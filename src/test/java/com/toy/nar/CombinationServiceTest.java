@@ -1,13 +1,19 @@
 package com.toy.nar;
 
-import com.toy.nar.entity.Champion;
-import com.toy.nar.entity.Game;
-import com.toy.nar.entity.GameParticipant;
-import com.toy.nar.entity.League;
-import com.toy.nar.entity.Player;
-import com.toy.nar.entity.Team;
-import com.toy.nar.repo.*;
-import com.toy.nar.service.CombinationService;
+import com.toy.nar.participant.entity.Champion;
+import com.toy.nar.participant.repository.ChampionRepository;
+import com.toy.nar.game.entity.Game;
+import com.toy.nar.game.entity.GameParticipant;
+import com.toy.nar.game.entity.League;
+import com.toy.nar.game.repository.BanRepository;
+import com.toy.nar.game.repository.GameParticipantRepository;
+import com.toy.nar.game.repository.GameRepository;
+import com.toy.nar.game.repository.LeagueRepository;
+import com.toy.nar.participant.entity.Player;
+import com.toy.nar.participant.repository.PlayerRepository;
+import com.toy.nar.participant.entity.Team;
+import com.toy.nar.participant.repository.TeamRepository;
+import com.toy.nar.combination.CombinationService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
