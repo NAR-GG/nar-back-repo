@@ -2,6 +2,8 @@ package com.toy.nar.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,25 +49,26 @@ public class ChampionDataService {
 			return;
 		}
 
+		Set<String> existingChampionNames = championRepository.findAll().stream()
+			.map(Champion::getChampionNameEn)
+			.collect(Collectors.toSet());
+
 		log.info("Fetched {} champions from API. Storing to DB...", enResponse.data().size());
 		List<Champion> championsToSave = new ArrayList<>();
 
-		// 3. 영어 데이터를 기준으로 반복
 		for (ChampionData enChampionData : enResponse.data().values()) {
+			String normalizedName = NameNormalizer.normalizeChampionName(enChampionData.id());
 
-			// champion_name_en을 기준으로 DB에 이미 있는지 확인
-			boolean exists = championRepository.existsByChampionNameEn(enChampionData.id());
-			if(exists) {
-				continue; // 이미 존재하면 건너뛰기
+			if (existingChampionNames.contains(normalizedName)) {
+				continue;
 			}
 
-			// 4. 한국어 이름 매칭 및 이미지 URL 생성
 			String championKrName = krResponse.data().get(enChampionData.id()).name();
 			String imageUrl = BASE_URL + "/img/champion/" + enChampionData.image().full();
 
 			// 5. Champion 엔티티 생성
 			championsToSave.add(Champion.builder()
-				.championNameEn(enChampionData.id()) // 고유한 영문 ID
+				.championNameEn(normalizedName)
 				.championNameKr(championKrName)
 				.imageUrl(imageUrl)
 				.build());
