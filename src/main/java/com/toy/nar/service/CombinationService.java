@@ -1,18 +1,22 @@
 package com.toy.nar.service;
 
+import com.toy.nar.dto.CombinationStatDto;
 import com.toy.nar.entity.GameParticipant;
 import com.toy.nar.repo.GameParticipantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.toy.nar.dto.CombinationFilterDto;
+import com.toy.nar.repo.CombinationQueryRepository;
+import jakarta.persistence.EntityManager;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -20,14 +24,108 @@ import java.util.stream.Collectors;
 public class CombinationService {
 
 	private final GameParticipantRepository gameParticipantRepository;
+	private final CombinationQueryRepository combinationQueryRepository;
+	private final EntityManager entityManager;
 
-	/**
-	 * 특정 포지션의 챔피언이 포함된 게임에서 가장 많이 나온 5챔피언 조합 리스트를 반환합니다.
-	 *
-	 * @param selectedPosition 사용자가 선택한 포지션 (예: "JUNGLE", "MID", "TOP", "ADC", "SUPPORT")
-	 * @param limit 반환할 조합의 최대 개수
-	 * @return 챔피언 조합 리스트와 해당 조합의 등장 횟수를 담은 Map 리스트
-	 */
+	public List<CombinationStatDto> findTopCombinations(List<String> championNames, CombinationFilterDto filter) {
+		if (championNames == null || championNames.isEmpty()) {
+			return Collections.emptyList();
+		}
+
+		List<String> normalizedChampionNames = championNames.stream()
+			.map(NameNormalizer::normalizeChampionName)
+			.collect(Collectors.toList());
+
+		// 1. 해당 챔피언이 포함된 게임 ID 조회
+		List<Long> gameIds = combinationQueryRepository.findGameIdsByCriteria(normalizedChampionNames, filter);
+
+		log.info("🔍 Found {} game IDs for champions: {}", gameIds.size(), normalizedChampionNames);
+
+		if (gameIds.isEmpty()) {
+			log.warn("⚠️ No games found for champions: {}", normalizedChampionNames);
+			return Collections.emptyList();
+		}
+
+		return findCombinationsContainingChampionsWithJPQL(gameIds, normalizedChampionNames);
+	}
+
+	private List<CombinationStatDto> findCombinationsContainingChampionsWithJPQL(List<Long> gameIds, List<String> championNames) {
+		String jpql = """
+        SELECT gp FROM GameParticipant gp
+        JOIN FETCH gp.game g
+        JOIN FETCH gp.champion c
+        JOIN FETCH gp.team t
+        WHERE g.id IN (:gameIds)
+        """;
+
+		List<GameParticipant> participants = entityManager.createQuery(jpql, GameParticipant.class)
+			.setParameter("gameIds", gameIds)
+			.getResultList();
+
+		log.info("📊 Found {} participants in {} games", participants.size(), gameIds.size());
+
+		// 게임별, 팀별 그룹화
+		Map<Long, Map<String, List<GameParticipant>>> gameTeamGroups = participants.stream()
+			.collect(Collectors.groupingBy(
+				gp -> gp.getGame().getId(),
+				Collectors.groupingBy(gp -> gp.getTeam().getName())
+			));
+
+		// 조합 빈도 계산
+		Map<List<String>, Long> combinationCounts = new HashMap<>();
+		int processedGames = 0;
+		int validTeams = 0;
+		int matchingTeams = 0;
+
+		Set<String> championSet = new HashSet<>(championNames);
+
+		for (Map.Entry<Long, Map<String, List<GameParticipant>>> gameEntry : gameTeamGroups.entrySet()) {
+			processedGames++;
+			Long gameId = gameEntry.getKey();
+			Map<String, List<GameParticipant>> teamGroups = gameEntry.getValue();
+
+			for (Map.Entry<String, List<GameParticipant>> teamEntry : teamGroups.entrySet()) {
+				List<GameParticipant> teamParticipants = teamEntry.getValue();
+
+				if (teamParticipants.size() == 5) {
+					validTeams++;
+
+					List<String> combination = teamParticipants.stream()
+						.map(gp -> gp.getChampion().getChampionNameEn())
+						.sorted()
+						.collect(Collectors.toList());
+
+					// 🔥 여러 챔피언이 모두 포함된 조합 확인
+					if (containsAllChampions(combination, championSet)) {
+						matchingTeams++;
+						combinationCounts.merge(combination, 1L, Long::sum);
+
+						// 첫 번째 매칭 조합 로깅
+						if (matchingTeams == 1) {
+							log.info("🎯 First matching combination found: {}", combination);
+						}
+					}
+				}
+			}
+		}
+
+		log.info("📈 Processed {} games, {} valid teams, {} matching teams, {} combinations",
+			processedGames, validTeams, matchingTeams, combinationCounts.size());
+
+		// 결과 반환
+		return combinationCounts.entrySet().stream()
+			.sorted(Map.Entry.<List<String>, Long>comparingByValue().reversed())
+			.limit(10)
+			.map(entry -> new CombinationStatDto(entry.getKey(), entry.getValue()))
+			.collect(Collectors.toList());
+	}
+
+	private boolean containsAllChampions(List<String> combination, Set<String> championSet) {
+		// 모든 챔피언이 조합에 포함되어 있는지 확인
+		return championSet.stream()
+			.allMatch(champion -> combination.contains(champion));
+	}
+
 	@Transactional(readOnly = true)
 	public List<Map<String, Object>> getMostFrequentCombinationsByPosition(String selectedPosition, int limit) {
 		log.info("Calculating most frequent combinations for position: {}", selectedPosition);

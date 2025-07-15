@@ -62,8 +62,6 @@ public class CombinationServiceTest {
 
 		// 2. 그 다음 종속성 테이블 삭제
 		gameRepository.deleteAllInBatch();           // League 참조
-		// championRepository, teamRepository, playerRepository는 서로 강한 참조가 없거나
-		// GameParticipant, Ban에 의해 참조되므로 그 이후에 삭제 (순서에 크게 구애받지 않음)
 		championRepository.deleteAllInBatch();
 		teamRepository.deleteAllInBatch();
 		playerRepository.deleteAllInBatch();
