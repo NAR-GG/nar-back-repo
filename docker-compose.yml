@@ -1,0 +1,33 @@
+version: '3.8' # 도커 컴포즈 버전
+
+services:
+  # 서비스 이름 (여기서는 db로 지정)
+  db:
+    image: mysql:8.0 # 사용할 MySQL 이미지 버전
+    container_name: lol_db_container # 컨테이너에 부여할 이름
+    restart: always # 컨테이너가 꺼지면 항상 자동으로 재시작
+
+    # 데이터베이스 설정 (환경 변수)
+    environment:
+      MYSQL_DATABASE: lol_esports_analysis # 생성할 데이터베이스 이름 (스키마)
+      MYSQL_USER: poppy_id                # 생성할 사용자 아이디
+      MYSQL_PASSWORD: poppy_pw            # 생성할 사용자 비밀번호
+      MYSQL_ROOT_PASSWORD: root_password  # MySQL root 계정의 비밀번호
+      TZ: Asia/Seoul                      # 컨테이너의 타임존 설정
+
+    # 포트 매핑 (내 컴퓨터:컨테이너)
+    ports:
+      - "3308:3306" # 내 PC의 3306 포트를 컨테이너의 3306 포트와 연결
+
+    # MySQL 서버 설정
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+    # 데이터 영속성을 위한 볼륨 설정
+    volumes:
+      - db_data:/var/lib/mysql
+
+# 도커 볼륨 정의
+volumes:
+  db_data:
