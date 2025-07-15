@@ -6,6 +6,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -18,10 +19,13 @@ import lombok.ToString;
 import java.util.Objects;
 
 @Entity
-@Table(name = "game_participants")
-@Getter
+@Table(name = "game_participants", indexes = {
+	@Index(name = "idx_game_champion", columnList = "game_id, champion_id"),
+	@Index(name = "idx_gameparticipant_player", columnList = "player_id"),
+	@Index(name = "idx_gameparticipant_team", columnList = "team_id")
+})@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id") // 이 테이블의 PK로 비교
+@EqualsAndHashCode(of = "id") 
 @ToString(exclude = {"game", "player", "team", "champion"}) // 연관 관계 필드는 toString에서 제외
 public class GameParticipant {
 

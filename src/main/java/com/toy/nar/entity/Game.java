@@ -7,6 +7,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
@@ -23,7 +24,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "games")
+@Table(name = "games", indexes = {
+	@Index(name = "idx_game_date", columnList = "game_date"),
+	@Index(name = "idx_game_league", columnList = "league_id")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(of = "id")
@@ -35,7 +39,7 @@ public class Game {
 	@Column(name = "game_id")
 	private Long id;
 
-	@Column(name = "game_origin_id")
+	@Column(name = "game_origin_id", unique = true)
 	private String gameOriginId;
 
 	@ManyToOne(fetch = FetchType.LAZY)
