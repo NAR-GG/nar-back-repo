@@ -1,10 +1,13 @@
 package com.toy.nar.participant.entity;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -12,7 +15,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+
+import com.toy.nar.game.entity.LeagueTeam;
 
 @Entity
 @Table(name = "teams")
@@ -32,6 +40,9 @@ public class Team {
 
 	@Column(name = "team_name", nullable = false, unique = true, length = 100)
 	private String name;
+
+	@OneToMany(mappedBy = "team", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+	private List<LeagueTeam> leagueTeams = new ArrayList<>();
 
 	@Builder
 	public Team(String name) {
