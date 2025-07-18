@@ -1,4 +1,4 @@
-package com.toy.nar.common;
+package com.toy.nar.common.data;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import com.toy.nar.common.NameNormalizer;
 import com.toy.nar.common.dto.ChampionApiResponse;
 import com.toy.nar.common.dto.ChampionData;
 import com.toy.nar.participant.entity.Champion;

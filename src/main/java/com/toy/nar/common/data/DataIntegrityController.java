@@ -1,4 +1,4 @@
-package com.toy.nar.common;
+package com.toy.nar.common.data;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -1,4 +1,4 @@
-package com.toy.nar.common;
+package com.toy.nar.common.data;
 
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -23,6 +23,7 @@ import org.springframework.util.StringUtils;
 
 import com.opencsv.bean.CsvToBean;
 import com.opencsv.bean.CsvToBeanBuilder;
+import com.toy.nar.common.NameNormalizer;
 import com.toy.nar.common.dto.GameDataCsvDto;
 import com.toy.nar.game.entity.Game;
 import com.toy.nar.game.entity.GameParticipant;

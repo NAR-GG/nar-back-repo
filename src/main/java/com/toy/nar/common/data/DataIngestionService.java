@@ -1,7 +1,8 @@
-package com.toy.nar.common;
+package com.toy.nar.common.data;
 
 import com.opencsv.bean.CsvToBean;
 import com.opencsv.bean.CsvToBeanBuilder;
+import com.toy.nar.common.NameNormalizer;
 import com.toy.nar.participant.entity.Champion;
 import com.toy.nar.participant.repository.ChampionRepository;
 import com.toy.nar.game.entity.Ban;
