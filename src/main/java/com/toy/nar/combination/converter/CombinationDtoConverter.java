@@ -49,6 +49,19 @@ public class CombinationDtoConverter {
 		);
 	}
 
+	public CombinationDetailDto toDetailDtoMulti(ChampionCombination combination,
+		List<GameParticipant> gameDetails,
+		List<String> teamNames,
+		List<String> targetChampions) {
+
+		CombinationResponseDto summary = toResponseDto(combination, 1, "");
+
+		List<CombinationDetailDto.GameDetailDto> gameDetailDtos =
+			gameDetailConverter.convertToGameDetailsMulti(gameDetails, teamNames, targetChampions);
+
+		return new CombinationDetailDto(summary, gameDetailDtos);
+	}
+
 	public CombinationDetailDto toDetailDto(ChampionCombination combination,
 		List<GameParticipant> gameParticipants,
 		String targetTeamName) {

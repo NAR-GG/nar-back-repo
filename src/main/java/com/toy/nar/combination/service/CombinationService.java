@@ -9,7 +9,8 @@ import com.toy.nar.combination.domain.TeamComposition;
 import com.toy.nar.combination.dto.CombinationDetailDto;
 import com.toy.nar.combination.dto.CombinationResponseDto;
 import com.toy.nar.combination.dto.CombinationStatDto;
-import com.toy.nar.combination.service.CombinationIdService.CombinationSearchContext;
+import com.toy.nar.combination.strategy.CombinationFilterManager;
+import com.toy.nar.combination.strategy.MultiCombinationFilterDto;
 import com.toy.nar.common.NameNormalizer;
 import com.toy.nar.game.entity.GameParticipant;
 import com.toy.nar.game.repository.GameParticipantRepository;
@@ -36,6 +37,41 @@ public class CombinationService {
 	private final CombinationDtoConverter converter;
 	private final GameParticipantRepository gameParticipantRepository;
 	private final CombinationIdService idService;
+	private final CombinationFilterManager filterManager;
+
+
+	public List<CombinationResponseDto> findTopCombinationsV2(
+		List<String> championNames,
+		MultiCombinationFilterDto filter) {
+
+		List<String> normalizedChampionNames = championNames.stream()
+			.map(NameNormalizer::normalizeChampionName)
+			.collect(Collectors.toList());
+
+		List<GameParticipant> participants = getFilteredParticipants(normalizedChampionNames, filter);
+
+		if (participants.isEmpty()) {
+			log.warn("⚠️ No participants found for filter: {}", filter);
+			return Collections.emptyList();
+		}
+
+		List<TeamComposition> compositions = convertToCompositions(participants);
+		List<ChampionCombination> combinations = analyzer.findTopCombinations(compositions, championNames);
+
+		List<ChampionCombination> sortedCombinations = combinations.stream()
+			.sorted(ChampionCombination::compareByRecency)
+			.limit(10)
+			.collect(Collectors.toList());
+
+		// 각 조합에 대해 고유 ID 생성 및 저장
+		return IntStream.range(0, sortedCombinations.size())
+			.mapToObj(i -> {
+				ChampionCombination combination = sortedCombinations.get(i);
+				String combinationId = idService.createMultiCombinationId(combination.getChampions(), filter);
+				return converter.toResponseDto(combination, i + 1, combinationId);
+			})
+			.collect(Collectors.toList());
+	}
 
 	// 조합 ID를 포함한 응답 반환
 	public List<CombinationResponseDto> findTopCombinations(
@@ -84,14 +120,60 @@ public class CombinationService {
 
 	// 새로운 메서드: ID로 상세정보 조회
 	public CombinationDetailDto getCombinationDetailById(String combinationId) {
-		CombinationSearchContext context = idService.getSearchContext(combinationId);
+		// 먼저 Multi 캐시에서 확인
+		CombinationIdService.MultiCombinationSearchContext multiContext =
+			idService.getMultiSearchContext(combinationId);
 
-		if (context == null) {
-			throw new IllegalArgumentException("Invalid combination ID: " + combinationId);
+		if (multiContext != null) {
+			log.info("🔍 Retrieving multi combination detail for ID: {}", combinationId);
+			return getCombinationDetailMulti(multiContext.champions(), multiContext.filter());
 		}
 
-		log.info("🔍 Retrieving combination detail for ID: {}", combinationId);
-		return getCombinationDetail(context.champions(), context.filter());
+		// 기존 캐시에서 확인
+		CombinationIdService.CombinationSearchContext context =
+			idService.getSearchContext(combinationId);
+
+		if (context != null) {
+			log.info("🔍 Retrieving combination detail for ID: {}", combinationId);
+			return getCombinationDetail(context.champions(), context.filter());
+		}
+
+		throw new IllegalArgumentException("Invalid combination ID: " + combinationId);
+	}
+
+	// 새로운 메서드: Multi 필터 상세정보 조회
+	public CombinationDetailDto getCombinationDetailMulti(
+		List<String> championNames,
+		MultiCombinationFilterDto filter) {
+
+		List<String> normalizedChampionNames = championNames.stream()
+			.map(NameNormalizer::normalizeChampionName)
+			.collect(Collectors.toList());
+
+		List<GameParticipant> participants = getFilteredParticipants(normalizedChampionNames, filter);
+
+		if (participants.isEmpty()) {
+			throw new IllegalArgumentException("No combination found for: " + championNames);
+		}
+
+		List<TeamComposition> compositions = convertToCompositions(participants);
+		List<ChampionCombination> combinations = analyzer.findTopCombinations(compositions, championNames);
+
+		if (combinations.isEmpty()) {
+			throw new IllegalArgumentException("No valid combinations found for: " + championNames);
+		}
+
+		Set<Long> allGameIds = combinations.stream()
+			.flatMap(c -> c.getGameIds().stream())
+			.collect(Collectors.toSet());
+
+		List<GameParticipant> gameDetails = gameParticipantRepository
+			.findGameDetailsByGameIds(allGameIds);
+
+		// 🔥 다중 팀 리스트 전달
+		List<String> teamNames = filter.getTeamNames();
+
+		return converter.toDetailDtoMulti(combinations.get(0), gameDetails, teamNames, championNames);
 	}
 
 	// 기존 메서드 유지 (내부 사용)
@@ -172,5 +254,34 @@ public class CombinationService {
 			.values().stream()
 			.map(factory::createFromParticipants)
 			.collect(Collectors.toList());
+	}
+
+	private List<GameParticipant> getFilteredParticipants(List<String> championNames,
+		MultiCombinationFilterDto filter) {
+
+		// 빈 리스트를 null로 변환하여 쿼리 단순화
+		List<String> splits = (filter.getSplits() != null && filter.getSplits().isEmpty())
+			? null : filter.getSplits();
+		List<String> leagueNames = (filter.getLeagueNames() != null && filter.getLeagueNames().isEmpty())
+			? null : filter.getLeagueNames();
+		List<String> teamNames = (filter.getTeamNames() != null && filter.getTeamNames().isEmpty())
+			? null : filter.getTeamNames();
+
+		if (filterManager.shouldUseMemoryFiltering(filter)) {
+			log.info("🔄 Using memory filtering for complex filters");
+			List<GameParticipant> baseParticipants = gameParticipantRepository.findBaseParticipants(
+				championNames, filter.getYear(), filter.getPatch());
+			return filterManager.applyFilters(baseParticipants, filter);
+		}
+
+		log.info("🔄 Using database filtering");
+		return gameParticipantRepository.findFilteredParticipantsMulti(
+			championNames,
+			filter.getYear(),
+			splits,
+			leagueNames,
+			teamNames,
+			filter.getPatch()
+		);
 	}
 }

@@ -6,6 +6,7 @@ import com.toy.nar.combination.dto.CombinationFilterDto;
 import com.toy.nar.combination.dto.CombinationResponseDto;
 import com.toy.nar.combination.dto.CombinationStatDto;
 import com.toy.nar.combination.service.CombinationService;
+import com.toy.nar.combination.strategy.MultiCombinationFilterDto;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -45,6 +46,27 @@ public class CombinationController {
 
 		List<CombinationResponseDto> topCombinations = combinationService.findTopCombinations(champions, filter);
 		return ResponseEntity.ok(topCombinations);
+	}
+
+	@GetMapping("/v2")
+	public ResponseEntity<List<CombinationResponseDto>> getCombinationsV2(
+		@RequestParam List<String> champions,
+		@RequestParam Optional<Integer> year,
+		@RequestParam Optional<List<String>> splits,
+		@RequestParam Optional<List<String>> leagueNames,
+		@RequestParam Optional<List<String>> teamNames,
+		@RequestParam Optional<String> patch) {
+
+		MultiCombinationFilterDto filter = MultiCombinationFilterDto.builder()
+			.year(year.orElse(null))
+			.splits(splits.orElse(null))
+			.leagueNames(leagueNames.orElse(null))
+			.teamNames(teamNames.orElse(null))
+			.patch(patch.orElse(null))
+			.build();
+
+		List<CombinationResponseDto> combinations = combinationService.findTopCombinationsV2(champions, filter);
+		return ResponseEntity.ok(combinations);
 	}
 
 	// 🔥 새로운 상세정보 엔드포인트: ID 기반 조회

@@ -1,10 +1,13 @@
 package com.toy.nar.combination.service;
 
 import com.toy.nar.combination.dto.CombinationFilterDto;
+import com.toy.nar.combination.strategy.MultiCombinationFilterDto;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,8 +17,60 @@ import java.util.stream.Collectors;
 @Service
 public class CombinationIdService {
 
-	// 조합 ID와 검색 컨텍스트를 매핑하는 캐시
+	// 기존 조합 ID와 검색 컨텍스트를 매핑하는 캐시
 	private final Map<String, CombinationSearchContext> combinationCache = new ConcurrentHashMap<>();
+
+	// 🔥 Multi 조합 ID와 검색 컨텍스트를 매핑하는 캐시 (누락된 부분)
+	private final Map<String, MultiCombinationSearchContext> multiCombinationCache = new ConcurrentHashMap<>();
+
+	public String createMultiCombinationId(List<String> champions, MultiCombinationFilterDto filter) {
+		StringBuilder sb = new StringBuilder();
+
+		// 챔피언 정보
+		String championKey = champions.stream()
+			.sorted()
+			.collect(Collectors.joining("_"));
+		sb.append(championKey);
+
+		// 필터 정보
+		if (filter.getYear() != null) {
+			sb.append("_Y").append(filter.getYear());
+		}
+
+		if (filter.getSplits() != null && !filter.getSplits().isEmpty()) {
+			String splitKey = filter.getSplits().stream()
+				.sorted()
+				.collect(Collectors.joining(","));
+			sb.append("_S").append(splitKey);
+		}
+
+		if (filter.getLeagueNames() != null && !filter.getLeagueNames().isEmpty()) {
+			String leagueKey = filter.getLeagueNames().stream()
+				.sorted()
+				.collect(Collectors.joining(","));
+			sb.append("_L").append(leagueKey);
+		}
+
+		if (filter.getTeamNames() != null && !filter.getTeamNames().isEmpty()) {
+			String teamKey = filter.getTeamNames().stream()
+				.sorted()
+				.collect(Collectors.joining(","));
+			sb.append("_T").append(teamKey);
+		}
+
+		if (filter.getPatch() != null) {
+			sb.append("_P").append(filter.getPatch());
+		}
+
+		String id = Base64.getEncoder().encodeToString(sb.toString().getBytes());
+
+		// 캐시에 저장
+		MultiCombinationSearchContext context = new MultiCombinationSearchContext(champions, filter);
+		multiCombinationCache.put(id, context);
+
+		log.info("🔧 Created multi combination ID: {} for champions: {}", id, champions);
+		return id;
+	}
 
 	public String createCombinationId(List<String> champions, CombinationFilterDto filter) {
 		// 🔥 챔피언 목록을 정렬하여 일관된 ID 생성
@@ -52,14 +107,36 @@ public class CombinationIdService {
 		return context;
 	}
 
+	// 🔥 Multi 검색 컨텍스트 조회 메서드 (누락된 부분)
+	public MultiCombinationSearchContext getMultiSearchContext(String combinationId) {
+		MultiCombinationSearchContext context = multiCombinationCache.get(combinationId);
+		if (context == null) {
+			// 디코딩해서 로그 출력
+			try {
+				String decoded = new String(Base64.getDecoder().decode(combinationId));
+				log.warn("❌ Multi combination ID not found: {} (decoded: {})", combinationId, decoded);
+			} catch (Exception e) {
+				log.warn("❌ Invalid combination ID format: {}", combinationId);
+			}
+		}
+		return context;
+	}
+
 	public void clearCache() {
 		combinationCache.clear();
+		multiCombinationCache.clear();
 		log.info("🗑️ Combination cache cleared");
 	}
 
-	// 🔥 검색 컨텍스트 레코드
+	// 🔥 기존 검색 컨텍스트 레코드
 	public record CombinationSearchContext(
 		List<String> champions,
 		CombinationFilterDto filter
+	) {}
+
+	// 🔥 Multi 검색 컨텍스트 레코드 (누락된 부분)
+	public record MultiCombinationSearchContext(
+		List<String> champions,
+		MultiCombinationFilterDto filter
 	) {}
 }
