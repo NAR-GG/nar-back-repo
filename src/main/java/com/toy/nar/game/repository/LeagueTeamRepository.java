@@ -1,0 +1,27 @@
+package com.toy.nar.game.repository;
+
+import java.util.List;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import com.toy.nar.game.entity.League;
+import com.toy.nar.game.entity.LeagueTeam;
+import com.toy.nar.participant.entity.Team;
+
+@Repository
+public interface LeagueTeamRepository extends JpaRepository<LeagueTeam, Long> {
+
+	@Query("SELECT lt.team FROM LeagueTeam lt WHERE lt.league.id = :leagueId")
+	List<Team> findTeamsByLeagueId(@Param("leagueId") Long leagueId);
+
+	@Query("SELECT lt.team FROM LeagueTeam lt WHERE lt.league.leagueName = :leagueName AND lt.league.seasonYear = :seasonYear AND lt.league.seasonSplit = :seasonSplit")
+	List<Team> findTeamsByLeagueParams(@Param("leagueName") String leagueName,
+		@Param("seasonYear") Integer seasonYear,
+		@Param("seasonSplit") String seasonSplit);
+
+	@Query("SELECT lt FROM LeagueTeam lt WHERE lt.league = :league AND lt.team = :team")
+	LeagueTeam findByLeagueAndTeam(@Param("league") League league, @Param("team") Team team);
+}
