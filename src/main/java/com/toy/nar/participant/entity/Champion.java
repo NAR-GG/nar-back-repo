@@ -32,4 +32,11 @@ public class Champion {
 		this.championNameEn = Objects.requireNonNull(championNameEn);
 		this.imageUrl = Objects.requireNonNull(imageUrl);
 	}
+
+	public void updateImageUrl(String imageUrl) {
+		if (imageUrl == null || imageUrl.isBlank()) {
+			throw new IllegalArgumentException("Image URL must not be null or blank");
+		}
+		this.imageUrl = imageUrl;
+	}
 }
