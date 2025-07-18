@@ -34,6 +34,10 @@ dependencies {
 
 	implementation 'com.opencsv:opencsv:5.9'
 	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+	//test log
+	testCompileOnly 'org.projectlombok:lombok'
+	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
 tasks.named('test') {
