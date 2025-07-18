@@ -1,11 +1,16 @@
+// combination/CombinationController.java
 package com.toy.nar.combination;
 
+import com.toy.nar.combination.dto.CombinationDetailDto;
 import com.toy.nar.combination.dto.CombinationFilterDto;
+import com.toy.nar.combination.dto.CombinationResponseDto;
 import com.toy.nar.combination.dto.CombinationStatDto;
+import com.toy.nar.combination.service.CombinationService;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,25 +25,78 @@ public class CombinationController {
 
 	private final CombinationService combinationService;
 
+	// 🔥 메인 엔드포인트: 조합 ID 포함
 	@GetMapping
-	public ResponseEntity<List<CombinationStatDto>> getCombinations(
+	public ResponseEntity<List<CombinationResponseDto>> getCombinations(
 		@RequestParam List<String> champions,
-		// 필터 파라미터들은 선택 사항(Optional)으로 받습니다.
 		@RequestParam Optional<Integer> year,
 		@RequestParam Optional<String> split,
 		@RequestParam Optional<String> leagueName,
-		@RequestParam Optional<String> teamName) {
+		@RequestParam Optional<String> teamName,
+		@RequestParam Optional<String> patch) {
 
-		// 필터 DTO 생성
 		CombinationFilterDto filter = CombinationFilterDto.builder()
 			.year(year.orElse(null))
 			.split(split.orElse(null))
 			.leagueName(leagueName.orElse(null))
 			.teamName(teamName.orElse(null))
+			.patch(patch.orElse(null))
 			.build();
 
-		// 서비스 호출 및 결과 반환
-		List<CombinationStatDto> topCombinations = combinationService.findTopCombinations(champions, filter);
+		List<CombinationResponseDto> topCombinations = combinationService.findTopCombinations(champions, filter);
+		return ResponseEntity.ok(topCombinations);
+	}
+
+	// 🔥 새로운 상세정보 엔드포인트: ID 기반 조회
+	@GetMapping("/{combinationId}/detail")
+	public ResponseEntity<CombinationDetailDto> getCombinationDetail(
+		@PathVariable String combinationId) {
+
+		CombinationDetailDto detail = combinationService.getCombinationDetailById(combinationId);
+		return ResponseEntity.ok(detail);
+	}
+
+	// 🔥 기존 상세정보 엔드포인트 유지 (하위 호환성)
+	@GetMapping("/detail")
+	public ResponseEntity<CombinationDetailDto> getCombinationDetailLegacy(
+		@RequestParam List<String> champions,
+		@RequestParam Optional<Integer> year,
+		@RequestParam Optional<String> split,
+		@RequestParam Optional<String> leagueName,
+		@RequestParam Optional<String> teamName,
+		@RequestParam Optional<String> patch) {
+
+		CombinationFilterDto filter = CombinationFilterDto.builder()
+			.year(year.orElse(null))
+			.split(split.orElse(null))
+			.leagueName(leagueName.orElse(null))
+			.teamName(teamName.orElse(null))
+			.patch(patch.orElse(null))
+			.build();
+
+		CombinationDetailDto detail = combinationService.getCombinationDetail(champions, filter);
+		return ResponseEntity.ok(detail);
+	}
+
+	// 🔥 레거시 엔드포인트 유지
+	@GetMapping("/legacy")
+	public ResponseEntity<List<CombinationStatDto>> getCombinationsLegacy(
+		@RequestParam List<String> champions,
+		@RequestParam Optional<Integer> year,
+		@RequestParam Optional<String> split,
+		@RequestParam Optional<String> leagueName,
+		@RequestParam Optional<String> teamName,
+		@RequestParam Optional<String> patch) {
+
+		CombinationFilterDto filter = CombinationFilterDto.builder()
+			.year(year.orElse(null))
+			.split(split.orElse(null))
+			.leagueName(leagueName.orElse(null))
+			.teamName(teamName.orElse(null))
+			.patch(patch.orElse(null))
+			.build();
+
+		List<CombinationStatDto> topCombinations = combinationService.findTopCombinationsLegacy(champions, filter);
 		return ResponseEntity.ok(topCombinations);
 	}
 }
