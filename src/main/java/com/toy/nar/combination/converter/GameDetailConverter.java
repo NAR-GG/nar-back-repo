@@ -17,7 +17,7 @@ public class GameDetailConverter {
 	public List<CombinationDetailDto.GameDetailDto> convertToGameDetails(
 		List<GameParticipant> participants,
 		String targetTeamName,
-		List<String> targetChampions) {  // 🔥 타겟 챔피언 목록 추가
+		List<String> targetChampions) {
 
 		return participants.stream()
 			.collect(Collectors.groupingBy(p -> p.getGame().getId()))
@@ -34,26 +34,36 @@ public class GameDetailConverter {
 		GameParticipant first = gameParticipants.get(0);
 		Game game = first.getGame();
 
-		// 🔥 팀별로 그룹화
+		// 팀별로 그룹화
 		Map<String, List<GameParticipant>> teamGroups = gameParticipants.stream()
 			.collect(Collectors.groupingBy(p -> p.getTeam().getName()));
 
-		// 🔥 우리 팀과 상대 팀 분리
+		// 🔥 우리 팀과 상대 팀 분리 로직 개선
 		CombinationDetailDto.TeamDetailDto ourTeam = null;
 		CombinationDetailDto.TeamDetailDto opponentTeam = null;
 
+		// 먼저 우리 팀을 찾기
 		for (Map.Entry<String, List<GameParticipant>> entry : teamGroups.entrySet()) {
 			String teamName = entry.getKey();
 			List<GameParticipant> teamPlayers = entry.getValue();
 
 			if (teamPlayers.size() == 5) {
-				CombinationDetailDto.TeamDetailDto teamDetail = createTeamDetail(teamName, teamPlayers);
-
-				// 🔥 우리 팀 판별 로직 개선
 				if (isOurTeam(teamName, targetTeamName, teamPlayers, targetChampions)) {
-					ourTeam = teamDetail;
-				} else {
-					opponentTeam = teamDetail;
+					ourTeam = createTeamDetail(teamName, teamPlayers);
+					break; // 🔥 우리 팀을 찾으면 바로 중단
+				}
+			}
+		}
+
+		// 상대 팀 찾기 (우리 팀이 아닌 팀)
+		for (Map.Entry<String, List<GameParticipant>> entry : teamGroups.entrySet()) {
+			String teamName = entry.getKey();
+			List<GameParticipant> teamPlayers = entry.getValue();
+
+			if (teamPlayers.size() == 5) {
+				if (ourTeam == null || !teamName.equals(ourTeam.teamName())) {
+					opponentTeam = createTeamDetail(teamName, teamPlayers);
+					break;
 				}
 			}
 		}
@@ -70,7 +80,7 @@ public class GameDetailConverter {
 		);
 	}
 
-	// 🔥 우리 팀 판별 로직
+	// 🔥 우리 팀 판별 로직 개선
 	private boolean isOurTeam(String teamName, String targetTeamName,
 		List<GameParticipant> teamPlayers, List<String> targetChampions) {
 
@@ -79,22 +89,18 @@ public class GameDetailConverter {
 			return teamName.equals(targetTeamName);
 		}
 
-		// 2. targetTeamName이 없으면 챔피언 조합으로 판별
+		// 2. targetTeamName이 없으면 챔피언 조합으로 판별 (부분 일치)
 		if (targetChampions != null && !targetChampions.isEmpty()) {
 			List<String> teamChampions = teamPlayers.stream()
 				.map(p -> p.getChampion().getChampionNameEn())
-				.sorted()
 				.collect(Collectors.toList());
 
-			List<String> sortedTargetChampions = targetChampions.stream()
-				.sorted()
-				.collect(Collectors.toList());
-
-			return teamChampions.equals(sortedTargetChampions);
+			// 🔥 부분 일치로 변경: 타겟 챔피언이 모두 팀에 포함되어 있는지 확인
+			return teamChampions.containsAll(targetChampions);
 		}
 
-		// 3. 기본값: 첫 번째 팀을 우리 팀으로 설정
-		return true;
+		// 3. 기본값: false (명시적으로 우리 팀이 아님)
+		return false;
 	}
 
 	private CombinationDetailDto.TeamDetailDto createTeamDetail(String teamName, List<GameParticipant> teamPlayers) {
@@ -115,6 +121,96 @@ public class GameDetailConverter {
 			first.getIsWin(),
 			players
 		);
+	}
+
+	// 🔥 Multi 버전 메서드들
+	public List<CombinationDetailDto.GameDetailDto> convertToGameDetailsMulti(
+		List<GameParticipant> participants,
+		List<String> targetTeamNames,
+		List<String> targetChampions) {
+
+		return participants.stream()
+			.collect(Collectors.groupingBy(p -> p.getGame().getId()))
+			.values().stream()
+			.map(gameParticipants -> createGameDetailMulti(gameParticipants, targetTeamNames, targetChampions))
+			.collect(Collectors.toList());
+	}
+
+	// 🔥 누락된 createGameDetailMulti 메서드 추가
+	private CombinationDetailDto.GameDetailDto createGameDetailMulti(
+		List<GameParticipant> gameParticipants,
+		List<String> targetTeamNames,
+		List<String> targetChampions) {
+
+		GameParticipant first = gameParticipants.get(0);
+		Game game = first.getGame();
+
+		// 팀별로 그룹화
+		Map<String, List<GameParticipant>> teamGroups = gameParticipants.stream()
+			.collect(Collectors.groupingBy(p -> p.getTeam().getName()));
+
+		CombinationDetailDto.TeamDetailDto ourTeam = null;
+		CombinationDetailDto.TeamDetailDto opponentTeam = null;
+
+		// 먼저 우리 팀을 찾기
+		for (Map.Entry<String, List<GameParticipant>> entry : teamGroups.entrySet()) {
+			String teamName = entry.getKey();
+			List<GameParticipant> teamPlayers = entry.getValue();
+
+			if (teamPlayers.size() == 5) {
+				if (isOurTeamMulti(teamName, targetTeamNames, teamPlayers, targetChampions)) {
+					ourTeam = createTeamDetail(teamName, teamPlayers);
+					break;
+				}
+			}
+		}
+
+		// 상대 팀 찾기 (우리 팀이 아닌 팀)
+		for (Map.Entry<String, List<GameParticipant>> entry : teamGroups.entrySet()) {
+			String teamName = entry.getKey();
+			List<GameParticipant> teamPlayers = entry.getValue();
+
+			if (teamPlayers.size() == 5) {
+				if (ourTeam == null || !teamName.equals(ourTeam.teamName())) {
+					opponentTeam = createTeamDetail(teamName, teamPlayers);
+					break;
+				}
+			}
+		}
+
+		return new CombinationDetailDto.GameDetailDto(
+			game.getId(),
+			game.getGameDate(),
+			game.getLeague().getSeasonSplit(),
+			game.getLeague().getLeagueName(),
+			game.getPatch(),
+			game.getGameLengthSeconds(),
+			ourTeam,
+			opponentTeam
+		);
+	}
+
+	// 🔥 Multi 버전 우리 팀 판별 로직
+	private boolean isOurTeamMulti(String teamName, List<String> targetTeamNames,
+		List<GameParticipant> teamPlayers, List<String> targetChampions) {
+
+		// 1. targetTeamNames가 있으면 우선 사용 (다중 팀 지원)
+		if (targetTeamNames != null && !targetTeamNames.isEmpty()) {
+			return targetTeamNames.contains(teamName);
+		}
+
+		// 2. targetTeamNames가 없으면 챔피언 조합으로 판별 (부분 일치)
+		if (targetChampions != null && !targetChampions.isEmpty()) {
+			List<String> teamChampions = teamPlayers.stream()
+				.map(p -> p.getChampion().getChampionNameEn())
+				.collect(Collectors.toList());
+
+			// 타겟 챔피언이 모두 팀에 포함되어 있는지 확인
+			return teamChampions.containsAll(targetChampions);
+		}
+
+		// 3. 기본값: false
+		return false;
 	}
 
 	private int getPositionOrder(CombinationDetailDto.PlayerDetailDto player) {

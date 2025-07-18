@@ -65,22 +65,47 @@ public interface GameParticipantRepository extends JpaRepository<GameParticipant
         """, nativeQuery = true)
 	List<Object[]> findIncompleteGames();
 
-	@Query(value = """
-        SELECT game_id, side, COUNT(*) as side_count
-        FROM game_participants 
-        GROUP BY game_id, side 
-        HAVING COUNT(*) != 5
-        LIMIT 50
-        """, nativeQuery = true)
-	List<Object[]> findUnbalancedSides();
+	@Query("SELECT gp FROM GameParticipant gp " +
+		"JOIN FETCH gp.game g " +
+		"JOIN FETCH gp.champion c " +
+		"JOIN FETCH gp.team t " +
+		"LEFT JOIN FETCH g.league l " +
+		"WHERE gp.game.id IN (" +
+		"    SELECT p.game.id FROM GameParticipant p " +
+		"    JOIN p.champion c2 " +
+		"    WHERE c2.championNameEn IN :championNames" +
+		") " +
+		"AND (:year IS NULL OR l.seasonYear = :year) " +
+		"AND (:splits IS NULL OR l.seasonSplit IN :splits) " +
+		"AND (:leagueNames IS NULL OR l.leagueName IN :leagueNames) " +
+		"AND (:teamNames IS NULL OR t.name IN :teamNames) " +
+		"AND (:patch IS NULL OR g.patch = :patch)")
+	List<GameParticipant> findFilteredParticipantsMulti(
+		@Param("championNames") List<String> championNames,
+		@Param("year") Integer year,
+		@Param("splits") List<String> splits,
+		@Param("leagueNames") List<String> leagueNames,
+		@Param("teamNames") List<String> teamNames,
+		@Param("patch") String patch
+	);
 
-	@Query(value = """
-        SELECT game_id, side, 
-               COUNT(DISTINCT position) as unique_positions
-        FROM game_participants
-        GROUP BY game_id, side
-        HAVING COUNT(DISTINCT position) != 5
-        LIMIT 50
-        """, nativeQuery = true)
-	List<Object[]> findTeamsWithMissingPositions();
+	// 기본 참가자 조회 (년도, 패치만 적용)
+	@Query("SELECT gp FROM GameParticipant gp " +
+		"JOIN FETCH gp.game g " +
+		"JOIN FETCH gp.champion c " +
+		"JOIN FETCH gp.team t " +
+		"LEFT JOIN FETCH g.league l " +
+		"WHERE gp.game.id IN (" +
+		"    SELECT p.game.id FROM GameParticipant p " +
+		"    JOIN p.champion c2 " +
+		"    WHERE c2.championNameEn IN :championNames" +
+		") " +
+		"AND (:year IS NULL OR l.seasonYear = :year) " +
+		"AND (:patch IS NULL OR g.patch = :patch)")
+	List<GameParticipant> findBaseParticipants(
+		@Param("championNames") List<String> championNames,
+		@Param("year") Integer year,
+		@Param("patch") String patch
+	);
+
 }
