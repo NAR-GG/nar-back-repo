@@ -4,7 +4,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
 import com.toy.nar.participant.repository.ChampionRepository;
-import com.toy.nar.common.data.ChampionDataService;
+import com.toy.nar.common.data.service.ChampionDataService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

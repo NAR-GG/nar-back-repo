@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.toy.nar.common.data.ChampionDataService;
+import com.toy.nar.common.data.service.ChampionDataService;
 import com.toy.nar.participant.dto.ChampionDto;
 import com.toy.nar.participant.service.ChampionService;
 
