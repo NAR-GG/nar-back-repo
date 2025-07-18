@@ -17,6 +17,7 @@ import com.toy.nar.participant.entity.Team;
 import com.toy.nar.participant.repository.TeamRepository;
 import com.toy.nar.common.dto.GameDataCsvDto;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
@@ -51,11 +52,14 @@ public class DataIngestionService {
 	private record LeagueIdentifier(String name, int year, String split, boolean isPlayoffs) {}
 
 	@Transactional
-	public void ingestCsvData() throws Exception {
+	public DataIngestionResult ingestCsvData() throws Exception {  // ✅ void → DataIngestionResult로 변경
 		log.info("Starting CSV data ingestion...");
 		long startTime = System.currentTimeMillis();
 
-		// 1. ✨ 변동이 적은 마스터 데이터(챔피언, 리그)를 미리 전체 조회하여 캐시를 생성합니다.
+		// ✅ 결과 추적 객체 생성
+		DataIngestionResult result = new DataIngestionResult();
+
+		// 마스터 데이터 캐시 생성
 		final Map<String, Champion> championCache = championRepository.findAll().stream()
 			.collect(Collectors.toMap(
 				champion -> NameNormalizer.normalizeChampionName(champion.getChampionNameEn()),
@@ -63,7 +67,8 @@ public class DataIngestionService {
 			));
 		final Map<LeagueIdentifier, League> leagueCache = leagueRepository.findAll().stream()
 			.collect(Collectors.toMap(
-				league -> new LeagueIdentifier(league.getLeagueName(), league.getSeasonYear(), league.getSeasonSplit(), league.getIsPlayoffs()),
+				league -> new LeagueIdentifier(league.getLeagueName(), league.getSeasonYear(),
+					league.getSeasonSplit(), league.getIsPlayoffs()),
 				Function.identity()
 			));
 
@@ -75,21 +80,36 @@ public class DataIngestionService {
 			List<GameDataCsvDto> chunk = new ArrayList<>(CHUNK_SIZE);
 			for (GameDataCsvDto dto : csvToBean) {
 				chunk.add(dto);
+				result.incrementProcessedRows();  // ✅ 행 수 카운트
+
 				if (chunk.size() >= CHUNK_SIZE) {
-					processChunk(chunk, championCache, leagueCache); // 생성된 캐시를 파라미터로 전달
+					ChunkProcessingResult chunkResult = processChunk(chunk, championCache, leagueCache);
+					result.merge(chunkResult);  // ✅ 청크 결과 합산
 					chunk.clear();
 				}
 			}
+
 			if (!chunk.isEmpty()) {
-				processChunk(chunk, championCache, leagueCache);
+				ChunkProcessingResult chunkResult = processChunk(chunk, championCache, leagueCache);
+				result.merge(chunkResult);  // ✅ 마지막 청크 결과 합산
 			}
 		}
+
 		long endTime = System.currentTimeMillis();
 		log.info("✅ Finished CSV data ingestion. Total time: {} ms", (endTime - startTime));
+		log.info("📊 Results: {} rows, {} games processed", result.getProcessedRows(), result.getProcessedGames());
+
+		return result;  // ✅ 결과 반환
 	}
 
-	private void processChunk(List<GameDataCsvDto> chunk, Map<String, Champion> championCache, Map<LeagueIdentifier, League> leagueCache) {
-		// 1. 청크에서 필요한 ID 수집
+
+	private ChunkProcessingResult processChunk(List<GameDataCsvDto> chunk,
+		Map<String, Champion> championCache,
+		Map<LeagueIdentifier, League> leagueCache) {
+		// ✅ 결과 추적 객체 생성
+		ChunkProcessingResult result = new ChunkProcessingResult();
+
+		// 기존 로직들...
 		Set<String> teamNames = new HashSet<>();
 		Set<String> playerNames = new HashSet<>();
 		Set<String> gameOriginIds = new HashSet<>();
@@ -100,25 +120,33 @@ public class DataIngestionService {
 			if (StringUtils.hasText(dto.getGameid())) gameOriginIds.add(dto.getGameid());
 		}
 
-		// 2. 청크 단위 데이터 조회
-		Map<String, Team> teamCache = teamRepository.findAllByNameInIgnoreCase(teamNames).stream().collect(Collectors.toMap(Team::getName, Function.identity(), (e1, e2) -> e1, () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
-		Map<String, Player> playerCache = playerRepository.findAllByNameInIgnoreCase(playerNames).stream().collect(Collectors.toMap(Player::getName, Function.identity(), (e1, e2) -> e1, () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
+		// 기존 캐시 생성 로직들...
+		Map<String, Team> teamCache = teamRepository.findAllByNameInIgnoreCase(teamNames).stream()
+			.collect(Collectors.toMap(Team::getName, Function.identity(), (e1, e2) -> e1,
+				() -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
+		Map<String, Player> playerCache = playerRepository.findAllByNameInIgnoreCase(playerNames).stream()
+			.collect(Collectors.toMap(Player::getName, Function.identity(), (e1, e2) -> e1,
+				() -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
 
 		Set<String> existingGameIds = Collections.emptySet();
-		if (!gameOriginIds.isEmpty()) { existingGameIds = gameRepository.findExistingGameIds(gameOriginIds); }
+		if (!gameOriginIds.isEmpty()) {
+			existingGameIds = gameRepository.findExistingGameIds(gameOriginIds);
+			result.skippedGames = existingGameIds.size();  // ✅ 스킵된 게임 수 기록
+		}
 
-		// 3. 새로운 데이터 저장 및 캐시 업데이트
+		// 기존 저장 로직들...
 		saveNewTeams(teamNames, teamCache);
 		saveNewPlayers(playerNames, playerCache);
-		saveNewLeagues(chunk, leagueCache); // ✨ 새로운 리그가 있다면 저장하고 캐시 업데이트
+		saveNewLeagues(chunk, leagueCache);
 
-		// 4. 데이터 조립 (메인 루프 내 DB 접근 없음)
+		// 게임 처리
 		List<GameParticipant> participantsToSave = new ArrayList<>();
 		Map<String, Game> newGameCache = new HashMap<>();
 
 		for (GameDataCsvDto dto : chunk) {
 			if (existingGameIds.contains(dto.getGameid())) continue;
 
+			// 기존 처리 로직...
 			Team team = teamCache.get(dto.getTeamname());
 			Player player = playerCache.get(dto.getPlayername());
 			if (team == null || player == null) continue;
@@ -127,8 +155,8 @@ public class DataIngestionService {
 			if (!championCache.containsKey(championName)) continue;
 			Champion champion = championCache.get(championName);
 
-			// ✨ 캐시에서 리그 정보 조회
-			LeagueIdentifier leagueId = new LeagueIdentifier(dto.getLeague(), dto.getYear(), dto.getSplit(), dto.getPlayoffs() == 1);
+			LeagueIdentifier leagueId = new LeagueIdentifier(dto.getLeague(), dto.getYear(),
+				dto.getSplit(), dto.getPlayoffs() == 1);
 			League league = leagueCache.get(leagueId);
 
 			if (league == null) {
@@ -139,7 +167,8 @@ public class DataIngestionService {
 			Game game = newGameCache.computeIfAbsent(dto.getGameid(), gameId -> {
 				Game newGame = Game.builder().gameOriginId(gameId).league(league)
 					.gameDate(LocalDate.parse(dto.getDate(), CSV_DATE_FORMATTER))
-					.gameNumber(dto.getGame()).patch(dto.getPatch()).gameLengthSeconds(dto.getGamelength()).build();
+					.gameNumber(dto.getGame()).patch(dto.getPatch())
+					.gameLengthSeconds(dto.getGamelength()).build();
 				addBan(newGame, team, championCache, dto.getBan1());
 				addBan(newGame, team, championCache, dto.getBan2());
 				addBan(newGame, team, championCache, dto.getBan3());
@@ -147,16 +176,24 @@ public class DataIngestionService {
 				addBan(newGame, team, championCache, dto.getBan5());
 				return newGame;
 			});
-			participantsToSave.add(GameParticipant.builder().game(game).team(team).player(player).champion(champion).side(dto.getSide()).position(dto.getPosition()).isWin(dto.getResult() == 1).build());
+			participantsToSave.add(GameParticipant.builder().game(game).team(team).player(player)
+				.champion(champion).side(dto.getSide()).position(dto.getPosition())
+				.isWin(dto.getResult() == 1).build());
 		}
 
-		// 5. 최종 데이터 저장
+		// 저장 및 결과 기록
 		if (!newGameCache.values().isEmpty()) {
 			gameRepository.saveAll(newGameCache.values());
 			gameParticipantRepository.saveAll(participantsToSave);
+			result.validGames = newGameCache.size();  // ✅ 성공한 게임 수 기록
 		}
-		log.info("Processed an optimized chunk of {} records.", chunk.size());
+
+		log.info("Processed chunk: {} valid games, {} skipped games",
+			result.validGames, result.skippedGames);
+
+		return result;  // ✅ 결과 반환
 	}
+
 
 	// ================== Private Helper Methods ==================
 
@@ -176,7 +213,6 @@ public class DataIngestionService {
 		}
 	}
 
-	// ✨ 새로운 리그를 저장하고 캐시를 업데이트하는 헬퍼 메소드
 	private void saveNewLeagues(List<GameDataCsvDto> chunk, Map<LeagueIdentifier, League> leagueCache) {
 		Set<LeagueIdentifier> newLeagueIds = chunk.stream()
 			.map(dto -> new LeagueIdentifier(dto.getLeague(), dto.getYear(), dto.getSplit(), dto.getPlayoffs() == 1))
@@ -200,5 +236,36 @@ public class DataIngestionService {
 				game.getBans().add(Ban.builder().game(game).team(team).bannedChampion(bannedChampion).build());
 			}
 		}
+	}
+
+	@Getter
+	public static class DataIngestionResult {
+		private long processedRows = 0;
+		private int processedGames = 0;
+		private int successfulGames = 0;
+		private int failedGames = 0;
+		private int skippedGames = 0;
+		private int incompleteGames = 0;
+
+		public void incrementProcessedRows() {
+			this.processedRows++;
+		}
+
+		public void merge(ChunkProcessingResult chunkResult) {
+			this.processedGames += chunkResult.validGames;
+			this.successfulGames += chunkResult.validGames;
+			this.failedGames += chunkResult.failedGames;
+			this.skippedGames += chunkResult.skippedGames;
+			this.incompleteGames += chunkResult.invalidGames;
+		}
+
+	}
+
+	@Getter
+	public static class ChunkProcessingResult {
+		int validGames     = 0;   // 정상적으로 저장된 게임
+		int invalidGames   = 0;   // 10명이 안 되거나 포지션이 잘못돼 스킵한 게임
+		int skippedGames   = 0;   // 이미 DB에 있는(complete) 게임
+		int failedGames    = 0;   // 처리 중 예외가 난 게임
 	}
 }
