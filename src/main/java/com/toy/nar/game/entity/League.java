@@ -1,10 +1,13 @@
 package com.toy.nar.game.entity;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
@@ -13,6 +16,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 @Entity
@@ -41,6 +47,10 @@ public class League {
 
 	@Column(name = "is_playoffs", nullable = false)
 	private Boolean isPlayoffs; // CSV 'playoffs' (0/1)을 Boolean으로 변환하여 저장
+
+	@OneToMany(mappedBy = "league", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+	private List<LeagueTeam> leagueTeams = new ArrayList<>();
+
 
 	@Builder // Lombok: 빌더 패턴 생성자
 	public League(String leagueName, Integer seasonYear, String seasonSplit, Boolean isPlayoffs) {

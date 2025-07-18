@@ -1,16 +1,22 @@
 package com.toy.nar.game.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
 import com.toy.nar.game.entity.League;
 
 public interface LeagueRepository extends JpaRepository<League, Long> {
-	/**
-	 * 리그의 비즈니스 키(이름, 연도, 스플릿, 플레이오프 여부)로 League 엔티티를 조회합니다.
-	 * 중복 리그 생성을 방지합니다.
-	 */
-	Optional<League> findByLeagueNameAndSeasonYearAndSeasonSplitAndIsPlayoffs(
-		String leagueName, Integer seasonYear, String seasonSplit, Boolean isPlayoffs
-	);
+
+	@Query("SELECT DISTINCT l.leagueName FROM League l WHERE l.seasonYear = 2025")
+	List<String> findDistinctLeagueNames();
+
+	@Query("SELECT DISTINCT l.seasonSplit FROM League l WHERE l.leagueName = :leagueName AND l.seasonYear = :seasonYear")
+	List<String> findSplitsByLeague(@Param("leagueName") String leagueName, @Param("seasonYear") Integer seasonYear);
+
+	@Query("SELECT l FROM League l WHERE l.leagueName = :leagueName AND l.seasonSplit = :seasonSplit AND l.isPlayoffs = :isPlayoffs")
+	Optional<League> findByLeagueNameAndSeasonSplitAndIsPlayoffs(@Param("leagueName") String leagueName, @Param("seasonSplit") String seasonSplit, @Param("isPlayoffs") Boolean isPlayoffs);
 }
