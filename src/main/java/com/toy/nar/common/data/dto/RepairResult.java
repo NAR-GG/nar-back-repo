@@ -1,9 +1,8 @@
-package com.toy.nar.common.data;
+package com.toy.nar.common.data.dto;
 
 import java.util.ArrayList;
 import java.util.List;
 
-// RepairResult.java
 public class RepairResult {
 	private int initialIncompleteGames = 0;
 	private int repairedGames = 0;

@@ -1,4 +1,4 @@
-package com.toy.nar.common.data;
+package com.toy.nar.common.data.service;
 
 import java.util.ArrayList;
 import java.util.List;

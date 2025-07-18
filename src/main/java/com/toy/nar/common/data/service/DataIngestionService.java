@@ -1,4 +1,4 @@
-package com.toy.nar.common.data;
+package com.toy.nar.common.data.service;
 
 import com.opencsv.bean.CsvToBean;
 import com.opencsv.bean.CsvToBeanBuilder;

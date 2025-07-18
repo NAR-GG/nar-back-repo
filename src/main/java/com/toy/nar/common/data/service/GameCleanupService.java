@@ -1,4 +1,4 @@
-package com.toy.nar.common.data;
+package com.toy.nar.common.data.service;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -7,6 +7,8 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.toy.nar.common.data.GameStatusAnalyzer;
+import com.toy.nar.common.data.dto.CleanupResult;
 import com.toy.nar.game.entity.Game;
 import com.toy.nar.game.repository.GameParticipantRepository;
 import com.toy.nar.game.repository.GameRepository;

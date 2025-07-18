@@ -1,9 +1,8 @@
-package com.toy.nar.common.data;
+package com.toy.nar.common.data.dto;
 
 import java.util.Collections;
 import java.util.List;
 
-// CleanupResult.java
 public class CleanupResult {
 	private final boolean success;
 	private final int deletedGames;

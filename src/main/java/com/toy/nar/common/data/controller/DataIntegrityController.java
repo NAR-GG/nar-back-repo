@@ -1,4 +1,4 @@
-package com.toy.nar.common.data;
+package com.toy.nar.common.data.controller;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -9,6 +9,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.toy.nar.common.data.GameStatusAnalyzer;
+import com.toy.nar.common.data.dto.CleanupResult;
+import com.toy.nar.common.data.dto.RepairResult;
+import com.toy.nar.common.data.service.DataIngestionService;
+import com.toy.nar.common.data.service.GameCleanupService;
+import com.toy.nar.common.data.service.SelectiveDataRepairService;
 import com.toy.nar.game.repository.GameRepository;
 
 import lombok.RequiredArgsConstructor;

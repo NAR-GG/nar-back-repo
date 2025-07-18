@@ -1,6 +1,5 @@
-package com.toy.nar.common.data;
+package com.toy.nar.common.data.dto;
 
-// GameRepairResult.java
 public class GameRepairResult {
 	public enum Status { SUCCESS, FAILED, NOT_FOUND }
 
