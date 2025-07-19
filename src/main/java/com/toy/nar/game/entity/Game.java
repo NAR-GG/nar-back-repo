@@ -21,7 +21,9 @@ import lombok.ToString;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "games", indexes = {
@@ -46,6 +48,9 @@ public class Game {
 	@JoinColumn(name = "league_id", nullable = false)
 	private League league;
 
+	@OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+	private Set<GameParticipant> participants = new HashSet<>();
+
 	@Column(name = "game_date", nullable = false)
 	private LocalDate gameDate;
 
@@ -59,7 +64,7 @@ public class Game {
 	private Integer gameLengthSeconds;
 
 	@OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-	private List<Ban> bans = new ArrayList<>();
+	private Set<Ban> bans = new HashSet<>();
 
 	@Builder
 	public Game(String gameOriginId, League league, LocalDate gameDate, Integer gameNumber, String patch, Integer gameLengthSeconds) {

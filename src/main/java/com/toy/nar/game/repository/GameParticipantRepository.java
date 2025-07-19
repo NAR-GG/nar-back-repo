@@ -108,4 +108,9 @@ public interface GameParticipantRepository extends JpaRepository<GameParticipant
 		@Param("patch") String patch
 	);
 
+	@Modifying(flushAutomatically = true, clearAutomatically = true)
+	int deleteByGameIdIn(Set<Long> gameIds);
+
+	@Query("SELECT DISTINCT gp.game.league.id, gp.team.id FROM GameParticipant gp")
+	List<Object[]> findAllDistinctLeagueTeamPairs();
 }

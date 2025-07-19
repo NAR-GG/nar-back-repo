@@ -3,6 +3,7 @@ package com.toy.nar.game.repository;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -22,6 +23,9 @@ public interface LeagueTeamRepository extends JpaRepository<LeagueTeam, Long> {
 		@Param("seasonYear") Integer seasonYear,
 		@Param("seasonSplit") String seasonSplit);
 
-	@Query("SELECT lt FROM LeagueTeam lt WHERE lt.league = :league AND lt.team = :team")
-	LeagueTeam findByLeagueAndTeam(@Param("league") League league, @Param("team") Team team);
+	@Modifying
+	int deleteByLeague_LeagueName(String leagueName);
+
+	@Query("SELECT lt.league.id, lt.team.id FROM LeagueTeam lt")
+	List<Object[]> findAllLeagueTeamPairs();
 }
