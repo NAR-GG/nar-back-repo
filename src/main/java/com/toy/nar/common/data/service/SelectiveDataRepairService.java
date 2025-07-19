@@ -70,16 +70,16 @@ public class SelectiveDataRepairService {
 		// 1. 현재 DB 상태 분석
 		GameStatusAnalyzer.GameStatusReport statusReport = gameAnalyzer.analyzeGameStatus();
 
-		if (statusReport.getIncompleteGames() == 0) {
+		if (statusReport.incompleteGames() == 0) {
 			log.info("✅ No incomplete games found. Nothing to repair.");
 			return RepairResult.noRepairNeeded();
 		}
 
 		RepairResult result = new RepairResult();
-		result.setInitialIncompleteGames((int) statusReport.getIncompleteGames());
+		result.setInitialIncompleteGames((int) statusReport.incompleteGames());
 
 		// 2. 불완전한 게임의 gameOriginId 조회
-		Set<String> incompleteGameOriginIds = getIncompleteGameOriginIds(statusReport.getIncompleteGameIds());
+		Set<String> incompleteGameOriginIds = getIncompleteGameOriginIds(statusReport.incompleteGameIds());
 		log.info("🎯 Target games for repair: {}", incompleteGameOriginIds.size());
 
 		// 3. 마스터 데이터 캐시

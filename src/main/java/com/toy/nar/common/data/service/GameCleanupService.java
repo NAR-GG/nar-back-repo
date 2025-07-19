@@ -1,8 +1,7 @@
 package com.toy.nar.common.data.service;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.toy.nar.common.data.GameStatusAnalyzer;
 import com.toy.nar.common.data.dto.CleanupResult;
 import com.toy.nar.game.entity.Game;
+import com.toy.nar.game.repository.BanRepository;
 import com.toy.nar.game.repository.GameParticipantRepository;
 import com.toy.nar.game.repository.GameRepository;
 
@@ -22,40 +22,37 @@ import lombok.extern.slf4j.Slf4j;
 public class GameCleanupService {
 
 	private final GameStatusAnalyzer gameAnalyzer;
-	private final GameParticipantRepository gameParticipantRepository;
 	private final GameRepository gameRepository;
 
 	@Transactional
 	public CleanupResult deleteIncompleteGames() {
-		log.info("🗑️ Starting deletion of irreparable incomplete games...");
+		log.warn("🗑️ Starting cleanup of all incomplete games using Cascade...");
 
-		// 현재 불완전한 게임 조회
+		// 1. 진단: 삭제할 게임 ID 목록을 가져옵니다.
 		GameStatusAnalyzer.GameStatusReport report = gameAnalyzer.analyzeGameStatus();
+		Set<Long> incompleteGameIds = report.incompleteGameIds();
 
-		if (report.getIncompleteGames() == 0) {
+		if (incompleteGameIds.isEmpty()) {
+			log.info("✅ No incomplete games found to delete. The database is clean.");
 			return CleanupResult.noGamesToDelete();
 		}
 
-		// 불완전한 게임들 삭제
-		int deletedCount = 0;
-		List<String> deletedGameOriginIds = new ArrayList<>();
+		log.info("Found {} incomplete games to delete. Game IDs: {}", incompleteGameIds.size(), incompleteGameIds);
 
-		for (Long gameId : report.getIncompleteGameIds()) {
-			// gameOriginId 조회 (로깅용)
-			Optional<Game> gameOpt = gameRepository.findById(gameId);
-			if (gameOpt.isPresent()) {
-				deletedGameOriginIds.add(gameOpt.get().getGameOriginId());
-			}
+		// 로깅을 위해 gameOriginId를 미리 조회 (선택적)
+		Set<String> gameOriginIds = gameRepository.findGameOriginIdsByIds(incompleteGameIds);
 
-			// 참가자 데이터 삭제
-			gameParticipantRepository.deleteByGameId(gameId);
-			// 게임 데이터 삭제
-			gameRepository.deleteById(gameId);
-			deletedCount++;
+		// [변경] 2. 삭제할 Game 엔티티들을 영속성 컨텍스트로 불러옵니다.
+		List<Game> gamesToDelete = gameRepository.findAllById(incompleteGameIds);
+
+		// [변경] 3. Game 엔티티를 직접 삭제합니다.
+		// 이 메서드는 @OneToMany(cascade = CascadeType.ALL) 옵션을 트리거하여
+		// JPA가 알아서 자식인 Ban과 GameParticipant를 먼저 삭제한 후 Game을 삭제합니다.
+		if (!gamesToDelete.isEmpty()) {
+			gameRepository.deleteAll(gamesToDelete);
 		}
 
-		log.info("✅ Deleted {} incomplete games: {}", deletedCount, deletedGameOriginIds);
-
-		return CleanupResult.success(deletedCount, deletedGameOriginIds);
+		log.warn("✅ Cleanup complete. {} incomplete games and their children have been deleted.", gamesToDelete.size());
+		return CleanupResult.success(gamesToDelete.size(), gameOriginIds.stream().toList());
 	}
 }
