@@ -11,8 +11,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.toy.nar.common.data.GameStatusAnalyzer;
 import com.toy.nar.common.data.dto.CleanupResult;
+import com.toy.nar.common.data.dto.DataIngestionResult;
 import com.toy.nar.common.data.dto.RepairResult;
-import com.toy.nar.common.data.service.DataIngestionService;
+import com.toy.nar.common.data.service.DataIngestionFacade;
+import com.toy.nar.common.data.service.DataReconciliationService;
 import com.toy.nar.common.data.service.GameCleanupService;
 import com.toy.nar.common.data.service.SelectiveDataRepairService;
 import com.toy.nar.game.repository.GameRepository;
@@ -28,9 +30,10 @@ public class DataIntegrityController {
 
 	private final GameStatusAnalyzer gameAnalyzer;
 	private final SelectiveDataRepairService repairService;
-	private final DataIngestionService ingestionService;
+	private final DataIngestionFacade ingestionFacade;
 	private final GameRepository gameRepository;
 	private final GameCleanupService cleanupService;
+	private final DataReconciliationService reconciliationService;
 
 	/**
 	 * 현재 게임 데이터 상태 분석
@@ -41,10 +44,10 @@ public class DataIntegrityController {
 			GameStatusAnalyzer.GameStatusReport report = gameAnalyzer.analyzeGameStatus();
 
 			Map<String, Object> response = new HashMap<>();
-			response.put("totalGames", report.getTotalGames());
-			response.put("completeGames", report.getCompleteGames());
-			response.put("incompleteGames", report.getIncompleteGames());
-			response.put("needsRepair", report.getIncompleteGames() > 0);
+			response.put("totalGames", report.totalGames());
+			response.put("completeGames", report.completeGames());
+			response.put("incompleteGames", report.incompleteGames());
+			response.put("needsRepair", report.incompleteGames() > 0);
 
 			return ResponseEntity.ok(response);
 
@@ -99,16 +102,16 @@ public class DataIntegrityController {
 			}
 
 			log.info("🚀 Starting initial data load via API...");
-			DataIngestionService.DataIngestionResult result = ingestionService.ingestCsvData();
+			DataIngestionResult result = ingestionFacade.ingestCsvData();
 
 			Map<String, Object> response = new HashMap<>();
 			response.put("success", true);
-			response.put("processedRows", result.getProcessedRows());
-			response.put("processedGames", result.getProcessedGames());
-			response.put("successfulGames", result.getSuccessfulGames());
-			response.put("failedGames", result.getFailedGames());
-			response.put("skippedGames", result.getSkippedGames());
-			response.put("incompleteGames", result.getIncompleteGames());
+			response.put("processedRows", result.processedRows());
+			response.put("processedGames", result.processedGames());
+			response.put("successfulGames", result.successfulGames());
+			response.put("failedGames", result.failedGames());
+			response.put("skippedGames", result.skippedGames());
+			response.put("incompleteGames", result.incompleteGames());
 
 			return ResponseEntity.ok(response);
 
@@ -128,8 +131,8 @@ public class DataIntegrityController {
 			GameStatusAnalyzer.GameStatusReport report = gameAnalyzer.analyzeGameStatus();
 
 			Map<String, Object> response = new HashMap<>();
-			response.put("incompleteGameIds", report.getIncompleteGameIds());
-			response.put("count", report.getIncompleteGames());
+			response.put("incompleteGameIds", report.incompleteGameIds());
+			response.put("count", report.totalGames());
 
 			return ResponseEntity.ok(response);
 
@@ -146,10 +149,10 @@ public class DataIntegrityController {
 			CleanupResult result = cleanupService.deleteIncompleteGames();
 
 			Map<String, Object> response = new HashMap<>();
-			response.put("success", result.isSuccess());
-			response.put("deletedGames", result.getDeletedGames());
-			response.put("deletedGameIds", result.getDeletedGameIds());
-			response.put("message", result.getMessage());
+			response.put("success", result.success());
+			response.put("deletedGames", result.deletedGameIds());
+			response.put("deletedGameIds", result.deletedGameIds());
+			response.put("message", result.message());
 
 			return ResponseEntity.ok(response);
 
@@ -158,5 +161,11 @@ public class DataIntegrityController {
 			return ResponseEntity.status(500)
 				.body(Map.of("error", "불완전한 게임 삭제 중 오류가 발생했습니다: " + e.getMessage()));
 		}
+	}
+
+	@PostMapping("/reconcile-leagueteams")
+	public ResponseEntity<DataReconciliationService.ReconciliationResult> reconcileLeagueTeams() {
+		DataReconciliationService.ReconciliationResult result = reconciliationService.reconcileLeagueTeams();
+		return ResponseEntity.ok(result);
 	}
 }
