@@ -9,7 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
-import com.toy.nar.game.repository.GameParticipantRepository;
+import com.toy.nar.domain.game.repository.GameParticipantRepository;
 
 @Slf4j
 @DataJpaTest
