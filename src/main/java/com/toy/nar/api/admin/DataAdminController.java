@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.toy.nar.app.data.maintenance.GameStatusAnalyzer;
 import com.toy.nar.app.data.maintenance.dto.CleanupResult;
 import com.toy.nar.app.data.source.DriveTestService;
+import com.toy.nar.app.data.source.NotificationService;
 import com.toy.nar.app.data.source.dto.DataSyncResult;
 import com.toy.nar.app.data.maintenance.DataReconciliationService;
 import com.toy.nar.app.data.maintenance.DataVerificationService;
@@ -29,6 +30,7 @@ public class DataAdminController {
 
 	// 데이터 소스 관련 서비스
 	private final GoogleDriveDataSyncService googleDriveDataSyncService;
+	private final NotificationService notificationService;
 
 	// 데이터 유지보수 관련 서비스
 	private final GameStatusAnalyzer gameStatusAnalyzer;
@@ -159,6 +161,18 @@ public class DataAdminController {
 	public ResponseEntity<String> testAll() {
 		driveTestService.runAllTests();
 		return ResponseEntity.ok("전체 테스트 완료 - 로그 확인");
+	}
+
+	@PostMapping("/test-notification")
+	public ResponseEntity<String> testNotification() {
+		notificationService.sendSuccessNotification(
+			DataSyncResult.success()
+				.toBuilder()
+				.source("TEST")
+				.processingTimeMs(100)
+				.build()
+		);
+		return ResponseEntity.ok("Slack 알림 완료");
 	}
 
 }
