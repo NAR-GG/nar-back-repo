@@ -38,4 +38,8 @@ public class Player {
 	public Player(String name) {
 		this.name = Objects.requireNonNull(name, "Player name must not be null");
 	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
 }
