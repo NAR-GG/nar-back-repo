@@ -1,9 +1,13 @@
 package com.toy.nar.app.data.source;
 
 import java.io.InputStream;
+import java.time.LocalDateTime;
+
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.google.api.services.drive.Drive;
+import com.toy.nar.app.analysis.service.CombinationService;
 import com.toy.nar.app.data.ingestion.dto.DataIngestionResult;
 import com.toy.nar.app.data.source.dto.DataSyncResult;
 import com.toy.nar.app.data.ingestion.DataIngestionFacade;
@@ -17,10 +21,31 @@ import lombok.extern.slf4j.Slf4j;
 public class GoogleDriveDataSyncService {
 
 	private final Drive drive;
-	private final DataIngestionFacade dataIngestionFacade; // 의존성 변경
+	private final DataIngestionFacade dataIngestionFacade;
+	private final NotificationService notificationService;
+	private final CombinationService combinationService;
 
 	private static final String CSV_FILE_ID = "1v6LRphp2kYciU4SXp0PCjEMuev1bDejc";
 
+	@Scheduled(cron = "0 30 4,10,16,22 * * ?", zone = "Asia/Seoul")
+	public void scheduledSyncFromGoogleDrive() {
+		try {
+			log.info("🔄 Starting scheduled Google Drive data sync at {}", LocalDateTime.now());
+			DataSyncResult result = syncFromGoogleDrive();
+
+			log.info("✅ Scheduled sync completed: {} new games added", result.newGamesAdded());
+
+			if (result.isSuccess()) {
+				combinationService.updateInfo();
+				notificationService.sendSuccessNotification(result);
+			}
+
+		} catch (Exception e) {
+			log.error("❌ Scheduled sync failed", e);
+			// 실패 알림
+			notificationService.sendFailureNotification("Scheduled sync failed: " + e.getMessage());
+		}
+	}
 	/**
 	 * Google Drive에서 최신 CSV를 다운로드하여 DB에 동기화
 	 */

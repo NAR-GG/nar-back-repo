@@ -3,6 +3,7 @@ package com.toy.nar.app.analysis.service;
 
 import com.toy.nar.app.analysis.converter.CombinationDtoConverter;
 import com.toy.nar.app.analysis.dto.PageCombinationResponse;
+import com.toy.nar.app.analysis.dto.UpdateInfoDto;
 import com.toy.nar.domain.combination.TeamCompositionFactory;
 import com.toy.nar.domain.combination.ChampionCombination;
 import com.toy.nar.domain.combination.GameTeamKey;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.toy.nar.app.analysis.dto.CombinationFilterDto;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -43,6 +45,17 @@ public class CombinationService {
 	private final GameParticipantRepository gameParticipantRepository;
 	private final CombinationIdService idService;
 	private final CombinationFilterManager filterManager;
+
+	private LocalDateTime lastUpdateTime = LocalDateTime.now();
+
+	@Transactional
+	public void updateInfo() {
+		lastUpdateTime = LocalDateTime.now();
+	}
+
+	public UpdateInfoDto getUpdateInfo() {
+		return new UpdateInfoDto(lastUpdateTime);
+	}
 
 	public PageCombinationResponse findTopCombinationsV2(
 		List<String> championNames,

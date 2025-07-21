@@ -6,6 +6,7 @@ import com.toy.nar.app.analysis.dto.CombinationFilterDto;
 import com.toy.nar.app.analysis.dto.CombinationResponseDto;
 import com.toy.nar.app.analysis.dto.CombinationStatDto;
 import com.toy.nar.app.analysis.dto.PageCombinationResponse;
+import com.toy.nar.app.analysis.dto.UpdateInfoDto;
 import com.toy.nar.app.analysis.service.CombinationService;
 import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
 
@@ -86,6 +87,11 @@ public class CombinationController {
 
 		CombinationDetailDto detail = combinationService.getCombinationDetail(champions, filter);
 		return ResponseEntity.ok(detail);
+	}
+
+	@GetMapping("/stat")
+	public ResponseEntity<UpdateInfoDto> getUpdateInfo() {
+		return ResponseEntity.ok(combinationService.getUpdateInfo());
 	}
 
 }
