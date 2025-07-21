@@ -34,15 +34,32 @@ public class ChampionCombination {
 			latestGameDate.isAfter(LocalDate.now().minusDays(30));
 	}
 
-	public int compareByRecency(ChampionCombination other) {
-		if (this.frequency != other.frequency) {
-			return Long.compare(other.frequency, this.frequency);
+	public static int compareByFrequency(ChampionCombination a, ChampionCombination b) {
+		if (a.frequency != b.frequency) {
+			return Long.compare(b.getFrequency(), a.getFrequency());
 		}
-		return other.latestGameDate.compareTo(this.latestGameDate);
+		return b.latestGameDate.compareTo(a.latestGameDate);
 	}
 
-	public boolean containsAll(Collection<String> championNames) {
-		return champions.containsAll(championNames);
+	public static int compareByPatch(ChampionCombination a, ChampionCombination b) {
+		String patchA = a.getPatches().stream().max(String::compareTo).orElse("");
+		String patchB = b.getPatches().stream().max(String::compareTo).orElse("");
+		int patchCompare = patchB.compareTo(patchA);  // DESC
+		if (patchCompare != 0) {
+			return patchCompare;
+		}
+		if (a.frequency != b.frequency) {
+			return Long.compare(b.getFrequency(), a.getFrequency());
+		}
+		return b.latestGameDate.compareTo(a.latestGameDate);
+	}
+
+	public static int compareByRecency(ChampionCombination a, ChampionCombination b) {
+		int dateCompare = b.latestGameDate.compareTo(a.latestGameDate);  // DESC (최신 먼저)
+		if (dateCompare != 0) {
+			return dateCompare;
+		}
+		return Long.compare(b.getFrequency(), a.getFrequency());
 	}
 
 	public int size() {

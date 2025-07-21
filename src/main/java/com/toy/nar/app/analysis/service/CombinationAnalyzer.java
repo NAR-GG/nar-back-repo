@@ -37,8 +37,6 @@ public class CombinationAnalyzer {
 
 		return combinationStats.entrySet().stream()
 			.map(entry -> createChampionCombination(entry.getKey(), entry.getValue()))
-			.sorted(ChampionCombination::compareByRecency)
-			.limit(10)
 			.collect(Collectors.toList());
 	}
 

@@ -1,6 +1,7 @@
 package com.toy.nar.app.analysis.converter;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.stereotype.Component;
@@ -58,6 +59,10 @@ public class CombinationDtoConverter {
 
 		List<CombinationDetailDto.GameDetailDto> gameDetailDtos =
 			gameDetailConverter.convertToGameDetailsMulti(gameDetails, teamNames, targetChampions);
+
+		gameDetailDtos = gameDetailDtos.stream()
+			.sorted(Comparator.comparing(CombinationDetailDto.GameDetailDto::gameDate, Comparator.reverseOrder()))  // DESC (최신 먼저)
+			.toList();
 
 		return new CombinationDetailDto(summary, gameDetailDtos);
 	}

@@ -1,5 +1,7 @@
 package com.toy.nar.domain.game.repository;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -42,6 +44,54 @@ public interface GameParticipantRepository extends JpaRepository<GameParticipant
 		"JOIN FETCH gp.game g " +
 		"JOIN FETCH gp.champion c " +
 		"JOIN FETCH gp.team t " +
+		"LEFT JOIN FETCH g.league l " +
+		"WHERE gp.game.id IN (" +
+		"    SELECT p.game.id FROM GameParticipant p " +
+		"    JOIN p.champion c2 " +
+		"    WHERE c2.championNameEn IN :championNames" +
+		") " +
+		"AND (:year IS NULL OR l.seasonYear = :year) " +
+		"AND (:splits IS NULL OR l.seasonSplit IN :splits) " +
+		"AND (:leagueNames IS NULL OR l.leagueName IN :leagueNames) " +
+		"AND (:teamNames IS NULL OR t.name IN :teamNames) " +
+		"AND (:patch IS NULL OR g.patch = :patch)")
+	List<GameParticipant> findFilteredParticipantsMulti(
+		@Param("championNames") List<String> championNames,
+		@Param("year") Integer year,
+		@Param("splits") List<String> splits,
+		@Param("leagueNames") List<String> leagueNames,
+		@Param("teamNames") List<String> teamNames,
+		@Param("patch") String patch
+	);
+
+	@Query("SELECT COUNT(gp) FROM GameParticipant gp " +
+		"JOIN gp.game g " +
+		"JOIN gp.champion c " +
+		"JOIN gp.team t " +
+		"LEFT JOIN g.league l " +
+		"WHERE gp.game.id IN (" +
+		"    SELECT p.game.id FROM GameParticipant p " +
+		"    JOIN p.champion c2 " +
+		"    WHERE c2.championNameEn IN :championNames" +
+		") " +
+		"AND (:year IS NULL OR l.seasonYear = :year) " +
+		"AND (:splits IS NULL OR l.seasonSplit IN :splits) " +
+		"AND (:leagueNames IS NULL OR l.leagueName IN :leagueNames) " +
+		"AND (:teamNames IS NULL OR t.name IN :teamNames) " +
+		"AND (:patch IS NULL OR g.patch = :patch)")
+	long countFilteredParticipantsMulti(
+		@Param("championNames") List<String> championNames,
+		@Param("year") Integer year,
+		@Param("splits") List<String> splits,
+		@Param("leagueNames") List<String> leagueNames,
+		@Param("teamNames") List<String> teamNames,
+		@Param("patch") String patch
+	);
+
+	@Query("SELECT gp FROM GameParticipant gp " +
+		"JOIN FETCH gp.game g " +
+		"JOIN FETCH gp.champion c " +
+		"JOIN FETCH gp.team t " +
 		"JOIN FETCH gp.player p " +
 		"LEFT JOIN FETCH g.league l " +
 		"WHERE g.id IN :gameIds " +
@@ -64,30 +114,6 @@ public interface GameParticipantRepository extends JpaRepository<GameParticipant
         LIMIT 100
         """, nativeQuery = true)
 	List<Object[]> findIncompleteGames();
-
-	@Query("SELECT gp FROM GameParticipant gp " +
-		"JOIN FETCH gp.game g " +
-		"JOIN FETCH gp.champion c " +
-		"JOIN FETCH gp.team t " +
-		"LEFT JOIN FETCH g.league l " +
-		"WHERE gp.game.id IN (" +
-		"    SELECT p.game.id FROM GameParticipant p " +
-		"    JOIN p.champion c2 " +
-		"    WHERE c2.championNameEn IN :championNames" +
-		") " +
-		"AND (:year IS NULL OR l.seasonYear = :year) " +
-		"AND (:splits IS NULL OR l.seasonSplit IN :splits) " +
-		"AND (:leagueNames IS NULL OR l.leagueName IN :leagueNames) " +
-		"AND (:teamNames IS NULL OR t.name IN :teamNames) " +
-		"AND (:patch IS NULL OR g.patch = :patch)")
-	List<GameParticipant> findFilteredParticipantsMulti(
-		@Param("championNames") List<String> championNames,
-		@Param("year") Integer year,
-		@Param("splits") List<String> splits,
-		@Param("leagueNames") List<String> leagueNames,
-		@Param("teamNames") List<String> teamNames,
-		@Param("patch") String patch
-	);
 
 	// 기본 참가자 조회 (년도, 패치만 적용)
 	@Query("SELECT gp FROM GameParticipant gp " +

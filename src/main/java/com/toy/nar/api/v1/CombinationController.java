@@ -5,10 +5,14 @@ import com.toy.nar.app.analysis.dto.CombinationDetailDto;
 import com.toy.nar.app.analysis.dto.CombinationFilterDto;
 import com.toy.nar.app.analysis.dto.CombinationResponseDto;
 import com.toy.nar.app.analysis.dto.CombinationStatDto;
+import com.toy.nar.app.analysis.dto.PageCombinationResponse;
 import com.toy.nar.app.analysis.service.CombinationService;
 import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
 
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,36 +30,17 @@ public class CombinationController {
 
 	private final CombinationService combinationService;
 
-	// 🔥 메인 엔드포인트: 조합 ID 포함
-	@GetMapping
-	public ResponseEntity<List<CombinationResponseDto>> getCombinations(
-		@RequestParam List<String> champions,
-		@RequestParam Optional<Integer> year,
-		@RequestParam Optional<String> split,
-		@RequestParam Optional<String> leagueName,
-		@RequestParam Optional<String> teamName,
-		@RequestParam Optional<String> patch) {
-
-		CombinationFilterDto filter = CombinationFilterDto.builder()
-			.year(year.orElse(null))
-			.split(split.orElse(null))
-			.leagueName(leagueName.orElse(null))
-			.teamName(teamName.orElse(null))
-			.patch(patch.orElse(null))
-			.build();
-
-		List<CombinationResponseDto> topCombinations = combinationService.findTopCombinations(champions, filter);
-		return ResponseEntity.ok(topCombinations);
-	}
-
 	@GetMapping("/v2")
-	public ResponseEntity<List<CombinationResponseDto>> getCombinationsV2(
+	public ResponseEntity<PageCombinationResponse> getCombinationsV2(
 		@RequestParam List<String> champions,
 		@RequestParam Optional<Integer> year,
 		@RequestParam Optional<List<String>> splits,
 		@RequestParam Optional<List<String>> leagueNames,
 		@RequestParam Optional<List<String>> teamNames,
-		@RequestParam Optional<String> patch) {
+		@RequestParam Optional<String> patch,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "10") int size,
+		@RequestParam(defaultValue = "frequency") String sort) {  // 추가: 정렬 타입 (frequency, recency, patch)
 
 		MultiCombinationFilterDto filter = MultiCombinationFilterDto.builder()
 			.year(year.orElse(null))
@@ -65,7 +50,10 @@ public class CombinationController {
 			.patch(patch.orElse(null))
 			.build();
 
-		List<CombinationResponseDto> combinations = combinationService.findTopCombinationsV2(champions, filter);
+		Pageable basicPageable = PageRequest.of(page, size);
+		Pageable pageable = combinationService.applyDynamicSort(basicPageable, sort);
+
+		PageCombinationResponse combinations = combinationService.findTopCombinationsV2(champions, filter, pageable);
 		return ResponseEntity.ok(combinations);
 	}
 
@@ -100,25 +88,4 @@ public class CombinationController {
 		return ResponseEntity.ok(detail);
 	}
 
-	// 🔥 레거시 엔드포인트 유지
-	@GetMapping("/legacy")
-	public ResponseEntity<List<CombinationStatDto>> getCombinationsLegacy(
-		@RequestParam List<String> champions,
-		@RequestParam Optional<Integer> year,
-		@RequestParam Optional<String> split,
-		@RequestParam Optional<String> leagueName,
-		@RequestParam Optional<String> teamName,
-		@RequestParam Optional<String> patch) {
-
-		CombinationFilterDto filter = CombinationFilterDto.builder()
-			.year(year.orElse(null))
-			.split(split.orElse(null))
-			.leagueName(leagueName.orElse(null))
-			.teamName(teamName.orElse(null))
-			.patch(patch.orElse(null))
-			.build();
-
-		List<CombinationStatDto> topCombinations = combinationService.findTopCombinationsLegacy(champions, filter);
-		return ResponseEntity.ok(topCombinations);
-	}
 }
