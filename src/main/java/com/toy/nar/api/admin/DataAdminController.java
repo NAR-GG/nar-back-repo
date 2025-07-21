@@ -37,7 +37,7 @@ public class DataAdminController {
 	private final DataVerificationService verificationService;
 
 	// Google Drive 서비스
-	private DriveTestService driveTestService;
+	private final DriveTestService driveTestService;
 
 	// == 데이터 동기화 (Sync) ==
 	@PostMapping("/sync")
@@ -160,4 +160,5 @@ public class DataAdminController {
 		driveTestService.runAllTests();
 		return ResponseEntity.ok("전체 테스트 완료 - 로그 확인");
 	}
+
 }
