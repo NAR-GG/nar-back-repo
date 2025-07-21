@@ -20,7 +20,9 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Entity
@@ -47,7 +49,7 @@ public class Game {
 	private League league;
 
 	@OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-	private Set<GameParticipant> participants = new HashSet<>();
+	private List<GameParticipant> participants = new ArrayList<>();
 
 	@Column(name = "game_date", nullable = false)
 	private LocalDate gameDate;
@@ -63,6 +65,11 @@ public class Game {
 
 	@OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
 	private Set<Ban> bans = new HashSet<>();
+
+	public void addParticipant(GameParticipant participant) {
+		participants.add(participant);
+		participant.assignGame(this);
+	}
 
 	@Builder
 	public Game(String gameOriginId, League league, LocalDate gameDate, Integer gameNumber, String patch, Integer gameLengthSeconds) {

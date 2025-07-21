@@ -8,24 +8,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import com.toy.nar.domain.participant.entity.Team;
 
 public interface TeamRepository extends JpaRepository<Team, Long> {
 
-	List<Team> findAllByNameInIgnoreCase(Collection<String> teamNames);
+	@Query("SELECT t FROM Team t WHERE t.name IN :names")
+	List<Team> findAllByNameInIgnoreCase(@Param("names") Set<String> names);
 
-	@Modifying
-	@Transactional
-	@Query(value = "INSERT IGNORE INTO teams (team_name) VALUES (?1)", nativeQuery = true)
-	void insertTeamIgnoreDuplicate(String teamName);
-
-	// 🔥 여러 팀 INSERT IGNORE
-	@Modifying
-	@Transactional
-	@Query(value = """
-        INSERT IGNORE INTO teams (team_name) 
-        VALUES (:#{#names})
-        """, nativeQuery = true)
-	void insertTeamsIgnoreDuplicates(@Param("names") List<String> teamNames);
 }

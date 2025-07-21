@@ -18,9 +18,8 @@ public interface LeagueRepository extends JpaRepository<League, Long> {
 	@Query("SELECT DISTINCT l.seasonSplit FROM League l WHERE l.leagueName = :leagueName AND l.seasonYear = :seasonYear")
 	List<String> findSplitsByLeague(@Param("leagueName") String leagueName, @Param("seasonYear") Integer seasonYear);
 
-	@Modifying
-	@Query("DELETE FROM League l WHERE l.leagueName = :leagueName")
-	int deleteByLeagueName(@Param("leagueName") String leagueName);
+	Optional<League> findByLeagueNameAndSeasonYearAndSeasonSplitAndIsPlayoffs(
+		String leagueName, int seasonYear, String seasonSplit, boolean isPlayoffs);
 
 	@Query("SELECT l FROM League l WHERE l.leagueName = :leagueName AND l.seasonSplit = :seasonSplit AND l.isPlayoffs = :isPlayoffs")
 	Optional<League> findByLeagueNameAndSeasonSplitAndIsPlayoffs(@Param("leagueName") String leagueName, @Param("seasonSplit") String seasonSplit, @Param("isPlayoffs") Boolean isPlayoffs);

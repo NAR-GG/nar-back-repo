@@ -8,24 +8,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import com.toy.nar.domain.participant.entity.Player;
 
 public interface PlayerRepository extends JpaRepository<Player, Long> {
 
-	List<Player> findAllByNameInIgnoreCase(Collection<String> playerNames);
-
-	@Modifying
-	@Transactional
-	@Query(value = "INSERT IGNORE INTO players (player_name) VALUES (?1)", nativeQuery = true)
-	void insertPlayerIgnoreDuplicate(String playerName);
-
-	// 🔥 여러 플레이어 INSERT IGNORE (더 효율적)
-	@Modifying
-	@Transactional
-	@Query(value = """
-        INSERT IGNORE INTO players (player_name) 
-        VALUES (:#{#names})
-        """, nativeQuery = true)
-	void insertPlayersIgnoreDuplicates(@Param("names") List<String> playerNames);
+	@Query("SELECT p FROM Player p WHERE p.name IN :names")
+	List<Player> findAllByNameInIgnoreCase(@Param("names") Set<String> names);
 }

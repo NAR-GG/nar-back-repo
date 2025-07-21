@@ -63,6 +63,10 @@ public class GameParticipant {
 	@Column(name = "is_win", nullable = false) // CSV 'result' (1/0)을 Boolean으로 변환
 	private Boolean isWin;
 
+	public void assignGame(Game game) {
+		this.game = game;
+	}
+
 	@Builder
 	public GameParticipant(Game game, Player player, Team team, String side, String position, Champion champion, Boolean isWin) {
 		this.game = Objects.requireNonNull(game, "Game must not be null");

@@ -48,4 +48,8 @@ public class Team {
 	public Team(String name) {
 		this.name = Objects.requireNonNull(name, "Team name must not be null");
 	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
 }

@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import com.toy.nar.domain.participant.entity.Team;
+
 @Entity
 @Table(name = "leagues", uniqueConstraints = {
 	@UniqueConstraint(columnNames = {"league_name", "season_year", "season_split", "is_playoffs"})
@@ -51,6 +53,20 @@ public class League {
 	@OneToMany(mappedBy = "league", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
 	private List<LeagueTeam> leagueTeams = new ArrayList<>();
 
+	public void addLeagueTeam(Team team) {
+		if (!hasTeam(team)) {
+			LeagueTeam leagueTeam = LeagueTeam.builder()
+				.league(this)
+				.team(team)
+				.build();
+			leagueTeams.add(leagueTeam);
+			team.getLeagueTeams().add(leagueTeam);  // 양방향 설정
+		}
+	}
+
+	public boolean hasTeam(Team team) {
+		return leagueTeams.stream().anyMatch(lt -> lt.getTeam().equals(team));
+	}
 
 	@Builder // Lombok: 빌더 패턴 생성자
 	public League(String leagueName, Integer seasonYear, String seasonSplit, Boolean isPlayoffs) {
