@@ -37,18 +37,30 @@ public class GameProcessor {
 	 * @return 변환 성공 시 ProcessedData를 담은 Optional, 실패 시 empty
 	 */
 	public Optional<ProcessedData> process(GameDataCsvDto dto, Map<String, Game> gameCacheInChunk) {
-		// 1. EntityResolver를 통해 연관 엔티티 조회
-		Team team = entityResolver.getTeamCache().get(dto.getTeamname());
-		Player player = entityResolver.getPlayerCache().get(dto.getPlayername());
-		Champion champion = entityResolver.getChampionCache().get(NameNormalizer.normalizeChampionName(dto.getChampion()));
-		League league = entityResolver.getLeagueCache().get(DataIngestionFacade.LeagueIdentifier.fromDto(dto));
+		// [수정] 조회용 Key를 소문자로 표준화하여 생성
+		String teamLookupKey = NameNormalizer.normalizeTeamName(dto.getTeamname() != null ? dto.getTeamname().trim() : "");
+		String playerLookupKey = NameNormalizer.normalizePlayerName(dto.getPlayername() != null ? dto.getPlayername().trim() : "");
+		String championKey = NameNormalizer.normalizeChampionName(dto.getChampion());
+		DataIngestionFacade.LeagueIdentifier leagueId = DataIngestionFacade.LeagueIdentifier.fromDto(dto);
+
+		// 1. EntityResolver를 통해 연관 엔티티 조회 (표준화된 Key 사용)
+		Team team = entityResolver.getTeamCache().get(teamLookupKey);
+		Player player = entityResolver.getPlayerCache().get(playerLookupKey);
+		Champion champion = entityResolver.getChampionCache().get(championKey);
+		League league = entityResolver.getLeagueCache().get(leagueId);
 
 		// 2. 유효성 검증
 		if (team == null || player == null || champion == null || league == null) {
-			log.warn("Skipping row due to missing entity. GameID: {}, Team: {}, Player: {}, Champion: {}, League: {}",
-				dto.getGameid(), dto.getTeamname(), dto.getPlayername(), dto.getChampion(), dto.getLeague());
+			log.warn("Skipping row due to missing entity. GameID: {}, Team: {} (key: {}), Player: {} (key: {}), Champion: {} (key: {}), League: {} (id: {})",
+				dto.getGameid(), dto.getTeamname(), teamLookupKey, dto.getPlayername(), playerLookupKey, dto.getChampion(), championKey, dto.getLeague(), leagueId);
+			if (team == null) log.warn("Missing Team for key: {}", teamLookupKey);
+			if (player == null) log.warn("Missing Player for key: {}", playerLookupKey);
+			if (champion == null) log.warn("Missing Champion for key: {}", championKey);
+			if (league == null) log.warn("Missing League for id: {}", leagueId);
 			return Optional.empty();
 		}
+
+		league.addLeagueTeam(team);
 
 		// 3. Game 엔티티 생성 또는 재사용
 		Game game = gameCacheInChunk.computeIfAbsent(dto.getGameid(), gameId -> createGame(dto, league));
@@ -58,6 +70,9 @@ public class GameProcessor {
 
 		// 5. GameParticipant 엔티티 생성
 		GameParticipant participant = createGameParticipant(dto, game, team, player, champion);
+		game.addParticipant(participant);
+
+		log.debug("Added participant to game: GameID {}, Participant: {}", dto.getGameid(), participant);
 
 		return Optional.of(new ProcessedData(game, participant));
 	}
@@ -74,7 +89,7 @@ public class GameProcessor {
 	}
 
 	private GameParticipant createGameParticipant(GameDataCsvDto dto, Game game, Team team, Player player, Champion champion) {
-		GameParticipant participant = GameParticipant.builder()
+		return GameParticipant.builder()
 			.game(game)
 			.team(team)
 			.player(player)
@@ -83,8 +98,6 @@ public class GameProcessor {
 			.position(dto.getPosition())
 			.isWin(dto.getResult() == 1)
 			.build();
-		// 양방향 연관관계 설정
-		return participant;
 	}
 
 	private void addBansToGame(Game game, Team team, GameDataCsvDto dto) {

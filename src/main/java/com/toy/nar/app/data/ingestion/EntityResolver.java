@@ -15,9 +15,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,53 +56,86 @@ public class EntityResolver {
 				)));
 			log.info("Initialized Champion cache with {} entries.", championCache.size());
 		}
-		if (leagueCache.isEmpty()) {
-			leagueCache.putAll(leagueRepository.findAll().stream()
-				.collect(Collectors.toMap(
-					DataIngestionFacade.LeagueIdentifier::fromEntity,
-					Function.identity()
-				)));
-			log.info("Initialized League cache with {} entries.", leagueCache.size());
-		}
 	}
 
 	/**
 	 * 책임: 청크 데이터를 기반으로 필요한 동적 엔티티(팀, 선수)를 DB에 저장하고 캐시를 최신화합니다.
 	 * [변경] 리그 해석 로직은 initializeCaches로 이동하여 더 이상 여기서 호출하지 않습니다.
 	 */
-	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	@Transactional
 	public void resolveEntitiesFromChunk(List<GameDataCsvDto> chunk) {
+		// [변경 없음] 원본 이름을 그대로 전달
 		Set<String> requiredTeamNames = chunk.stream()
 			.map(GameDataCsvDto::getTeamname)
 			.collect(Collectors.toSet());
 		Set<String> requiredPlayerNames = chunk.stream()
 			.map(GameDataCsvDto::getPlayername)
 			.collect(Collectors.toSet());
+		Set<DataIngestionFacade.LeagueIdentifier> requiredLeagueIds = chunk.stream()
+			.map(DataIngestionFacade.LeagueIdentifier::fromDto).collect(Collectors.toSet());
+
 
 		resolveTeams(requiredTeamNames);
 		resolvePlayers(requiredPlayerNames);
+		log.debug("Resolving {} leagues from chunk.", requiredLeagueIds.size());
+		resolveLeagues(requiredLeagueIds);
+		log.debug("After resolve: League cache size: {}, Champion cache size: {}", leagueCache.size(), championCache.size());
 	}
 
 	// [변경] Team 해석 로직이 제네릭 메서드를 호출하도록 간소화
-	private void resolveTeams(Set<String> names) {
+	private void resolveTeams(Set<String> originalNames) {
 		resolveEntitiesByName(
-			names,
+			originalNames,
+			NameNormalizer::normalizeTeamName, // 저장용 이름 표준화 함수
 			teamCache,
-			teamRepository::findAllByNameInIgnoreCase, // 메서드 참조
-			name -> Team.builder().name(name).build(), // 생성 람다
+			teamRepository::findAllByNameInIgnoreCase,
+			// [수정] .build()를 포함한 람다식으로 변경
+			name -> Team.builder().name(name).build(),
 			teamRepository
 		);
 	}
 
 	// [변경] Player 해석 로직이 제네릭 메서드를 호출하도록 간소화
-	private void resolvePlayers(Set<String> names) {
+	private void resolvePlayers(Set<String> originalNames) {
 		resolveEntitiesByName(
-			names,
+			originalNames,
+			NameNormalizer::normalizePlayerName, // 저장용 이름 표준화 함수
 			playerCache,
-			playerRepository::findAllByNameInIgnoreCase, // 메서드 참조
-			name -> Player.builder().name(name).build(), // 생성 람다
+			playerRepository::findAllByNameInIgnoreCase,
+			// [수정] .build()를 포함한 람다식으로 변경
+			name -> Player.builder().name(name).build(),
 			playerRepository
 		);
+	}
+
+	private void resolveLeagues(Set<DataIngestionFacade.LeagueIdentifier> requiredIds) {
+		log.debug("Required league IDs: {}", requiredIds);
+		requiredIds.forEach(id ->
+			// 캐시에 없으면 findOrCreateLeague를 호출하여 값을 가져오거나 생성 후 캐시에 저장
+			leagueCache.computeIfAbsent(id, this::findOrCreateLeague)
+		);
+		log.debug("League cache after resolve: {}", leagueCache.keySet());
+	}
+
+	private League findOrCreateLeague(DataIngestionFacade.LeagueIdentifier id) {
+		// 1. 먼저 DB에서 찾아본다.
+		return leagueRepository.findByLeagueNameAndSeasonYearAndSeasonSplitAndIsPlayoffs(
+			id.name(), id.year(), id.split(), id.isPlayoffs()
+		).orElseGet(() -> {
+			// 2. DB에 없으면 새로 생성한다.
+			log.info("Creating new league: {} (name: {}, year: {}, split: {}, playoffs: {})",
+				id, id.name(), id.year(), id.split(), id.isPlayoffs());  // 상세 로그 추가
+			League newLeague = League.builder()
+				.leagueName(id.name())
+				.seasonYear(id.year())
+				.seasonSplit(id.split())
+				.isPlayoffs(id.isPlayoffs())
+				.build();
+
+			League saved = leagueRepository.save(newLeague);
+			log.info("Saved new league with ID: {}", saved.getId());  // 저장 확인 로그
+			return saved;
+		});
 	}
 
 	/**
@@ -116,39 +151,61 @@ public class EntityResolver {
 	 * @param <ID>               엔티티의 ID 타입
 	 */
 	private <T, ID> void resolveEntitiesByName(
-		Set<String> requiredNames,
+		Set<String> originalNames,
+		Function<String, String> storageNormalizer, // 이름 표준화 함수(Title Case 변환용)
 		Map<String, T> cache,
 		Function<Set<String>, List<T>> findInDb,
 		Function<String, T> entityCreator,
 		JpaRepository<T, ID> repository
 	) {
-		// 캐시에 없는 새로운 이름만 필터링
-		Set<String> newNames = requiredNames.stream()
-			.filter(name -> !cache.containsKey(name))
+		// 조회용 Key(lowercase)를 기준으로 캐시에 없는 원본 이름만 필터링
+		Set<String> newOriginalNames = originalNames.stream()
+			.filter(name -> StringUtils.hasText(name) && !cache.containsKey(storageNormalizer.apply(name.trim())))
 			.collect(Collectors.toSet());
 
-		if (newNames.isEmpty()) return;
+		if (newOriginalNames.isEmpty()) return;
 
-		// 1. DB에서 기존 엔티티 조회 후 캐시에 추가
-		List<T> existingEntities = findInDb.apply(newNames);
-		existingEntities.forEach(entity -> cache.put(getNameFromEntity(entity), entity));
-
-		// 2. 여전히 캐시에 없는 이름(DB에도 없던 이름)들을 찾아 새로 생성
-		Set<String> namesToCreate = newNames.stream()
-			.filter(name -> !cache.containsKey(name))
+		// 조회용 Key Set (모두 소문자)
+		Set<String> lookupKeysToFind = newOriginalNames.stream()
+			.map(name -> storageNormalizer.apply(name.trim()))
 			.collect(Collectors.toSet());
+
+		log.debug("Querying DB for {} with keys: {}", repository.getClass().getSimpleName(), lookupKeysToFind);
+
+		// 1. DB에서 조회 후 캐시에 추가
+		List<T> existingEntities = findInDb.apply(lookupKeysToFind);
+		log.debug("Found {} existing entities from DB.", existingEntities.size());
+
+		existingEntities.forEach(entity -> {
+			String normalizedName = getNameFromEntity(entity); // 이미 normalized 되어 있어야 함
+			cache.put(normalizedName, entity);
+		});
+
+		// 2. DB에도 없어 최종적으로 새로 생성해야 할 이름 필터링
+		Set<String> namesToCreate = lookupKeysToFind.stream() // 이미 normalized Set 사용
+			.filter(normalizedName -> !cache.containsKey(normalizedName))
+			.collect(Collectors.toSet());
+
+		log.debug("Names to create (after DB check): {}", namesToCreate);
 
 		if (!namesToCreate.isEmpty()) {
-			List<T> newEntities = namesToCreate.stream()
-				.map(entityCreator)
-				.toList();
+			Map<String, T> uniqueEntitiesToCreate = new HashMap<>();
+			namesToCreate.forEach(normalizedName -> {
+				// 이미 normalizedName이 키이므로 putIfAbsent
+				uniqueEntitiesToCreate.putIfAbsent(normalizedName, entityCreator.apply(normalizedName));
+			});
+			List<T> newEntities = new ArrayList<>(uniqueEntitiesToCreate.values());
 
-			// 3. 새로 생성한 엔티티들을 DB에 저장
-			List<T> savedEntities = repository.saveAll(newEntities);
+			if (!newEntities.isEmpty()) {
+				log.info("Attempting to save {} new entities.", newEntities.size());
+				List<T> savedEntities = repository.saveAll(newEntities);
 
-			// 4. 저장된 엔티티(ID가 부여된)를 캐시에 추가
-			savedEntities.forEach(entity -> cache.put(getNameFromEntity(entity), entity));
-			log.info("Saved and cached {} new {}(s).", savedEntities.size(), savedEntities.get(0).getClass().getSimpleName());
+				savedEntities.forEach(entity -> {
+					String normalizedName = getNameFromEntity(entity);
+					cache.put(normalizedName, entity);
+				});
+				log.info("Saved and cached {} new {}(s).", savedEntities.size(), savedEntities.get(0).getClass().getSimpleName());
+			}
 		}
 	}
 
