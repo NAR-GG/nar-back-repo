@@ -18,7 +18,6 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: maven
 
       - name: Cache Gradle dependencies  # Gradle 캐싱
         uses: actions/cache@v3
