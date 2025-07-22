@@ -29,8 +29,11 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
-      - name: Build with Maven
-        run: mvn clean package -DskipTests
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew clean build -x test
 
       - name: Create service-account-key.json from Secrets
         run: echo "${{ secrets.SERVICE_ACCOUNT_KEY }}" > service-account-key.json
