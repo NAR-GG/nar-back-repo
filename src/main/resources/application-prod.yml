@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        show_sql: false
+
+
+notification:
+  enabled: true
+  slack:
+    webhook-url: ${SLACK_WEBHOOK_URL}
+
+# 로깅 관련 공통 설정
+logging:
+  level:
+    org.hibernate.SQL: info
+
+google:
+  drive:
+    csv-file-id: "1v6LRphp2kYciU4SXp0PCjEMuev1bDejc"
