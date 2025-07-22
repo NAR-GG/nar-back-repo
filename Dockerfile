@@ -2,7 +2,7 @@ FROM openjdk:17-jdk-slim
 
 WORKDIR /app
 
-COPY target/*.jar app.jar
+COPY build/libs/*.jar app.jar
 COPY service-account-key.json /app/service-account-key.json
 
 EXPOSE 8080
