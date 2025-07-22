@@ -11,7 +11,11 @@ spring:
     properties:
       hibernate:
         show_sql: false
-
+        format_sql: false
+        jdbc:
+          batch_size: 50
+          order_inserts: true
+    open-in-view: false
 
 notification:
   enabled: true
