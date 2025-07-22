@@ -10,8 +10,8 @@ import com.google.auth.oauth2.ServiceAccountCredentials;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
 
@@ -20,14 +20,19 @@ public class GoogleDriveConfig {
 
 	private static final String APPLICATION_NAME = "NAR Game Data Importer";
 	private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
-	private static final String SERVICE_ACCOUNT_KEY_PATH = "src/main/resources/service-account-key.json";
+	private static final String SERVICE_ACCOUNT_KEY_FILENAME = "service-account-key.json";
 
 	@Bean
 	public Drive googleDrive() throws GeneralSecurityException, IOException {
 		final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
 
-		ServiceAccountCredentials credentials = (ServiceAccountCredentials)ServiceAccountCredentials
-			.fromStream(new FileInputStream(SERVICE_ACCOUNT_KEY_PATH))
+		InputStream credentialsStream = getClass().getClassLoader().getResourceAsStream(SERVICE_ACCOUNT_KEY_FILENAME);
+		if (credentialsStream == null) {
+			throw new IOException("Service account key file not found in classpath: " + SERVICE_ACCOUNT_KEY_FILENAME);
+		}
+
+		ServiceAccountCredentials credentials = (ServiceAccountCredentials) ServiceAccountCredentials
+			.fromStream(credentialsStream)
 			.createScoped(Collections.singletonList("https://www.googleapis.com/auth/drive.readonly"));
 
 		return new Drive.Builder(HTTP_TRANSPORT, JSON_FACTORY, new HttpCredentialsAdapter(credentials))
