@@ -1,9 +1,17 @@
 package com.toy.nar.app.category;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.toy.nar.app.category.dto.CategoryQueryDto;
+import com.toy.nar.app.category.dto.CategoryTree;
+import com.toy.nar.app.category.dto.LeagueCategory;
+import com.toy.nar.app.category.dto.SeasonCategory;
+import com.toy.nar.app.category.dto.SplitCategory;
+import com.toy.nar.app.category.dto.TeamSummary;
 import com.toy.nar.domain.game.entity.League;
 import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.domain.game.repository.LeagueTeamRepository;
@@ -18,8 +26,34 @@ public class CategoryService {
 	private final LeagueTeamRepository leagueTeamRepository;
 
 	public CategoryTree buildCategoryTree() {
-		List<SeasonCategory> seasons = List.of(buildSeason2025());
-		return new CategoryTree(seasons);
+		List<CategoryQueryDto> flatData = leagueRepository.findAllCategoryDataByYear(2025);
+		List<LeagueCategory> leagueCategories = flatData.stream()
+			.collect(Collectors.groupingBy(CategoryQueryDto::leagueName))
+			.entrySet().stream()
+			.map(leagueEntity -> {
+				String leagueName = leagueEntity.getKey();
+
+				List<SplitCategory> splitCategories = leagueEntity.getValue().stream()
+					.collect(Collectors.groupingBy(CategoryQueryDto::splitName))
+					.entrySet().stream()
+					.map(splitEntry -> {
+						String splitName = splitEntry.getKey();
+
+						List<TeamSummary> teams = splitEntry.getValue().stream()
+							.filter(dto -> dto.teamName() != null)
+							.map(dto -> new TeamSummary(dto.teamId(), dto.teamName()))
+							.distinct()
+							.sorted(Comparator.comparing(TeamSummary::name))
+							.toList();
+
+						Long leagueId = splitEntry.getValue().get(0).leagueId();
+						return new SplitCategory(splitName, leagueId, teams);
+					}).toList();
+
+				return new LeagueCategory(leagueName, splitCategories);
+			}).toList();
+		SeasonCategory season2025 = new SeasonCategory(2025, leagueCategories);
+		return new CategoryTree(List.of(season2025));
 	}
 
 	private SeasonCategory buildSeason2025() {

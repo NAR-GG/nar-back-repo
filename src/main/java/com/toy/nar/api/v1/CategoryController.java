@@ -9,8 +9,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.toy.nar.app.category.CategoryService;
-import com.toy.nar.app.category.CategoryTree;
-import com.toy.nar.app.category.TeamSummary;
+import com.toy.nar.app.category.dto.CategoryTree;
+import com.toy.nar.app.category.dto.TeamSummary;
 
 import lombok.RequiredArgsConstructor;
 
