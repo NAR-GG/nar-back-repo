@@ -9,7 +9,7 @@ public class CorsConfig implements WebMvcConfigurer {
 
 	@Override
 	public void addCorsMappings(CorsRegistry registry) {
-		registry.addMapping("/**")  // 모든 엔드포인트에 적용 (예: /api/** 로 제한 가능)
+		registry.addMapping("/**")
 			.allowedOrigins(
 				"http://localhost:3000",
 				"https://nar.kr",
