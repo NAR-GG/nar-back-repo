@@ -33,9 +33,12 @@ jobs:
 
       - name: Create service-account-key.json from Secrets and move to resources
         run: |
-          echo "${{ secrets.SERVICE_ACCOUNT_KEY }}" > service-account-key.json
+          cat <<EOF > service-account-key.json
+          ${{ secrets.SERVICE_ACCOUNT_KEY }}
+          EOF
           mkdir -p src/main/resources  
           mv service-account-key.json src/main/resources/service-account-key.json  
+          ls -la src/main/resources  
 
       - name: Build with Gradle
         run: ./gradlew clean build -x test
