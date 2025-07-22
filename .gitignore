@@ -36,6 +36,7 @@ out/
 ### VS Code ###
 .vscode/
 
+/src/main/resources/service-account-key.json
 # Spring Boot application properties
 /src/main/resources/application.properties
 /src/main/resources/application.yml
