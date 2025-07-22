@@ -45,6 +45,16 @@ public class NotificationService {
 		sendNotification("Data Sync Success", message, "good");
 	}
 
+	public void sendUserCountNotification(long userCount) {
+		if (!notificationEnabled) return;
+
+		String title = "[축하] 실시간 접속자 수 돌파!";
+		String message = String.format("현재 실시간 접속자 수가 %d명을 돌파했습니다.", userCount);
+
+		sendNotification(title, message, "good");
+	}
+
+
 	/**
 	 * 실패 알림 전송
 	 */
