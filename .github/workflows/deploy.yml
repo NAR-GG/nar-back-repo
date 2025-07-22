@@ -34,8 +34,11 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build -x test
 
-      - name: Create service-account-key.json from Secrets
-        run: echo "${{ secrets.SERVICE_ACCOUNT_KEY }}" > service-account-key.json
+      - name: Create service-account-key.json from Secrets and move to resources
+        run: |
+          echo "${{ secrets.SERVICE_ACCOUNT_KEY }}" > service-account-key.json
+          mkdir -p src/main/resources  
+          mv service-account-key.json src/main/resources/service-account-key.json  
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
