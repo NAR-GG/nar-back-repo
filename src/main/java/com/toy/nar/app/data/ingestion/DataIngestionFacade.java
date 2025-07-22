@@ -57,7 +57,7 @@ public class DataIngestionFacade {
 		long startTime = System.currentTimeMillis();
 		DataIngestionResult.Builder resultBuilder = DataIngestionResult.builder();
 
-		// 1. 고정 데이터 캐시 초기화 (챔피언 등)
+		// 1. 고정 데이터 캐시 초기화
 		entityResolver.initializeCaches();
 
 		try (Reader reader = new InputStreamReader(csvStream)) {

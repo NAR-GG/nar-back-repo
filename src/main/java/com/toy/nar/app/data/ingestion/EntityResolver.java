@@ -165,7 +165,6 @@ public class EntityResolver {
 
 		if (newOriginalNames.isEmpty()) return;
 
-		// 조회용 Key Set (모두 소문자)
 		Set<String> lookupKeysToFind = newOriginalNames.stream()
 			.map(name -> storageNormalizer.apply(name.trim()))
 			.collect(Collectors.toSet());
