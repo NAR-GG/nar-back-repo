@@ -3,7 +3,7 @@ package com.toy.nar.domain.combination;
 import java.time.LocalDate;
 import java.util.List;
 
-import com.toy.nar.common.NameNormalizer;
+import com.toy.nar.common.util.NameNormalizer;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -1,6 +1,6 @@
 package com.toy.nar.app.data.ingestion;
 
-import com.toy.nar.common.NameNormalizer;
+import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.app.data.ingestion.dto.GameDataCsvDto;
 import com.toy.nar.domain.game.entity.League;
 import com.toy.nar.domain.participant.entity.Champion;

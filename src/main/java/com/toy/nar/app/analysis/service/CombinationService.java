@@ -12,7 +12,7 @@ import com.toy.nar.app.analysis.dto.CombinationDetailDto;
 import com.toy.nar.app.analysis.dto.CombinationResponseDto;
 import com.toy.nar.domain.combination.strategy.CombinationFilterManager;
 import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
-import com.toy.nar.common.NameNormalizer;
+import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.domain.game.entity.GameParticipant;
 import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import lombok.RequiredArgsConstructor;

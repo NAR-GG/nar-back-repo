@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 
 import com.toy.nar.domain.combination.ChampionCombination;
 import com.toy.nar.domain.combination.TeamComposition;
-import com.toy.nar.common.NameNormalizer;
+import com.toy.nar.common.util.NameNormalizer;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
