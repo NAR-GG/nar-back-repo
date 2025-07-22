@@ -68,7 +68,6 @@ public class CombinationIdService {
 		MultiCombinationSearchContext context = new MultiCombinationSearchContext(champions, filter);
 		multiCombinationCache.put(id, context);
 
-		log.info("🔧 Created multi combination ID: {} for champions: {}", id, champions);
 		return id;
 	}
 
@@ -95,14 +94,14 @@ public class CombinationIdService {
 		CombinationSearchContext context = new CombinationSearchContext(champions, filter);
 		combinationCache.put(combinationId, context);
 
-		log.debug("🔑 Created combination ID: {} for champions: {}", combinationId, champions);
+		log.debug("[DEBUG] Created combination ID: {} for champions: {}", combinationId, champions);
 		return combinationId;
 	}
 
 	public CombinationSearchContext getSearchContext(String combinationId) {
 		CombinationSearchContext context = combinationCache.get(combinationId);
 		if (context == null) {
-			log.warn("❌ Combination ID not found: {}", combinationId);
+			log.warn("[WARN] Combination ID not found: {}", combinationId);
 		}
 		return context;
 	}
@@ -114,9 +113,9 @@ public class CombinationIdService {
 			// 디코딩해서 로그 출력
 			try {
 				String decoded = new String(Base64.getDecoder().decode(combinationId));
-				log.warn("❌ Multi combination ID not found: {} (decoded: {})", combinationId, decoded);
+				log.warn("[WARN] Multi combination ID not found: {} (decoded: {})", combinationId, decoded);
 			} catch (Exception e) {
-				log.warn("❌ Invalid combination ID format: {}", combinationId);
+				log.warn("[WARN] Invalid combination ID format: {}", combinationId);
 			}
 		}
 		return context;
@@ -125,7 +124,7 @@ public class CombinationIdService {
 	public void clearCache() {
 		combinationCache.clear();
 		multiCombinationCache.clear();
-		log.info("🗑️ Combination cache cleared");
+		log.debug("[DEBUG]️ Combination cache cleared");
 	}
 
 	// 🔥 기존 검색 컨텍스트 레코드

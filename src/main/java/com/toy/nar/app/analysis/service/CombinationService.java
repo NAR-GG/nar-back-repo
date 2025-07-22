@@ -78,7 +78,7 @@ public class CombinationService {
 			.findFirst()
 			.map(Sort.Order::getProperty)
 			.orElse("frequency");
-		log.info("Applied sortType: {}", sortType);
+		log.debug("Applied sortType: {}", sortType);
 
 		Comparator<ChampionCombination> comparator = getComparator(sortType);
 		List<ChampionCombination> sortedCombinations = allCombinations.stream()
@@ -125,7 +125,7 @@ public class CombinationService {
 			idService.getMultiSearchContext(combinationId);
 
 		if (multiContext != null) {
-			log.info("🔍 Retrieving multi combination detail for ID: {}", combinationId);
+			log.debug("[DEBUG] Retrieving multi combination detail for ID: {}", combinationId);
 			return getCombinationDetailMulti(multiContext.champions(), multiContext.filter());
 		}
 
@@ -134,7 +134,7 @@ public class CombinationService {
 			idService.getSearchContext(combinationId);
 
 		if (context != null) {
-			log.info("🔍 Retrieving combination detail for ID: {}", combinationId);
+			log.debug("[DEBUG] Retrieving combination detail for ID: {}", combinationId);
 			return getCombinationDetail(context.champions(), context.filter());
 		}
 
@@ -228,13 +228,13 @@ public class CombinationService {
 			? null : filter.getTeamNames();
 
 		if (filterManager.shouldUseMemoryFiltering(filter)) {
-			log.info("🔄 Using memory filtering for complex filters");
+			log.debug("[MEMORY] Using memory filtering for complex filters");
 			List<GameParticipant> baseParticipants = gameParticipantRepository.findBaseParticipants(
 				championNames, filter.getYear(), filter.getPatch());
 			return filterManager.applyFilters(baseParticipants, filter);
 		}
 
-		log.info("🔄 Using database filtering");
+		log.debug("[DB] Using database filtering");
 		return gameParticipantRepository.findFilteredParticipantsMulti(
 			championNames,
 			filter.getYear(),
