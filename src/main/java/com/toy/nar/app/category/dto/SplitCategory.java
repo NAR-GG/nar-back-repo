@@ -1,4 +1,4 @@
-package com.toy.nar.app.category;
+package com.toy.nar.app.category.dto;
 
 import java.util.List;
 
