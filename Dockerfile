@@ -1,5 +1,7 @@
 FROM openjdk:17-jdk-slim
 
+ENV TZ=Asia/Seoul
+
 WORKDIR /app
 
 COPY build/libs/*.jar app.jar
