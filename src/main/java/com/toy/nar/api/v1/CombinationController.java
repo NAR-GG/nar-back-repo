@@ -33,15 +33,15 @@ public class CombinationController {
 
 	@GetMapping("/v2")
 	public ResponseEntity<PageCombinationResponse> getCombinationsV2(
-		@RequestParam List<String> champions,
-		@RequestParam Optional<Integer> year,
-		@RequestParam Optional<List<String>> splits,
-		@RequestParam Optional<List<String>> leagueNames,
-		@RequestParam Optional<List<String>> teamNames,
-		@RequestParam Optional<String> patch,
-		@RequestParam(defaultValue = "0") int page,
-		@RequestParam(defaultValue = "10") int size,
-		@RequestParam(defaultValue = "frequency") String sort) {  // 추가: 정렬 타입 (frequency, recency, patch)
+		@RequestParam("champions") List<String> champions,
+		@RequestParam(value = "year", required = false) Optional<Integer> year,
+		@RequestParam(value = "splits", required = false) Optional<List<String>> splits,
+		@RequestParam(value = "leagueNames", required = false) Optional<List<String>> leagueNames,
+		@RequestParam(value = "teamNames", required = false) Optional<List<String>> teamNames,
+		@RequestParam(value = "patch", required = false) Optional<String> patch,
+		@RequestParam(value = "page", defaultValue = "0") int page,
+		@RequestParam(value = "size", defaultValue = "10") int size,
+		@RequestParam(value = "sort", defaultValue = "frequency") String sort) {  // 추가: 정렬 타입 (frequency, recency, patch)
 
 		MultiCombinationFilterDto filter = MultiCombinationFilterDto.builder()
 			.year(year.orElse(null))
@@ -58,34 +58,11 @@ public class CombinationController {
 		return ResponseEntity.ok(combinations);
 	}
 
-	// 🔥 새로운 상세정보 엔드포인트: ID 기반 조회
 	@GetMapping("/{combinationId}/detail")
 	public ResponseEntity<CombinationDetailDto> getCombinationDetail(
-		@PathVariable String combinationId) {
+		@PathVariable("combinationId") String combinationId) {
 
 		CombinationDetailDto detail = combinationService.getCombinationDetailById(combinationId);
-		return ResponseEntity.ok(detail);
-	}
-
-	// 🔥 기존 상세정보 엔드포인트 유지 (하위 호환성)
-	@GetMapping("/detail")
-	public ResponseEntity<CombinationDetailDto> getCombinationDetailLegacy(
-		@RequestParam List<String> champions,
-		@RequestParam Optional<Integer> year,
-		@RequestParam Optional<String> split,
-		@RequestParam Optional<String> leagueName,
-		@RequestParam Optional<String> teamName,
-		@RequestParam Optional<String> patch) {
-
-		CombinationFilterDto filter = CombinationFilterDto.builder()
-			.year(year.orElse(null))
-			.split(split.orElse(null))
-			.leagueName(leagueName.orElse(null))
-			.teamName(teamName.orElse(null))
-			.patch(patch.orElse(null))
-			.build();
-
-		CombinationDetailDto detail = combinationService.getCombinationDetail(champions, filter);
 		return ResponseEntity.ok(detail);
 	}
 
