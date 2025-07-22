@@ -1,12 +1,11 @@
 spring:
   profiles:
-    active: prod
+    active: dev
 
   jpa:
     properties:
       hibernate:
-        # 모든 환경에서 SQL 포맷팅을 예쁘게 설정
-        format_sql: true
+        format_sql: false
         # 배치 설정 (공통으로 사용)
         jdbc:
           batch_size: 50
