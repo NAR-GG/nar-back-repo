@@ -31,7 +31,7 @@ public class CombinationController {
 
 	private final CombinationService combinationService;
 
-	@GetMapping("/v2")
+	@GetMapping("/")
 	public ResponseEntity<PageCombinationResponse> getCombinationsV2(
 		@RequestParam("champions") List<String> champions,
 		@RequestParam(value = "year", required = false) Optional<Integer> year,
@@ -41,7 +41,7 @@ public class CombinationController {
 		@RequestParam(value = "patch", required = false) Optional<String> patch,
 		@RequestParam(value = "page", defaultValue = "0") int page,
 		@RequestParam(value = "size", defaultValue = "10") int size,
-		@RequestParam(value = "sort", defaultValue = "frequency") String sort) {  // 추가: 정렬 타입 (frequency, recency, patch)
+		@RequestParam(value = "sort", defaultValue = "frequency") String sort) {
 
 		MultiCombinationFilterDto filter = MultiCombinationFilterDto.builder()
 			.year(year.orElse(null))
