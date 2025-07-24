@@ -35,10 +35,10 @@ public class GameStatusAnalyzer {
 			incompleteGameIds
 		);
 
-		log.info("📊 Game Status Analysis Complete:");
-		log.info("   📈 Total games: {}", report.totalGames());
-		log.info("   ✅ Complete games (10 participants): {}", report.completeGames());
-		log.info("   ❌ Incomplete games (not 10 participants): {}", report.incompleteGames());
+		log.info(" Game Status Analysis Complete:");
+		log.info(" Total games: {}", report.totalGames());
+		log.info(" Complete games (10 participants): {}", report.completeGames());
+		log.info(" Incomplete games (not 10 participants): {}", report.incompleteGames());
 
 		return report;
 	}
