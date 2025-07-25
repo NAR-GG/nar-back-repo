@@ -34,16 +34,6 @@ public class DataIngestionFacade {
 
 	private static final int CHUNK_SIZE = 5000;
 
-	// 역할: League 엔티티를 식별하기 위한 복합 키 record
-	public record LeagueIdentifier(String name, int year, String split, boolean isPlayoffs) {
-		public static LeagueIdentifier fromDto(GameDataCsvDto dto) {
-			return new LeagueIdentifier(dto.getLeague(), dto.getYear(), dto.getSplit(), dto.getPlayoffs() == 1);
-		}
-		public static LeagueIdentifier fromEntity(League league) {
-			return new LeagueIdentifier(league.getLeagueName(), league.getSeasonYear(), league.getSeasonSplit(), league.getIsPlayoffs());
-		}
-	}
-
 	@Transactional
 	public DataIngestionResult ingestCsvData() throws Exception {
 		log.info("[Starting] Starting local CSV data ingestion ('lol_esports_data.csv')...");
@@ -53,18 +43,17 @@ public class DataIngestionFacade {
 
 	@Transactional
 	public DataIngestionResult ingestFromStream(InputStream csvStream) throws Exception {
-		log.info("[Starting] Starting stream-based CSV data ingestion with new architecture...");
+		log.info("[Starting] Starting stream-based CSV data ingestion...");
 		long startTime = System.currentTimeMillis();
 		DataIngestionResult.Builder resultBuilder = DataIngestionResult.builder();
 
-		// 1. 고정 데이터 캐시 초기화
 		entityResolver.initializeCaches();
 
 		try (Reader reader = new InputStreamReader(csvStream)) {
 			CsvToBean<GameDataCsvDto> csvToBean = new CsvToBeanBuilder<GameDataCsvDto>(reader)
 				.withType(GameDataCsvDto.class)
 				.withIgnoreLeadingWhiteSpace(true)
-				.withFilter(new CsvNonEmptyFilter()) // 유효하지 않은 라인 필터링
+				.withFilter(new CsvNonEmptyFilter())
 				.build();
 
 			List<GameDataCsvDto> chunk = new ArrayList<>(CHUNK_SIZE);
@@ -119,7 +108,6 @@ public class DataIngestionFacade {
 						dto.getPosition().equalsIgnoreCase("sup")))
 				.toList();
 
-			// [변경] 필터링된 플레이어 데이터가 10개인지 검증합니다.
 			if (playerDtos.size() != 10) {
 				log.warn("[Incomplete] Incomplete player data for gameId: {}. Found {} player rows instead of 10. Skipping.", gameId, playerDtos.size());
 				invalidGames++;
@@ -130,7 +118,6 @@ public class DataIngestionFacade {
 				Map<String, Game> singleGameCache = new HashMap<>();
 				boolean isGameValid = true;
 
-				// [변경] 필터링된 10개의 플레이어 DTO만 처리합니다.
 				for (GameDataCsvDto dto : playerDtos) {
 					if (gameProcessor.process(dto, singleGameCache).isEmpty()) {
 						isGameValid = false;
@@ -158,7 +145,6 @@ public class DataIngestionFacade {
 		return new ChunkProcessingResult(gamesToSave.size(), invalidGames, skippedGames, failedGames);
 	}
 
-	// CSV 파일의 빈 줄이나 필수 값이 없는 줄을 건너뛰기 위한 필터
 	private static class CsvNonEmptyFilter implements CsvToBeanFilter {
 		@Override
 		public boolean allowLine(String[] line) {

@@ -1,5 +1,6 @@
 package com.toy.nar.app.data.ingestion;
 
+import com.toy.nar.app.data.ingestion.dto.LeagueIdentifier;
 import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.app.data.ingestion.dto.GameDataCsvDto;
 import com.toy.nar.domain.game.entity.Ban;
@@ -37,11 +38,10 @@ public class GameProcessor {
 	 * @return 변환 성공 시 ProcessedData를 담은 Optional, 실패 시 empty
 	 */
 	public Optional<ProcessedData> process(GameDataCsvDto dto, Map<String, Game> gameCacheInChunk) {
-		// [수정] 조회용 Key를 소문자로 표준화하여 생성
 		String teamLookupKey = NameNormalizer.normalizeTeamName(dto.getTeamname() != null ? dto.getTeamname().trim() : "");
 		String playerLookupKey = NameNormalizer.normalizePlayerName(dto.getPlayername() != null ? dto.getPlayername().trim() : "");
 		String championKey = NameNormalizer.normalizeChampionName(dto.getChampion());
-		DataIngestionFacade.LeagueIdentifier leagueId = DataIngestionFacade.LeagueIdentifier.fromDto(dto);
+		LeagueIdentifier leagueId = LeagueIdentifier.fromDto(dto);
 
 		// 1. EntityResolver를 통해 연관 엔티티 조회 (표준화된 Key 사용)
 		Team team = entityResolver.getTeamCache().get(teamLookupKey);

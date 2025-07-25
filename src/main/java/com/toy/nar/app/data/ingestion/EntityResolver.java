@@ -42,10 +42,6 @@ public class EntityResolver {
 	@Getter private final Map<String, Player> playerCache = new ConcurrentHashMap<>();
 	@Getter private final Map<String, Champion> championCache = new ConcurrentHashMap<>();
 
-	/**
-	 * 역할: 애플리케이션 시작 시, 자주 변경되지 않는 데이터를 미리 캐시에 적재합니다.
-	 * [변경] 리그 정보도 챔피언처럼 시작 시점에 한 번만 캐싱하여 성능을 향상시킵니다.
-	 */
 	@Transactional(readOnly = true)
 	public void initializeCaches() {
 		if (championCache.isEmpty()) {
@@ -60,11 +56,9 @@ public class EntityResolver {
 
 	/**
 	 * 책임: 청크 데이터를 기반으로 필요한 동적 엔티티(팀, 선수)를 DB에 저장하고 캐시를 최신화합니다.
-	 * [변경] 리그 해석 로직은 initializeCaches로 이동하여 더 이상 여기서 호출하지 않습니다.
 	 */
 	@Transactional
 	public void resolveEntitiesFromChunk(List<GameDataCsvDto> chunk) {
-		// [변경 없음] 원본 이름을 그대로 전달
 		Set<String> requiredTeamNames = chunk.stream()
 			.map(GameDataCsvDto::getTeamname)
 			.collect(Collectors.toSet());
@@ -82,11 +76,10 @@ public class EntityResolver {
 		log.debug("After resolve: League cache size: {}, Champion cache size: {}", leagueCache.size(), championCache.size());
 	}
 
-	// [변경] Team 해석 로직이 제네릭 메서드를 호출하도록 간소화
 	private void resolveTeams(Set<String> originalNames) {
 		resolveEntitiesByName(
 			originalNames,
-			NameNormalizer::normalizeTeamName, // 저장용 이름 표준화 함수
+			NameNormalizer::normalizeTeamName,
 			teamCache,
 			teamRepository::findAllByNameInIgnoreCase,
 			// [수정] .build()를 포함한 람다식으로 변경
@@ -95,11 +88,10 @@ public class EntityResolver {
 		);
 	}
 
-	// [변경] Player 해석 로직이 제네릭 메서드를 호출하도록 간소화
 	private void resolvePlayers(Set<String> originalNames) {
 		resolveEntitiesByName(
 			originalNames,
-			NameNormalizer::normalizePlayerName, // 저장용 이름 표준화 함수
+			NameNormalizer::normalizePlayerName,
 			playerCache,
 			playerRepository::findAllByNameInIgnoreCase,
 			// [수정] .build()를 포함한 람다식으로 변경
@@ -111,7 +103,6 @@ public class EntityResolver {
 	private void resolveLeagues(Set<DataIngestionFacade.LeagueIdentifier> requiredIds) {
 		log.debug("Required league IDs: {}", requiredIds);
 		requiredIds.forEach(id ->
-			// 캐시에 없으면 findOrCreateLeague를 호출하여 값을 가져오거나 생성 후 캐시에 저장
 			leagueCache.computeIfAbsent(id, this::findOrCreateLeague)
 		);
 		log.debug("League cache after resolve: {}", leagueCache.keySet());
@@ -208,7 +199,6 @@ public class EntityResolver {
 		}
 	}
 
-	// 제네릭 메서드에서 엔티티의 이름을 가져오기 위한 헬퍼 메서드
 	private <T> String getNameFromEntity(T entity) {
 		if (entity instanceof Team) {
 			return ((Team) entity).getName();
