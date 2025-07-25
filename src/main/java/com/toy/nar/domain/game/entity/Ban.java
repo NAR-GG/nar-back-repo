@@ -24,11 +24,11 @@ import com.toy.nar.domain.participant.entity.Team;
 
 @Entity
 @Table(name = "bans", uniqueConstraints = {
-	@UniqueConstraint(columnNames = {"game_id", "team_id", "banned_champion_id"})
+	@UniqueConstraint(columnNames = {"game_id", "banned_champion_id"})
 })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id") // ID가 PK이므로 ID로만 비교 (Lombok 기본 동작)
+@EqualsAndHashCode(of = {"game", "bannedChampion"})
 @ToString(exclude = {"game", "team", "bannedChampion"}) // 연관 관계 필드는 toString에서 제외
 public class Ban {
 
@@ -46,7 +46,7 @@ public class Ban {
 	private Team team;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "banned_champion_id", nullable = false) // champions 테이블의 FK
+	@JoinColumn(name = "banned_champion_id", nullable = false)
 	private Champion bannedChampion;
 
 	@Builder

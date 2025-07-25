@@ -112,15 +112,14 @@ public class GameProcessor {
 		if (StringUtils.hasText(banName)) {
 			Champion bannedChampion = entityResolver.getChampionCache().get(NameNormalizer.normalizeChampionName(banName));
 			if (bannedChampion != null) {
+				log.warn("Skipping ban for champion: {}", banName);
 				Ban ban = Ban.builder()
 					.game(game)
 					.team(team)
 					.bannedChampion(bannedChampion)
 					.build();
-				// 중복 방지 로직 (이미 Ban 객체에 EqualsAndHashCode가 잘 정의되어 있다면 Set이 효과적)
-				if (!game.getBans().contains(ban)) {
-					game.getBans().add(ban);
-				}
+				game.getBans().add(ban);
+
 			}
 		}
 	}
