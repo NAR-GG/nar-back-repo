@@ -60,9 +60,9 @@ public class GoogleDriveDataSyncService {
 				.executeMediaAsInputStream();
 
 			// 2. 기존 검증된 로직으로 처리
-			DataIngestionResult ingestionResult = dataIngestionFacade.ingestFromStream(csvStream); // 호출 대상 변경
+			DataIngestionResult ingestionResult = dataIngestionFacade.ingestFromStream(csvStream);
 
-			// 3. 결과 변환 (1번 방법 사용)
+			// 3. 결과 변환
 			DataSyncResult syncResult = DataSyncResult.fromIngestionResult(ingestionResult)
 				.toBuilder()
 				.processingTimeMs(System.currentTimeMillis() - startTime)
