@@ -1,5 +1,6 @@
 package com.toy.nar.app.data.ingestion;
 
+import com.toy.nar.app.data.ingestion.dto.LeagueIdentifier;
 import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.app.data.ingestion.dto.GameDataCsvDto;
 import com.toy.nar.domain.game.entity.League;
@@ -37,7 +38,7 @@ public class EntityResolver {
 	private final PlayerRepository playerRepository;
 	private final ChampionRepository championRepository;
 
-	@Getter private final Map<DataIngestionFacade.LeagueIdentifier, League> leagueCache = new ConcurrentHashMap<>();
+	@Getter private final Map<LeagueIdentifier, League> leagueCache = new ConcurrentHashMap<>();
 	@Getter private final Map<String, Team> teamCache = new ConcurrentHashMap<>();
 	@Getter private final Map<String, Player> playerCache = new ConcurrentHashMap<>();
 	@Getter private final Map<String, Champion> championCache = new ConcurrentHashMap<>();
@@ -65,8 +66,8 @@ public class EntityResolver {
 		Set<String> requiredPlayerNames = chunk.stream()
 			.map(GameDataCsvDto::getPlayername)
 			.collect(Collectors.toSet());
-		Set<DataIngestionFacade.LeagueIdentifier> requiredLeagueIds = chunk.stream()
-			.map(DataIngestionFacade.LeagueIdentifier::fromDto).collect(Collectors.toSet());
+		Set<LeagueIdentifier> requiredLeagueIds = chunk.stream()
+			.map(LeagueIdentifier::fromDto).collect(Collectors.toSet());
 
 
 		resolveTeams(requiredTeamNames);
@@ -82,7 +83,6 @@ public class EntityResolver {
 			NameNormalizer::normalizeTeamName,
 			teamCache,
 			teamRepository::findAllByNameInIgnoreCase,
-			// [수정] .build()를 포함한 람다식으로 변경
 			name -> Team.builder().name(name).build(),
 			teamRepository
 		);
@@ -94,13 +94,12 @@ public class EntityResolver {
 			NameNormalizer::normalizePlayerName,
 			playerCache,
 			playerRepository::findAllByNameInIgnoreCase,
-			// [수정] .build()를 포함한 람다식으로 변경
 			name -> Player.builder().name(name).build(),
 			playerRepository
 		);
 	}
 
-	private void resolveLeagues(Set<DataIngestionFacade.LeagueIdentifier> requiredIds) {
+	private void resolveLeagues(Set<LeagueIdentifier> requiredIds) {
 		log.debug("Required league IDs: {}", requiredIds);
 		requiredIds.forEach(id ->
 			leagueCache.computeIfAbsent(id, this::findOrCreateLeague)
@@ -108,7 +107,7 @@ public class EntityResolver {
 		log.debug("League cache after resolve: {}", leagueCache.keySet());
 	}
 
-	private League findOrCreateLeague(DataIngestionFacade.LeagueIdentifier id) {
+	private League findOrCreateLeague(LeagueIdentifier id) {
 		// 1. 먼저 DB에서 찾아본다.
 		return leagueRepository.findByLeagueNameAndSeasonYearAndSeasonSplitAndIsPlayoffs(
 			id.name(), id.year(), id.split(), id.isPlayoffs()
@@ -143,7 +142,7 @@ public class EntityResolver {
 	 */
 	private <T, ID> void resolveEntitiesByName(
 		Set<String> originalNames,
-		Function<String, String> storageNormalizer, // 이름 표준화 함수(Title Case 변환용)
+		Function<String, String> storageNormalizer,
 		Map<String, T> cache,
 		Function<Set<String>, List<T>> findInDb,
 		Function<String, T> entityCreator,
