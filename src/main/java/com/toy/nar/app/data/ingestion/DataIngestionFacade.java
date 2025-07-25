@@ -46,14 +46,14 @@ public class DataIngestionFacade {
 
 	@Transactional
 	public DataIngestionResult ingestCsvData() throws Exception {
-		log.info("📥 Starting local CSV data ingestion ('lol_esports_data.csv')...");
+		log.info("[Starting] Starting local CSV data ingestion ('lol_esports_data.csv')...");
 		InputStream csvStream = new ClassPathResource("lol_esports_data.csv").getInputStream();
 		return ingestFromStream(csvStream);
 	}
 
 	@Transactional
 	public DataIngestionResult ingestFromStream(InputStream csvStream) throws Exception {
-		log.info("📥 Starting stream-based CSV data ingestion with new architecture...");
+		log.info("[Starting] Starting stream-based CSV data ingestion with new architecture...");
 		long startTime = System.currentTimeMillis();
 		DataIngestionResult.Builder resultBuilder = DataIngestionResult.builder();
 
@@ -84,7 +84,7 @@ public class DataIngestionFacade {
 		}
 
 		DataIngestionResult result = resultBuilder.processingTimeMs(System.currentTimeMillis() - startTime).build();
-		log.info("✅ Stream ingestion completed. {}", result.getSummary());
+		log.info("[Completed] Stream ingestion completed. {}", result.getSummary());
 		return result;
 	}
 
@@ -121,7 +121,7 @@ public class DataIngestionFacade {
 
 			// [변경] 필터링된 플레이어 데이터가 10개인지 검증합니다.
 			if (playerDtos.size() != 10) {
-				log.warn("Incomplete player data for gameId: {}. Found {} player rows instead of 10. Skipping.", gameId, playerDtos.size());
+				log.warn("[Incomplete] Incomplete player data for gameId: {}. Found {} player rows instead of 10. Skipping.", gameId, playerDtos.size());
 				invalidGames++;
 				continue;
 			}
@@ -141,12 +141,12 @@ public class DataIngestionFacade {
 				if (isGameValid) {
 					gamesToSave.addAll(singleGameCache.values());
 				} else {
-					log.warn("Game data for gameId: {} is invalid and will be skipped.", gameId);
+					log.warn("[Skip] Game data for gameId: {} is invalid and will be skipped.", gameId);
 					invalidGames++;
 				}
 
 			} catch (Exception e) {
-				log.error("A critical error occurred while processing game {}: {}", gameId, e.getMessage(), e);
+				log.error("[Error] A critical error occurred while processing game {}: {}", gameId, e.getMessage(), e);
 				failedGames++;
 			}
 		}
