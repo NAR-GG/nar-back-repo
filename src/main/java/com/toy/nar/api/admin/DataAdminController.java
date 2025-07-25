@@ -44,7 +44,7 @@ public class DataAdminController {
 	// == 데이터 동기화 (Sync) ==
 	@PostMapping("/sync")
 	public ResponseEntity<Map<String, Object>> syncData() {
-		log.info("🚀 Google Drive sync requested via API");
+		log.info("Google Drive sync requested via API");
 
 		DataSyncResult result = googleDriveDataSyncService.syncFromGoogleDrive();
 
