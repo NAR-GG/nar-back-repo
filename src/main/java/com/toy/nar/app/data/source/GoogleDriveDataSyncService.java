@@ -30,10 +30,10 @@ public class GoogleDriveDataSyncService {
 	@Scheduled(cron = "0 30 4,10,16,22 * * ?", zone = "Asia/Seoul")
 	public void scheduledSyncFromGoogleDrive() {
 		try {
-			log.info("🔄 Starting scheduled Google Drive data sync at {}", LocalDateTime.now());
+			log.info("[Starting] Starting scheduled Google Drive data sync at {}", LocalDateTime.now());
 			DataSyncResult result = syncFromGoogleDrive();
 
-			log.info("✅ Scheduled sync completed: {} new games added", result.newGamesAdded());
+			log.info("[Completed] Scheduled sync completed: {} new games added", result.newGamesAdded());
 
 			if (result.isSuccess()) {
 				combinationService.updateInfo();
@@ -41,16 +41,16 @@ public class GoogleDriveDataSyncService {
 			}
 
 		} catch (Exception e) {
-			log.error("❌ Scheduled sync failed", e);
+			log.error("[Failed] Scheduled sync failed", e);
 			// 실패 알림
-			notificationService.sendFailureNotification("Scheduled sync failed: " + e.getMessage());
+			notificationService.sendFailureNotification("[Failed] Scheduled sync failed: " + e.getMessage());
 		}
 	}
 	/**
 	 * Google Drive에서 최신 CSV를 다운로드하여 DB에 동기화
 	 */
 	public DataSyncResult syncFromGoogleDrive() {
-		log.info("🔄 Starting Google Drive data sync...");
+		log.info("[Starting] Starting Google Drive data sync...");
 		long startTime = System.currentTimeMillis();
 
 		try {
@@ -69,11 +69,11 @@ public class GoogleDriveDataSyncService {
 				.source("GOOGLE_DRIVE")
 				.build();
 
-			log.info("✅ Google Drive sync completed: {}", syncResult.getSummary());
+			log.info("[Completed] Google Drive sync completed: {}", syncResult.getSummary());
 			return syncResult;
 
 		} catch (Exception e) {
-			log.error("❌ Google Drive sync failed", e);
+			log.error("[Failed] Google Drive sync failed", e);
 
 			// 에러를 래핑하여 DataSyncResult로 반환 (예외 재발생 안함)
 			return DataSyncResult.failure(e.getMessage())
@@ -99,8 +99,8 @@ public class GoogleDriveDataSyncService {
 				fileMetadata.getSize(),
 				fileMetadata.getModifiedTime());
 		} catch (Exception e) {
-			log.error("Failed to check file status", e);
-			throw new RuntimeException("파일 상태 확인 실패: " + e.getMessage());
+			log.error("[Failed] Failed to check file status", e);
+			throw new RuntimeException("[Failed] 파일 상태 확인 실패: " + e.getMessage());
 		}
 	}
 }
