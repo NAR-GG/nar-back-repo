@@ -17,6 +17,16 @@ public class NameNormalizer {
 		if (!StringUtils.hasText(championName)) {
 			return "";
 		}
+
+		switch (championName.toLowerCase().replaceAll("[\\s'.-]+", "")) {
+			case "nunu":
+				return "Nunu&Willump";
+			case "renata":
+				return "RenataGlasc";
+			case "monkeyking":
+				return "Wukong";
+		}
+
 		String cleaned = championName.replaceAll("[\\s'.-]+", "").toLowerCase();
 		if (cleaned.isEmpty()) {
 			return "";
