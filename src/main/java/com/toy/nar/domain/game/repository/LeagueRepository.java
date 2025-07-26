@@ -2,6 +2,7 @@ package com.toy.nar.domain.game.repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -30,4 +31,11 @@ public interface LeagueRepository extends JpaRepository<League, Long> {
 
 	@Query("SELECT l FROM League l WHERE l.leagueName = :leagueName AND l.seasonSplit = :seasonSplit AND l.isPlayoffs = :isPlayoffs")
 	Optional<League> findByLeagueNameAndSeasonSplitAndIsPlayoffs(@Param("leagueName") String leagueName, @Param("seasonSplit") String seasonSplit, @Param("isPlayoffs") Boolean isPlayoffs);
-}
+
+	@Query("SELECT l FROM League l WHERE " +
+		"l.leagueName IN :leagueNames AND " +
+		"l.seasonYear IN :years")
+	List<League> findLeaguesByIdentifiers(
+		@Param("leagueNames") Set<String> leagueNames,
+		@Param("years") Set<Integer> years
+	);}
