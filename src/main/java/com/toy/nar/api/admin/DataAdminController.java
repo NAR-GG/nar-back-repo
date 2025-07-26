@@ -48,11 +48,16 @@ public class DataAdminController {
 
 		DataSyncResult result = googleDriveDataSyncService.syncFromGoogleDrive();
 
+		String errorMessage = result.errorMessage() != null ? result.errorMessage() : "오류 메시지 없음";
+		String summary = result.getSummary() != null ? result.getSummary() : "요약 정보 없음";
+		String source = result.source() != null ? result.source() : "출처 정보 없음";
+
+
 		if (result.isSuccess()) {
 			return ResponseEntity.ok(Map.of(
 				"success", true,
 				"message", "동기화가 성공적으로 완료되었습니다",
-				"summary", result.getSummary(),
+				"summary", summary,
 				"data", Map.of(
 					"totalRowsProcessed", result.totalRowsProcessed(),
 					"newGamesAdded", result.newGamesAdded(),
@@ -67,12 +72,12 @@ public class DataAdminController {
 			return ResponseEntity.status(500).body(Map.of(
 				"success", false,
 				"message", "동기화 중 오류가 발생했습니다",
-				"error", result.errorMessage(),
-				"summary", result.getSummary(),
+				"error", errorMessage,
+				"summary", result.getSummary() != null ? result.getSummary() : "요약 정보 없음",
 				"data", Map.of(
 					"totalRowsProcessed", result.totalRowsProcessed(),
 					"processingTimeMs", result.processingTimeMs(),
-					"source", result.source()
+					"source", source
 				)
 			));
 		}
