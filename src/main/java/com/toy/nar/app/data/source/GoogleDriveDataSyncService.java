@@ -11,6 +11,7 @@ import com.toy.nar.app.analysis.service.CombinationService;
 import com.toy.nar.app.data.ingestion.dto.DataIngestionResult;
 import com.toy.nar.app.data.source.dto.DataSyncResult;
 import com.toy.nar.app.data.ingestion.DataIngestionFacade;
+import com.toy.nar.domain.sync.SyncStatusRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ public class GoogleDriveDataSyncService {
 	private final DataIngestionFacade dataIngestionFacade;
 	private final NotificationService notificationService;
 	private final CombinationService combinationService;
+	private final SyncStatusRepository syncStatusRepository;
 
 	private static final String CSV_FILE_ID = "1v6LRphp2kYciU4SXp0PCjEMuev1bDejc";
 
@@ -54,13 +56,18 @@ public class GoogleDriveDataSyncService {
 		long startTime = System.currentTimeMillis();
 
 		try {
+
+			String lastProcessedId = syncStatusRepository.findById("GOOGLE_DRIVE_CSV")
+				.map(status -> status.getLastProcessedId())
+				.orElse(null);
+
 			// 1. Google Drive에서 스트림으로 다운로드
 			InputStream csvStream = drive.files()
 				.get(CSV_FILE_ID)
 				.executeMediaAsInputStream();
 
 			// 2. 기존 검증된 로직으로 처리
-			DataIngestionResult ingestionResult = dataIngestionFacade.ingestFromStream(csvStream);
+			DataIngestionResult ingestionResult = dataIngestionFacade.ingestFromStream(csvStream, lastProcessedId);
 
 			// 3. 결과 변환
 			DataSyncResult syncResult = DataSyncResult.fromIngestionResult(ingestionResult)
