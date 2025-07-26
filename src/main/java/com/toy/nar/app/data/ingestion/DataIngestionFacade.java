@@ -6,9 +6,13 @@ import com.opencsv.bean.CsvToBeanFilter;
 import com.toy.nar.app.data.ingestion.dto.GameDataCsvDto;
 import com.toy.nar.app.data.ingestion.dto.ChunkProcessingResult;
 import com.toy.nar.app.data.ingestion.dto.DataIngestionResult;
+import com.toy.nar.app.data.maintenance.DeltaCsvFilter;
 import com.toy.nar.domain.game.entity.Game;
 import com.toy.nar.domain.game.entity.League;
 import com.toy.nar.domain.game.repository.GameRepository;
+import com.toy.nar.domain.sync.SyncStatus;
+import com.toy.nar.domain.sync.SyncStatusRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,34 +35,30 @@ public class DataIngestionFacade {
 	private final GameRepository gameRepository;
 	private final EntityResolver entityResolver;
 	private final GameProcessor gameProcessor;
+	private final SyncStatusRepository syncStatusRepository;
 
 	private static final int CHUNK_SIZE = 5000;
 
-	@Transactional
-	public DataIngestionResult ingestCsvData() throws Exception {
-		log.info("[Starting] Starting local CSV data ingestion ('lol_esports_data.csv')...");
-		InputStream csvStream = new ClassPathResource("lol_esports_data.csv").getInputStream();
-		return ingestFromStream(csvStream);
-	}
-
-	@Transactional
-	public DataIngestionResult ingestFromStream(InputStream csvStream) throws Exception {
+	public DataIngestionResult ingestFromStream(InputStream csvStream, String lastProcessedGameId) throws Exception {
 		log.info("[Starting] Starting stream-based CSV data ingestion");
 		long startTime = System.currentTimeMillis();
 		DataIngestionResult.Builder resultBuilder = DataIngestionResult.builder();
 
 		entityResolver.initializeCaches();
 
+		String lastIdInStream = null;
+
 		try (Reader reader = new InputStreamReader(csvStream)) {
 			CsvToBean<GameDataCsvDto> csvToBean = new CsvToBeanBuilder<GameDataCsvDto>(reader)
 				.withType(GameDataCsvDto.class)
 				.withIgnoreLeadingWhiteSpace(true)
-				.withFilter(new CsvNonEmptyFilter())
+				.withFilter(new DeltaCsvFilter(lastProcessedGameId))
 				.build();
 
 			List<GameDataCsvDto> chunk = new ArrayList<>(CHUNK_SIZE);
 			for (GameDataCsvDto dto : csvToBean) {
 				chunk.add(dto);
+				lastIdInStream = dto.getGameid();
 				resultBuilder.incrementProcessedRows();
 				if (chunk.size() >= CHUNK_SIZE) {
 					ChunkProcessingResult chunkResult = processChunk(chunk);
@@ -72,12 +72,18 @@ public class DataIngestionFacade {
 			}
 		}
 
+		if (StringUtils.hasText(lastIdInStream)) {
+			syncStatusRepository.save(new SyncStatus("GOOGLE_DRIVE_CSV", lastIdInStream));
+			log.info("Updated last processed gameId to: {}", lastIdInStream);
+		}
+
 		DataIngestionResult result = resultBuilder.processingTimeMs(System.currentTimeMillis() - startTime).build();
 		log.info("[Completed] Stream ingestion completed. {}", result.getSummary());
 		return result;
 	}
 
-	private ChunkProcessingResult processChunk(List<GameDataCsvDto> chunk) {
+	@Transactional
+	public ChunkProcessingResult processChunk(List<GameDataCsvDto> chunk) {
 		int invalidGames = 0;
 		int failedGames = 0;
 

@@ -32,10 +32,10 @@ public interface LeagueRepository extends JpaRepository<League, Long> {
 	@Query("SELECT l FROM League l WHERE l.leagueName = :leagueName AND l.seasonSplit = :seasonSplit AND l.isPlayoffs = :isPlayoffs")
 	Optional<League> findByLeagueNameAndSeasonSplitAndIsPlayoffs(@Param("leagueName") String leagueName, @Param("seasonSplit") String seasonSplit, @Param("isPlayoffs") Boolean isPlayoffs);
 
-	@Query("SELECT l FROM League l WHERE " +
-		"l.leagueName IN :leagueNames AND " +
-		"l.seasonYear IN :years")
-	List<League> findLeaguesByIdentifiers(
+	@Query("SELECT DISTINCT l FROM League l LEFT JOIN FETCH l.leagueTeams WHERE l.leagueName IN :leagueNames AND l.seasonYear IN :years")
+	List<League> findLeaguesWithTeamsByIdentifiers(
 		@Param("leagueNames") Set<String> leagueNames,
 		@Param("years") Set<Integer> years
-	);}
+	);
+}
+

@@ -116,7 +116,7 @@ public class EntityResolver {
 			.map(LeagueIdentifier::year)
 			.collect(Collectors.toSet());
 
-		List<League> foundLeagues = leagueRepository.findLeaguesByIdentifiers(leagueNamesToFind, yearsToFind);
+		List<League> foundLeagues = leagueRepository.findLeaguesWithTeamsByIdentifiers(leagueNamesToFind, yearsToFind);
 
 		// 조회 결과를 애플리케이션 레벨에서 최종 필터링하고 캐시에 추가합니다.
 		Map<LeagueIdentifier, League> foundLeaguesMap = foundLeagues.stream()
