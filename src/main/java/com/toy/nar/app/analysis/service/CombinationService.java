@@ -57,6 +57,7 @@ public class CombinationService {
 		return new UpdateInfoDto(lastUpdateTime);
 	}
 
+	@Transactional(readOnly = true)
 	public PageCombinationResponse findTopCombinationsV2(
 		List<String> championNames,
 		MultiCombinationFilterDto filter,
