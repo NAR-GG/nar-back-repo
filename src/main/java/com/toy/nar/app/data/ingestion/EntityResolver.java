@@ -99,12 +99,53 @@ public class EntityResolver {
 		);
 	}
 
-	private void resolveLeagues(Set<LeagueIdentifier> requiredIds) {
-		log.debug("Required league IDs: {}", requiredIds);
-		requiredIds.forEach(id ->
-			leagueCache.computeIfAbsent(id, this::findOrCreateLeague)
-		);
-		log.debug("League cache after resolve: {}", leagueCache.keySet());
+	@Transactional
+	public void resolveLeagues(Set<LeagueIdentifier> requiredIds) {
+		Set<LeagueIdentifier> missingInCache = requiredIds.stream()
+			.filter(id -> !leagueCache.containsKey(id))
+			.collect(Collectors.toSet());
+
+		if (missingInCache.isEmpty()) {
+			return;
+		}
+
+		Set<String> leagueNamesToFind = missingInCache.stream()
+			.map(LeagueIdentifier::name)
+			.collect(Collectors.toSet());
+		Set<Integer> yearsToFind = missingInCache.stream()
+			.map(LeagueIdentifier::year)
+			.collect(Collectors.toSet());
+
+		List<League> foundLeagues = leagueRepository.findLeaguesByIdentifiers(leagueNamesToFind, yearsToFind);
+
+		// 조회 결과를 애플리케이션 레벨에서 최종 필터링하고 캐시에 추가합니다.
+		Map<LeagueIdentifier, League> foundLeaguesMap = foundLeagues.stream()
+			.collect(Collectors.toMap(LeagueIdentifier::fromEntity, Function.identity()));
+
+		leagueCache.putAll(foundLeaguesMap);
+
+
+		// 4. DB에도 없어서 최종적으로 새로 생성해야 할 리그들을 식별합니다.
+		List<League> leaguesToCreate = missingInCache.stream()
+			.filter(id -> !foundLeaguesMap.containsKey(id))
+			.map(id -> League.builder()
+				.leagueName(id.name())
+				.seasonYear(id.year())
+				.seasonSplit(id.split())
+				.isPlayoffs(id.isPlayoffs())
+				.build())
+			.toList(); // Java 17+
+
+		if (!leaguesToCreate.isEmpty()) {
+			log.info("Creating {} new leagues.", leaguesToCreate.size());
+
+			// 5. 단 한 번의 INSERT 쿼리(saveAll)로 새로운 리그들을 저장합니다.
+			List<League> savedLeagues = leagueRepository.saveAll(leaguesToCreate);
+
+			// 6. 저장된 리그 정보도 캐시에 추가합니다.
+			savedLeagues.forEach(league -> leagueCache.put(LeagueIdentifier.fromEntity(league), league));
+			log.info("Successfully created and cached {} new leagues.", savedLeagues.size());
+		}
 	}
 
 	private League findOrCreateLeague(LeagueIdentifier id) {
