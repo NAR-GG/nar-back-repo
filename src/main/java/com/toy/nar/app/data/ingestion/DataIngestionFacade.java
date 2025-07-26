@@ -43,7 +43,7 @@ public class DataIngestionFacade {
 
 	@Transactional
 	public DataIngestionResult ingestFromStream(InputStream csvStream) throws Exception {
-		log.info("[Starting] Starting stream-based CSV data ingestion...");
+		log.info("[Starting] Starting stream-based CSV data ingestion");
 		long startTime = System.currentTimeMillis();
 		DataIngestionResult.Builder resultBuilder = DataIngestionResult.builder();
 
