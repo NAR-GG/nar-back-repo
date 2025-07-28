@@ -76,7 +76,8 @@ public class GameDetailConverter {
 			game.getPatch(),
 			game.getGameLengthSeconds(),
 			ourTeam,
-			opponentTeam
+			opponentTeam,
+			null
 		);
 	}
 
@@ -186,7 +187,8 @@ public class GameDetailConverter {
 			game.getPatch(),
 			game.getGameLengthSeconds(),
 			ourTeam,
-			opponentTeam
+			opponentTeam,
+			null
 		);
 	}
 
