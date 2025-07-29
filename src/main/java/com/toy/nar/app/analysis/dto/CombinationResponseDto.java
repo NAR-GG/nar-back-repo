@@ -1,6 +1,7 @@
 package com.toy.nar.app.analysis.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record CombinationResponseDto(
@@ -11,7 +12,7 @@ public record CombinationResponseDto(
 	long winCount,
 	long lossCount,
 	double winRate,
-	LocalDate latestGameDate,
+	LocalDateTime latestGameDate,
 	List<String> recentPatches
 ) {
 	public double calculateWinRate() {

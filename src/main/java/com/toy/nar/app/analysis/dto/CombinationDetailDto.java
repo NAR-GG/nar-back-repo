@@ -1,6 +1,7 @@
 package com.toy.nar.app.analysis.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,7 +11,7 @@ public record CombinationDetailDto(
 ) {
 	public record GameDetailDto(
 		Long gameId,
-		LocalDate gameDate,
+		LocalDateTime gameDate,
 		String split,
 		String league,
 		String patch,

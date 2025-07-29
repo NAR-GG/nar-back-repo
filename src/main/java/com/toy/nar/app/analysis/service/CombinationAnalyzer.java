@@ -1,6 +1,7 @@
 package com.toy.nar.app.analysis.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -82,7 +83,7 @@ public class CombinationAnalyzer {
 		private long frequency = 0;
 		private long winCount = 0;
 		private long lossCount = 0;
-		private LocalDate latestGameDate = LocalDate.MIN;
+		private LocalDateTime latestGameDate = LocalDateTime.MIN;
 		private Set<Long> gameIds = new HashSet<>();
 		private Set<String> patches = new HashSet<>();
 		private Set<String> leagues = new HashSet<>();

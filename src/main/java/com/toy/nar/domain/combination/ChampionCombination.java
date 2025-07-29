@@ -1,6 +1,7 @@
 package com.toy.nar.domain.combination;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -14,7 +15,7 @@ public class ChampionCombination {
 	private final long frequency;
 	private final long winCount;
 	private final long lossCount;
-	private final LocalDate latestGameDate;
+	private final LocalDateTime latestGameDate;
 	private final Set<Long> gameIds;
 	private final Set<String> patches;
 	private final Set<String> leagues;
@@ -31,7 +32,7 @@ public class ChampionCombination {
 
 	public boolean isRecentCombination() {
 		return latestGameDate != null &&
-			latestGameDate.isAfter(LocalDate.now().minusDays(30));
+			latestGameDate.isAfter(LocalDateTime.now().minusDays(30));
 	}
 
 	public static int compareByFrequency(ChampionCombination a, ChampionCombination b) {

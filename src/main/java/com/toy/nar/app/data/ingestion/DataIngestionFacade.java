@@ -1,5 +1,7 @@
 package com.toy.nar.app.data.ingestion;
 
+import static com.toy.nar.app.data.ingestion.GameProcessor.*;
+
 import com.opencsv.bean.CsvToBean;
 import com.opencsv.bean.CsvToBeanBuilder;
 import com.opencsv.bean.CsvToBeanFilter;
@@ -24,6 +26,9 @@ import org.springframework.util.StringUtils;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -91,6 +96,7 @@ public class DataIngestionFacade {
 
 		Map<String, List<GameDataCsvDto>> gamesGroupedById = chunk.stream()
 			.collect(Collectors.groupingBy(GameDataCsvDto::getGameid));
+		Map<String, LocalDateTime> scheduledTimeMap = calculateScheduledTimesForChunk(chunk);
 
 		Set<String> existingGameIds = gameRepository.findExistingGameIds(gamesGroupedById.keySet());
 		int skippedGames = existingGameIds.size();
@@ -125,7 +131,9 @@ public class DataIngestionFacade {
 				boolean isGameValid = true;
 
 				for (GameDataCsvDto dto : playerDtos) {
-					if (gameProcessor.process(dto, singleGameCache).isEmpty()) {
+					LocalDateTime scheduledTime = scheduledTimeMap.get(dto.getGameid());
+
+					if (gameProcessor.process(dto, singleGameCache, scheduledTime).isEmpty()) {
 						isGameValid = false;
 						break;
 					}
@@ -156,5 +164,52 @@ public class DataIngestionFacade {
 		public boolean allowLine(String[] line) {
 			return StringUtils.hasText(line[0]) && StringUtils.hasText(line[1]); // gameid, league 컬럼 확인
 		}
+	}
+
+	private Map<String, LocalDateTime> calculateScheduledTimesForChunk(List<GameDataCsvDto> chunk) {
+		Map<String, LocalDateTime> resultMap = new HashMap<>();
+
+		List<GameDataCsvDto> lckGames = chunk.stream()
+			.filter(dto -> "LCK".equalsIgnoreCase(dto.getLeague()))
+			.toList();
+
+		// 날짜별로 게임들을 그룹화
+		Map<LocalDate, List<GameDataCsvDto>> gamesByDate = lckGames.stream()
+			.collect(Collectors.groupingBy(dto -> LocalDateTime.parse(dto.getDate(), CSV_DATE_FORMATTER).toLocalDate()));
+
+		for (var entry : gamesByDate.entrySet()) {
+			LocalDate date = entry.getKey();
+			List<GameDataCsvDto> dailyGames = entry.getValue();
+
+			// 하루의 경기들을 시간순으로 정렬 (1경기, 2경기 순서를 정하기 위해)
+			List<String> sortedGameIds = dailyGames.stream()
+				.map(dto -> new AbstractMap.SimpleEntry<>(dto.getGameid(), LocalDateTime.parse(dto.getDate(), CSV_DATE_FORMATTER)))
+				.distinct() // 게임 ID 중복 제거
+				.sorted(Map.Entry.comparingByValue())
+				.map(Map.Entry::getKey)
+				.toList();
+
+			boolean isWeekend = date.getDayOfWeek().getValue() >= 6; // 토, 일
+
+			for (int i = 0; i < sortedGameIds.size(); i++) {
+				String gameId = sortedGameIds.get(i);
+				int matchOrder = i + 1; // 1번째 경기, 2번째 경기...
+
+				LocalDateTime scheduledTimeKst;
+				if (isWeekend) {
+					scheduledTimeKst = date.atTime(matchOrder == 1 ? 15 : 17, 0); // 주말: 15시, 17시
+				} else {
+					scheduledTimeKst = date.atTime(matchOrder == 1 ? 17 : 19, 0); // 평일: 17시, 19시
+				}
+
+				LocalDateTime scheduledTimeUtc = scheduledTimeKst
+					.atZone(ZoneId.of("Asia/Seoul"))       // 1. KST 시간대 정보 부여
+					.withZoneSameInstant(ZoneId.of("UTC")) // 2. 동일한 순간의 UTC 시간으로 변경
+					.toLocalDateTime();
+
+				resultMap.put(gameId, scheduledTimeUtc);
+			}
+		}
+		return resultMap;
 	}
 }
