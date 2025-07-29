@@ -20,9 +20,9 @@ public class NameNormalizer {
 
 		switch (championName.toLowerCase().replaceAll("[\\s'.-]+", "")) {
 			case "nunu":
-				return "Nunu&Willump";
+				return "Nunu&willump";
 			case "renata":
-				return "RenataGlasc";
+				return "Renataglasc";
 			case "monkeyking":
 				return "Wukong";
 		}
