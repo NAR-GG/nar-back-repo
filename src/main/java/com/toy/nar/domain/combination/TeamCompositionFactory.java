@@ -33,7 +33,7 @@ public class TeamCompositionFactory {
 			first.getIsWin(),
 			game.getPatch(),
 			game.getLeague().getLeagueName(),
-			game.getGameDate()
+			game.getActualGameStartTime()
 		);
 	}
 

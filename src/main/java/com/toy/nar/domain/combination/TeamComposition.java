@@ -1,6 +1,7 @@
 package com.toy.nar.domain.combination;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.toy.nar.common.util.NameNormalizer;
@@ -23,7 +24,7 @@ public class TeamComposition {
 	private final boolean isWin;
 	private final String patch;
 	private final String league;
-	private final LocalDate gameDate;
+	private final LocalDateTime gameDate;
 
 	public boolean isValidTeam() {
 		return champions.size() == 5;
