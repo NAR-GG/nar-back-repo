@@ -114,7 +114,7 @@ public class MatchupService {
 		String normalizedChampion2
 	) {
 		return gameGroups.entrySet().stream()
-			.sorted(Comparator.comparing(entry -> entry.getValue().get(0).getGame().getGameDate(), Comparator.reverseOrder()))
+			.sorted(Comparator.comparing(entry -> entry.getValue().get(0).getGame().getActualGameStartTime(), Comparator.reverseOrder()))
 			.map(entry -> {
 				Long gameId = entry.getKey();
 				List<GameParticipant> gameParts = entry.getValue();
@@ -137,7 +137,7 @@ public class MatchupService {
 				// DTO 생성 (기존 필드 + 1v1 특화 필드)
 				return new CombinationDetailDto.GameDetailDto(
 					gameId,
-					gameParts.get(0).getGame().getGameDate(),
+					gameParts.get(0).getGame().getActualGameStartTime(),
 					gameParts.get(0).getGame().getLeague().getSeasonSplit(),
 					gameParts.get(0).getGame().getLeague().getLeagueName(),
 					gameParts.get(0).getGame().getPatch(),
