@@ -19,7 +19,7 @@ import lombok.NoArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -27,7 +27,7 @@ import java.util.Set;
 
 @Entity
 @Table(name = "games", indexes = {
-	@Index(name = "idx_game_date", columnList = "game_date"),
+	@Index(name = "idx_scheduled_time", columnList = "scheduled_game_start_time"),
 	@Index(name = "idx_game_league", columnList = "league_id")
 })
 @Getter
@@ -51,8 +51,11 @@ public class Game {
 	@OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
 	private List<GameParticipant> participants = new ArrayList<>();
 
-	@Column(name = "game_date", nullable = false)
-	private LocalDate gameDate;
+	@Column(name = "actual_game_start_time", nullable = false)
+	private LocalDateTime actualGameStartTime;
+
+	@Column(name = "scheduled_game_start_time")
+	private LocalDateTime scheduledGameStartTime;
 
 	@Column(name = "game_number", nullable = false)
 	private Integer gameNumber;
@@ -72,10 +75,11 @@ public class Game {
 	}
 
 	@Builder
-	public Game(String gameOriginId, League league, LocalDate gameDate, Integer gameNumber, String patch, Integer gameLengthSeconds) {
+	public Game(String gameOriginId, League league, LocalDateTime actualGameStartTime, LocalDateTime scheduledGameStartTime, Integer gameNumber, String patch, Integer gameLengthSeconds) {
 		this.gameOriginId = gameOriginId;
 		this.league = league;
-		this.gameDate = gameDate;
+		this.actualGameStartTime = actualGameStartTime;
+		this.scheduledGameStartTime = scheduledGameStartTime;
 		this.gameNumber = gameNumber;
 		this.patch = patch;
 		this.gameLengthSeconds = gameLengthSeconds;

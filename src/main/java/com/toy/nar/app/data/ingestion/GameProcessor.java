@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Optional;
@@ -26,7 +27,7 @@ import java.util.Optional;
 public class GameProcessor {
 
 	private final EntityResolver entityResolver;
-	private static final DateTimeFormatter CSV_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+	static final DateTimeFormatter CSV_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
 	// 역할: 처리된 Game과 Participant를 함께 전달하기 위한 record
 	public record ProcessedData(Game game, GameParticipant participant) {}
@@ -37,7 +38,7 @@ public class GameProcessor {
 	 * @param gameCacheInChunk 청크 내에서 Game 객체의 재사용을 위한 캐시
 	 * @return 변환 성공 시 ProcessedData를 담은 Optional, 실패 시 empty
 	 */
-	public Optional<ProcessedData> process(GameDataCsvDto dto, Map<String, Game> gameCacheInChunk) {
+	public Optional<ProcessedData> process(GameDataCsvDto dto, Map<String, Game> gameCacheInChunk, LocalDateTime scheduledGameStartTime) {
 		String teamLookupKey = NameNormalizer.normalizeTeamName(dto.getTeamname() != null ? dto.getTeamname().trim() : "");
 		String playerLookupKey = NameNormalizer.normalizePlayerName(dto.getPlayername() != null ? dto.getPlayername().trim() : "");
 		String championKey = NameNormalizer.normalizeChampionName(dto.getChampion());
@@ -63,7 +64,7 @@ public class GameProcessor {
 		league.addLeagueTeam(team);
 
 		// 3. Game 엔티티 생성 또는 재사용
-		Game game = gameCacheInChunk.computeIfAbsent(dto.getGameid(), gameId -> createGame(dto, league));
+		Game game = gameCacheInChunk.computeIfAbsent(dto.getGameid(), gameId -> createGame(dto, league, scheduledGameStartTime));
 
 		// 4. Ban 정보 추가 (Game 객체에 직접 추가)
 		addBansToGame(game, team, dto);
@@ -77,11 +78,12 @@ public class GameProcessor {
 		return Optional.of(new ProcessedData(game, participant));
 	}
 
-	private Game createGame(GameDataCsvDto dto, League league) {
+	private Game createGame(GameDataCsvDto dto, League league, LocalDateTime scheduledGameStartTime) {
 		return Game.builder()
 			.gameOriginId(dto.getGameid())
 			.league(league)
-			.gameDate(LocalDate.parse(dto.getDate(), CSV_DATE_FORMATTER))
+			.actualGameStartTime(LocalDateTime.parse(dto.getDate(), CSV_DATE_FORMATTER))
+			.scheduledGameStartTime(scheduledGameStartTime)
 			.gameNumber(dto.getGame())
 			.patch(dto.getPatch())
 			.gameLengthSeconds(dto.getGamelength())
@@ -112,7 +114,6 @@ public class GameProcessor {
 		if (StringUtils.hasText(banName)) {
 			Champion bannedChampion = entityResolver.getChampionCache().get(NameNormalizer.normalizeChampionName(banName));
 			if (bannedChampion != null) {
-				log.warn("Skipping ban for champion: {}", banName);
 				Ban ban = Ban.builder()
 					.game(game)
 					.team(team)

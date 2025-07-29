@@ -1,5 +1,6 @@
 package com.toy.nar.domain.game.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -41,4 +42,12 @@ public interface GameRepository extends JpaRepository<Game, Long> {
 		"LEFT JOIN FETCH p.champion " +
 		"WHERE g.league.id = :leagueId")
 	List<Game> findAllByLeagueIdWithDetails(@Param("leagueId") Long leagueId);
+
+	@Query("SELECT DISTINCT g FROM Game g " +
+		"JOIN FETCH g.participants p " +
+		"JOIN FETCH p.team t " +
+		"JOIN FETCH g.league l " +
+		"WHERE g.scheduledGameStartTime >= :start AND g.scheduledGameStartTime < :end " +
+		"ORDER BY g.scheduledGameStartTime ASC")
+	List<Game> findGamesByScheduledDateWithDetails(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 }

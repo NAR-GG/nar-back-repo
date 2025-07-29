@@ -70,7 +70,7 @@ public class GameDetailConverter {
 
 		return new CombinationDetailDto.GameDetailDto(
 			game.getId(),
-			game.getGameDate(),
+			game.getActualGameStartTime(),
 			game.getLeague().getSeasonSplit(),
 			game.getLeague().getLeagueName(),
 			game.getPatch(),
@@ -181,7 +181,7 @@ public class GameDetailConverter {
 
 		return new CombinationDetailDto.GameDetailDto(
 			game.getId(),
-			game.getGameDate(),
+			game.getActualGameStartTime(),
 			game.getLeague().getSeasonSplit(),
 			game.getLeague().getLeagueName(),
 			game.getPatch(),

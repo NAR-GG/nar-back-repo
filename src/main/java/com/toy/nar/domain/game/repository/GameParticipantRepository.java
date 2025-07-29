@@ -67,7 +67,7 @@ public interface GameParticipantRepository extends JpaRepository<GameParticipant
 		"JOIN FETCH gp.player p " +
 		"LEFT JOIN FETCH g.league l " +
 		"WHERE g.id IN :gameIds " +
-		"ORDER BY g.gameDate DESC, gp.position ASC")
+		"ORDER BY g.actualGameStartTime DESC, gp.position ASC")
 	List<GameParticipant> findGameDetailsByGameIds(@Param("gameIds") Set<Long> gameIds);
 
 	@Query("SELECT DISTINCT gp.game.league, gp.team FROM GameParticipant gp " +
@@ -126,7 +126,7 @@ public interface GameParticipantRepository extends JpaRepository<GameParticipant
 		"AND (:leagueNames IS NULL OR l.leagueName IN :leagueNames) " +
 		"AND (:teamNames IS NULL OR t.name IN :teamNames) " +
 		"AND (:patch IS NULL OR g.patch = :patch) " +
-		"ORDER BY g.gameDate DESC")  // 최신순 기본 정렬
+		"ORDER BY g.actualGameStartTime DESC")  // 최신순 기본 정렬
 	List<GameParticipant> find1v1MatchupParticipants(
 		@Param("champion1") String champion1,
 		@Param("champion2") String champion2,
