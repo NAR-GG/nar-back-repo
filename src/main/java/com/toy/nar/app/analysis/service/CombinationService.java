@@ -1,38 +1,23 @@
-// combination/service/CombinationService.java
 package com.toy.nar.app.analysis.service;
 
-import com.toy.nar.app.analysis.converter.CombinationDtoConverter;
-import com.toy.nar.app.analysis.dto.CombinationStatDto;
-import com.toy.nar.app.analysis.dto.PageCombinationResponse;
-import com.toy.nar.app.analysis.dto.UpdateInfoDto;
-import com.toy.nar.domain.combination.TeamCompositionFactory;
-import com.toy.nar.domain.combination.ChampionCombination;
-import com.toy.nar.domain.combination.GameTeamKey;
-import com.toy.nar.domain.combination.TeamComposition;
-import com.toy.nar.app.analysis.dto.CombinationDetailDto;
-import com.toy.nar.app.analysis.dto.CombinationResponseDto;
-import com.toy.nar.domain.combination.strategy.CombinationFilterManager;
+import com.toy.nar.app.analysis.dto.*;
 import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
-import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.domain.game.entity.GameParticipant;
 import com.toy.nar.domain.game.repository.GameParticipantRepository;
+import com.toy.nar.app.analysis.converter.GameDetailConverter; // 상세 DTO 변환을 위한 컨버터
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.toy.nar.app.analysis.dto.CombinationFilterDto;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -41,12 +26,9 @@ import java.util.stream.IntStream;
 @Transactional(readOnly = true)
 public class CombinationService {
 
-	private final CombinationAnalyzer analyzer;
-	private final TeamCompositionFactory factory;
-	private final CombinationDtoConverter converter;
 	private final GameParticipantRepository gameParticipantRepository;
 	private final CombinationIdService idService;
-	private final CombinationFilterManager filterManager;
+	private final GameDetailConverter gameDetailConverter; // 상세 DTO 변환을 위해 추가
 
 	private LocalDateTime lastUpdateTime = LocalDateTime.now();
 
@@ -59,19 +41,20 @@ public class CombinationService {
 		return new UpdateInfoDto(lastUpdateTime);
 	}
 
+	/**
+	 * [V3] DB 최적화를 적용한 메인 조합 조회 메서드
+	 */
 	public PageCombinationResponse findTopCombinationsV3(
 		List<String> championNames,
 		MultiCombinationFilterDto filter,
 		Pageable pageable) {
 
-		// 1. Repository에 모든 필터 정보와 페이징 정보를 넘겨 DB에서 직접 집계/정렬/페이징된 결과를 받음.
 		Page<CombinationStatDto> statsPage = gameParticipantRepository.findCombinationStats(
 			championNames,
 			filter,
 			pageable
 		);
 
-		// 2. DB에서 온 Page<CombinationStatDto>를 최종 응답 형태인 List<CombinationResponseDto>로 변환.
 		List<CombinationResponseDto> responseDtos = IntStream.range(0, statsPage.getContent().size())
 			.mapToObj(i -> {
 				CombinationStatDto stat = statsPage.getContent().get(i);
@@ -94,9 +77,8 @@ public class CombinationService {
 					stat.getLatestPatch()
 				);
 			})
-			.toList(); // Java 17+
+			.toList();
 
-		// 3. Page 객체의 페이징 정보를 사용하여 최종 응답 객체를 생성.
 		return new PageCombinationResponse(
 			responseDtos,
 			statsPage.getPageable(),
@@ -105,201 +87,64 @@ public class CombinationService {
 		);
 	}
 
-
-	@Transactional(readOnly = true)
-	public PageCombinationResponse findTopCombinationsV2(
-		List<String> championNames,
-		MultiCombinationFilterDto filter,
-		Pageable pageable) {
-
-		List<GameParticipant> allParticipants = getFilteredParticipants(championNames, filter);
-		long totalCount = allParticipants.size();
-
-
-		if (allParticipants.isEmpty()) {
-			return new PageCombinationResponse(Collections.emptyList(), pageable, false, totalCount);
-		}
-
-		List<TeamComposition> allCompositions = convertToCompositions(allParticipants);
-		List<ChampionCombination> allCombinations = analyzer.findTopCombinations(allCompositions, championNames);
-
-		// 동적 정렬 적용 (기존 getComparator 사용)
-		String sortType = pageable.getSort().stream()
-			.findFirst()
-			.map(Sort.Order::getProperty)
-			.orElse("frequency");
-		log.debug("Applied sortType: {}", sortType);
-
-		Comparator<ChampionCombination> comparator = getComparator(sortType);
-		List<ChampionCombination> sortedCombinations = allCombinations.stream()
-			.sorted(comparator)
-			.toList();
-
-		// 이제 combinations 리스트를 pageable로 슬라이스
-		int from = (int) pageable.getOffset();  // page * size
-		int to = Math.min(from + pageable.getPageSize(), sortedCombinations.size());
-		List<ChampionCombination> pagedCombinations = sortedCombinations.subList(from, to);
-
-		// ID 생성 및 DTO 변환
-		List<CombinationResponseDto> response = IntStream.range(0, pagedCombinations.size())
-			.mapToObj(i -> {
-				ChampionCombination combination = pagedCombinations.get(i);
-				String combinationId = idService.createMultiCombinationId(combination.getChampions(), filter);
-				return converter.toResponseDto(combination, from + i + 1, combinationId);  // rank는 전체 순위 기반
-			})
-			.toList();
-
-		boolean hasNext = to < sortedCombinations.size();
-		return new PageCombinationResponse(response, pageable, hasNext, (long) sortedCombinations.size());  // totalCount를 실제 조합 수로 변경
-	}
-
-	private Comparator<ChampionCombination> getComparator(String sortType) {
-		return switch (sortType != null ? sortType.toLowerCase() : "frequency") {  // 빈도수 디폴트
-			case "frequency" -> ChampionCombination::compareByFrequency;
-			case "recency" -> ChampionCombination::compareByRecency;
-			case "patch" -> ChampionCombination::compareByPatch;
-			default -> ChampionCombination::compareByFrequency;  // 디폴트 빈도수
-		};
-	}
-
+	/**
+	 * 정렬 파라미터를 DB 컬럼명에 맞게 변환하는 헬퍼 메서드
+	 */
 	public Pageable applyDynamicSort(Pageable pageable, String sortType) {
-		// 🔥 sortType을 실제 DB 컬럼 별칭(alias)으로 매핑합니다.
 		String property = switch (sortType.toLowerCase()) {
 			case "recency" -> "latestGameDate";
 			case "patch" -> "latestPatch";
 			default -> "frequency";
 		};
-
 		Sort sort = Sort.by(Sort.Direction.DESC, property);
 		return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
 	}
 
-	// 새로운 메서드: ID로 상세정보 조회
+	/**
+	 * [V3] DB 최적화를 적용한 조합 상세 조회 메서드
+	 */
 	public CombinationDetailDto getCombinationDetailById(String combinationId) {
-		// 먼저 Multi 캐시에서 확인
-		CombinationIdService.MultiCombinationSearchContext multiContext =
+		CombinationIdService.MultiCombinationSearchContext context =
 			idService.getMultiSearchContext(combinationId);
 
-		if (multiContext != null) {
-			log.debug("[DEBUG] Retrieving multi combination detail for ID: {}", combinationId);
-			return getCombinationDetailMulti(multiContext.champions(), multiContext.filter());
+		if (context == null) {
+			throw new IllegalArgumentException("Invalid or expired combination ID: " + combinationId);
 		}
 
-		// 기존 캐시에서 확인
-		CombinationIdService.CombinationSearchContext context =
-			idService.getSearchContext(combinationId);
+		List<String> champions = context.champions();
+		MultiCombinationFilterDto filter = context.filter();
 
-		if (context != null) {
-			log.debug("[DEBUG] Retrieving combination detail for ID: {}", combinationId);
-			return getCombinationDetail(context.champions(), context.filter());
-		}
+		// 1. 해당 조합의 통계 정보(요약)를 가져옵니다.
+		// (이 기능을 위해 Repository에 findSingleCombinationStat 메서드 추가 필요)
+		CombinationStatDto summaryStat = gameParticipantRepository.findSingleCombinationStat(champions, filter)
+			.orElseThrow(() -> new IllegalArgumentException("Combination not found for given context."));
 
-		throw new IllegalArgumentException("Invalid combination ID: " + combinationId);
-	}
-
-	public CombinationDetailDto getCombinationDetailMulti(
-		List<String> championNames,
-		MultiCombinationFilterDto filter) {
-
-		List<String> normalizedChampionNames = championNames.stream()
-			.map(NameNormalizer::normalizeChampionName)
-			.toList();
-
-		DetailData detailData = retrieveCombinationAndGameDetails(normalizedChampionNames, filter, true);
-
-		List<String> teamNames = filter.getTeamNames();
-
-		return converter.toDetailDtoMulti(detailData.combinations.get(0), detailData.gameDetails, teamNames, championNames);
-	}
-
-	public CombinationDetailDto getCombinationDetail(
-		List<String> championNames,
-		CombinationFilterDto filter) {
-
-		List<String> normalizedChampionNames = championNames.stream()
-			.map(NameNormalizer::normalizeChampionName)
-			.toList();
-
-		DetailData detailData = retrieveCombinationAndGameDetails(normalizedChampionNames, filter, false);
-
-		return converter.toDetailDto(detailData.combinations.get(0), detailData.gameDetails, filter.teamName());
-	}
-
-	private DetailData retrieveCombinationAndGameDetails(
-		List<String> normalizedChampionNames,
-		Object filter,
-		boolean isMulti) {
-
-		List<GameParticipant> participants = isMulti
-			? getFilteredParticipants(normalizedChampionNames, (MultiCombinationFilterDto) filter)
-			: gameParticipantRepository.findFilteredParticipants(
-			normalizedChampionNames,
-			((CombinationFilterDto) filter).year(),
-			((CombinationFilterDto) filter).split(),
-			((CombinationFilterDto) filter).leagueName(),
-			((CombinationFilterDto) filter).teamName(),
-			((CombinationFilterDto) filter).patch()
+		// CombinationStatDto -> CombinationResponseDto 변환
+		CombinationResponseDto summaryDto = new CombinationResponseDto(
+			combinationId, 1, summaryStat.getChampions(), summaryStat.getFrequency(),
+			summaryStat.getWinCount(), summaryStat.getFrequency() - summaryStat.getWinCount(),
+			(summaryStat.getFrequency() > 0) ? (double) summaryStat.getWinCount() / summaryStat.getFrequency() * 100 : 0.0,
+			summaryStat.getLatestGameDate(), summaryStat.getLatestPatch()
 		);
 
-		if (participants.isEmpty()) {
-			throw new IllegalArgumentException("No combination found for: " + normalizedChampionNames);
+		// 2. 해당 조합이 사용된 모든 게임의 ID 목록을 가져옵니다.
+		List<Long> gameIds = gameParticipantRepository.findGameIdsByCombination(champions, filter);
+		if (gameIds.isEmpty()) {
+			// 통계는 있는데 게임 목록이 없는 경우는 거의 없지만, 방어 코드
+			return new CombinationDetailDto(summaryDto, List.of());
 		}
 
-		List<TeamComposition> compositions = convertToCompositions(participants);
-		List<ChampionCombination> combinations = analyzer.findTopCombinations(compositions, normalizedChampionNames);
+		// 3. 게임 ID 목록으로 모든 참가자 정보를 한 번에 조회합니다.
+		List<GameParticipant> gameDetailsData = gameParticipantRepository.findGameDetailsByGameIds(new HashSet<>(gameIds));
 
-		if (combinations.isEmpty()) {
-			throw new IllegalArgumentException("No valid combinations found for: " + normalizedChampionNames);
-		}
+		// 4. 조회된 데이터를 최종 DTO 형태로 변환합니다.
+		List<CombinationDetailDto.GameDetailDto> gameDetailDtos =
+			gameDetailConverter.convertToGameDetailsMulti(gameDetailsData, filter.getTeamNames(), champions);
 
-		Set<Long> allGameIds = combinations.stream()
-			.flatMap(c -> c.getGameIds().stream())
-			.collect(Collectors.toSet());
+		// 최신순으로 정렬
+		gameDetailDtos.sort(Comparator.comparing(CombinationDetailDto.GameDetailDto::gameDate).reversed());
 
-		List<GameParticipant> gameDetails = gameParticipantRepository
-			.findGameDetailsByGameIds(allGameIds);
-
-		return new DetailData(combinations, gameDetails);
+		return new CombinationDetailDto(summaryDto, gameDetailDtos);
 	}
 
-	private List<TeamComposition> convertToCompositions(List<GameParticipant> participants) {
-		return participants.stream()
-			.collect(Collectors.groupingBy(
-				p -> new GameTeamKey(p.getGame().getId(), p.getTeam().getName())
-			))
-			.values().stream()
-			.map(factory::createFromParticipants)
-			.toList();
-	}
-
-	private List<GameParticipant> getFilteredParticipants(List<String> championNames,
-		MultiCombinationFilterDto filter) {
-
-		// 빈 리스트를 null로 변환하여 쿼리 단순화
-		List<String> splits = (filter.getSplits() != null && filter.getSplits().isEmpty())
-			? null : filter.getSplits();
-		List<String> leagueNames = (filter.getLeagueNames() != null && filter.getLeagueNames().isEmpty())
-			? null : filter.getLeagueNames();
-		List<String> teamNames = (filter.getTeamNames() != null && filter.getTeamNames().isEmpty())
-			? null : filter.getTeamNames();
-
-		if (filterManager.shouldUseMemoryFiltering(filter)) {
-			log.debug("[MEMORY] Using memory filtering for complex filters");
-			List<GameParticipant> baseParticipants = gameParticipantRepository.findBaseParticipants(
-				championNames, filter.getYear(), filter.getPatch());
-			return filterManager.applyFilters(baseParticipants, filter);
-		}
-
-		log.debug("[DB] Using database filtering");
-		return gameParticipantRepository.findFilteredParticipantsMulti(
-			championNames,
-			filter.getYear(),
-			splits,
-			leagueNames,
-			teamNames,
-			filter.getPatch()
-		);
-	}
-
-	private record DetailData(List<ChampionCombination> combinations, List<GameParticipant> gameDetails) {}
 }

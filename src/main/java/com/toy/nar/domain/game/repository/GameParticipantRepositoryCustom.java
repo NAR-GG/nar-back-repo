@@ -5,6 +5,7 @@ import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.util.List;
+import java.util.Optional;
 
 public interface GameParticipantRepositoryCustom {
 
@@ -13,4 +14,9 @@ public interface GameParticipantRepositoryCustom {
 		MultiCombinationFilterDto filter,
 		Pageable pageable
 	);
+
+	List<Long> findGameIdsByCombination(List<String> championNames, MultiCombinationFilterDto filter);
+
+	Optional<CombinationStatDto> findSingleCombinationStat(List<String> championNames, MultiCombinationFilterDto filter);
+
 }
