@@ -38,7 +38,7 @@ public class GameDetailConverter {
 		Map<String, List<GameParticipant>> teamGroups = gameParticipants.stream()
 			.collect(Collectors.groupingBy(p -> p.getTeam().getName()));
 
-		// 🔥 우리 팀과 상대 팀 분리 로직 개선
+		// 우리 팀과 상대 팀 분리 로직 개선
 		CombinationDetailDto.TeamDetailDto ourTeam = null;
 		CombinationDetailDto.TeamDetailDto opponentTeam = null;
 
@@ -50,7 +50,7 @@ public class GameDetailConverter {
 			if (teamPlayers.size() == 5) {
 				if (isOurTeam(teamName, targetTeamName, teamPlayers, targetChampions)) {
 					ourTeam = createTeamDetail(teamName, teamPlayers);
-					break; // 🔥 우리 팀을 찾으면 바로 중단
+					break; // 우리 팀을 찾으면 바로 중단
 				}
 			}
 		}
@@ -81,7 +81,7 @@ public class GameDetailConverter {
 		);
 	}
 
-	// 🔥 우리 팀 판별 로직 개선
+	// 우리 팀 판별 로직 개선
 	private boolean isOurTeam(String teamName, String targetTeamName,
 		List<GameParticipant> teamPlayers, List<String> targetChampions) {
 
@@ -96,7 +96,7 @@ public class GameDetailConverter {
 				.map(p -> p.getChampion().getChampionNameEn())
 				.collect(Collectors.toList());
 
-			// 🔥 부분 일치로 변경: 타겟 챔피언이 모두 팀에 포함되어 있는지 확인
+			// 부분 일치로 변경: 타겟 챔피언이 모두 팀에 포함되어 있는지 확인
 			return teamChampions.containsAll(targetChampions);
 		}
 
@@ -124,7 +124,7 @@ public class GameDetailConverter {
 		);
 	}
 
-	// 🔥 Multi 버전 메서드들
+	// Multi 버전 메서드들
 	public List<CombinationDetailDto.GameDetailDto> convertToGameDetailsMulti(
 		List<GameParticipant> participants,
 		List<String> targetTeamNames,
@@ -137,7 +137,7 @@ public class GameDetailConverter {
 			.collect(Collectors.toList());
 	}
 
-	// 🔥 누락된 createGameDetailMulti 메서드 추가
+	// 누락된 createGameDetailMulti 메서드 추가
 	private CombinationDetailDto.GameDetailDto createGameDetailMulti(
 		List<GameParticipant> gameParticipants,
 		List<String> targetTeamNames,
@@ -192,7 +192,7 @@ public class GameDetailConverter {
 		);
 	}
 
-	// 🔥 Multi 버전 우리 팀 판별 로직
+	// Multi 버전 우리 팀 판별 로직
 	private boolean isOurTeamMulti(String teamName, List<String> targetTeamNames,
 		List<GameParticipant> teamPlayers, List<String> targetChampions) {
 
