@@ -73,7 +73,7 @@ public class CombinationService {
 					stat.getWinCount(),
 					lossCount,
 					winRate,
-					stat.getLatestGameDate(),
+					stat.getLatestGameDate().toLocalDate(),
 					stat.getLatestPatch()
 				);
 			})
@@ -124,7 +124,7 @@ public class CombinationService {
 			combinationId, 1, summaryStat.getChampions(), summaryStat.getFrequency(),
 			summaryStat.getWinCount(), summaryStat.getFrequency() - summaryStat.getWinCount(),
 			(summaryStat.getFrequency() > 0) ? (double) summaryStat.getWinCount() / summaryStat.getFrequency() * 100 : 0.0,
-			summaryStat.getLatestGameDate(), summaryStat.getLatestPatch()
+			summaryStat.getLatestGameDate().toLocalDate(), summaryStat.getLatestPatch()
 		);
 
 		// 2. 해당 조합이 사용된 모든 게임의 ID 목록을 가져옵니다.
