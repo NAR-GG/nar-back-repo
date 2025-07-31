@@ -1,7 +1,7 @@
 package com.toy.nar.app.analysis.service;
 
 import com.toy.nar.app.analysis.dto.*;
-import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
+import com.toy.nar.app.analysis.dto.MultiCombinationFilterDto;
 import com.toy.nar.domain.game.entity.GameParticipant;
 import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import com.toy.nar.app.analysis.converter.GameDetailConverter; // 상세 DTO 변환을 위한 컨버터

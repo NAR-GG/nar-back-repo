@@ -1,9 +1,7 @@
-package com.toy.nar.domain.combination.strategy;
+package com.toy.nar.app.analysis.dto;
 
 import java.util.Collections;
 import java.util.List;
-
-import com.toy.nar.app.analysis.dto.CombinationFilterDto;
 
 import lombok.Builder;
 import lombok.Getter;

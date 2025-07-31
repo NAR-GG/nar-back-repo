@@ -1,7 +1,7 @@
 package com.toy.nar.app.analysis.service;
 
 import com.toy.nar.app.analysis.dto.CombinationFilterDto;
-import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
+import com.toy.nar.app.analysis.dto.MultiCombinationFilterDto;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

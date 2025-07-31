@@ -6,7 +6,7 @@ import com.toy.nar.app.analysis.dto.PageMatchupResponse;
 import com.toy.nar.app.analysis.dto.UpdateInfoDto;
 import com.toy.nar.app.analysis.service.CombinationService;
 import com.toy.nar.app.analysis.service.MatchupService;
-import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
+import com.toy.nar.app.analysis.dto.MultiCombinationFilterDto;
 
 import lombok.RequiredArgsConstructor;
 
