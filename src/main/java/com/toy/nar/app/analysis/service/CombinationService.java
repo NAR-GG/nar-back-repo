@@ -2,6 +2,7 @@
 package com.toy.nar.app.analysis.service;
 
 import com.toy.nar.app.analysis.converter.CombinationDtoConverter;
+import com.toy.nar.app.analysis.dto.CombinationStatDto;
 import com.toy.nar.app.analysis.dto.PageCombinationResponse;
 import com.toy.nar.app.analysis.dto.UpdateInfoDto;
 import com.toy.nar.domain.combination.TeamCompositionFactory;
@@ -18,6 +19,7 @@ import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -56,6 +58,53 @@ public class CombinationService {
 	public UpdateInfoDto getUpdateInfo() {
 		return new UpdateInfoDto(lastUpdateTime);
 	}
+
+	public PageCombinationResponse findTopCombinationsV3(
+		List<String> championNames,
+		MultiCombinationFilterDto filter,
+		Pageable pageable) {
+
+		// 1. Repository에 모든 필터 정보와 페이징 정보를 넘겨 DB에서 직접 집계/정렬/페이징된 결과를 받음.
+		Page<CombinationStatDto> statsPage = gameParticipantRepository.findCombinationStats(
+			championNames,
+			filter,
+			pageable
+		);
+
+		// 2. DB에서 온 Page<CombinationStatDto>를 최종 응답 형태인 List<CombinationResponseDto>로 변환.
+		List<CombinationResponseDto> responseDtos = IntStream.range(0, statsPage.getContent().size())
+			.mapToObj(i -> {
+				CombinationStatDto stat = statsPage.getContent().get(i);
+				long lossCount = stat.getFrequency() - stat.getWinCount();
+				double winRate = (stat.getFrequency() > 0)
+					? (double) stat.getWinCount() / stat.getFrequency() * 100
+					: 0.0;
+				int rank = (int) pageable.getOffset() + i + 1;
+				String combinationId = idService.createMultiCombinationId(stat.getChampions(), filter);
+
+				return new CombinationResponseDto(
+					combinationId,
+					rank,
+					stat.getChampions(),
+					stat.getFrequency(),
+					stat.getWinCount(),
+					lossCount,
+					winRate,
+					stat.getLatestGameDate(),
+					stat.getLatestPatch()
+				);
+			})
+			.toList(); // Java 17+
+
+		// 3. Page 객체의 페이징 정보를 사용하여 최종 응답 객체를 생성.
+		return new PageCombinationResponse(
+			responseDtos,
+			statsPage.getPageable(),
+			statsPage.hasNext(),
+			statsPage.getTotalElements()
+		);
+	}
+
 
 	@Transactional(readOnly = true)
 	public PageCombinationResponse findTopCombinationsV2(
@@ -114,8 +163,14 @@ public class CombinationService {
 	}
 
 	public Pageable applyDynamicSort(Pageable pageable, String sortType) {
-		Sort.Direction direction = Sort.Direction.DESC;
-		Sort sort = Sort.by(direction, sortType != null ? sortType.toLowerCase() : "frequency");
+		// 🔥 sortType을 실제 DB 컬럼 별칭(alias)으로 매핑합니다.
+		String property = switch (sortType.toLowerCase()) {
+			case "recency" -> "latestGameDate";
+			case "patch" -> "latestPatch";
+			default -> "frequency";
+		};
+
+		Sort sort = Sort.by(Sort.Direction.DESC, property);
 		return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
 	}
 

@@ -52,7 +52,7 @@ public class CombinationController {
 		Pageable basicPageable = PageRequest.of(page, size);
 		Pageable pageable = combinationService.applyDynamicSort(basicPageable, sort);
 
-		PageCombinationResponse combinations = combinationService.findTopCombinationsV2(champions, filter, pageable);
+		PageCombinationResponse combinations = combinationService.findTopCombinationsV3(champions, filter, pageable);
 		return ResponseEntity.ok(combinations);
 	}
 

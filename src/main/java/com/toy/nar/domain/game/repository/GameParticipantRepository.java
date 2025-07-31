@@ -1,5 +1,6 @@
 package com.toy.nar.domain.game.repository;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,9 +9,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Set;
+
+import com.toy.nar.app.analysis.dto.CombinationStatDto;
 import com.toy.nar.domain.game.entity.GameParticipant;
 
-public interface GameParticipantRepository extends JpaRepository<GameParticipant, Long> {
+public interface GameParticipantRepository extends JpaRepository<GameParticipant, Long>, GameParticipantRepositoryCustom {
 
 	@Query("SELECT gp FROM GameParticipant gp " +
 		"JOIN FETCH gp.game g " +
@@ -136,4 +139,5 @@ public interface GameParticipantRepository extends JpaRepository<GameParticipant
 		@Param("teamNames") List<String> teamNames,
 		@Param("patch") String patch
 	);
+
 }
