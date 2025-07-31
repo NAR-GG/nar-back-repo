@@ -13,7 +13,7 @@ public record CombinationResponseDto(
 	long lossCount,
 	double winRate,
 	LocalDateTime latestGameDate,
-	List<String> recentPatches
+	String latestPatch
 ) {
 	public double calculateWinRate() {
 		long totalGames = winCount + lossCount;

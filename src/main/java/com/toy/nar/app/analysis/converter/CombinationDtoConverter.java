@@ -31,7 +31,7 @@ public class CombinationDtoConverter {
 			combination.getLossCount(),
 			combination.getWinRate(),
 			combination.getLatestGameDate(),
-			new ArrayList<>(combination.getPatches())
+			combination.getPatches().toString()
 		);
 	}
 
@@ -46,7 +46,7 @@ public class CombinationDtoConverter {
 			combination.getLossCount(),
 			combination.getWinRate(),
 			combination.getLatestGameDate(),
-			new ArrayList<>(combination.getPatches())
+			combination.getPatches().toString()
 		);
 	}
 
@@ -81,10 +81,4 @@ public class CombinationDtoConverter {
 		return new CombinationDetailDto(summary, gameDetails);
 	}
 
-	public CombinationStatDto toStatDto(ChampionCombination combination) {
-		return new CombinationStatDto(
-			combination.getChampions(),
-			combination.getFrequency()
-		);
-	}
 }
