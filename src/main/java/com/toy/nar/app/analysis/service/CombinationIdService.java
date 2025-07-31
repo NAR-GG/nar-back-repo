@@ -20,7 +20,7 @@ public class CombinationIdService {
 	// 기존 조합 ID와 검색 컨텍스트를 매핑하는 캐시
 	private final Map<String, CombinationSearchContext> combinationCache = new ConcurrentHashMap<>();
 
-	// 🔥 Multi 조합 ID와 검색 컨텍스트를 매핑하는 캐시 (누락된 부분)
+	// Multi 조합 ID와 검색 컨텍스트를 매핑하는 캐시 (누락된 부분)
 	private final Map<String, MultiCombinationSearchContext> multiCombinationCache = new ConcurrentHashMap<>();
 
 	public String createMultiCombinationId(List<String> champions, MultiCombinationFilterDto filter) {
@@ -72,12 +72,12 @@ public class CombinationIdService {
 	}
 
 	public String createCombinationId(List<String> champions, CombinationFilterDto filter) {
-		// 🔥 챔피언 목록을 정렬하여 일관된 ID 생성
+		// 챔피언 목록을 정렬하여 일관된 ID 생성
 		String sortedChampions = champions.stream()
 			.sorted()
 			.collect(Collectors.joining(","));
 
-		// 🔥 필터 정보를 포함한 컨텍스트 문자열 생성
+		// 필터 정보를 포함한 컨텍스트 문자열 생성
 		String filterString = String.format("%s_%s_%s_%s_%s",
 			filter.year(),
 			filter.split(),
@@ -85,12 +85,12 @@ public class CombinationIdService {
 			filter.teamName(),
 			filter.patch());
 
-		// 🔥 해시 기반 조합 ID 생성
+		// 해시 기반 조합 ID 생성
 		String combinationId = DigestUtils.md5DigestAsHex(
 			(sortedChampions + "_" + filterString).getBytes()
 		).substring(0, 12); // 12자리로 축약
 
-		// 🔥 검색 컨텍스트 저장
+		// 검색 컨텍스트 저장
 		CombinationSearchContext context = new CombinationSearchContext(champions, filter);
 		combinationCache.put(combinationId, context);
 
@@ -106,7 +106,7 @@ public class CombinationIdService {
 		return context;
 	}
 
-	// 🔥 Multi 검색 컨텍스트 조회 메서드 (누락된 부분)
+	// Multi 검색 컨텍스트 조회 메서드 (누락된 부분)
 	public MultiCombinationSearchContext getMultiSearchContext(String combinationId) {
 		MultiCombinationSearchContext context = multiCombinationCache.get(combinationId);
 		if (context == null) {
@@ -127,13 +127,13 @@ public class CombinationIdService {
 		log.debug("[DEBUG]️ Combination cache cleared");
 	}
 
-	// 🔥 기존 검색 컨텍스트 레코드
+	// 기존 검색 컨텍스트 레코드
 	public record CombinationSearchContext(
 		List<String> champions,
 		CombinationFilterDto filter
 	) {}
 
-	// 🔥 Multi 검색 컨텍스트 레코드 (누락된 부분)
+	// Multi 검색 컨텍스트 레코드 (누락된 부분)
 	public record MultiCombinationSearchContext(
 		List<String> champions,
 		MultiCombinationFilterDto filter
