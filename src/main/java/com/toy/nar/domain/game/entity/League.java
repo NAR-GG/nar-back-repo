@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import org.hibernate.Hibernate;
+
 import com.toy.nar.domain.participant.entity.Team;
 
 @Entity
@@ -29,7 +31,6 @@ import com.toy.nar.domain.participant.entity.Team;
 }) // 복합 유니크 제약 조건 추가
 @Getter // Lombok: Getter 자동 생성
 @NoArgsConstructor(access = AccessLevel.PROTECTED) // Lombok: 기본 생성자
-@EqualsAndHashCode(of = {"leagueName", "seasonYear", "seasonSplit", "isPlayoffs"}) // Lombok: 동등성 비교 (비즈니스 키)
 @ToString // Lombok: toString 메서드
 public class League {
 
@@ -59,13 +60,17 @@ public class League {
 				.league(this)
 				.team(team)
 				.build();
-			leagueTeams.add(leagueTeam);
-			team.getLeagueTeams().add(leagueTeam);  // 양방향 설정
+			this.leagueTeams.add(leagueTeam);
+
 		}
 	}
 
 	public boolean hasTeam(Team team) {
-		return leagueTeams.stream().anyMatch(lt -> lt.getTeam().equals(team));
+		if (team == null || team.getId() == null) {
+			return false;
+		}
+		return leagueTeams.stream()
+			.anyMatch(lt -> lt.getTeam().getId().equals(team.getId()));
 	}
 
 	@Builder // Lombok: 빌더 패턴 생성자
@@ -74,5 +79,18 @@ public class League {
 		this.seasonYear = Objects.requireNonNull(seasonYear, "Season year must not be null");
 		this.seasonSplit = Objects.requireNonNull(seasonSplit, "Season split must not be null");
 		this.isPlayoffs = Objects.requireNonNull(isPlayoffs, "Is playoffs must not be null");
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) return false;
+		League league = (League) o;
+		return id != null && Objects.equals(id, league.id);
+	}
+
+	@Override
+	public int hashCode() {
+		return getClass().hashCode();
 	}
 }
