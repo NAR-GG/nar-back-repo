@@ -7,6 +7,7 @@ public record MatchDetailResponseDto(
 	List<GameDetailDto> gameDetails
 ) {
 	public record GameDetailDto(
+		Long id,
 		int gameNumber,
 		int gameLengthSeconds,
 		TeamPicksDto blueTeam,
