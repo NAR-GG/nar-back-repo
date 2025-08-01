@@ -16,14 +16,8 @@ public interface GameRepository extends JpaRepository<Game, Long> {
 	@Query("SELECT g.gameOriginId FROM Game g WHERE g.gameOriginId IN :gameIds")
 	Set<String> findExistingGameIds(@Param("gameIds") Set<String> gameIds);
 
-	@Query("SELECT g FROM Game g WHERE g.gameOriginId = :gameOriginId")
-	Optional<Game> findByGameOriginId(@Param("gameOriginId") String gameOriginId);
-
 	@Query("SELECT g.gameOriginId FROM Game g WHERE g.id IN :gameIds")
 	Set<String> findGameOriginIdsByIds(@Param("gameIds") Set<Long> gameIds);
-
-	@Query("SELECT g.id FROM Game g WHERE g.league.leagueName = :leagueName")
-	List<Long> findGameIdsByLeague_LeagueName(@Param("leagueName") String leagueName);
 
 	@Query(value = """
         SELECT g.game_id
@@ -50,4 +44,16 @@ public interface GameRepository extends JpaRepository<Game, Long> {
 		"WHERE g.scheduledGameStartTime >= :start AND g.scheduledGameStartTime < :end " +
 		"ORDER BY g.scheduledGameStartTime ASC")
 	List<Game> findGamesByScheduledDateWithDetails(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+	@Query("SELECT g FROM Game g " +
+		"LEFT JOIN FETCH g.league l " +
+		"LEFT JOIN FETCH g.participants p " +
+		"LEFT JOIN FETCH p.player " +
+		"LEFT JOIN FETCH p.team " +
+		"LEFT JOIN FETCH p.champion " +
+		"LEFT JOIN FETCH p.stat " +
+		"LEFT JOIN FETCH g.bans b " +
+		"LEFT JOIN FETCH b.bannedChampion " +
+		"WHERE g.id = :gameId")
+	Optional<Game> findGameDetailsById(@Param("gameId") Long gameId);
 }

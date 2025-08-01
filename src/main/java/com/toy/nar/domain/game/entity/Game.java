@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -25,12 +26,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.toy.nar.app.data.ingestion.GameProcessor;
+import com.toy.nar.app.data.ingestion.dto.GameDataCsvDto;
+
 @Entity
 @Table(name = "games", indexes = {
 	@Index(name = "idx_scheduled_time", columnList = "scheduled_game_start_time"),
 	@Index(name = "idx_game_league", columnList = "league_id")
 })
 @Getter
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(of = "id")
 @ToString(exclude = {"league", "bans"})
@@ -49,7 +55,12 @@ public class Game {
 	private League league;
 
 	@OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+	@Builder.Default
 	private List<GameParticipant> participants = new ArrayList<>();
+
+	@OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+	@Builder.Default
+	private Set<Ban> bans = new HashSet<>();
 
 	@Column(name = "actual_game_start_time", nullable = false)
 	private LocalDateTime actualGameStartTime;
@@ -66,22 +77,25 @@ public class Game {
 	@Column(name = "game_length_seconds", nullable = false)
 	private Integer gameLengthSeconds;
 
-	@OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-	private Set<Ban> bans = new HashSet<>();
+	@Column(name = "ckpm", nullable = false)
+	private Double ckpm;
+
 
 	public void addParticipant(GameParticipant participant) {
 		participants.add(participant);
 		participant.assignGame(this);
 	}
 
-	@Builder
-	public Game(String gameOriginId, League league, LocalDateTime actualGameStartTime, LocalDateTime scheduledGameStartTime, Integer gameNumber, String patch, Integer gameLengthSeconds) {
-		this.gameOriginId = gameOriginId;
-		this.league = league;
-		this.actualGameStartTime = actualGameStartTime;
-		this.scheduledGameStartTime = scheduledGameStartTime;
-		this.gameNumber = gameNumber;
-		this.patch = patch;
-		this.gameLengthSeconds = gameLengthSeconds;
+	public static Game from(GameDataCsvDto dto, League league, LocalDateTime scheduledGameStartTime) {
+		return Game.builder()
+			.gameOriginId(dto.getGameid())
+			.league(league)
+			.actualGameStartTime(LocalDateTime.parse(dto.getDate(), GameProcessor.CSV_DATE_FORMATTER))
+			.scheduledGameStartTime(scheduledGameStartTime)
+			.gameNumber(dto.getGame())
+			.patch(dto.getPatch())
+			.gameLengthSeconds(dto.getGamelength())
+			.ckpm(dto.getCkpm())
+			.build();
 	}
 }

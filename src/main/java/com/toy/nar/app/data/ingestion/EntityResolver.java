@@ -98,6 +98,24 @@ public class EntityResolver {
 			playerRepository
 		);
 	}
+	public Team resolveTeam(String teamName) {
+		if (!StringUtils.hasText(teamName)) return null;
+		return teamCache.get(NameNormalizer.normalizeTeamName(teamName.trim()));
+	}
+
+	public Player resolvePlayer(String playerName) {
+		if (!StringUtils.hasText(playerName)) return null;
+		return playerCache.get(NameNormalizer.normalizePlayerName(playerName.trim()));
+	}
+
+	public Champion resolveChampion(String championName) {
+		if (!StringUtils.hasText(championName)) return null;
+		return championCache.get(NameNormalizer.normalizeChampionName(championName.trim()));
+	}
+
+	public League resolveLeague(GameDataCsvDto dto) {
+		return leagueCache.get(LeagueIdentifier.fromDto(dto));
+	}
 
 	@Transactional
 	public void resolveLeagues(Set<LeagueIdentifier> requiredIds, Set<String> requiredTeamNames) {
@@ -128,7 +146,6 @@ public class EntityResolver {
 		missingInCache.stream()
 			.filter(id -> !foundLeaguesMap.containsKey(id))
 			.forEach(id -> {
-				// 4. 새 League 객체 생성
 				League newLeague = League.builder()
 					.leagueName(id.name())
 					.seasonYear(id.year())
@@ -136,7 +153,6 @@ public class EntityResolver {
 					.isPlayoffs(id.isPlayoffs())
 					.build();
 
-				// 5. [핵심] 현재 청크의 팀들을 새 리그에 연결!
 				requiredTeamNames.forEach(teamName -> {
 					String teamLookupKey = NameNormalizer.normalizeTeamName(teamName);
 					Team team = teamCache.get(teamLookupKey);
@@ -156,32 +172,10 @@ public class EntityResolver {
 		}
 	}
 
-	private League findOrCreateLeague(LeagueIdentifier id) {
-		// 1. 먼저 DB에서 찾아본다.
-		return leagueRepository.findByLeagueNameAndSeasonYearAndSeasonSplitAndIsPlayoffs(
-			id.name(), id.year(), id.split(), id.isPlayoffs()
-		).orElseGet(() -> {
-			// 2. DB에 없으면 새로 생성한다.
-			log.info("Creating new league: {} (name: {}, year: {}, split: {}, playoffs: {})",
-				id, id.name(), id.year(), id.split(), id.isPlayoffs());  // 상세 로그 추가
-			League newLeague = League.builder()
-				.leagueName(id.name())
-				.seasonYear(id.year())
-				.seasonSplit(id.split())
-				.isPlayoffs(id.isPlayoffs())
-				.build();
-
-			League saved = leagueRepository.save(newLeague);
-			log.info("Saved new league with ID: {}", saved.getId());  // 저장 확인 로그
-			return saved;
-		});
-	}
-
 	/**
 	 * [신규] 이름 기반 엔티티(Team, Player)의 중복된 조회/생성 로직을 통합한 제네릭 메서드입니다.
 	 * 역할: 이름으로 엔티티를 찾거나, 없으면 생성하여 캐시에 저장합니다.
 	 *
-	 * @param requiredNames      필요한 엔티티 이름 목록
 	 * @param cache              해당 엔티티의 캐시
 	 * @param findInDb           DB에서 이름으로 찾는 기능을 하는 메서드
 	 * @param entityCreator      이름으로 새 엔티티를 생성하는 함수

@@ -135,7 +135,7 @@ public class ScheduleService {
 				TeamPicksDto blueTeam = createTeamPicksDto(participantsBySide.get("Blue"));
 				TeamPicksDto redTeam = createTeamPicksDto(participantsBySide.get("Red"));
 
-				return new GameDetailDto(game.getGameNumber(), game.getGameLengthSeconds(), blueTeam, redTeam);
+				return new GameDetailDto(game.getId(), game.getGameNumber(), game.getGameLengthSeconds(), blueTeam, redTeam);
 			})
 			.sorted(Comparator.comparing(GameDetailDto::gameNumber)) // gameNumber 순으로 정렬
 			.toList();

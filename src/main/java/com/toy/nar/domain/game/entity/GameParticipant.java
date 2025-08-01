@@ -1,5 +1,6 @@
 package com.toy.nar.domain.game.entity;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -9,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -18,7 +20,9 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import java.util.Objects;
 
+import com.toy.nar.app.data.ingestion.dto.GameDataCsvDto;
 import com.toy.nar.domain.participant.entity.Champion;
+import com.toy.nar.domain.participant.entity.GamePlayerStat;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.Team;
 
@@ -63,9 +67,14 @@ public class GameParticipant {
 	@Column(name = "is_win", nullable = false) // CSV 'result' (1/0)을 Boolean으로 변환
 	private Boolean isWin;
 
+	@OneToOne(mappedBy = "gameParticipant", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+	private GamePlayerStat stat;
+
 	public void assignGame(Game game) {
 		this.game = game;
 	}
+
+	public void setStat(GamePlayerStat stat) { this.stat = stat; }
 
 	@Builder
 	public GameParticipant(Game game, Player player, Team team, String side, String position, Champion champion, Boolean isWin) {
@@ -76,5 +85,17 @@ public class GameParticipant {
 		this.position = Objects.requireNonNull(position, "Position must not be null");
 		this.champion = Objects.requireNonNull(champion);
 		this.isWin = Objects.requireNonNull(isWin, "Is win must not be null");
+	}
+
+	public static GameParticipant from(Game game, Team team, Player player, Champion champion, GameDataCsvDto dto) {
+		return GameParticipant.builder()
+			.game(Objects.requireNonNull(game))
+			.team(Objects.requireNonNull(team))
+			.player(Objects.requireNonNull(player))
+			.champion(Objects.requireNonNull(champion))
+			.side(Objects.requireNonNull(dto.getSide()))
+			.position(Objects.requireNonNull(dto.getPosition()))
+			.isWin(dto.getResult() == 1)
+			.build();
 	}
 }
