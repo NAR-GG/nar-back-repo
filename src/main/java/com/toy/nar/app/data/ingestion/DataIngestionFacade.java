@@ -12,6 +12,8 @@ import com.toy.nar.app.data.maintenance.DeltaCsvFilter;
 import com.toy.nar.domain.game.entity.Game;
 import com.toy.nar.domain.game.entity.League;
 import com.toy.nar.domain.game.repository.GameRepository;
+import com.toy.nar.domain.participant.entity.GameTeamStat;
+import com.toy.nar.domain.participant.repository.GameTeamStatRepository;
 import com.toy.nar.domain.sync.SyncStatus;
 import com.toy.nar.domain.sync.SyncStatusRepository;
 
@@ -41,6 +43,7 @@ public class DataIngestionFacade {
 	private final EntityResolver entityResolver;
 	private final GameProcessor gameProcessor;
 	private final SyncStatusRepository syncStatusRepository;
+	private final GameTeamStatRepository gameTeamStatRepository;
 
 	private static final int CHUNK_SIZE = 5000;
 
@@ -96,32 +99,35 @@ public class DataIngestionFacade {
 
 		Map<String, List<GameDataCsvDto>> gamesGroupedById = chunk.stream()
 			.collect(Collectors.groupingBy(GameDataCsvDto::getGameid));
-		Map<String, LocalDateTime> scheduledTimeMap = calculateScheduledTimesForChunk(chunk);
 
+		Map<String, LocalDateTime> scheduledTimeMap = calculateScheduledTimesForChunk(chunk);
 		Set<String> existingGameIds = gameRepository.findExistingGameIds(gamesGroupedById.keySet());
 		int skippedGames = existingGameIds.size();
 
 		List<Game> gamesToSave = new ArrayList<>();
+		List<GameTeamStat> teamStatsToSave = new ArrayList<>(); // [신규] 팀 통계 저장 리스트
 
 		for (Map.Entry<String, List<GameDataCsvDto>> gameEntry : gamesGroupedById.entrySet()) {
 			String gameId = gameEntry.getKey();
-			List<GameDataCsvDto> allGameDtos = gameEntry.getValue();
-
 			if (existingGameIds.contains(gameId)) {
 				continue;
 			}
 
-			List<GameDataCsvDto> playerDtos = allGameDtos.stream()
-				.filter(dto -> dto.getPosition() != null &&
-					(dto.getPosition().equalsIgnoreCase("top") ||
-						dto.getPosition().equalsIgnoreCase("jng") ||
-						dto.getPosition().equalsIgnoreCase("mid") ||
-						dto.getPosition().equalsIgnoreCase("bot") ||
-						dto.getPosition().equalsIgnoreCase("sup")))
-				.toList();
+			List<GameDataCsvDto> allGameDtos = gameEntry.getValue();
 
-			if (playerDtos.size() != 10) {
-				log.warn("[Incomplete] Incomplete player data for gameId: {}. Found {} player rows instead of 10. Skipping.", gameId, playerDtos.size());
+			// [수정] 플레이어 행과 팀 행을 분리
+			Map<Boolean, List<GameDataCsvDto>> partitionedData = allGameDtos.stream()
+				.collect(Collectors.partitioningBy(dto ->
+					dto.getPosition() != null && !dto.getPosition().isBlank() && !dto.getPosition().equalsIgnoreCase("team")
+				));
+
+			List<GameDataCsvDto> playerDtos = partitionedData.get(true);
+			List<GameDataCsvDto> teamDtos = partitionedData.get(false);
+
+			// [수정] 데이터 유효성 검증
+			if (playerDtos.size() != 10 || teamDtos.size() != 2) {
+				log.warn("[Incomplete] Data for gameId: {}. Players: {}, Teams: {}. Skipping.",
+					gameId, playerDtos.size(), teamDtos.size());
 				invalidGames++;
 				continue;
 			}
@@ -130,21 +136,35 @@ public class DataIngestionFacade {
 				Map<String, Game> singleGameCache = new HashMap<>();
 				boolean isGameValid = true;
 
+				// 1. 플레이어 데이터 처리
 				for (GameDataCsvDto dto : playerDtos) {
 					LocalDateTime scheduledTime = scheduledTimeMap.get(dto.getGameid());
-
 					if (gameProcessor.process(dto, singleGameCache, scheduledTime).isEmpty()) {
 						isGameValid = false;
 						break;
 					}
 				}
 
-				if (isGameValid) {
-					gamesToSave.addAll(singleGameCache.values());
-				} else {
+				if (!isGameValid) {
 					log.warn("[Skip] Game data for gameId: {} is invalid and will be skipped.", gameId);
 					invalidGames++;
+					continue;
 				}
+
+				// 2. [신규] 팀 데이터 처리
+				Game processedGame = singleGameCache.get(gameId);
+				if (processedGame == null) {
+					log.error("[Error] Game object was not created for gameId: {}. Skipping.", gameId);
+					failedGames++;
+					continue;
+				}
+
+				for (GameDataCsvDto teamDto : teamDtos) {
+					gameProcessor.processTeamStats(teamDto, processedGame)
+						.ifPresent(teamStatsToSave::add);
+				}
+
+				gamesToSave.add(processedGame);
 
 			} catch (Exception e) {
 				log.error("[Error] A critical error occurred while processing game {}: {}", gameId, e.getMessage(), e);
@@ -152,18 +172,16 @@ public class DataIngestionFacade {
 			}
 		}
 
+		// [수정] Cascade 설정에 의해 Game 저장 시 Participant와 PlayerStat이 함께 저장됨
 		if (!gamesToSave.isEmpty()) {
 			gameRepository.saveAll(gamesToSave);
 		}
+		// [신규] 팀 통계 데이터 저장
+		if (!teamStatsToSave.isEmpty()) {
+			gameTeamStatRepository.saveAll(teamStatsToSave);
+		}
 
 		return new ChunkProcessingResult(gamesToSave.size(), invalidGames, skippedGames, failedGames);
-	}
-
-	private static class CsvNonEmptyFilter implements CsvToBeanFilter {
-		@Override
-		public boolean allowLine(String[] line) {
-			return StringUtils.hasText(line[0]) && StringUtils.hasText(line[1]); // gameid, league 컬럼 확인
-		}
 	}
 
 	private Map<String, LocalDateTime> calculateScheduledTimesForChunk(List<GameDataCsvDto> chunk) {
