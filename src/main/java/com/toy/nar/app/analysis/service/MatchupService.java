@@ -3,7 +3,7 @@ package com.toy.nar.app.analysis.service;
 import com.toy.nar.app.analysis.dto.CombinationDetailDto;
 import com.toy.nar.app.analysis.dto.PageMatchupResponse;
 import com.toy.nar.common.util.NameNormalizer;
-import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
+import com.toy.nar.app.analysis.dto.MultiCombinationFilterDto;
 import com.toy.nar.domain.game.entity.GameParticipant;
 import com.toy.nar.domain.game.repository.GameParticipantRepository;
 

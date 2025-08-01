@@ -73,7 +73,7 @@ public class EntityResolver {
 		resolveTeams(requiredTeamNames);
 		resolvePlayers(requiredPlayerNames);
 		log.debug("Resolving {} leagues from chunk.", requiredLeagueIds.size());
-		resolveLeagues(requiredLeagueIds);
+		resolveLeagues(requiredLeagueIds, requiredTeamNames);
 		log.debug("After resolve: League cache size: {}, Champion cache size: {}", leagueCache.size(), championCache.size());
 	}
 
@@ -82,7 +82,7 @@ public class EntityResolver {
 			originalNames,
 			NameNormalizer::normalizeTeamName,
 			teamCache,
-			teamRepository::findAllByNameInIgnoreCase,
+			teamRepository::findAllByNameInWithLeagueTeams,
 			name -> Team.builder().name(name).build(),
 			teamRepository
 		);
@@ -100,7 +100,7 @@ public class EntityResolver {
 	}
 
 	@Transactional
-	public void resolveLeagues(Set<LeagueIdentifier> requiredIds) {
+	public void resolveLeagues(Set<LeagueIdentifier> requiredIds, Set<String> requiredTeamNames) {
 		Set<LeagueIdentifier> missingInCache = requiredIds.stream()
 			.filter(id -> !leagueCache.containsKey(id))
 			.collect(Collectors.toSet());
@@ -115,34 +115,42 @@ public class EntityResolver {
 		Set<Integer> yearsToFind = missingInCache.stream()
 			.map(LeagueIdentifier::year)
 			.collect(Collectors.toSet());
-
 		List<League> foundLeagues = leagueRepository.findLeaguesWithTeamsByIdentifiers(leagueNamesToFind, yearsToFind);
 
 		// 조회 결과를 애플리케이션 레벨에서 최종 필터링하고 캐시에 추가합니다.
 		Map<LeagueIdentifier, League> foundLeaguesMap = foundLeagues.stream()
 			.collect(Collectors.toMap(LeagueIdentifier::fromEntity, Function.identity()));
-
 		leagueCache.putAll(foundLeaguesMap);
 
 
 		// 4. DB에도 없어서 최종적으로 새로 생성해야 할 리그들을 식별합니다.
-		List<League> leaguesToCreate = missingInCache.stream()
+		List<League> leaguesToCreate = new ArrayList<>();
+		missingInCache.stream()
 			.filter(id -> !foundLeaguesMap.containsKey(id))
-			.map(id -> League.builder()
-				.leagueName(id.name())
-				.seasonYear(id.year())
-				.seasonSplit(id.split())
-				.isPlayoffs(id.isPlayoffs())
-				.build())
-			.toList(); // Java 17+
+			.forEach(id -> {
+				// 4. 새 League 객체 생성
+				League newLeague = League.builder()
+					.leagueName(id.name())
+					.seasonYear(id.year())
+					.seasonSplit(id.split())
+					.isPlayoffs(id.isPlayoffs())
+					.build();
+
+				// 5. [핵심] 현재 청크의 팀들을 새 리그에 연결!
+				requiredTeamNames.forEach(teamName -> {
+					String teamLookupKey = NameNormalizer.normalizeTeamName(teamName);
+					Team team = teamCache.get(teamLookupKey);
+					if (team != null) {
+						newLeague.addLeagueTeam(team);
+					}
+				});
+				leaguesToCreate.add(newLeague);
+			});
 
 		if (!leaguesToCreate.isEmpty()) {
 			log.info("Creating {} new leagues.", leaguesToCreate.size());
-
-			// 5. 단 한 번의 INSERT 쿼리(saveAll)로 새로운 리그들을 저장합니다.
 			List<League> savedLeagues = leagueRepository.saveAll(leaguesToCreate);
 
-			// 6. 저장된 리그 정보도 캐시에 추가합니다.
 			savedLeagues.forEach(league -> leagueCache.put(LeagueIdentifier.fromEntity(league), league));
 			log.info("Successfully created and cached {} new leagues.", savedLeagues.size());
 		}

@@ -1,7 +1,7 @@
 package com.toy.nar.domain.game.repository;
 
 import com.toy.nar.app.analysis.dto.CombinationStatDto;
-import com.toy.nar.domain.combination.strategy.MultiCombinationFilterDto;
+import com.toy.nar.app.analysis.dto.MultiCombinationFilterDto;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
@@ -147,7 +147,7 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
                 WHERE c.champion_name_en IN (:championNames)
                 GROUP BY gp.game_id, gp.team_id
                 HAVING COUNT(DISTINCT c.champion_name_en) = :championCount
-            ),
+            ),	
             -- CTE Part 2: 찾은 팀들의 상세 정보(챔피언 조합 문자열, 승패 등)를 만듭니다.
             team_combinations AS (
                 SELECT
