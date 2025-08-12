@@ -28,7 +28,9 @@ import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import com.toy.nar.domain.game.repository.GameRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ScheduleService {
@@ -40,14 +42,24 @@ public class ScheduleService {
 	 * 일정 목록 조회 서비스
 	 */
 	public ScheduleResponseDto getDailySchedule(LocalDate date) {
-		// 1. KST 날짜 -> UTC 시간 범위로 변환
+		// <<< 2. 시간 측정 로직 추가
+		long totalStartTime = System.nanoTime();
+
+		// --- 단계 1: DB 조회 ---
+		log.info("Step 1: Starting DB query...");
+		long dbQueryStartTime = System.nanoTime();
+
 		LocalDateTime startOfDayUtc = date.atStartOfDay(ZoneId.of("Asia/Seoul")).withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
 		LocalDateTime endOfDayUtc = startOfDayUtc.plusDays(1);
-
-		// 2. DB에서 해당 날짜의 모든 게임 상세 정보 조회
 		List<Game> games = gameRepository.findGamesByScheduledDateWithDetails(startOfDayUtc, endOfDayUtc);
 
-		// 3. 게임(세트)들을 '매치' 단위로 묶어서 DTO로 변환
+		long dbQueryEndTime = System.nanoTime();
+		log.info("... DB query finished in {} ms", (dbQueryEndTime - dbQueryStartTime) / 1_000_000);
+
+		// --- 단계 2: 매치 그룹핑 ---
+		log.info("Step 2: Starting grouping logic...");
+		long groupingStartTime = System.nanoTime();
+
 		Map<Set<String>, List<Game>> gamesByMatchup = games.stream()
 			.collect(Collectors.groupingBy(game ->
 				game.getParticipants().stream()
@@ -55,12 +67,29 @@ public class ScheduleService {
 					.collect(Collectors.toSet())
 			));
 
+		long groupingEndTime = System.nanoTime();
+		log.info("... Grouping logic finished in {} ms", (groupingEndTime - groupingStartTime) / 1_000_000);
+
+
+		// --- 단계 3: DTO 변환 ---
+		log.info("Step 3: Starting DTO transformation...");
+		long transformStartTime = System.nanoTime();
+
 		List<MatchSummaryDto> matches = gamesByMatchup.values().stream()
 			.map(this::createMatchSummaryDto)
 			.sorted(Comparator.comparing(MatchSummaryDto::scheduledTime))
 			.toList();
 
-		return new ScheduleResponseDto(date.toString(), matches);
+		long transformEndTime = System.nanoTime();
+		log.info("... DTO transformation finished in {} ms", (transformEndTime - transformStartTime) / 1_000_000);
+
+
+		// --- 최종 반환 ---
+		ScheduleResponseDto response = new ScheduleResponseDto(date.toString(), matches);
+		long totalEndTime = System.nanoTime();
+		log.info("Total execution time for getDailySchedule: {} ms", (totalEndTime - totalStartTime) / 1_000_000);
+
+		return response;
 	}
 
 	/**
