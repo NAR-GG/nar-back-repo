@@ -41,6 +41,7 @@ public interface GameRepository extends JpaRepository<Game, Long> {
 		"JOIN FETCH g.participants p " +
 		"JOIN FETCH p.team t " +
 		"JOIN FETCH g.league l " +
+		"LEFT JOIN FETCH p.stat s " +
 		"WHERE g.scheduledGameStartTime >= :start AND g.scheduledGameStartTime < :end " +
 		"ORDER BY g.scheduledGameStartTime ASC")
 	List<Game> findGamesByScheduledDateWithDetails(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
