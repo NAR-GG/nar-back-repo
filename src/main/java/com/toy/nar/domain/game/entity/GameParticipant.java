@@ -34,7 +34,7 @@ import com.toy.nar.domain.participant.entity.Team;
 })@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(of = "id")
-@ToString(exclude = {"game", "player", "team", "champion"}) // 연관 관계 필드는 toString에서 제외
+@ToString(exclude = {"game", "player", "team", "champion", "stat"}) // 연관 관계 필드는 toString에서 제외
 public class GameParticipant {
 
 	@Id
@@ -67,7 +67,7 @@ public class GameParticipant {
 	@Column(name = "is_win", nullable = false) // CSV 'result' (1/0)을 Boolean으로 변환
 	private Boolean isWin;
 
-	@OneToOne(mappedBy = "gameParticipant", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+	@OneToOne(mappedBy = "gameParticipant", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true, optional = false)
 	private GamePlayerStat stat;
 
 	public void assignGame(Game game) {
