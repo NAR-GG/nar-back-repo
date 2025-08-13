@@ -4,9 +4,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,6 +23,7 @@ import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto.PlayerPickDto;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto.TeamPicksDto;
 import com.toy.nar.app.schedule.dto.MatchSummaryDto;
+import com.toy.nar.app.schedule.dto.ScheduleItemDto;
 import com.toy.nar.app.schedule.dto.ScheduleResponseDto;
 import com.toy.nar.app.schedule.dto.TeamResultDto;
 import com.toy.nar.domain.game.entity.Game;
@@ -28,9 +32,7 @@ import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import com.toy.nar.domain.game.repository.GameRepository;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ScheduleService {
@@ -42,55 +44,42 @@ public class ScheduleService {
 	 * 일정 목록 조회 서비스
 	 */
 	public ScheduleResponseDto getDailySchedule(LocalDate date) {
-		// <<< 2. 시간 측정 로직 추가
-		long totalStartTime = System.nanoTime();
-
-		// --- 단계 1: DB 조회 ---
-		log.info("Step 1: Starting DB query...");
-		long dbQueryStartTime = System.nanoTime();
-
+		// 1. KST 날짜 -> UTC 시간 범위로 변환
 		LocalDateTime startOfDayUtc = date.atStartOfDay(ZoneId.of("Asia/Seoul")).withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
 		LocalDateTime endOfDayUtc = startOfDayUtc.plusDays(1);
-		List<Game> games = gameRepository.findGamesByScheduledDateWithDetails(startOfDayUtc, endOfDayUtc);
 
-		long dbQueryEndTime = System.nanoTime();
-		log.info("... DB query finished in {} ms", (dbQueryEndTime - dbQueryStartTime) / 1_000_000);
+		// 2. DB에서 프로젝션 DTO 리스트를 바로 조회
+		List<ScheduleItemDto> scheduleItems = gameRepository.findScheduleItemsByDate(startOfDayUtc, endOfDayUtc);
 
-		// --- 단계 2: 매치 그룹핑 ---
-		log.info("Step 2: Starting grouping logic...");
-		long groupingStartTime = System.nanoTime();
+		if (scheduleItems.isEmpty()) {
+			return new ScheduleResponseDto(date.toString(), Collections.emptyList());
+		}
 
-		Map<Set<String>, List<Game>> gamesByMatchup = games.stream()
-			.collect(Collectors.groupingBy(game ->
-				game.getParticipants().stream()
-					.map(p -> p.getTeam().getName())
-					.collect(Collectors.toSet())
-			));
+		// 3. 게임(Game) 단위로 참가자(participant)들을 그룹핑
+		Map<Long, List<ScheduleItemDto>> gamesMap = scheduleItems.stream()
+			.collect(Collectors.groupingBy(ScheduleItemDto::gameId));
 
-		long groupingEndTime = System.nanoTime();
-		log.info("... Grouping logic finished in {} ms", (groupingEndTime - groupingStartTime) / 1_000_000);
+		// 4. 게임들을 매치(Match) 단위로 다시 그룹핑 (Key: {팀A, 팀B}, Value: 해당 팀들의 게임 리스트)
+		Map<Set<String>, List<List<ScheduleItemDto>>> matchesMap = new HashMap<>();
+		for (List<ScheduleItemDto> gameParticipants : gamesMap.values()) {
+			Set<String> teamNames = gameParticipants.stream()
+				.map(ScheduleItemDto::teamName)
+				.collect(Collectors.toSet());
 
+			if (teamNames.size() == 2) { // 2팀이 경기한 정상적인 게임만 포함
+				matchesMap.computeIfAbsent(teamNames, k -> new ArrayList<>()).add(gameParticipants);
+			}
+		}
 
-		// --- 단계 3: DTO 변환 ---
-		log.info("Step 3: Starting DTO transformation...");
-		long transformStartTime = System.nanoTime();
-
-		List<MatchSummaryDto> matches = gamesByMatchup.values().stream()
-			.map(this::createMatchSummaryDto)
+		// 5. 그룹핑된 매치 정보를 최종 응답 DTO로 변환
+		List<MatchSummaryDto> matches = matchesMap.values().stream()
+			.map(this::createMatchSummaryFromGames)
 			.sorted(Comparator.comparing(MatchSummaryDto::scheduledTime))
 			.toList();
 
-		long transformEndTime = System.nanoTime();
-		log.info("... DTO transformation finished in {} ms", (transformEndTime - transformStartTime) / 1_000_000);
-
-
-		// --- 최종 반환 ---
-		ScheduleResponseDto response = new ScheduleResponseDto(date.toString(), matches);
-		long totalEndTime = System.nanoTime();
-		log.info("Total execution time for getDailySchedule: {} ms", (totalEndTime - totalStartTime) / 1_000_000);
-
-		return response;
+		return new ScheduleResponseDto(date.toString(), matches);
 	}
+
 
 	/**
 	 * 매치 상세 정보 조회 서비스
@@ -110,6 +99,48 @@ public class ScheduleService {
 
 
 	// --- Private Helper Methods ---
+
+	private MatchSummaryDto createMatchSummaryFromGames(List<List<ScheduleItemDto>> matchGames) {
+		// matchGames: 한 매치에 속한 게임들의 리스트 (e.g., Best of 3 이면 3개 게임)
+		// 각 게임은 10명의 참가자 DTO 리스트
+		List<ScheduleItemDto> firstGameParticipants = matchGames.get(0);
+		ScheduleItemDto representativeItem = firstGameParticipants.get(0);
+
+		// 팀 이름 정렬 (TeamA, TeamB 순서 고정 위함)
+		List<String> sortedTeamNames = firstGameParticipants.stream()
+			.map(ScheduleItemDto::teamName).distinct().sorted().toList();
+		String teamAName = sortedTeamNames.get(0);
+		String teamBName = sortedTeamNames.get(1);
+
+		// 팀별 승리 횟수(스코어) 계산
+		int teamAScore = 0;
+		int teamBScore = 0;
+		for (List<ScheduleItemDto> game : matchGames) {
+			String winnerTeam = game.stream()
+				.filter(ScheduleItemDto::isWin)
+				.map(ScheduleItemDto::teamName)
+				.findFirst().orElse("");
+			if (winnerTeam.equals(teamAName)) teamAScore++;
+			else if (winnerTeam.equals(teamBName)) teamBScore++;
+		}
+
+		TeamResultDto teamA = new TeamResultDto(teamAName, teamAScore);
+		TeamResultDto teamB = new TeamResultDto(teamBName, teamBScore);
+
+		// matchId 생성 (매치에 속한 모든 gameId 사용)
+		String matchId = encodeMatchId(matchGames.stream()
+			.map(game -> game.get(0).gameId())
+			.collect(Collectors.toSet()));
+
+		// 리그, 시간 정보 생성
+		String leagueInfo = String.format("%s %s", representativeItem.leagueName(), representativeItem.seasonSplit());
+		String scheduledTime = representativeItem.scheduledGameStartTime()
+			.atZone(ZoneId.of("UTC"))
+			.withZoneSameInstant(ZoneId.of("Asia/Seoul"))
+			.format(DateTimeFormatter.ofPattern("HH:mm"));
+
+		return new MatchSummaryDto(matchId, scheduledTime, leagueInfo, teamA, teamB);
+	}
 
 	private MatchSummaryDto createMatchSummaryDto(List<Game> matchGames) {
 		Game firstGame = matchGames.get(0);
