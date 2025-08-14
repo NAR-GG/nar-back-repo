@@ -45,6 +45,8 @@ dependencies {
 
 	implementation 'com.google.auth:google-auth-library-oauth2-http:1.23.0'
 
+	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	implementation 'com.github.ben-manes.caffeine:caffeine'
 }
 
 tasks.named('test') {
