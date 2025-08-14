@@ -92,6 +92,7 @@ jobs:
             docker run -d --name dozzle --restart always \
               -v /var/run/docker.sock:/var/run/docker.sock:ro \
               -p 127.0.0.1:8082:8080 \
+              -e "DOZZLE_BASE=/dozzle" \
               amir20/dozzle:latest
             
             echo "Deployment successful!"
