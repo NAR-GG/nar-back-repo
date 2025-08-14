@@ -16,18 +16,21 @@ public class CacheConfig {
 
 	private static final long TODAY_SCHEDULE_MAX_SIZE = 2;
 	private static final long TODAY_MATCH_DETAIL_MAX_SIZE = 10;
-	private static final long SCHEDULE_MAX_SIZE = 8192;         // 1MB
-	private static final long MATCH_DETAIL_MAX_SIZE = 9892;     // 4MB
-	private static final long GAME_RECORD_MAX_SIZE = 10347;    // 6MB
+	private static final long SCHEDULE_MAX_SIZE = 8192;    // 1MB
+	private static final long MATCH_DETAIL_MAX_SIZE = 9892; // 4MB
+	private static final long GAME_RECORD_MAX_SIZE = 10347; // 6MB
 
 	@Bean
 	public CacheManager cacheManager() {
 		List<CaffeineCache> caches = List.of(
-			createCache("todaySchedules", 1, TimeUnit.HOURS, TODAY_SCHEDULE_MAX_SIZE),
-			createCache("todayMatchDetails", 1, TimeUnit.HOURS, TODAY_MATCH_DETAIL_MAX_SIZE),
-			createCache("dailySchedules", 24, TimeUnit.HOURS, SCHEDULE_MAX_SIZE),
-			createCache("matchDetails", 24, TimeUnit.HOURS, MATCH_DETAIL_MAX_SIZE),
-			createCache("gameRecords", 24, TimeUnit.HOURS, GAME_RECORD_MAX_SIZE)
+			// 변할 가능성이 있는 데이터 → TTL 유지
+			createCacheWithTTL("todaySchedules", 1, TimeUnit.HOURS, TODAY_SCHEDULE_MAX_SIZE),
+			createCacheWithTTL("todayMatchDetails", 1, TimeUnit.HOURS, TODAY_MATCH_DETAIL_MAX_SIZE),
+
+			// 불변 데이터 → TTL 제거, size limit만 적용 (LRU 정책)
+			createCacheNoTTL("dailySchedules", SCHEDULE_MAX_SIZE),
+			createCacheNoTTL("matchDetails", MATCH_DETAIL_MAX_SIZE),
+			createCacheNoTTL("gameRecords", GAME_RECORD_MAX_SIZE)
 		);
 
 		SimpleCacheManager cacheManager = new SimpleCacheManager();
@@ -35,11 +38,18 @@ public class CacheConfig {
 		return cacheManager;
 	}
 
-	private CaffeineCache createCache(String name, int ttl, TimeUnit unit, long maxSize) {
+	private CaffeineCache createCacheWithTTL(String name, int ttl, TimeUnit unit, long maxSize) {
 		return new CaffeineCache(name, Caffeine.newBuilder()
-			.expireAfterWrite(ttl, unit) // 쓰기 후 만료 시간
-			.maximumSize(maxSize)         // 최대 항목 개수
-			.recordStats()                // 캐시 통계 수집 (모니터링에 유용)
+			.expireAfterWrite(ttl, unit)
+			.maximumSize(maxSize)
+			.recordStats()
+			.build());
+	}
+
+	private CaffeineCache createCacheNoTTL(String name, long maxSize) {
+		return new CaffeineCache(name, Caffeine.newBuilder()
+			.maximumSize(maxSize)
+			.recordStats()
 			.build());
 	}
 }
