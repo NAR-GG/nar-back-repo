@@ -34,8 +34,7 @@ public class DebugController {
 				// 캐시에 대한 상세 정보를 Map에 담습니다.
 				Map<String, Object> cacheDetails = Map.of(
 					"size", nativeCache.estimatedSize(), // 현재 캐시된 아이템 수
-					"keys", nativeCache.asMap().keySet(),    // 캐시에 저장된 모든 키 목록
-					"stats", nativeCache.stats().toString()  // 히트, 미스 등 통계 정보
+					"keys", nativeCache.asMap().keySet()   // 캐시에 저장된 모든 키 목록
 				);
 				result.put(cacheName, cacheDetails);
 			}

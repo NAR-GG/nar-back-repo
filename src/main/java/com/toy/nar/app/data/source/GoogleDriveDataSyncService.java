@@ -11,6 +11,7 @@ import com.toy.nar.app.analysis.service.CombinationService;
 import com.toy.nar.app.data.ingestion.dto.DataIngestionResult;
 import com.toy.nar.app.data.source.dto.DataSyncResult;
 import com.toy.nar.app.data.ingestion.DataIngestionFacade;
+import com.toy.nar.app.schedule.CacheEvictionService;
 import com.toy.nar.domain.sync.SyncStatusRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class GoogleDriveDataSyncService {
 	private final DataIngestionFacade dataIngestionFacade;
 	private final NotificationService notificationService;
 	private final CombinationService combinationService;
+	private final CacheEvictionService cacheEvictionService;
 	private final SyncStatusRepository syncStatusRepository;
 
 	private static final String CSV_FILE_ID = "1v6LRphp2kYciU4SXp0PCjEMuev1bDejc";
@@ -39,6 +41,7 @@ public class GoogleDriveDataSyncService {
 
 			if (result.isSuccess()) {
 				combinationService.updateInfo();
+				cacheEvictionService.evictTodayScheduleCache();
 				notificationService.sendSuccessNotification(result);
 			}
 

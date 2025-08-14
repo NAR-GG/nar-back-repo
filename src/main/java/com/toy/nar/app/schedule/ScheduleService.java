@@ -7,8 +7,8 @@ import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto.TeamPic
 import com.toy.nar.domain.game.entity.Game;
 import com.toy.nar.domain.game.entity.GameParticipant;
 import com.toy.nar.domain.game.repository.GameParticipantRepository;
-import com.toy.nar.domain.game.repository.GameRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,14 +20,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ScheduleService {
 
-	private final GameRepository gameRepository;
 	private final GameParticipantRepository gameParticipantRepository;
+	private final ScheduleCacheableService scheduleCacheableService;
 
-	// [리팩토링 1] 요약 정보 생성을 위한 최소 데이터 구조 정의 (inner record 사용)
 	private record GameInfoForSummary(
 		Long gameId,
 		LocalDateTime scheduledGameStartTime,
@@ -40,109 +40,36 @@ public class ScheduleService {
 
 
 	/**
-	 * 일정 목록 조회 서비스 (캐싱 적용)
+	 * 일정 조회 공개 메서드.
+	 * 날짜에 따라 오늘 또는 과거 일정을 조회하는 캐시 서비스를 호출합니다.
 	 */
-	@Cacheable(value = "dailySchedules", key = "#date.toString()")
 	public ScheduleResponseDto getDailySchedule(LocalDate date) {
-		LocalDateTime startOfDayUtc = date.atStartOfDay(ZoneId.of("Asia/Seoul")).withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
-		LocalDateTime endOfDayUtc = startOfDayUtc.plusDays(1);
-
-		List<ScheduleItemDto> scheduleItems = gameRepository.findScheduleItemsByDate(startOfDayUtc, endOfDayUtc);
-		if (scheduleItems.isEmpty()) {
-			return new ScheduleResponseDto(date.toString(), Collections.emptyList());
+		if (date.isEqual(LocalDate.now(ZoneId.of("Asia/Seoul")))) {
+			return scheduleCacheableService.getTodaySchedule(date);
 		}
-
-		Map<Long, List<ScheduleItemDto>> gamesMap = scheduleItems.stream()
-			.collect(Collectors.groupingBy(ScheduleItemDto::gameId));
-
-		Map<Set<String>, List<List<ScheduleItemDto>>> matchesMap = new HashMap<>();
-		for (List<ScheduleItemDto> gameParticipants : gamesMap.values()) {
-			Set<String> teamNames = gameParticipants.stream().map(ScheduleItemDto::teamName).collect(Collectors.toSet());
-			if (teamNames.size() == 2) {
-				matchesMap.computeIfAbsent(teamNames, k -> new ArrayList<>()).add(gameParticipants);
-			}
-		}
-
-		List<MatchSummaryDto> matches = matchesMap.values().stream()
-			.map(matchGames -> {
-				// [리팩토링 2] DB 조회 결과(DTO)를 공통 데이터 구조로 변환
-				List<GameInfoForSummary> gamesForSummary = matchGames.stream()
-					.map(gameParticipants -> {
-						ScheduleItemDto representative = gameParticipants.get(0);
-						List<ParticipantInfo> participantInfos = gameParticipants.stream()
-							.map(p -> new ParticipantInfo(p.teamName(), p.isWin()))
-							.toList();
-						return new GameInfoForSummary(
-							representative.gameId(),
-							representative.scheduledGameStartTime(),
-							representative.leagueName(),
-							representative.seasonSplit(),
-							participantInfos
-						);
-					})
-					.toList();
-				// [리팩토링 3] 통합된 단일 메서드 호출
-				return createMatchSummary(gamesForSummary);
-			})
-			.sorted(Comparator.comparing(MatchSummaryDto::scheduledTime))
-			.toList();
-
-		return new ScheduleResponseDto(date.toString(), matches);
+		return scheduleCacheableService.getPastSchedule(date);
 	}
 
 	/**
 	 * 매치 상세 정보 조회 서비스
 	 */
+	@Cacheable(value = "matchDetails", key = "#matchId", unless = "#result == null or #matchId == null")
 	@Transactional(readOnly = true)
 	public MatchDetailResponseDto getMatchDetail(String matchId) {
+		log.info("DB에서 매치 상세 정보를 조회합니다: matchId={}", matchId);
 		Set<Long> gameIds = decodeMatchId(matchId);
 		List<GameParticipant> participants = gameParticipantRepository.findGameDetailsByGameIds(gameIds);
 		return convertToMatchDetailDto(participants, matchId);
 	}
 
 
-	// --- Private Helper Methods ---
-
-	/**
-	 * [리팩토링 4] 통합된 매치 요약 DTO 생성 메서드
-	 * 어떤 데이터 소스에서 왔는지와 무관하게, GameInfoForSummary 리스트만 받아서 MatchSummaryDto를 생성하는 단일 책임
-	 */
-	private MatchSummaryDto createMatchSummary(List<GameInfoForSummary> matchGames) {
-		GameInfoForSummary firstGame = matchGames.get(0);
-
-		// 팀 이름 정렬 (TeamA, TeamB 순서 고정 위함)
-		List<String> sortedTeamNames = firstGame.participants().stream()
-			.map(ParticipantInfo::teamName).distinct().sorted().toList();
-		String teamAName = sortedTeamNames.get(0);
-		String teamBName = sortedTeamNames.get(1);
-
-		// 팀별 승리 횟수(스코어) 계산
-		int teamAScore = 0;
-		int teamBScore = 0;
-		for (GameInfoForSummary game : matchGames) {
-			String winnerTeam = game.participants().stream()
-				.filter(ParticipantInfo::isWin)
-				.map(ParticipantInfo::teamName)
-				.findFirst().orElse("");
-			if (winnerTeam.equals(teamAName)) teamAScore++;
-			else if (winnerTeam.equals(teamBName)) teamBScore++;
-		}
-
-		TeamResultDto teamA = new TeamResultDto(teamAName, teamAScore);
-		TeamResultDto teamB = new TeamResultDto(teamBName, teamBScore);
-
-		String matchId = encodeMatchId(matchGames.stream().map(GameInfoForSummary::gameId).collect(Collectors.toSet()));
-		String leagueInfo = String.format("%s %s", firstGame.leagueName(), firstGame.seasonSplit());
-		String scheduledTime = firstGame.scheduledGameStartTime()
-			.atZone(ZoneId.of("UTC"))
-			.withZoneSameInstant(ZoneId.of("Asia/Seoul"))
-			.format(DateTimeFormatter.ofPattern("HH:mm"));
-
-		return new MatchSummaryDto(matchId, scheduledTime, leagueInfo, teamA, teamB);
-	}
+	// --- Private Helper Methods for MatchDetail ---
 
 	private MatchDetailResponseDto convertToMatchDetailDto(List<GameParticipant> participants, String matchId) {
-		// [리팩토링 5] Game 엔티티를 공통 데이터 구조로 변환하여 재사용
+		if (participants.isEmpty()) {
+			// 조회된 데이터가 없으면 null을 반환하여 캐시되지 않도록 합니다.
+			return null;
+		}
 		List<Game> games = participants.stream().map(GameParticipant::getGame).distinct().toList();
 		List<GameInfoForSummary> gamesForSummary = games.stream()
 			.map(game -> {
@@ -181,8 +108,48 @@ public class ScheduleService {
 		return new MatchDetailResponseDto(summary, gameDetails);
 	}
 
-	// createTeamPicksDto, encodeMatchId, decodeMatchId, getPositionOrder 메서드는 변경 없음
+	private MatchSummaryDto createMatchSummary(List<GameInfoForSummary> matchGames) {
+		if (matchGames.isEmpty() || matchGames.get(0).participants().isEmpty()) {
+			return null;
+		}
+		GameInfoForSummary firstGame = matchGames.get(0);
+
+		List<String> sortedTeamNames = firstGame.participants().stream()
+			.map(ParticipantInfo::teamName).distinct().sorted().toList();
+		if (sortedTeamNames.size() < 2) {
+			return null;
+		}
+		String teamAName = sortedTeamNames.get(0);
+		String teamBName = sortedTeamNames.get(1);
+
+		int teamAScore = 0;
+		int teamBScore = 0;
+		for (GameInfoForSummary game : matchGames) {
+			String winnerTeam = game.participants().stream()
+				.filter(ParticipantInfo::isWin)
+				.map(ParticipantInfo::teamName)
+				.findFirst().orElse("");
+			if (winnerTeam.equals(teamAName)) teamAScore++;
+			else if (winnerTeam.equals(teamBName)) teamBScore++;
+		}
+
+		TeamResultDto teamA = new TeamResultDto(teamAName, teamAScore);
+		TeamResultDto teamB = new TeamResultDto(teamBName, teamBScore);
+
+		String matchId = encodeMatchId(matchGames.stream().map(GameInfoForSummary::gameId).collect(Collectors.toSet()));
+		String leagueInfo = String.format("%s %s", firstGame.leagueName(), firstGame.seasonSplit());
+		String scheduledTime = firstGame.scheduledGameStartTime()
+			.atZone(ZoneId.of("UTC"))
+			.withZoneSameInstant(ZoneId.of("Asia/Seoul"))
+			.format(DateTimeFormatter.ofPattern("HH:mm"));
+
+		return new MatchSummaryDto(matchId, scheduledTime, leagueInfo, teamA, teamB);
+	}
+
 	private TeamPicksDto createTeamPicksDto(List<GameParticipant> teamParticipants) {
+		if(teamParticipants == null || teamParticipants.isEmpty()) {
+			return new TeamPicksDto("Unknown", false, Collections.emptyList());
+		}
 		String teamName = teamParticipants.get(0).getTeam().getName();
 		boolean isWin = teamParticipants.get(0).getIsWin();
 

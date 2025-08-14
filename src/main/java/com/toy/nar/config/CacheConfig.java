@@ -1,9 +1,11 @@
 package com.toy.nar.config;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.caffeine.CaffeineCacheManager;
+import org.springframework.cache.caffeine.CaffeineCache;
+import org.springframework.cache.support.SimpleCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -12,15 +14,30 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 @Configuration
 public class CacheConfig {
 
+	private static final long TODAY_SCHEDULE_MAX_SIZE = 10;     // 오늘 하루치 캐시는 넉넉하게 10개
+	private static final long SCHEDULE_MAX_SIZE = 8192;         // 1MB
+	private static final long MATCH_DETAIL_MAX_SIZE = 9892;     // 4MB
+	private static final long GAME_RECORD_MAX_SIZE = 10347;    // 6MB
+
 	@Bean
 	public CacheManager cacheManager() {
-		CaffeineCacheManager cacheManager = new CaffeineCacheManager("dailySchedules"); // @Cacheable의 value와 동일한 이름 등록
-		cacheManager.setCaffeine(Caffeine.newBuilder()
-			// 캐시가 쓰여진 후 10분이 지나면 자동으로 삭제됩니다.
-			.expireAfterWrite(10, TimeUnit.MINUTES)
-			// 캐시는 최대 100개까지만 저장합니다. (메모리 관리)
-			.maximumSize(100)
+		List<CaffeineCache> caches = List.of(
+			createCache("todaySchedules", 1, TimeUnit.HOURS, TODAY_SCHEDULE_MAX_SIZE),
+			createCache("dailySchedules", 24, TimeUnit.HOURS, SCHEDULE_MAX_SIZE),
+			createCache("matchDetails", 24, TimeUnit.HOURS, MATCH_DETAIL_MAX_SIZE),
+			createCache("gameRecords", 24, TimeUnit.HOURS, GAME_RECORD_MAX_SIZE)
 		);
+
+		SimpleCacheManager cacheManager = new SimpleCacheManager();
+		cacheManager.setCaches(caches);
 		return cacheManager;
+	}
+
+	private CaffeineCache createCache(String name, int ttl, TimeUnit unit, long maxSize) {
+		return new CaffeineCache(name, Caffeine.newBuilder()
+			.expireAfterWrite(ttl, unit) // 쓰기 후 만료 시간
+			.maximumSize(maxSize)         // 최대 항목 개수
+			.recordStats()                // 캐시 통계 수집 (모니터링에 유용)
+			.build());
 	}
 }
