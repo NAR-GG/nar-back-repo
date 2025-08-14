@@ -5,10 +5,12 @@ import com.toy.nar.app.record.dto.GameRecordDto;
 import com.toy.nar.app.record.dto.PlayerRecordDto;
 import com.toy.nar.domain.game.entity.*;
 import com.toy.nar.domain.game.repository.GameRepository;
-import com.toy.nar.domain.participant.entity.GamePlayerStat;
 import com.toy.nar.domain.participant.entity.GameTeamStat;
 import com.toy.nar.domain.participant.repository.GameTeamStatRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -24,6 +27,7 @@ public class GameRecordService {
 	private final GameRepository gameRepository;
 	private final GameTeamStatRepository gameTeamStatRepository;
 
+	@Cacheable(value = "gameRecords", key = "#gameId.toString()")
 	public GameRecordDto getGameRecord(Long gameId) {
 		// 1. Repository에서 한 번의 쿼리로 모든 데이터를 가져옴
 		Game game = gameRepository.findGameDetailsById(gameId)
@@ -57,11 +61,13 @@ public class GameRecordService {
 			}).toList();
 
 		// 3-3. 최종 GameRecordDto 조립
-		return new GameRecordDto(
+		GameRecordDto recordDto = new GameRecordDto(
 			game.getGameOriginId(), "complete", game.getLeague().getLeagueName(),
 			game.getLeague().getSeasonYear(), game.getLeague().getSeasonSplit(), game.getLeague().getIsPlayoffs() ? 1 : 0,
 			game.getActualGameStartTime().toLocalDate().toString(), game.getGameNumber(), game.getPatch(),
 			game.getGameLengthSeconds(), bansDto, playerRecordDtos
 		);
+
+		return recordDto;
 	}
 }
