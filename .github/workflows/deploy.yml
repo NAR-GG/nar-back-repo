@@ -90,8 +90,8 @@ jobs:
             docker stop dozzle || true
             docker rm dozzle || true
             docker run -d --name dozzle --restart always \
-            -v /var/run/docker.sock:/var/run/docker.sock:ro \
-            -p 8081:8080 \
-            amir20/dozzle:latest
+              -v /var/run/docker.sock:/var/run/docker.sock:ro \
+              -p 127.0.0.1:8082:8080 \
+              amir20/dozzle:latest
             
             echo "Deployment successful!"
