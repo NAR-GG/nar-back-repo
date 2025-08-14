@@ -67,13 +67,6 @@ public class GameRecordService {
 			game.getActualGameStartTime().toLocalDate().toString(), game.getGameNumber(), game.getPatch(),
 			game.getGameLengthSeconds(), bansDto, playerRecordDtos
 		);
-		try {
-			long dtoSize = ObjectSizeCalculator.sizeOf(recordDto);
-			log.info("GameRecordDto created for gameId: {}, Estimated Size: {} bytes ({} KB)",
-				gameId, dtoSize, String.format("%.2f", dtoSize / 1024.0));
-		} catch (IllegalStateException e) {
-			log.warn("ObjectSizeCalculator is not initialized. Run with -javaagent option to measure DTO size.");
-		}
 
 		return recordDto;
 	}

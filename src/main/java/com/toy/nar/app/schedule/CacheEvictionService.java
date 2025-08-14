@@ -16,4 +16,9 @@ public class CacheEvictionService {
 	public void evictTodayScheduleCache() {
 		log.info("'todaySchedules' 캐시의 모든 데이터를 무효화합니다.");
 	}
+
+	@CacheEvict(value = "todayMatchDetails", allEntries = true)
+	public void evictTodayMatchDetailsCache() {
+		log.info("'todaySchedules' 캐시의 모든 데이터를 무효화합니다.");
+	}
 }

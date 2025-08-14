@@ -42,6 +42,7 @@ public class GoogleDriveDataSyncService {
 			if (result.isSuccess()) {
 				combinationService.updateInfo();
 				cacheEvictionService.evictTodayScheduleCache();
+				cacheEvictionService.evictTodayMatchDetailsCache();
 				notificationService.sendSuccessNotification(result);
 			}
 
