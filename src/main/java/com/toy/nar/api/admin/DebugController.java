@@ -1,5 +1,7 @@
 package com.toy.nar.api.admin;
 import com.github.benmanes.caffeine.cache.Cache;
+import com.toy.nar.app.schedule.CacheEvictionService;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.caffeine.CaffeineCache;
@@ -13,12 +15,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-@Profile("local") // ❗️ local 프로필에서만 활성화되어 운영 환경에 노출되지 않도록 함
+@Profile("local")
 @RestController
 @RequiredArgsConstructor
 public class DebugController {
 
 	private final CacheManager cacheManager;
+	private final CacheEvictionService cacheEvictionService;
 
 	@GetMapping("/api/debug/caches")
 	public ResponseEntity<Map<String, Object>> getCacheDetails() {
@@ -41,5 +44,14 @@ public class DebugController {
 		}
 
 		return ResponseEntity.ok(result);
+	}
+
+	@GetMapping("/api/debug/caches/eviction")
+	public ResponseEntity<String> getEvictionDetails() {
+
+		cacheEvictionService.evictTodayScheduleCache();
+		cacheEvictionService.evictTodayMatchDetailsCache();
+
+		return ResponseEntity.ok("캐시가 성공적으로 제거되었습니다.");
 	}
 }
