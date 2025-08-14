@@ -84,3 +84,14 @@ jobs:
               -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
               -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
               ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
+            
+            echo "Deploying Dozzle..."
+            docker pull amir20/dozzle:latest
+            docker stop dozzle || true
+            docker rm dozzle || true
+            docker run -d --name dozzle --restart always \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -p 8081:8080 \
+            amir20/dozzle:latest
+            
+            echo "Deployment successful!"
