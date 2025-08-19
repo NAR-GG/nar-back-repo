@@ -67,7 +67,7 @@ public class GameParticipant {
 	@Column(name = "is_win", nullable = false) // CSV 'result' (1/0)을 Boolean으로 변환
 	private Boolean isWin;
 
-	@OneToOne(mappedBy = "gameParticipant", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true, optional = false)
+	@OneToOne(mappedBy = "gameParticipant", cascade = CascadeType.ALL,orphanRemoval = true, optional = false)
 	private GamePlayerStat stat;
 
 	public void assignGame(Game game) {

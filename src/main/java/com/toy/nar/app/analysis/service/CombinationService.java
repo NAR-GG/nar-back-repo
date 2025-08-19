@@ -28,7 +28,7 @@ public class CombinationService {
 
 	private final GameParticipantRepository gameParticipantRepository;
 	private final CombinationIdService idService;
-	private final GameDetailConverter gameDetailConverter; // 상세 DTO 변환을 위해 추가
+	private final GameDetailConverter gameDetailConverter;
 
 	private LocalDateTime lastUpdateTime = LocalDateTime.now();
 
@@ -115,7 +115,6 @@ public class CombinationService {
 		MultiCombinationFilterDto filter = context.filter();
 
 		// 1. 해당 조합의 통계 정보(요약)를 가져옵니다.
-		// (이 기능을 위해 Repository에 findSingleCombinationStat 메서드 추가 필요)
 		CombinationStatDto summaryStat = gameParticipantRepository.findSingleCombinationStat(champions, filter)
 			.orElseThrow(() -> new IllegalArgumentException("Combination not found for given context."));
 

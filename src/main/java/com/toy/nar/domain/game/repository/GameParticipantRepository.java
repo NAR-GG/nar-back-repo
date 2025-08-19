@@ -68,4 +68,10 @@ public interface GameParticipantRepository extends JpaRepository<GameParticipant
 		@Param("patch") String patch
 	);
 
+	@Query("SELECT gp FROM GameParticipant gp " +
+		"JOIN FETCH gp.player " +
+		"JOIN FETCH gp.champion " +
+		"JOIN FETCH gp.team " +
+		"WHERE gp.game.id IN :gameIds")
+	List<GameParticipant> findWithDetailsByGameIds(@Param("gameIds") List<Long> gameIds);
 }
