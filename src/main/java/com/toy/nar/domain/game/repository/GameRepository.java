@@ -12,7 +12,7 @@ import org.springframework.data.repository.query.Param;
 import com.toy.nar.app.schedule.dto.ScheduleItemDto;
 import com.toy.nar.domain.game.entity.Game;
 
-public interface GameRepository extends JpaRepository<Game, Long> {
+public interface GameRepository extends JpaRepository<Game, Long>, GameRepositoryCustom {
 
 	@Query("SELECT g.gameOriginId FROM Game g WHERE g.gameOriginId IN :gameIds")
 	Set<String> findExistingGameIds(@Param("gameIds") Set<String> gameIds);
