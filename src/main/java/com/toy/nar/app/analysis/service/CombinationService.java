@@ -28,7 +28,7 @@ public class CombinationService {
 
 	private final GameParticipantRepository gameParticipantRepository;
 	private final CombinationIdService idService;
-	private final GameDetailConverter gameDetailConverter; // 상세 DTO 변환을 위해 추가
+	private final GameDetailConverter gameDetailConverter;
 
 	private LocalDateTime lastUpdateTime = LocalDateTime.now();
 
