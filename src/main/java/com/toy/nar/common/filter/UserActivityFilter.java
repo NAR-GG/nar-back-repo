@@ -12,19 +12,19 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.toy.nar.app.monitor.UserActivityService;
 
-@Component
-@RequiredArgsConstructor
-public class UserActivityFilter extends OncePerRequestFilter {
-
-	private final UserActivityService userActivityService;
-
-	@Override
-	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-		throws ServletException, IOException {
-
-		String userIdentifier = request.getRemoteAddr();
-		userActivityService.recordUserActivity(userIdentifier);
-
-		filterChain.doFilter(request, response);
-	}
-}
+// @Component
+// @RequiredArgsConstructor
+// public class UserActivityFilter extends OncePerRequestFilter {
+//
+// 	private final UserActivityService userActivityService;
+//
+// 	@Override
+// 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+// 		throws ServletException, IOException {
+//
+// 		String userIdentifier = request.getRemoteAddr();
+// 		userActivityService.recordUserActivity(userIdentifier);
+//
+// 		filterChain.doFilter(request, response);
+// 	}
+// }

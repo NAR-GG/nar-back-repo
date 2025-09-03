@@ -47,6 +47,13 @@ dependencies {
 
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	implementation 'com.github.ben-manes.caffeine:caffeine'
+
+	implementation 'org.xerial:sqlite-jdbc'
+	implementation 'org.hibernate.orm:hibernate-community-dialects'
+}
+
+clean {
+	delete file('src/main/generated')
 }
 
 tasks.named('test') {
