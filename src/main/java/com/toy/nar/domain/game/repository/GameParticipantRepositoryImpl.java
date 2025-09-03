@@ -9,9 +9,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-
-import java.math.BigDecimal;
-import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,32 +22,44 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
 
 	@Override
 	public Page<CombinationStatDto> findCombinationStats(List<String> championNames, MultiCombinationFilterDto filter, Pageable pageable) {
-
 		Map<String, Object> params = new HashMap<>();
 
-		// 1. CTE(WITH절)를 포함한 쿼리의 기본 뼈대 구성
+		// 1) 공통 CTE(valid_teams, team_combinations)
 		String baseQuery = buildBaseQuery(championNames, filter, params);
 
-		// 2. Count 쿼리 실행
-		String countSql = baseQuery + " SELECT COUNT(*) FROM (SELECT 1 FROM team_combinations GROUP BY championCombination) as distinct_combinations";
+		// 2) total count: 조합 종류 수
+		String countSql = baseQuery
+			+ " SELECT COUNT(*) FROM (SELECT 1 FROM team_combinations GROUP BY championCombination) AS distinct_combinations";
 		Query countQuery = em.createNativeQuery(countSql);
 		params.forEach(countQuery::setParameter);
 		long total = ((Number) countQuery.getSingleResult()).longValue();
 
-		// 3. 데이터 조회 쿼리 (최종 집계)
+		// 3) 데이터 조회: annotated CTE 추가(윈도우 함수로 최신 패치 추출)
 		StringBuilder dataSql = new StringBuilder(baseQuery);
 		dataSql.append("""
+            , annotated AS (
+                SELECT
+                    championCombination,
+                    isWin,
+                    gameDate,
+                    patch,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY championCombination
+                        ORDER BY gameDate DESC
+                    ) AS rn
+                FROM team_combinations
+            )
             SELECT
                 championCombination,
-                COUNT(*) as frequency,
-                SUM(isWin) as winCount,
-                MAX(gameDate) as latestGameDate,
-                SUBSTRING_INDEX(GROUP_CONCAT(patch ORDER BY gameDate DESC SEPARATOR ','), ',', 1) as latestPatch
-            FROM team_combinations
+                COUNT(*) AS frequency,
+                SUM(isWin) AS winCount,
+                MAX(gameDate) AS latestGameDate,
+                MAX(CASE WHEN rn = 1 THEN patch END) AS latestPatch
+            FROM annotated
             GROUP BY championCombination
             """);
 
-		// 정렬 조건 추가
+		// 정렬 조건
 		Sort sort = pageable.getSort();
 		if (sort.isSorted()) {
 			dataSql.append(" ORDER BY ");
@@ -62,20 +71,28 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
 
 		Query query = em.createNativeQuery(dataSql.toString());
 		params.forEach(query::setParameter);
-
 		query.setFirstResult((int) pageable.getOffset());
 		query.setMaxResults(pageable.getPageSize());
 
+		@SuppressWarnings("unchecked")
 		List<Object[]> results = query.getResultList();
 
+		// SELECT 컬럼 순서: =championCombination, [1]=frequency, [2]=winCount, [3]=latestGameDate, [4]=latestPatch
 		List<CombinationStatDto> content = results.stream()
-			.map(row -> new CombinationStatDto(
-				(String) row[0],
-				((Number) row[1]).longValue(),
-				((BigDecimal) row[2]).longValue(), // SUM(boolean) can return BigDecimal in MySQL
-				(row[3] instanceof Timestamp) ? ((Timestamp) row[3]).toLocalDateTime() : null,
-				(String) row[4]
-			))
+			.map(row -> {
+				String combo = (String) row[0];
+				long frequency = ((Number) row[1]).longValue();
+				long winCount = ((Number) row[2]).longValue();
+				java.time.LocalDateTime latest = null;
+				if (row[3] instanceof Long val) {
+					latest = java.time.LocalDateTime.ofInstant(
+						java.time.Instant.ofEpochMilli(val),
+						java.time.ZoneId.of("Asia/Seoul")
+					);
+				}
+				String latestPatch = (String) row[4];
+				return new CombinationStatDto(combo, frequency, winCount, latest, latestPatch);
+			})
 			.toList();
 
 		return new PageImpl<>(content, pageable, total);
@@ -87,11 +104,12 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
 		String baseQuery = buildBaseQuery(championNames, filter, params);
 
 		String sql = baseQuery + " SELECT DISTINCT gameId FROM team_combinations";
-
 		Query query = em.createNativeQuery(sql, Long.class);
 		params.forEach(query::setParameter);
 
-		return query.getResultList();
+		@SuppressWarnings("unchecked")
+		List<Long> ids = query.getResultList();
+		return ids;
 	}
 
 	@Override
@@ -101,13 +119,25 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
 
 		StringBuilder dataSql = new StringBuilder(baseQuery);
 		dataSql.append("""
+            , annotated AS (
+                SELECT
+                    championCombination,
+                    isWin,
+                    gameDate,
+                    patch,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY championCombination
+                        ORDER BY gameDate DESC
+                    ) AS rn
+                FROM team_combinations
+            )
             SELECT
                 championCombination,
-                COUNT(*) as frequency,
-                SUM(isWin) as winCount,
-                MAX(gameDate) as latestGameDate,
-                SUBSTRING_INDEX(GROUP_CONCAT(patch ORDER BY gameDate DESC SEPARATOR ','), ',', 1) as latestPatch
-            FROM team_combinations
+                COUNT(*) AS frequency,
+                SUM(isWin) AS winCount,
+                MAX(gameDate) AS latestGameDate,
+                MAX(CASE WHEN rn = 1 THEN patch END) AS latestPatch
+            FROM annotated
             GROUP BY championCombination
             """);
 
@@ -118,28 +148,35 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
 		Query query = em.createNativeQuery(dataSql.toString());
 		params.forEach(query::setParameter);
 
+		@SuppressWarnings("unchecked")
 		List<Object[]> results = query.getResultList();
-		if (results.isEmpty()) {
-			return Optional.empty();
-		}
+		if (results.isEmpty()) return Optional.empty();
 
 		Object[] row = results.get(0);
-		CombinationStatDto dto = new CombinationStatDto(
-			(String) row[0],
-			((Number) row[1]).longValue(),
-			((BigDecimal) row[2]).longValue(),
-			(row[3] instanceof Timestamp) ? ((Timestamp) row[3]).toLocalDateTime() : null,
-			(String) row[4]
-		);
+		// 수정 1: 인덱스 0으로 접근
+		String combo = (String) row[0];
+		// 수정 2: SELECT 문에 맞는 올바른 인덱스 사용
+		long frequency = ((Number) row[1]).longValue();
+		long winCount = ((Number) row[2]).longValue();
+		java.time.LocalDateTime latest = null;
+		if (row[3] instanceof Long val) {
+			latest = java.time.LocalDateTime.ofInstant(
+				java.time.Instant.ofEpochMilli(val),
+				java.time.ZoneId.of("Asia/Seoul")
+			);
+		}
+		String latestPatch = (String) row[4];
+
+		CombinationStatDto dto = new CombinationStatDto(combo, frequency, winCount, latest, latestPatch);
 		return Optional.of(dto);
+
 	}
 
-	// --- Private Helper Method to build the common query part ---
-
+	// --- SQLite 전용 CTE 빌더 ---
 	private String buildBaseQuery(List<String> championNames, MultiCombinationFilterDto filter, Map<String, Object> params) {
-		StringBuilder queryBuilder = new StringBuilder();
-		// CTE Part 1: 조건에 맞는 팀(game_id, team_id) 목록을 찾습니다.
-		queryBuilder.append("""
+		StringBuilder sb = new StringBuilder();
+
+		sb.append("""
             WITH valid_teams AS (
                 SELECT gp.game_id, gp.team_id
                 FROM game_participants gp
@@ -147,15 +184,25 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
                 WHERE c.champion_name_en IN (:championNames)
                 GROUP BY gp.game_id, gp.team_id
                 HAVING COUNT(DISTINCT c.champion_name_en) = :championCount
-            ),	
-            -- CTE Part 2: 찾은 팀들의 상세 정보(챔피언 조합 문자열, 승패 등)를 만듭니다.
+            ),
             team_combinations AS (
                 SELECT
-                    GROUP_CONCAT(c.champion_name_en ORDER BY c.champion_name_en SEPARATOR ',') as championCombination,
-                    p.is_win as isWin,
-                    g.actual_game_start_time as gameDate,
-                    g.patch as patch,
-                    vt.game_id as gameId
+                    /* 정렬된 하위 SELECT → group_concat로 조합 문자열 생성 */
+                    (
+                      SELECT group_concat(x.champion_name_en, ',')
+                      FROM (
+                        SELECT c2.champion_name_en
+                        FROM game_participants p2
+                        JOIN champions c2 ON p2.champion_id = c2.champion_id
+                        WHERE p2.game_id = vt.game_id AND p2.team_id = vt.team_id
+                        ORDER BY c2.champion_name_en
+                      ) x
+                    ) AS championCombination,
+                    /* 같은 팀은 동일 승패 → 0/1로 수치화 후 MAX */
+                    MAX(CASE WHEN p.is_win THEN 1 ELSE 0 END) AS isWin,
+                    g.actual_game_start_time AS gameDate,
+                    g.patch AS patch,
+                    vt.game_id AS gameId
                 FROM game_participants p
                 JOIN valid_teams vt ON p.game_id = vt.game_id AND p.team_id = vt.team_id
                 JOIN champions c ON p.champion_id = c.champion_id
@@ -168,30 +215,30 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
 		params.put("championNames", championNames);
 		params.put("championCount", championNames.size());
 
-		// Dynamic Filtering Part
+		// 동적 필터
 		if (filter.getYear() != null) {
-			queryBuilder.append(" AND l.season_year = :year");
+			sb.append(" AND l.season_year = :year");
 			params.put("year", filter.getYear());
 		}
 		if (filter.getPatch() != null && !filter.getPatch().isEmpty()) {
-			queryBuilder.append(" AND g.patch = :patch");
+			sb.append(" AND g.patch = :patch");
 			params.put("patch", filter.getPatch());
 		}
 		if (filter.getSplits() != null && !filter.getSplits().isEmpty()) {
-			queryBuilder.append(" AND l.season_split IN (:splits)");
+			sb.append(" AND l.season_split IN (:splits)");
 			params.put("splits", filter.getSplits());
 		}
 		if (filter.getLeagueNames() != null && !filter.getLeagueNames().isEmpty()) {
-			queryBuilder.append(" AND l.league_name IN (:leagueNames)");
+			sb.append(" AND l.league_name IN (:leagueNames)");
 			params.put("leagueNames", filter.getLeagueNames());
 		}
 		if (filter.getTeamNames() != null && !filter.getTeamNames().isEmpty()) {
-			queryBuilder.append(" AND t.name IN (:teamNames)");
+			sb.append(" AND t.name IN (:teamNames)");
 			params.put("teamNames", filter.getTeamNames());
 		}
 
-		queryBuilder.append(" GROUP BY vt.game_id, vt.team_id, p.is_win, g.actual_game_start_time, g.patch ) ");
-
-		return queryBuilder.toString();
+		// 팀 단위 1로우 보장
+		sb.append(" GROUP BY vt.game_id, vt.team_id, g.actual_game_start_time, g.patch ) ");
+		return sb.toString();
 	}
 }
