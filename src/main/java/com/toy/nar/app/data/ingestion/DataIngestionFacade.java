@@ -52,6 +52,7 @@ public class DataIngestionFacade {
 		long startTime = System.currentTimeMillis();
 		DataIngestionResult.Builder resultBuilder = DataIngestionResult.builder();
 
+		entityResolver.clearCaches();
 		entityResolver.initializeCaches();
 
 		String lastIdInStream = null;
@@ -78,6 +79,8 @@ public class DataIngestionFacade {
 				ChunkProcessingResult chunkResult = processChunk(chunk);
 				resultBuilder.merge(chunkResult);
 			}
+		} finally {
+			entityResolver.clearCaches();
 		}
 
 		if (StringUtils.hasText(lastIdInStream)) {
@@ -105,7 +108,7 @@ public class DataIngestionFacade {
 		int skippedGames = existingGameIds.size();
 
 		List<Game> gamesToSave = new ArrayList<>();
-		List<GameTeamStat> teamStatsToSave = new ArrayList<>(); // [신규] 팀 통계 저장 리스트
+		List<GameTeamStat> teamStatsToSave = new ArrayList<>();
 
 		for (Map.Entry<String, List<GameDataCsvDto>> gameEntry : gamesGroupedById.entrySet()) {
 			String gameId = gameEntry.getKey();
@@ -115,7 +118,6 @@ public class DataIngestionFacade {
 
 			List<GameDataCsvDto> allGameDtos = gameEntry.getValue();
 
-			// [수정] 플레이어 행과 팀 행을 분리
 			Map<Boolean, List<GameDataCsvDto>> partitionedData = allGameDtos.stream()
 				.collect(Collectors.partitioningBy(dto ->
 					dto.getPosition() != null && !dto.getPosition().isBlank() && !dto.getPosition().equalsIgnoreCase("team")
@@ -124,7 +126,6 @@ public class DataIngestionFacade {
 			List<GameDataCsvDto> playerDtos = partitionedData.get(true);
 			List<GameDataCsvDto> teamDtos = partitionedData.get(false);
 
-			// [수정] 데이터 유효성 검증
 			if (playerDtos.size() != 10 || teamDtos.size() != 2) {
 				log.warn("[Incomplete] Data for gameId: {}. Players: {}, Teams: {}. Skipping.",
 					gameId, playerDtos.size(), teamDtos.size());
@@ -136,7 +137,6 @@ public class DataIngestionFacade {
 				Map<String, Game> singleGameCache = new HashMap<>();
 				boolean isGameValid = true;
 
-				// 1. 플레이어 데이터 처리
 				for (GameDataCsvDto dto : playerDtos) {
 					LocalDateTime scheduledTime = scheduledTimeMap.get(dto.getGameid());
 					if (gameProcessor.process(dto, singleGameCache, scheduledTime).isEmpty()) {
@@ -151,7 +151,6 @@ public class DataIngestionFacade {
 					continue;
 				}
 
-				// 2. [신규] 팀 데이터 처리
 				Game processedGame = singleGameCache.get(gameId);
 				if (processedGame == null) {
 					log.error("[Error] Game object was not created for gameId: {}. Skipping.", gameId);
@@ -172,11 +171,9 @@ public class DataIngestionFacade {
 			}
 		}
 
-		// [수정] Cascade 설정에 의해 Game 저장 시 Participant와 PlayerStat이 함께 저장됨
 		if (!gamesToSave.isEmpty()) {
 			gameRepository.saveAll(gamesToSave);
 		}
-		// [신규] 팀 통계 데이터 저장
 		if (!teamStatsToSave.isEmpty()) {
 			gameTeamStatRepository.saveAll(teamStatsToSave);
 		}
