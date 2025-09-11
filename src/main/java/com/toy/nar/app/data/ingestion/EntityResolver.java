@@ -249,4 +249,12 @@ public class EntityResolver {
 		}
 		throw new IllegalArgumentException("Unsupported entity type for getName: " + entity.getClass().getName());
 	}
+
+	public void clearCaches() {
+		leagueCache.clear();
+		teamCache.clear();
+		playerCache.clear();
+		championCache.clear(); // 챔피언 캐시까지 지울지 여부는 선택
+		log.info("EntityResolver caches cleared.");
+	}
 }
