@@ -16,7 +16,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
-@Tag(name = "1.2 챔피언 관리", description = "챔피언 목록 조회 및 데이터 동기화 API")
+@Tag(name = "1.2 챔피언 관리", description = "챔피언 목록 조회 기능을 제공합니다.")
 @RestController
 @RequestMapping("/api/champions")
 @RequiredArgsConstructor
