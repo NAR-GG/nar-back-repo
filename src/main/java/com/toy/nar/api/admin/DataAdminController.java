@@ -3,6 +3,7 @@ package com.toy.nar.api.admin;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +23,7 @@ import com.toy.nar.app.data.source.GoogleDriveDataSyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+@Profile({"local", "dev"})
 @RestController
 @RequestMapping("/api/admin/data")
 @RequiredArgsConstructor
