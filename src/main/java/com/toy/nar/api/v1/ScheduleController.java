@@ -18,7 +18,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
-@Tag(name = "2. 경기 일정", description = "날짜별 경기 일정 및 매치 상세 정보 조회")
+@Tag(name = "2. 경기 일정", description = "날짜별 경기 일정 및 매치 상세 정보를 조회합니다.")
 @RestController
 @RequestMapping("/api/schedule")
 @RequiredArgsConstructor

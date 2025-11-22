@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import com.toy.nar.app.record.GameRecordService;
 import com.toy.nar.app.record.dto.GameRecordDto;
 
-@Tag(name = "4. 게임 기록 (상세)", description = "특정 게임의 세부 전적, 밴픽, 인게임 지표 조회")
+@Tag(name = "4. 게임 기록 (상세)", description = "특정 게임의 세부 전적, 밴픽, 인게임 지표를 조회합니다.")
 @RestController
 @RequestMapping("/api/games")
 @RequiredArgsConstructor
