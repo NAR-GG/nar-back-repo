@@ -25,7 +25,7 @@ public class ChampionController {
 	private final ChampionService championService;
 	private final ChampionDataService championDataService;
 
-	@Operation(summary = "전체 챔피언 목록 조회", description = "등록된 모든 챔피언의 정보를 조회합니다. (검색 필터나 드롭다운 구성용)")
+	@Operation(summary = "전체 챔피언 목록 조회", description = "등록된 모든 챔피언의 정보를 조회합니다. ")
 	@GetMapping
 	public ResponseEntity<List<ChampionDto>> getAllChampions() {
 		List<ChampionDto> champions = championService.getAllChampions();
