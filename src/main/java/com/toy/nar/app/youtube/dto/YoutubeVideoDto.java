@@ -9,5 +9,6 @@ public record YoutubeVideoDto(
 	OffsetDateTime publishedAt,
 	long viewCount,
 	long likeCount,
-	long commentCount
+	long commentCount,
+	String thumbnailUrl
 ) {}

@@ -19,11 +19,22 @@ public class YoutubeController {
 
 	// 최신순
 	@GetMapping("/api/youtube/shorts/latest")
-	public List<YoutubeVideoDto> getShortsLatest(
-		@RequestParam(defaultValue = "UCBjjh72yM1KoMHfFhNBQr8w") String channelId,
-		@RequestParam(defaultValue = "20") long maxResults
+	public List<YoutubeVideoDto> getShortsLatestMultiChannel(
+		@RequestParam(required = false) List<String> channelIds,
+		@RequestParam(defaultValue = "20") long limit
 	) {
-		return youtubeService.getChannelShortsOrderByLatest(channelId, maxResults);
+		// 파라미터 없으면 기본 3개 채널 사용
+		List<String> defaultChannels = List.of(
+			"UCORzxHO2quCHbE2fTo_snEg", // 롤뻔뻔
+			"UCBjjh72yM1KoMHfFhNBQr8w", // 대유쾌마운틴
+			"UCwvk_uRd0w-n0O1I4QRdM0g"  // 롤꺾마
+		);
+
+		List<String> targetChannels = (channelIds == null || channelIds.isEmpty())
+			? defaultChannels
+			: channelIds;
+
+		return youtubeService.getChannelsShortsOrderByLatest(targetChannels, limit);
 	}
 
 	// 댓글순
