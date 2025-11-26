@@ -9,6 +9,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,13 +87,23 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
 				String combo = (String) row[0];
 				long frequency = ((Number) row[1]).longValue();
 				long winCount = ((Number) row[2]).longValue();
-				java.time.LocalDateTime latest = null;
-				if (row[3] instanceof Long val) {
-					latest = java.time.LocalDateTime.ofInstant(
-						java.time.Instant.ofEpochMilli(val),
-						java.time.ZoneId.of("Asia/Seoul")
-					);
+
+				LocalDateTime latest = null;
+				Object col = row[3];
+
+				if (col != null) {
+					if (col instanceof LocalDateTime ldt) {
+						latest = ldt;
+					} else if (col instanceof java.sql.Timestamp ts) {
+						latest = ts.toLocalDateTime();
+					} else if (col instanceof Number num) { // SQLite에서 epoch ms인 경우
+						latest = LocalDateTime.ofInstant(
+							Instant.ofEpochMilli(num.longValue()),
+							ZoneId.of("Asia/Seoul")
+						);
+					}
 				}
+
 				String latestPatch = (String) row[4];
 				return new CombinationStatDto(combo, frequency, winCount, latest, latestPatch);
 			})
@@ -159,11 +173,19 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
 		long frequency = ((Number) row[1]).longValue();
 		long winCount = ((Number) row[2]).longValue();
 		java.time.LocalDateTime latest = null;
-		if (row[3] instanceof Long val) {
-			latest = java.time.LocalDateTime.ofInstant(
-				java.time.Instant.ofEpochMilli(val),
-				java.time.ZoneId.of("Asia/Seoul")
-			);
+		Object col = row[3];
+
+		if (col != null) {
+			if (col instanceof java.time.LocalDateTime ldt) {
+				latest = ldt;
+			} else if (col instanceof java.sql.Timestamp ts) {
+				latest = ts.toLocalDateTime();
+			} else if (col instanceof Number num) {
+				latest = LocalDateTime.ofInstant(
+					Instant.ofEpochMilli(num.longValue()),
+					ZoneId.of("Asia/Seoul")
+				);
+			}
 		}
 		String latestPatch = (String) row[4];
 
