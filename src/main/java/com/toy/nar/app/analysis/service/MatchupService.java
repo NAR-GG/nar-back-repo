@@ -2,6 +2,8 @@ package com.toy.nar.app.analysis.service;
 
 import com.toy.nar.app.analysis.dto.CombinationDetailDto;
 import com.toy.nar.app.analysis.dto.PageMatchupResponse;
+import com.toy.nar.common.error.ErrorCode;
+import com.toy.nar.common.error.exception.CustomException;
 import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.app.analysis.dto.MultiCombinationFilterDto;
 import com.toy.nar.domain.game.entity.GameParticipant;
@@ -35,6 +37,10 @@ public class MatchupService {
 	 * 책임: 입력 유효성 검사와 최종 응답 조립.
 	 */
 	public PageMatchupResponse get1v1MatchupStats(String champion1, String champion2, MultiCombinationFilterDto filter, Pageable pageable) {
+		if (champion1.equalsIgnoreCase(champion2)) {
+			throw new CustomException(ErrorCode.INVALID_MATCHUP_REQUEST);
+		}
+
 		String normalizedChampion1 = NameNormalizer.normalizeChampionName(champion1);
 		String normalizedChampion2 = NameNormalizer.normalizeChampionName(champion2);
 
@@ -119,20 +125,21 @@ public class MatchupService {
 				Long gameId = entry.getKey();
 				List<GameParticipant> gameParts = entry.getValue();
 
-				Optional<GameParticipant> p1Opt = gameParts.stream()
+				GameParticipant p1 = gameParts.stream()
 					.filter(gp -> gp.getChampion().getChampionNameEn().equalsIgnoreCase(normalizedChampion1))
-					.findFirst();
+					.findFirst()
+					.orElseThrow(() -> {
+						log.error("[Data Integrity Error] Game ID {} contains no participant for {}", gameId, normalizedChampion1);
+						return new CustomException(ErrorCode.DATA_INTEGRITY_ERROR);
+					});
 
-				boolean champion1Won = p1Opt.filter(GameParticipant::getIsWin).isPresent();
+				CombinationDetailDto.TeamDetailDto ourTeam = createTeamDetail(p1, gameParts);
 
-				// ourTeam: champion1 소속 팀 (헬퍼 메서드 호출)
-				CombinationDetailDto.TeamDetailDto ourTeam = p1Opt
-					.map(p1 -> createTeamDetail(p1, gameParts))
-					.orElse(null);  // null 안전 처리 (필요 시 예외 throw)
-
-				// opponentTeam: champion2 소속 팀 (헬퍼 메서드 호출)
 				CombinationDetailDto.TeamDetailDto opponentTeam = createOpponentTeamDetail(gameParts, normalizedChampion2)
-					.orElse(null);
+					.orElseThrow(() -> {
+						log.error("[Data Integrity Error] Game ID {} match found but opponent {} missing", gameId, normalizedChampion2);
+						return new CustomException(ErrorCode.DATA_INTEGRITY_ERROR);
+					});
 
 				// DTO 생성 (기존 필드 + 1v1 특화 필드)
 				return new CombinationDetailDto.GameDetailDto(
@@ -144,7 +151,7 @@ public class MatchupService {
 					gameParts.get(0).getGame().getGameLengthSeconds(),
 					ourTeam,
 					opponentTeam,
-					Optional.of(champion1Won)
+					Optional.of(p1.getIsWin())
 				);
 			})
 			.collect(Collectors.toList());

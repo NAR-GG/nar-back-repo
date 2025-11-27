@@ -2,6 +2,8 @@ package com.toy.nar.app.analysis.service;
 
 import com.toy.nar.app.analysis.dto.*;
 import com.toy.nar.app.analysis.dto.MultiCombinationFilterDto;
+import com.toy.nar.common.error.ErrorCode;
+import com.toy.nar.common.error.exception.CustomException;
 import com.toy.nar.domain.game.entity.GameParticipant;
 import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import com.toy.nar.app.analysis.converter.GameDetailConverter; // 상세 DTO 변환을 위한 컨버터
@@ -108,7 +110,7 @@ public class CombinationService {
 			idService.getMultiSearchContext(combinationId);
 
 		if (context == null) {
-			throw new IllegalArgumentException("Invalid or expired combination ID: " + combinationId);
+			throw new CustomException(ErrorCode.INVALID_COMBINATION_ID);
 		}
 
 		List<String> champions = context.champions();
@@ -116,7 +118,7 @@ public class CombinationService {
 
 		// 1. 해당 조합의 통계 정보(요약)를 가져옵니다.
 		CombinationStatDto summaryStat = gameParticipantRepository.findSingleCombinationStat(champions, filter)
-			.orElseThrow(() -> new IllegalArgumentException("Combination not found for given context."));
+			.orElseThrow(() ->new CustomException(ErrorCode.COMBINATION_NOT_FOUND));
 
 		// CombinationStatDto -> CombinationResponseDto 변환
 		CombinationResponseDto summaryDto = new CombinationResponseDto(
