@@ -7,6 +7,8 @@ import com.toy.nar.app.analysis.dto.UpdateInfoDto;
 import com.toy.nar.app.analysis.service.CombinationService;
 import com.toy.nar.app.analysis.service.MatchupService;
 import com.toy.nar.app.analysis.dto.MultiCombinationFilterDto;
+import com.toy.nar.common.error.ErrorCode;
+import com.toy.nar.config.swagger.ApiErrorCode;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -75,6 +77,11 @@ public class CombinationController {
 	}
 
 	@Operation(summary = "1vs1 라인전 매치업 조회", description = "두 챔피언 간의 1:1 상대 전적 및 지표를 조회합니다.")
+	@ApiErrorCode({
+		ErrorCode.INVALID_INPUT_VALUE,
+		ErrorCode.INVALID_MATCHUP_REQUEST,
+		ErrorCode.DATA_INTEGRITY_ERROR
+	})
 	@GetMapping("/matchups/1v1")
 	public ResponseEntity<PageMatchupResponse> get1v1Matchup(
 		@Parameter(description = "내 챔피언 (기준)", required = true, example = "Ahri")
@@ -99,6 +106,7 @@ public class CombinationController {
 	}
 
 	@Operation(summary = "조합 상세 분석", description = "특정 조합 ID를 기반으로 상세 게임 데이터를 조회합니다.")
+	@ApiErrorCode({ErrorCode.INVALID_COMBINATION_ID, ErrorCode.COMBINATION_NOT_FOUND})
 	@GetMapping("/{combinationId}/detail")
 	public ResponseEntity<CombinationDetailDto> getCombinationDetail(
 		@Parameter(description = "조합 고유 ID")
