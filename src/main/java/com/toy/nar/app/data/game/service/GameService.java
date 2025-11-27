@@ -71,8 +71,17 @@ public class GameService {
 		if (CollectionUtils.isEmpty(participants)) return null;
 
 		GameParticipant first = participants.get(0);
+
+		// 방어 코드: 팀 정보가 누락된 경우
+		if (first.getTeam() == null) return null;
+
 		List<GameResponseDto.PlayerInGameDto> playerDtos = participants.stream()
-			.map(p -> new GameResponseDto.PlayerInGameDto(p.getPlayer().getName(), p.getChampion().getChampionNameEn()))
+			.map(p -> {
+				// 방어 코드: 선수나 챔피언 정보가 누락된 경우 안전하게 처리
+				String playerName = (p.getPlayer() != null) ? p.getPlayer().getName() : "Unknown";
+				String championName = (p.getChampion() != null) ? p.getChampion().getChampionNameEn() : "Unknown";
+				return new GameResponseDto.PlayerInGameDto(playerName, championName);
+			})
 			.toList();
 
 		return new GameResponseDto.TeamInGameDto(
