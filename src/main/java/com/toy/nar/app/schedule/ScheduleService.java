@@ -4,6 +4,8 @@ import com.toy.nar.app.schedule.dto.*;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto.PlayerPickDto;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto.TeamPicksDto;
+import com.toy.nar.common.error.ErrorCode;
+import com.toy.nar.common.error.exception.CustomException;
 import com.toy.nar.domain.game.entity.Game;
 import com.toy.nar.domain.game.entity.GameParticipant;
 import com.toy.nar.domain.game.repository.GameParticipantRepository;
@@ -36,6 +38,10 @@ public class ScheduleService {
 	 * 날짜에 따라 오늘 또는 과거 일정을 조회하는 캐시 서비스를 호출합니다.
 	 */
 	public ScheduleResponseDto getDailySchedule(LocalDate date) {
+		if (date == null) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
 		if (date.isEqual(LocalDate.now(ZoneId.of("Asia/Seoul")))) {
 			return scheduleCacheableService.getTodaySchedule(date);
 		}
@@ -48,7 +54,9 @@ public class ScheduleService {
 	@Transactional(readOnly = true)
 	public MatchDetailResponseDto getMatchDetail(String matchId) {
 		Set<Long> gameIds = decodeMatchId(matchId);
-		if (gameIds.isEmpty()) return null;
+		if (gameIds.isEmpty()) {
+			throw new CustomException(ErrorCode.MATCH_NOT_FOUND);
+		}
 
 		// 대표 게임 ID 하나로 날짜를 확인합니다.
 		Long representativeGameId = gameIds.iterator().next();
@@ -63,8 +71,22 @@ public class ScheduleService {
 	}
 
 	private Set<Long> decodeMatchId(String matchId) {
-		byte[] decodedBytes = Base64.getDecoder().decode(matchId);
-		String[] idStrings = new String(decodedBytes).split(",");
-		return Arrays.stream(idStrings).map(Long::parseLong).collect(Collectors.toSet());
+		try {
+			if (matchId == null || matchId.isBlank()) {
+				throw new IllegalArgumentException("Empty matchId");
+			}
+			byte[] decodedBytes = Base64.getDecoder().decode(matchId);
+			String[] idStrings = new String(decodedBytes).split(",");
+			return Arrays.stream(idStrings)
+				.map(Long::parseLong)
+				.collect(Collectors.toSet());
+		} catch (IllegalArgumentException e) {
+			// Base64 형식이 아니거나, 파싱 불가능한 문자가 들어왔을 때
+			log.warn("Invalid matchId format: {}", matchId);
+			throw new CustomException(ErrorCode.INVALID_MATCH_ID);
+		} catch (Exception e) {
+			log.error("Error decoding matchId: {}", matchId, e);
+			throw new CustomException(ErrorCode.INVALID_MATCH_ID);
+		}
 	}
 }

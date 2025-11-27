@@ -12,6 +12,8 @@ public enum ErrorCode {
 	INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
 	INVALID_COMBINATION_ID(HttpStatus.BAD_REQUEST, "유효하지 않거나 만료된 조합 ID입니다."),
 	INVALID_MATCHUP_REQUEST(HttpStatus.BAD_REQUEST, "동일한 챔피언끼리는 매치업을 조회할 수 없습니다."),
+	INVALID_MATCH_ID(HttpStatus.BAD_REQUEST, "유효하지 않은 매치 ID 형식입니다."),
+	MATCH_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 매치 정보를 찾을 수 없습니다."),
 
 	/* 404 NOT_FOUND : 리소스를 찾을 수 없음 */
 	COMBINATION_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 조건의 조합 데이터를 찾을 수 없습니다."),

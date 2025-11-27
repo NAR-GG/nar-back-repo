@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.toy.nar.app.schedule.ScheduleService;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto;
 import com.toy.nar.app.schedule.dto.ScheduleResponseDto;
+import com.toy.nar.common.error.ErrorCode;
+import com.toy.nar.config.swagger.ApiErrorCode;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,6 +29,7 @@ public class ScheduleController {
 	private final ScheduleService scheduleService;
 
 	@Operation(summary = "일별 경기 일정 조회", description = "특정 날짜의 경기 목록을 조회합니다. (캘린더 클릭 시 사용)")
+	@ApiErrorCode(ErrorCode.INVALID_INPUT_VALUE)
 	@GetMapping("")
 	public ResponseEntity<ScheduleResponseDto> getDailySchedule(
 		@RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
@@ -36,6 +39,7 @@ public class ScheduleController {
 	}
 
 	@Operation(summary = "매치 상세 정보 조회", description = "특정 매치(Match)의 세부 정보를 조회합니다.")
+	@ApiErrorCode({ErrorCode.INVALID_MATCH_ID, ErrorCode.MATCH_NOT_FOUND})
 	@GetMapping("/matches/{matchId}/detail")
 	public ResponseEntity<MatchDetailResponseDto> getMatchDetail(
 		@PathVariable String matchId
