@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import com.toy.nar.app.youtube.dto.YoutubeChannelResponse;
 import com.toy.nar.app.youtube.dto.YoutubeSearchResponse;
 import com.toy.nar.app.youtube.dto.YoutubeVideosResponse;
 import com.toy.nar.app.youtube.dto.YoutubeVideoDto;
@@ -28,6 +29,8 @@ public class YoutubeService {
 	private static final String ORDER_DATE = "date";
 	private static final String VIDEO_DURATION_SHORT = "short";
 	private static final int VIDEOS_LIST_MAX_IDS = 50;
+
+	private static final String PART_CHANNEL_INFO = "snippet,contentDetails";
 
 	private final WebClient youtubeWebClient;
 	private final YoutubeApiProperties properties;
@@ -187,6 +190,33 @@ public class YoutubeService {
 			commentCount,
 			thumbnailUrl
 		);
+	}
+
+	public List<YoutubeChannelResponse.ChannelItem> getChannelInfos(List<String> channelIds) {
+		if (channelIds == null || channelIds.isEmpty()) {
+			return List.of();
+		}
+
+		String idParam = String.join(",", channelIds);
+
+		YoutubeChannelResponse response = youtubeWebClient.get()
+			.uri(uriBuilder -> uriBuilder
+				.path("/channels")
+				.queryParam("part", PART_CHANNEL_INFO)
+				.queryParam("id", idParam)
+				.queryParam("key", properties.getKey())
+				.build()
+			)
+			.retrieve()
+			.bodyToMono(YoutubeChannelResponse.class)
+			.block();
+
+		if (response == null || response.items() == null) {
+			return List.of();
+		}
+
+		// 이제 타입이 맞아서 에러가 안 납니다.
+		return response.items();
 	}
 
 	private long parseLongSafe(String value) {
