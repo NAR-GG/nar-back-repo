@@ -18,7 +18,7 @@ public class CorsConfig implements WebMvcConfigurer {
 				"https://api.nar.kr"
 			)
 			.allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
-			.allowedHeaders("*")
+			.allowedOriginPatterns("*")
 			.exposedHeaders("Authorization", "Content-Type")
 			.allowCredentials(true)
 			.maxAge(3600);
