@@ -16,9 +16,13 @@ import com.toy.nar.app.youtube.VideoService;
 import com.toy.nar.app.youtube.YoutubeSyncService;
 import com.toy.nar.app.youtube.dto.VideoListResponse;
 
+import io.swagger.v3.oas.annotations.Hidden;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
-@Profile({"local", "dev"})
+@Tag(name = "5. 유튜브 쇼츠/영상 서비스", description = "프로팀 및 쇼츠 채널의 최신 영상 데이터를 제공합니다.")
 @RestController
 @RequiredArgsConstructor
 public class YoutubeController {
@@ -26,14 +30,19 @@ public class YoutubeController {
 	private final YoutubeSyncService youtubeSyncService;
 	private final VideoService videoService;
 
+	@Operation(summary = "최신 영상 목록 조회", description = "전체, 프로팀, 쇼츠 카테고리별로 최신순 영상을 페이징 조회합니다.")
 	@GetMapping("/api/youtube/videos")
 	public ResponseEntity<Page<VideoListResponse>> getVideos(
+		@Parameter(description = "카테고리 (all: 전체, pro: 프로팀, shorts: 쇼츠 채널)", example = "all")
 		@RequestParam(defaultValue = "all") String category,
+
+		@Parameter(description = "페이징 정보 (기본 20개)")
 		@PageableDefault(size = 20) Pageable pageable
 	) {
 		return ResponseEntity.ok(videoService.getVideosByCategory(category, pageable));
 	}
 
+	@Hidden
 	@PostMapping("/api/youtube/sync")
 	public ResponseEntity<String> syncLatestShorts() {
 		youtubeSyncService.syncLastWeekShorts();
