@@ -45,8 +45,15 @@ public class YoutubeController {
 	@Hidden
 	@PostMapping("/api/story/sync")
 	public ResponseEntity<String> syncLatestShorts() {
-		youtubeSyncService.syncLastWeekShorts();
+		youtubeSyncService.syncLastWeekVideos();
 		return ResponseEntity.ok("Shorts synchronization completed for last week.");
+	}
+
+	@Operation(summary = "[관리자용] 유튜브 채널 세팅", description = "유튜브 채널 ID 세팅을 초기화합니다.")
+	@PostMapping("/api/youtube/sync")
+	public ResponseEntity<String> syncLatestVideos() {
+		youtubeSyncService.initChannelsFromProperties();
+		return ResponseEntity.ok("Video synchronization completed for last week.");
 	}
 }
 

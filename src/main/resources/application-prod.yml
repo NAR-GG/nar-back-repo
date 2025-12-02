@@ -6,7 +6,7 @@ spring:
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         show_sql: false
@@ -15,6 +15,9 @@ spring:
           batch_size: 50
           order_inserts: true
     open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
 
 notification:
   enabled: true
