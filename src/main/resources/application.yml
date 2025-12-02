@@ -12,3 +12,26 @@ spring:
           order_inserts: true
     # N+1 문제 방지를 위한 공통 설정
     open-in-view: false
+springdoc:
+  swagger-ui:
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+app:
+  youtube:
+    seed-channels:
+      PRO_TEAMS:
+        - "UCJprx3bX49vNl6Bcw01Cwfg" # T1
+        - "UCrfB1-zWijAYkgfZW7Ehc8Q" # HLE
+        - "UCDmmbxGg8g-EBkC_ku6vybg" # GEN.G
+        - "UC8FErYSi74YwGUAoTpjvgzQ" # KT
+        - "UC4PoHC-R9EeJYTuUv3ndmJw" # NS
+        - "UCepHesz_5Lwr7qRaqjB-p1A" # DK
+        - "UC5WN-znPsJK0BbA8aHxZHWQ" # DRX
+        - "UCxedTJNaGRHiq6YfNtQVCNA" # BFX
+        - "UCYQO6n0KZmwfwzWtm4_nAPA" # OK BRION
+        - "UCGW76VChAJKee9kYzvyoycQ" # DNF
+      SHORTS:
+        - "UCORzxHO2quCHbE2fTo_snEg" # 롤뻔뻔
+        - "UCBjjh72yM1KoMHfFhNBQr8w" # 대유쾌마운틴
+        - "UCwvk_uRd0w-n0O1I4QRdM0g" # 롤꺾마
