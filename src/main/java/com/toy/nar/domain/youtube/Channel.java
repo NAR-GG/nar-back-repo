@@ -27,7 +27,7 @@ public class Channel {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "channel_id")
-	private String id;
+	private Long id;
 
 	@Column(name = "youtube_channel_id", nullable = false, unique = true)
 	private String youtubeChannelId;
@@ -36,6 +36,8 @@ public class Channel {
 	private String channelName;
 
 	private String uploadPlaylistId;
+
+	private String profileImageUrl;
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "channel_type")

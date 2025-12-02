@@ -39,11 +39,12 @@ public class ChannelInitializer implements CommandLineRunner {
 
 		if (allTargetIds.isEmpty()) return;
 
+		// 2. 이미 존재하는 채널 확인
 		Set<String> existingYoutubeIds = channelRepository.findByYoutubeChannelIdIn(allTargetIds).stream()
-			.map(Channel::getYoutubeChannelId) // PK(id)가 아니라 youtubeChannelId를 비교
+			.map(Channel::getYoutubeChannelId)
 			.collect(Collectors.toSet());
 
-		// 3. 없는 ID 필터링
+		// 3. 없는 ID 필터링 (신규 채널 대상)
 		List<String> newIds = allTargetIds.stream()
 			.filter(id -> !existingYoutubeIds.contains(id))
 			.toList();
@@ -60,13 +61,18 @@ public class ChannelInitializer implements CommandLineRunner {
 
 		// 5. 엔티티 생성
 		List<Channel> newChannels = channelDtos.stream()
-			.map(dto -> Channel.builder()
-				.youtubeChannelId(dto.id())
-				.channelName(dto.snippet().title())
-				.uploadPlaylistId(dto.contentDetails().relatedPlaylists().uploads())
-				.channelType(idTypeMap.get(dto.id()))
-				.build()
-			)
+			.map(dto -> {
+				// 썸네일 추출 로직 추가
+				String profileUrl = youtubeService.extractBestThumbnailUrl(dto.snippet().thumbnails());
+
+				return Channel.builder()
+					.youtubeChannelId(dto.id())
+					.channelName(dto.snippet().title())
+					.profileImageUrl(profileUrl) // 필드 저장
+					.uploadPlaylistId(dto.contentDetails().relatedPlaylists().uploads())
+					.channelType(idTypeMap.get(dto.id()))
+					.build();
+			})
 			.toList();
 
 		if (!newChannels.isEmpty()) {

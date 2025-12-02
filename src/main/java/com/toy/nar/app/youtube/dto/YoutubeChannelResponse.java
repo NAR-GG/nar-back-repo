@@ -1,6 +1,7 @@
 package com.toy.nar.app.youtube.dto;
 
 import java.util.List;
+import java.util.Map;
 
 public record YoutubeChannelResponse(
 	List<ChannelItem> items
@@ -13,7 +14,8 @@ public record YoutubeChannelResponse(
 
 	public record Snippet(
 		String title,
-		String description
+		String description,
+		Map<String, YoutubeSearchResponse.Thumbnail> thumbnails
 	) {}
 
 	public record ContentDetails(
