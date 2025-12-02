@@ -32,3 +32,7 @@ logging:
 google:
   drive:
     csv-file-id: "1v6LRphp2kYciU4SXp0PCjEMuev1bDejc"
+  youtube:
+    api:
+      key: "AIzaSyBycidZXAUhO6EV7qQ7Wzeu26Xq9hAOVdQ"
+      base-url: "https://www.googleapis.com/youtube/v3"
