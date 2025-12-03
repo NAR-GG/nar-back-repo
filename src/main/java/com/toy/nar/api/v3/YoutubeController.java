@@ -49,6 +49,7 @@ public class YoutubeController {
 		return ResponseEntity.ok("Shorts synchronization completed for last week.");
 	}
 
+	@Hidden
 	@Operation(summary = "[관리자용] 유튜브 채널 세팅", description = "유튜브 채널 ID 세팅을 초기화합니다.")
 	@PostMapping("/api/youtube/sync")
 	public ResponseEntity<String> syncLatestVideos() {
