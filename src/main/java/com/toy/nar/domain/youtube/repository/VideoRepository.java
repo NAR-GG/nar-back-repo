@@ -4,10 +4,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
+import com.toy.nar.domain.youtube.Channel;
 import com.toy.nar.domain.youtube.ChannelType;
 import com.toy.nar.domain.youtube.Video;
 
@@ -25,4 +29,7 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
 	// 2. 카테고리(ChannelType)별 조회
 	@EntityGraph(attributePaths = "channel")
 	Page<Video> findByChannel_ChannelType(ChannelType channelType, Pageable pageable);
+
+	@Query("SELECT MAX(v.publishedAt) FROM Video v WHERE v.channel = :channel")
+	LocalDateTime findLatestPublishedAtByChannel(@Param("channel") Channel channel);
 }

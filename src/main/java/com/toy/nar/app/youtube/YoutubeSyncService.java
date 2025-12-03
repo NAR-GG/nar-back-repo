@@ -128,16 +128,20 @@ public class YoutubeSyncService {
 		log.info("### 비디오 전체 동기화 완료. 총 {}개의 신규 영상 저장됨 ###", totalSaved);
 	}
 
-	private int syncSingleChannelVideos(Channel channel, LocalDateTime since) {
-		// ChannelType에 따른 분기 (쇼츠 vs 일반)
-		String videoDurationParam = null;
-		if (channel.getChannelType() == ChannelType.SHORTS) {
-			videoDurationParam = "short";
-		}
+	private int syncSingleChannelVideos(Channel channel, LocalDateTime defaultSince) {
+		// 1. DB에서 해당 채널의 가장 최신 영상 날짜를 가져옴
+		LocalDateTime lastSavedAt = videoRepository.findLatestPublishedAtByChannel(channel);
+
+		// 2. DB에 데이터가 없으면 기본값(일주일 전) 사용, 있으면 그 시간 이후 데이터만 타겟팅
+		// 중복 방지를 위해 마지막 저장 시간보다 1초 뒤부터 조회한다고 가정하거나,
+		// API 검색 결과에서 같은 시간대는 ID로 중복 체크
+		LocalDateTime searchAfter = (lastSavedAt != null) ? lastSavedAt : defaultSince;
+
+		String videoDurationParam = (channel.getChannelType() == ChannelType.SHORTS) ? "short" : null;
 
 		YoutubeSearchResponse searchResponse = youtubeService.searchLatestVideos(
 			channel.getYoutubeChannelId(),
-			20,
+			50,
 			videoDurationParam
 		);
 
@@ -145,20 +149,25 @@ public class YoutubeSyncService {
 			return 0;
 		}
 
+		// 4. 필터링 및 변환
 		List<Video> videosToSave = searchResponse.items().stream()
 			.filter(item -> {
 				OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
 				LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
-				return publishedAtKst.isAfter(since);
+
+				return publishedAtKst.isAfter(searchAfter);
 			})
+			// 혹시 모를 중복(시간이 겹칠 경우 등)을 위해 ID 체크는 안전장치로 유지하되,
+			// 위 날짜 필터로 인해 호출 횟수는 확연히 줄어듦
 			.filter(item -> !videoRepository.existsByYoutubeVideoId(item.id().videoId()))
 			.map(item -> convertToVideoEntity(item, channel))
 			.toList();
 
+		// 5. 저장
 		if (!videosToSave.isEmpty()) {
 			videoRepository.saveAll(videosToSave);
-			log.info("[{}] ({}) 신규 영상 {}개 저장",
-				channel.getChannelName(), channel.getChannelType(), videosToSave.size());
+			log.info("[{}] 신규 영상 {}개 저장 (기준: {} 이후)",
+				channel.getChannelName(), videosToSave.size(), searchAfter);
 			return videosToSave.size();
 		}
 
