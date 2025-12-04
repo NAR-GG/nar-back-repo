@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.toy.nar.app.youtube.dto.YoutubeSearchResponse;
+import com.toy.nar.app.youtube.dto.YoutubeVideoResponse;
 import com.toy.nar.common.util.YoutubeProperties;
 import com.toy.nar.domain.youtube.Channel;
 import com.toy.nar.domain.youtube.ChannelType;
@@ -174,6 +175,47 @@ public class YoutubeSyncService {
 		return 0;
 	}
 
+	@Transactional
+	public void processNewVideoNotification(String videoId, String channelId) {
+		// 1. 이미 저장된 영상인지 확인
+		if (videoRepository.existsByYoutubeVideoId(videoId)) {
+			log.info("이미 존재하는 영상입니다. ID: {}", videoId);
+			return;
+		}
+
+		// 2. 채널 정보 조회
+		Channel channel = channelRepository.findByYoutubeChannelId(channelId)
+			.orElseThrow(() -> new IllegalArgumentException("관리되지 않는 채널입니다: " + channelId));
+
+		// 3. 유튜브 API로 영상 상세 정보(썸네일 등) 조회
+		// (XML 정보만으로 저장하면 썸네일/Duration 처리가 어렵기 때문에 API 1회 호출 권장)
+		YoutubeVideoResponse response = youtubeService.searchVideoById(videoId);
+
+		if (response != null && response.items() != null && !response.items().isEmpty()) {
+
+			// [수정] Item 타입 변경
+			YoutubeVideoResponse.VideoItem item = response.items().get(0);
+
+			Video video = convertVideoItemToEntity(item, channel);
+			videoRepository.save(video);
+
+			log.info("[PubSub] 실시간 신규 영상 저장 완료: {} - {}", channel.getChannelName(), video.getTitle());
+		}
+	}
+
+	public void subscribeAllChannels(String callbackBaseUrl) {
+		List<Channel> channels = channelRepository.findAll();
+		String callbackUrl = callbackBaseUrl + "/api/youtube/webhook";
+
+		for (Channel channel : channels) {
+			try {
+				youtubeService.subscribeToChannel(channel.getYoutubeChannelId(), callbackUrl);
+			} catch (Exception e) {
+				log.error("구독 요청 실패: {}", channel.getChannelName());
+			}
+		}
+	}
+
 	private Video convertToVideoEntity(YoutubeSearchResponse.SearchItem item, Channel channel) {
 		String videoId = item.id().videoId();
 		String title = item.snippet().title();
@@ -181,6 +223,31 @@ public class YoutubeSyncService {
 
 		OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
 		LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
+
+		String videoUrl;
+		if (channel.getChannelType() == ChannelType.SHORTS) {
+			videoUrl = "https://www.youtube.com/shorts/" + videoId;
+		} else {
+			videoUrl = "https://www.youtube.com/watch?v=" + videoId;
+		}
+
+		return Video.builder()
+			.channel(channel)
+			.youtubeVideoId(videoId)
+			.title(title)
+			.thumbnailUrl(thumbnailUrl)
+			.videoUrl(videoUrl)
+			.publishedAt(publishedAtKst)
+			.build();
+	}
+
+	private Video convertVideoItemToEntity(YoutubeVideoResponse.VideoItem item, Channel channel) {
+		String videoId = item.id();
+		String title = item.snippet().title();
+		String thumbnailUrl = youtubeService.extractBestThumbnailUrl(item.snippet().thumbnails());
+
+		OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
+		LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDateTime();
 
 		String videoUrl;
 		if (channel.getChannelType() == ChannelType.SHORTS) {

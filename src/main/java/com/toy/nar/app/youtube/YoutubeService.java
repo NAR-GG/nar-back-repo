@@ -8,6 +8,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import com.toy.nar.app.youtube.dto.YoutubeChannelResponse;
 import com.toy.nar.app.youtube.dto.YoutubeSearchResponse;
+import com.toy.nar.app.youtube.dto.YoutubeVideoResponse;
 import com.toy.nar.common.util.YoutubeApiProperties;
 
 import lombok.RequiredArgsConstructor;
@@ -111,5 +112,36 @@ public class YoutubeService {
 			.findFirst()
 			.map(YoutubeSearchResponse.Thumbnail::url)
 			.orElse(null);
+	}
+
+	public void subscribeToChannel(String channelId, String callbackUrl) {
+		WebClient client = WebClient.create("https://pubsubhubbub.appspot.com");
+
+		client.post()
+			.uri("/subscribe")
+			.header("Content-Type", "application/x-www-form-urlencoded")
+			.bodyValue("hub.callback=" + callbackUrl +
+				"&hub.mode=subscribe" +
+				"&hub.topic=https://www.youtube.com/xml/feeds/videos.xml?channel_id=" + channelId)
+			.retrieve()
+			.toBodilessEntity()
+			.subscribe(
+				response -> System.out.println("Subscribed to " + channelId),
+				error -> System.err.println("Failed to subscribe: " + error.getMessage())
+			);
+	}
+
+	public YoutubeVideoResponse searchVideoById(String videoId) {
+		return youtubeWebClient.get()
+			.uri(uriBuilder -> uriBuilder
+				.path("/videos")
+				.queryParam("part", PART_SNIPPET) // snippet 정보 필요
+				.queryParam("id", videoId)
+				.queryParam("key", properties.getKey())
+				.build()
+			)
+			.retrieve()
+			.bodyToMono(YoutubeVideoResponse.class) // [수정] 클래스 변경
+			.block();
 	}
 }
