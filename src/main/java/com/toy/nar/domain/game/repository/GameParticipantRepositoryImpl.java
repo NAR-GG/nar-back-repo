@@ -255,7 +255,7 @@ public class GameParticipantRepositoryImpl implements GameParticipantRepositoryC
 			params.put("leagueNames", filter.getLeagueNames());
 		}
 		if (filter.getTeamNames() != null && !filter.getTeamNames().isEmpty()) {
-			sb.append(" AND t.name IN (:teamNames)");
+			sb.append(" AND t.team_name IN (:teamNames)");
 			params.put("teamNames", filter.getTeamNames());
 		}
 
