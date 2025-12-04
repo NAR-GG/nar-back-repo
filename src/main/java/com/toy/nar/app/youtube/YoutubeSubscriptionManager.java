@@ -40,15 +40,20 @@ public class YoutubeSubscriptionManager {
 	}
 
 	private void subscribeTask() {
-		String callbackUrl = baseUrl + "/api/youtube/webhook";
+		// [수정] 여기서 경로를 붙이지 말고 baseUrl만 그대로 넘깁니다.
+		// YoutubeSyncService 내부에서 "/api/youtube/webhook"을 붙이기 때문입니다.
+		String targetDomain = baseUrl;
 
-		if (baseUrl == null || baseUrl.contains("localhost")) {
-			log.warn("!!! 주의 !!! 설정된 도메인이 localhost이거나 비어있습니다. PubSub 요청이 실패할 수 있습니다. URL: {}", baseUrl);
+		if (targetDomain == null || targetDomain.contains("localhost")) {
+			log.warn("!!! 주의 !!! 설정된 도메인이 localhost이거나 비어있습니다. PubSub 요청이 실패할 수 있습니다. URL: {}", targetDomain);
 		}
 
 		try {
-			youtubeSyncService.subscribeAllChannels(callbackUrl);
-			log.info("구독 요청 전송 완료. Target Callback: {}", callbackUrl);
+			// Service에게 도메인만 전달 (예: https://api.nar.kr)
+			youtubeSyncService.subscribeAllChannels(targetDomain);
+
+			// 로그에는 헷갈리지 않게 실제 호출될 예상 URL을 찍어줍니다.
+			log.info("구독 요청 전송 완료. Target Base URL: {}", targetDomain);
 		} catch (Exception e) {
 			log.error("구독 요청 중 에러 발생", e);
 		}
