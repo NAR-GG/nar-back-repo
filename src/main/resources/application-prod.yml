@@ -36,3 +36,7 @@ google:
     api:
       key: ${YOUTUBE_API_KEY}
       base-url: "https://www.googleapis.com/youtube/v3"
+
+app:
+  server:
+    url: "https://api.nar.kr"
