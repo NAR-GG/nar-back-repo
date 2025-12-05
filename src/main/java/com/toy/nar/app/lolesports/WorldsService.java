@@ -1,0 +1,346 @@
+package com.toy.nar.app.lolesports;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+
+import com.fasterxml.jackson.databind.JsonNode;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class WorldsService {
+
+	private final WebClient webClient;
+
+	private static final String WORLDS_LEAGUE_ID = "98767975604431411";
+	// LCK ID
+	private static final String LCK_LEAGUE_ID = "98767991310872058";
+
+	@Value("${lolesports.riot-api.key}")
+	private String RIOT_API_KEY;
+
+	public MatchResponseWrapper getWorldsMatches(String pageToken) {
+		// 1. [Schedule API] 전체 일정 조회 (이건 한 번만 하니까 block 해도 됨)
+		JsonNode scheduleRoot = callScheduleApi(pageToken);
+		if (scheduleRoot == null) return MatchResponseWrapper.builder().matches(List.of()).build();
+
+		JsonNode dataNode = scheduleRoot.path("data").path("schedule");
+		JsonNode eventsNode = dataNode.path("events");
+		String nextToken = dataNode.path("pages").path("older").asText(null);
+
+		List<JsonNode> targetEvents = new ArrayList<>();
+		if (eventsNode.isArray()) {
+			for (JsonNode event : eventsNode) {
+				// "완료된 매치"만 필터링해서 리스트에 담음
+				if ("completed".equalsIgnoreCase(event.path("state").asText())
+					&& "match".equalsIgnoreCase(event.path("type").asText())) {
+					targetEvents.add(event);
+				}
+			}
+		}
+
+		// 2. [병렬 처리 핵심] Flux를 사용하여 동시에 API 쏘기
+		List<MatchResultDto> matchResults = reactor.core.publisher.Flux.fromIterable(targetEvents)
+			.parallel() // 병렬 레일 시작
+			.runOn(reactor.core.scheduler.Schedulers.boundedElastic()) // 쓰레드 풀 지정
+			.flatMap(event -> {
+				String matchId = event.path("match").path("id").asText();
+				String startTime = event.path("startTime").asText();
+				String blockName = event.path("blockName").asText();
+
+				// 비동기로 상세 정보 가져오기
+				return fetchMatchDetailsAsync(matchId, startTime, blockName);
+			})
+			.sequential() // 다시 하나의 스트림으로 합침
+			// 날짜 내림차순 정렬 (병렬 처리는 순서가 뒤섞이므로 정렬 필수)
+			.sort((a, b) -> b.getMatchDate().compareTo(a.getMatchDate()))
+			.collectList()
+			.block(); // 모든 병렬 작업이 끝날 때까지 여기서 딱 1번만 대기 (약 1~2초 소요)
+
+		return MatchResponseWrapper.builder()
+			.matches(matchResults)
+			.nextPageToken(nextToken)
+			.build();
+	}
+
+	private reactor.core.publisher.Mono<MatchResultDto> fetchMatchDetailsAsync(String eventId, String matchDate, String stageName) {
+		return webClient.get()
+			.uri(uri -> uri
+				.scheme("https")
+				.host("esports-api.lolesports.com")
+				.path("/persisted/gw/getEventDetails")
+				.queryParam("hl", "ko-KR")
+				.queryParam("id", eventId)
+				.build())
+			.header("x-api-key", "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z")
+			.header("Referer", "https://lolesports.com/")
+			.retrieve()
+			.bodyToMono(JsonNode.class)
+			.map(root -> {
+				// 기존 fetchMatchDetails 내부 로직과 동일하게 파싱
+				JsonNode event = root.path("data").path("event");
+				JsonNode match = event.path("match");
+				JsonNode teams = match.path("teams");
+
+				if (teams.size() < 2) return null; // 유효하지 않은 데이터
+
+				JsonNode teamA = teams.get(0);
+				JsonNode teamB = teams.get(1);
+				int winsA = teamA.path("result").path("gameWins").asInt(0);
+				int winsB = teamB.path("result").path("gameWins").asInt(0);
+
+				List<MatchResultDto.SetVod> setVods = new ArrayList<>();
+				JsonNode games = match.path("games");
+				int setNum = 1;
+
+				if (games.isArray()) {
+					for (JsonNode game : games) {
+						if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
+						String vodUrl = findBestVodUrl(game.path("vods"));
+						setVods.add(MatchResultDto.SetVod.builder()
+							.setNumber(setNum++)
+							.vodUrl(vodUrl)
+							.build());
+					}
+				}
+
+				// DTO 생성 후 반환
+				return MatchResultDto.builder()
+					.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText())
+					.matchDate(matchDate)
+					.score(winsA + " : " + winsB)
+					.blueTeam(MatchResultDto.TeamInfo.builder().code(teamA.path("code").asText()).name(teamA.path("name").asText()).wins(winsA).build())
+					.redTeam(MatchResultDto.TeamInfo.builder().code(teamB.path("code").asText()).name(teamB.path("name").asText()).wins(winsB).build())
+					.sets(setVods)
+					.build();
+			})
+			.onErrorResume(e -> {
+				log.error("상세 조회 실패 (ID: {}): {}", eventId, e.getMessage());
+				return reactor.core.publisher.Mono.empty(); // 에러 난 건 리스트에서 제외
+			});
+	}
+
+	public List<MatchResultDto> getRecent3Matches() {
+		// 1. [Schedule API] 전체 일정 조회
+		JsonNode scheduleRoot = callApi("/persisted/gw/getSchedule", "leagueId", LCK_LEAGUE_ID);
+		if (scheduleRoot == null) return List.of();
+
+		List<JsonNode> events = new ArrayList<>();
+		JsonNode eventsNode = scheduleRoot.path("data").path("schedule").path("events");
+
+		if (eventsNode.isArray()) {
+			for (JsonNode event : eventsNode) {
+				// 완료된 '매치'만 필터링 (type check 추가 권장)
+				if ("completed".equalsIgnoreCase(event.path("state").asText())
+					&& "match".equalsIgnoreCase(event.path("type").asText())) {
+					events.add(event);
+				}
+			}
+		}
+
+		// 최신순 정렬 -> 상위 3개 추출
+		// 여기서 startTime도 같이 가져가는 게 좋습니다.
+		return events.stream()
+			.sorted(Comparator.comparing(e -> e.path("startTime").asText(), Comparator.reverseOrder()))
+			.limit(3)
+			.map(event -> {
+				String matchId = event.path("match").path("id").asText();
+				String matchDate = event.path("startTime").asText(); // [수정] 날짜 추출
+				return fetchMatchDetails(matchId, matchDate);        // [수정] 날짜 전달
+			})
+			.filter(dto -> dto != null) // 혹시 모를 null 제거
+			.toList();
+	}
+
+	// [수정] matchDate를 인자로 받음
+	private MatchResultDto fetchMatchDetails(String eventId, String matchDate) {
+		JsonNode root = callApi("/persisted/gw/getEventDetails", "id", eventId);
+		if (root == null) return null;
+
+		JsonNode event = root.path("data").path("event");
+		JsonNode match = event.path("match");
+		JsonNode teams = match.path("teams");
+
+		if (teams.size() < 2) return null;
+
+		// 팀 정보 파싱
+		JsonNode teamA = teams.get(0);
+		JsonNode teamB = teams.get(1);
+		int winsA = teamA.path("result").path("gameWins").asInt(0);
+		int winsB = teamB.path("result").path("gameWins").asInt(0);
+
+		// 세트별 VOD 파싱
+		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
+		JsonNode games = match.path("games");
+		int setNum = 1;
+
+		if (games.isArray()) {
+			for (JsonNode game : games) {
+				// 게임이 완료된 것만 (unneeded 제외)
+				if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
+
+				String vodUrl = findBestVodUrl(game.path("vods"));
+
+				setVods.add(MatchResultDto.SetVod.builder()
+					.setNumber(setNum++)
+					.vodUrl(vodUrl)
+					.build());
+			}
+		}
+
+		return MatchResultDto.builder()
+			.matchTitle(teamA.path("code").asText() + " vs " + teamB.path("code").asText())
+			.matchDate(matchDate) // [수정] 넘겨받은 날짜 사용
+			.score(winsA + " : " + winsB)
+			.blueTeam(MatchResultDto.TeamInfo.builder()
+				.code(teamA.path("code").asText())
+				.name(teamA.path("name").asText())
+				.wins(winsA)
+				.build())
+			.redTeam(MatchResultDto.TeamInfo.builder()
+				.code(teamB.path("code").asText())
+				.name(teamB.path("name").asText())
+				.wins(winsB)
+				.build())
+			.sets(setVods)
+			.build();
+	}
+
+	private MatchResultDto fetchMatchDetails(String eventId, String matchDate, String stageName) {
+		JsonNode root = callApi("/persisted/gw/getEventDetails", "id", eventId);
+		if (root == null) return null;
+
+		JsonNode event = root.path("data").path("event");
+		JsonNode match = event.path("match");
+		JsonNode teams = match.path("teams");
+
+		if (teams.size() < 2) return null;
+
+		JsonNode teamA = teams.get(0);
+		JsonNode teamB = teams.get(1);
+		int winsA = teamA.path("result").path("gameWins").asInt(0);
+		int winsB = teamB.path("result").path("gameWins").asInt(0);
+
+		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
+		JsonNode games = match.path("games");
+		int setNum = 1;
+
+		if (games.isArray()) {
+			for (JsonNode game : games) {
+				if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
+				String vodUrl = findBestVodUrl(game.path("vods"));
+				setVods.add(MatchResultDto.SetVod.builder().setNumber(setNum++).vodUrl(vodUrl).build());
+			}
+		}
+
+		return MatchResultDto.builder()
+			.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText()) // "결승 | T1 vs GEN"
+			.matchDate(matchDate)
+			.score(winsA + " : " + winsB)
+			.blueTeam(MatchResultDto.TeamInfo.builder().code(teamA.path("code").asText()).name(teamA.path("name").asText()).wins(winsA).build())
+			.redTeam(MatchResultDto.TeamInfo.builder().code(teamB.path("code").asText()).name(teamB.path("name").asText()).wins(winsB).build())
+			.sets(setVods)
+			.build();
+	}
+
+	private String findBestVodUrl(JsonNode vodsNode) {
+		if (vodsNode.isMissingNode() || !vodsNode.isArray()) return "";
+
+		String bestUrl = "";
+
+		for (JsonNode vod : vodsNode) {
+			String locale = vod.path("locale").asText();
+			String provider = vod.path("provider").asText();
+			String parameter = vod.path("parameter").asText();
+			long startMillis = vod.path("startMillis").asLong(0);
+
+			// [수정] 1순위: 한국어 + 유튜브 (가장 베스트)
+			if ("ko-KR".equalsIgnoreCase(locale) && "youtube".equalsIgnoreCase(provider)) {
+				return buildYoutubeUrl(parameter, startMillis);
+			}
+
+			// [수정] 2순위: 한국어 + 아프리카TV (유튜브가 없을 때만)
+			if ("ko-KR".equalsIgnoreCase(locale) && "afreecatv".equalsIgnoreCase(provider)) {
+				if (bestUrl.isEmpty()) {
+					bestUrl = buildAfreecaUrl(parameter, startMillis);
+				}
+			}
+		}
+
+		// 아무것도 못 찾았으면 첫 번째 영상이라도 반환 (혹은 빈 문자열)
+		if (bestUrl.isEmpty() && vodsNode.size() > 0) {
+			JsonNode first = vodsNode.get(0);
+			// 대충 처리 (구현 필요 시 추가)
+		}
+
+		return bestUrl;
+	}
+
+	private String buildYoutubeUrl(String parameter, long startMillis) {
+		long seconds = startMillis / 1000;
+		return "https://www.youtube.com/watch?v=" + parameter + "&t=" + seconds + "s";
+	}
+
+	private String buildAfreecaUrl(String parameter, long startMillis) {
+		String url = "https://vod.afreecatv.com/player/" + parameter;
+		if (startMillis > 0) {
+			long seconds = startMillis / 1000;
+			url += "?change_second=" + seconds;
+		}
+		return url;
+	}
+
+	private JsonNode callScheduleApi(String pageToken) {
+		return webClient.get()
+			.uri(uriBuilder -> {
+				uriBuilder
+					.scheme("https")
+					.host("esports-api.lolesports.com")
+					.path("/persisted/gw/getSchedule")
+					.queryParam("hl", "ko-KR")
+					.queryParam("leagueId", LCK_LEAGUE_ID);
+
+				// 토큰이 있을 때만 파라미터 추가
+				if (pageToken != null && !pageToken.isEmpty()) {
+					uriBuilder.queryParam("pageToken", pageToken);
+				}
+
+				return uriBuilder.build();
+			})
+			.header("x-api-key", RIOT_API_KEY)
+			.header("Referer", "https://lolesports.com/")
+			.retrieve()
+			.bodyToMono(JsonNode.class)
+			.block();
+	}
+
+	private JsonNode callApi(String path, String queryParam, String queryValue) {
+		try {
+			return webClient.get()
+				.uri(uri -> uri
+					.scheme("https")
+					.host("esports-api.lolesports.com")
+					.path(path)
+					.queryParam("hl", "ko-KR")
+					.queryParam(queryParam, queryValue)
+					.build())
+				.header("x-api-key", RIOT_API_KEY)
+				.header("Referer", "https://lolesports.com/")
+				.retrieve()
+				.bodyToMono(JsonNode.class)
+				.block();
+		} catch (Exception e) {
+			log.error("API Call Failed: {}", path, e);
+			return null;
+		}
+	}
+}
