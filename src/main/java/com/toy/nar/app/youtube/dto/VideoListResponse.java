@@ -9,6 +9,7 @@ public record VideoListResponse(
 	String title,
 	String videoUrl,
 	String thumbnailUrl,
+	String channelType,
 	LocalDateTime publishedAt,
 	// 채널 정보
 	Long channelId,
@@ -21,6 +22,7 @@ public record VideoListResponse(
 			video.getTitle(),
 			video.getVideoUrl(),
 			video.getThumbnailUrl(),
+			video.getChannel().getChannelType().name(),
 			video.getPublishedAt(),
 			video.getChannel().getId(),
 			video.getChannel().getChannelName(),
