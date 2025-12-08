@@ -83,6 +83,7 @@ jobs:
               -e DB_URL="${{ secrets.DB_URL }}" \
               -e GOOGLE_DRIVE_CSV_FILE_ID="${{ secrets.GOOGLE_DRIVE_CSV_FILE_ID }}" \
               -e YOUTUBE_API_KEY="${{ secrets.YOUTUBE_API_KEY }}" \
+              -e LOL_ESPORTS_KEY="${{ secrets.LOL_ESPORTS_KEY }}" \
               -v /home/ubuntu/lol_esports_analysis_test.db:/home/ubuntu/lol_esports_analysis_test.db \
               ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
             
