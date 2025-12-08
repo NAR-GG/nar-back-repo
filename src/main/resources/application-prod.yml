@@ -40,3 +40,7 @@ google:
 app:
   server:
     url: "https://api.nar.kr"
+
+lolesports:
+  riot-api:
+    key: ${LOL_ESPORTS_KEY}
