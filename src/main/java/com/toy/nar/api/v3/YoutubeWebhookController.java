@@ -8,9 +8,11 @@ import org.springframework.web.bind.annotation.*;
 import com.toy.nar.app.youtube.YoutubeSyncService;
 import com.toy.nar.app.youtube.dto.PubSubFeed;
 
+import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+@Hidden
 @Slf4j
 @RestController
 @RequestMapping("/api/youtube")
