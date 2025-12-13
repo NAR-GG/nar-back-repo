@@ -12,13 +12,16 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.toy.nar.app.youtube.dto.YoutubeCommentResponse;
 import com.toy.nar.app.youtube.dto.YoutubeSearchResponse;
 import com.toy.nar.app.youtube.dto.YoutubeVideoResponse;
 import com.toy.nar.common.util.YoutubeProperties;
 import com.toy.nar.domain.youtube.Channel;
 import com.toy.nar.domain.youtube.ChannelType;
+import com.toy.nar.domain.youtube.Comment;
 import com.toy.nar.domain.youtube.Video;
 import com.toy.nar.domain.youtube.repository.ChannelRepository;
+import com.toy.nar.domain.youtube.repository.CommentRepository;
 import com.toy.nar.domain.youtube.repository.VideoRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -32,6 +35,7 @@ public class YoutubeSyncService {
 	private final YoutubeService youtubeService;
 	private final ChannelRepository channelRepository;
 	private final VideoRepository videoRepository;
+	private final CommentRepository commentRepository;
 	private final YoutubeProperties youtubeProperties;
 
 	private static final ZoneId ZONE_KST = ZoneId.of("Asia/Seoul");
@@ -217,6 +221,54 @@ public class YoutubeSyncService {
 			videoRepository.save(video);
 
 			log.info("[PubSub] 실시간 신규 영상 저장 완료: {} - {}", channel.getChannelName(), video.getTitle());
+		}
+	}
+
+	@Transactional
+	public void syncRecentComments() {
+		LocalDateTime oneDayAgo = LocalDateTime.now(ZONE_KST).minusDays(1);
+		List<Video> recentVideos = videoRepository.findByPublishedAtAfter(oneDayAgo);
+
+		log.info("### 최근 24시간 영상 댓글 동기화 시작. 대상: {}개 ###", recentVideos.size());
+
+		for (Video video : recentVideos) {
+			try {
+				syncCommentsForVideo(video);
+			} catch (Exception e) {
+				log.error("댓글 동기화 실패: {} (ID: {})", video.getTitle(), video.getYoutubeVideoId(), e);
+			}
+		}
+	}
+
+	private void syncCommentsForVideo(Video video) {
+		YoutubeCommentResponse response = youtubeService.getVideoComments(video.getYoutubeVideoId());
+
+		if (response == null || response.items() == null) {
+			return;
+		}
+
+		List<Comment> commentsToSave = response.items().stream()
+			.map(item -> item.snippet().topLevelComment())
+			.filter(comment -> !commentRepository.existsByYoutubeCommentId(comment.id()))
+			.map(comment -> {
+				OffsetDateTime odt = OffsetDateTime.parse(comment.snippet().publishedAt());
+				LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
+
+				return Comment.builder()
+					.video(video)
+					.youtubeCommentId(comment.id())
+					.authorDisplayName(comment.snippet().authorDisplayName())
+					.authorProfileImageUrl(comment.snippet().authorProfileImageUrl())
+					.textDisplay(comment.snippet().textDisplay())
+					.likeCount(comment.snippet().likeCount())
+					.publishedAt(publishedAtKst)
+					.build();
+			})
+			.toList();
+
+		if (!commentsToSave.isEmpty()) {
+			commentRepository.saveAll(commentsToSave);
+			log.info("[댓글 Sync] {} - 신규 댓글 {}개 저장", video.getTitle(), commentsToSave.size());
 		}
 	}
 
