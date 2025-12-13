@@ -12,7 +12,9 @@ import com.toy.nar.app.youtube.dto.YoutubeVideoResponse;
 import com.toy.nar.common.util.YoutubeApiProperties;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class YoutubeService {
@@ -42,7 +44,6 @@ public class YoutubeService {
 					.queryParam("maxResults", maxResults)
 					.queryParam("key", properties.getKey());
 
-				// videoDuration이 있을 때만 파라미터 추가 (short, medium, long)
 				if (videoDuration != null) {
 					builder.queryParam("videoDuration", videoDuration);
 				}
@@ -115,7 +116,7 @@ public class YoutubeService {
 	}
 
 	public void subscribeToChannel(String channelId, String callbackUrl) {
-		WebClient client = WebClient.create("https://pubsubhubbub.appspot.com");
+		WebClient client = WebClient.create(properties.getPubSubHubbubUrl());
 
 		client.post()
 			.uri("/subscribe")
@@ -126,8 +127,8 @@ public class YoutubeService {
 			.retrieve()
 			.toBodilessEntity()
 			.subscribe(
-				response -> System.out.println("Subscribed to " + channelId),
-				error -> System.err.println("Failed to subscribe: " + error.getMessage())
+				response -> log.info("Subscribed to channel: {}", channelId),
+				error -> log.error("Failed to subscribe to channel: {}", channelId, error)
 			);
 	}
 
@@ -135,13 +136,13 @@ public class YoutubeService {
 		return youtubeWebClient.get()
 			.uri(uriBuilder -> uriBuilder
 				.path("/videos")
-				.queryParam("part", PART_SNIPPET) // snippet 정보 필요
+				.queryParam("part", PART_SNIPPET)
 				.queryParam("id", videoId)
 				.queryParam("key", properties.getKey())
 				.build()
 			)
 			.retrieve()
-			.bodyToMono(YoutubeVideoResponse.class) // [수정] 클래스 변경
+			.bodyToMono(YoutubeVideoResponse.class)
 			.block();
 	}
 }

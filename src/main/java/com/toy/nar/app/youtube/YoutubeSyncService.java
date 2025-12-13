@@ -35,6 +35,8 @@ public class YoutubeSyncService {
 	private final YoutubeProperties youtubeProperties;
 
 	private static final ZoneId ZONE_KST = ZoneId.of("Asia/Seoul");
+	private static final String YOUTUBE_WATCH_URL = "https://www.youtube.com/watch?v=";
+	private static final String YOUTUBE_SHORTS_URL = "https://www.youtube.com/shorts/";
 
 	/**
 	 * [관리자용 1단계] 채널 목록 초기화 (YML -> DB)
@@ -44,44 +46,45 @@ public class YoutubeSyncService {
 	public int initChannelsFromProperties() {
 		log.info("### [Admin] 채널 데이터 초기화(From YML) 시작 ###");
 
-		// 1. yml 데이터 준비 (Map<Type, List<ID>> -> Map<ID, Type>)
-		Map<String, ChannelType> idTypeMap = youtubeProperties.seedChannels().entrySet().stream()
-			.flatMap(entry -> entry.getValue().stream()
-				.map(id -> Map.entry(id, entry.getKey())))
-			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-		List<String> allTargetIds = new ArrayList<>(idTypeMap.keySet());
-
-		if (allTargetIds.isEmpty()) {
+		Map<String, ChannelType> idTypeMap = getChannelIdTypeMap();
+		if (idTypeMap.isEmpty()) {
 			log.warn("yml에 설정된 채널이 없습니다.");
 			return 0;
 		}
 
-		// 2. 이미 DB에 존재하는 채널 확인 (중복 방지)
-		Set<String> existingYoutubeIds = channelRepository.findByYoutubeChannelIdIn(allTargetIds).stream()
-			.map(Channel::getYoutubeChannelId)
-			.collect(Collectors.toSet());
-
-		// 3. 없는 ID 필터링 (신규 저장 대상)
-		List<String> newIds = allTargetIds.stream()
-			.filter(id -> !existingYoutubeIds.contains(id))
-			.toList();
-
+		List<String> newIds = filterNewChannels(idTypeMap.keySet());
 		if (newIds.isEmpty()) {
 			log.info("### 추가할 신규 채널이 없습니다. (모두 최신 상태) ###");
 			return 0;
 		}
 
 		log.info("### 신규 채널 {}개 발견. 유튜브 API 조회 중... ###", newIds.size());
+		return fetchAndSaveChannels(newIds, idTypeMap);
+	}
 
-		// 4. 유튜브 API 조회
+	private Map<String, ChannelType> getChannelIdTypeMap() {
+		return youtubeProperties.seedChannels().entrySet().stream()
+			.flatMap(entry -> entry.getValue().stream()
+				.map(id -> Map.entry(id, entry.getKey())))
+			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+	}
+
+	private List<String> filterNewChannels(Set<String> allTargetIds) {
+		Set<String> existingYoutubeIds = channelRepository.findByYoutubeChannelIdIn(new ArrayList<>(allTargetIds)).stream()
+			.map(Channel::getYoutubeChannelId)
+			.collect(Collectors.toSet());
+
+		return allTargetIds.stream()
+			.filter(id -> !existingYoutubeIds.contains(id))
+			.toList();
+	}
+
+	private int fetchAndSaveChannels(List<String> newIds, Map<String, ChannelType> idTypeMap) {
 		var channelDtos = youtubeService.getChannelInfos(newIds);
 
-		// 5. 엔티티 생성 및 저장
 		List<Channel> newChannels = channelDtos.stream()
 			.map(dto -> {
 				String profileUrl = youtubeService.extractBestThumbnailUrl(dto.snippet().thumbnails());
-
 				return Channel.builder()
 					.youtubeChannelId(dto.id())
 					.channelName(dto.snippet().title())
@@ -117,7 +120,6 @@ public class YoutubeSyncService {
 		log.info("### 비디오 Sync 시작. 기준 시간(KST): {} (대상 채널: {}개) ###", oneWeekAgo, channels.size());
 
 		int totalSaved = 0;
-
 		for (Channel channel : channels) {
 			try {
 				totalSaved += syncSingleChannelVideos(channel, oneWeekAgo);
@@ -130,12 +132,7 @@ public class YoutubeSyncService {
 	}
 
 	private int syncSingleChannelVideos(Channel channel, LocalDateTime defaultSince) {
-		// 1. DB에서 해당 채널의 가장 최신 영상 날짜를 가져옴
 		LocalDateTime lastSavedAt = videoRepository.findLatestPublishedAtByChannel(channel);
-
-		// 2. DB에 데이터가 없으면 기본값(일주일 전) 사용, 있으면 그 시간 이후 데이터만 타겟팅
-		// 중복 방지를 위해 마지막 저장 시간보다 1초 뒤부터 조회한다고 가정하거나,
-		// API 검색 결과에서 같은 시간대는 ID로 중복 체크
 		LocalDateTime searchAfter = (lastSavedAt != null) ? lastSavedAt : defaultSince;
 
 		String videoDurationParam = (channel.getChannelType() == ChannelType.SHORTS) ? "short" : null;
@@ -150,21 +147,22 @@ public class YoutubeSyncService {
 			return 0;
 		}
 
-		// 4. 필터링 및 변환
 		List<Video> videosToSave = searchResponse.items().stream()
 			.filter(item -> {
 				OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
 				LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
-
 				return publishedAtKst.isAfter(searchAfter);
 			})
-			// 혹시 모를 중복(시간이 겹칠 경우 등)을 위해 ID 체크는 안전장치로 유지하되,
-			// 위 날짜 필터로 인해 호출 횟수는 확연히 줄어듦
 			.filter(item -> !videoRepository.existsByYoutubeVideoId(item.id().videoId()))
-			.map(item -> convertToVideoEntity(item, channel))
+			.map(item -> buildVideoEntity(
+				item.id().videoId(),
+				item.snippet().title(),
+				item.snippet().thumbnails(),
+				item.snippet().publishedAt(),
+				channel
+			))
 			.toList();
 
-		// 5. 저장
 		if (!videosToSave.isEmpty()) {
 			videoRepository.saveAll(videosToSave);
 			log.info("[{}] 신규 영상 {}개 저장 (기준: {} 이후)",
@@ -177,26 +175,26 @@ public class YoutubeSyncService {
 
 	@Transactional
 	public void processNewVideoNotification(String videoId, String channelId) {
-		// 1. 이미 저장된 영상인지 확인
 		if (videoRepository.existsByYoutubeVideoId(videoId)) {
 			log.info("이미 존재하는 영상입니다. ID: {}", videoId);
 			return;
 		}
 
-		// 2. 채널 정보 조회
 		Channel channel = channelRepository.findByYoutubeChannelId(channelId)
 			.orElseThrow(() -> new IllegalArgumentException("관리되지 않는 채널입니다: " + channelId));
 
-		// 3. 유튜브 API로 영상 상세 정보(썸네일 등) 조회
-		// (XML 정보만으로 저장하면 썸네일/Duration 처리가 어렵기 때문에 API 1회 호출 권장)
 		YoutubeVideoResponse response = youtubeService.searchVideoById(videoId);
 
 		if (response != null && response.items() != null && !response.items().isEmpty()) {
-
-			// [수정] Item 타입 변경
 			YoutubeVideoResponse.VideoItem item = response.items().get(0);
 
-			Video video = convertVideoItemToEntity(item, channel);
+			Video video = buildVideoEntity(
+				item.id(),
+				item.snippet().title(),
+				item.snippet().thumbnails(),
+				item.snippet().publishedAt(),
+				channel
+			);
 			videoRepository.save(video);
 
 			log.info("[PubSub] 실시간 신규 영상 저장 완료: {} - {}", channel.getChannelName(), video.getTitle());
@@ -216,45 +214,15 @@ public class YoutubeSyncService {
 		}
 	}
 
-	private Video convertToVideoEntity(YoutubeSearchResponse.SearchItem item, Channel channel) {
-		String videoId = item.id().videoId();
-		String title = item.snippet().title();
-		String thumbnailUrl = youtubeService.extractBestThumbnailUrl(item.snippet().thumbnails());
+	private Video buildVideoEntity(String videoId, String title, Map<String, YoutubeSearchResponse.Thumbnail> thumbnails, String publishedAtStr, Channel channel) {
+		String thumbnailUrl = youtubeService.extractBestThumbnailUrl(thumbnails);
 
-		OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
+		OffsetDateTime odt = OffsetDateTime.parse(publishedAtStr);
 		LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
 
-		String videoUrl;
-		if (channel.getChannelType() == ChannelType.SHORTS) {
-			videoUrl = "https://www.youtube.com/shorts/" + videoId;
-		} else {
-			videoUrl = "https://www.youtube.com/watch?v=" + videoId;
-		}
-
-		return Video.builder()
-			.channel(channel)
-			.youtubeVideoId(videoId)
-			.title(title)
-			.thumbnailUrl(thumbnailUrl)
-			.videoUrl(videoUrl)
-			.publishedAt(publishedAtKst)
-			.build();
-	}
-
-	private Video convertVideoItemToEntity(YoutubeVideoResponse.VideoItem item, Channel channel) {
-		String videoId = item.id();
-		String title = item.snippet().title();
-		String thumbnailUrl = youtubeService.extractBestThumbnailUrl(item.snippet().thumbnails());
-
-		OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
-		LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDateTime();
-
-		String videoUrl;
-		if (channel.getChannelType() == ChannelType.SHORTS) {
-			videoUrl = "https://www.youtube.com/shorts/" + videoId;
-		} else {
-			videoUrl = "https://www.youtube.com/watch?v=" + videoId;
-		}
+		String videoUrl = (channel.getChannelType() == ChannelType.SHORTS)
+			? YOUTUBE_SHORTS_URL + videoId
+			: YOUTUBE_WATCH_URL + videoId;
 
 		return Video.builder()
 			.channel(channel)
