@@ -6,6 +6,7 @@ import com.toy.nar.domain.youtube.Video;
 
 public record VideoListResponse(
 	Long videoId,
+	String youtubeVideoId,
 	String title,
 	String videoUrl,
 	String thumbnailUrl,
@@ -22,6 +23,7 @@ public record VideoListResponse(
 	public static VideoListResponse from(Video video) {
 		return new VideoListResponse(
 			video.getId(),
+			video.getYoutubeVideoId(),
 			video.getTitle(),
 			video.getVideoUrl(),
 			video.getThumbnailUrl(),
