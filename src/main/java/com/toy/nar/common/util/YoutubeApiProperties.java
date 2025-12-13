@@ -11,4 +11,5 @@ import lombok.Setter;
 public class YoutubeApiProperties {
 	private String key;
 	private String baseUrl;
+	private String pubSubHubbubUrl = "https://pubsubhubbub.appspot.com";
 }
