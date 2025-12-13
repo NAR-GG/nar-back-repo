@@ -55,4 +55,15 @@ public class Video {
 	private Long likeCount;
 
 	private Long commentCount;
+
+	public void updateStatistics(Long viewCount, Long likeCount, Long commentCount) {
+		this.viewCount = viewCount;
+		this.likeCount = likeCount;
+		this.commentCount = commentCount;
+	}
+
+	public void updateInfo(String title, String thumbnailUrl) {
+		this.title = title;
+		this.thumbnailUrl = thumbnailUrl;
+	}
 }

@@ -78,9 +78,7 @@ class YoutubeSyncServiceTest {
 		SearchItem searchItem = new SearchItem(searchId, searchSnippet);
 		YoutubeSearchResponse searchResponse = new YoutubeSearchResponse(List.of(searchItem));
 
-		when(videoRepository.findLatestPublishedAtByChannel(channel)).thenReturn(null);
 		when(youtubeService.searchLatestVideos(eq("UC_test_channel"), anyLong(), any())).thenReturn(searchResponse);
-		when(videoRepository.existsByYoutubeVideoId("video123")).thenReturn(false);
 
 		// 2. Mock Details Response (with Statistics)
 		VideoStatistics statistics = new VideoStatistics("1000", "50", "10");
@@ -89,19 +87,59 @@ class YoutubeSyncServiceTest {
 
 		when(youtubeService.getVideoDetails(List.of("video123"))).thenReturn(videoResponse);
 		when(youtubeService.extractBestThumbnailUrl(any())).thenReturn("http://thumb.url");
+		when(videoRepository.findByYoutubeVideoId("video123")).thenReturn(Optional.empty()); // New video
 
 		// When
-		youtubeSyncService.syncLastWeekVideos(); // This iterates over all channels, so we need to mock findAll
-
-		// Wait, syncing calls findAll first.
 		when(channelRepository.findAll()).thenReturn(List.of(channel));
-
 		youtubeSyncService.syncLastWeekVideos();
 
 		// Then
 		verify(videoRepository).saveAll(anyList());
-		
-		// Verify details were fetched
 		verify(youtubeService).getVideoDetails(List.of("video123"));
+	}
+
+	@Test
+	@DisplayName("syncSingleChannelVideos는 이미 존재하는 영상의 통계 정보를 업데이트해야 한다")
+	void syncSingleChannelVideos_shouldUpdateExistingVideoStatistics() {
+		// Given
+		Channel channel = Channel.builder()
+			.youtubeChannelId("UC_test_channel")
+			.channelName("Test Channel")
+			.channelType(ChannelType.PRO_TEAMS)
+			.build();
+
+		SearchSnippet searchSnippet = new SearchSnippet(
+			OffsetDateTime.now().toString(),
+			"UC_test_channel",
+			"Test Video Title",
+			"Description",
+			Map.of("default", new Thumbnail("http://thumb.url", 120, 90))
+		);
+		SearchId searchId = new SearchId("youtube#video", "video123");
+		SearchItem searchItem = new SearchItem(searchId, searchSnippet);
+		YoutubeSearchResponse searchResponse = new YoutubeSearchResponse(List.of(searchItem));
+
+		when(youtubeService.searchLatestVideos(eq("UC_test_channel"), anyLong(), any())).thenReturn(searchResponse);
+
+		VideoStatistics statistics = new VideoStatistics("5000", "100", "20"); // Updated stats
+		VideoItem videoItem = new VideoItem("video123", searchSnippet, statistics);
+		YoutubeVideoResponse videoResponse = new YoutubeVideoResponse(List.of(videoItem));
+
+		when(youtubeService.getVideoDetails(List.of("video123"))).thenReturn(videoResponse);
+		when(youtubeService.extractBestThumbnailUrl(any())).thenReturn("http://thumb.url");
+
+		// Mock Existing Video
+		Video existingVideo = mock(Video.class);
+		when(videoRepository.findByYoutubeVideoId("video123")).thenReturn(Optional.of(existingVideo));
+
+		when(channelRepository.findAll()).thenReturn(List.of(channel));
+
+		// When
+		youtubeSyncService.syncLastWeekVideos();
+
+		// Then
+		// Verify updateStatistics was called with new values
+		verify(existingVideo).updateStatistics(5000L, 100L, 20L);
+		verify(videoRepository).saveAll(anyList());
 	}
 }

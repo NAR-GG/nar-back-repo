@@ -136,8 +136,9 @@ public class YoutubeSyncService {
 	}
 
 	private int syncSingleChannelVideos(Channel channel, LocalDateTime defaultSince) {
-		LocalDateTime lastSavedAt = videoRepository.findLatestPublishedAtByChannel(channel);
-		LocalDateTime searchAfter = (lastSavedAt != null) ? lastSavedAt : defaultSince;
+		// [수정] 통계(조회수, 좋아요 등) 업데이트를 위해
+		// DB 저장 여부와 상관없이 무조건 '기준 시간(defaultSince, 1주일 전)' 이후의 영상을 모두 조회합니다.
+		LocalDateTime searchAfter = defaultSince;
 
 		String videoDurationParam = (channel.getChannelType() == ChannelType.SHORTS) ? "short" : null;
 
@@ -151,44 +152,64 @@ public class YoutubeSyncService {
 			return 0;
 		}
 
-		// 1. 저장 대상 비디오 ID 필터링
-		List<String> videoIdsToSave = searchResponse.items().stream()
+		// 1. 대상 비디오 ID 추출 (날짜 필터링만 수행)
+		List<String> videoIdsToProcess = searchResponse.items().stream()
 			.filter(item -> {
 				OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
 				LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
+				// '검색 기준 시간' 이후 영상만 처리
 				return publishedAtKst.isAfter(searchAfter);
 			})
-			.filter(item -> !videoRepository.existsByYoutubeVideoId(item.id().videoId()))
 			.map(item -> item.id().videoId())
 			.toList();
 
-		if (videoIdsToSave.isEmpty()) {
+		if (videoIdsToProcess.isEmpty()) {
 			return 0;
 		}
 
-		// 2. 비디오 상세 정보(통계 포함) 조회
-		YoutubeVideoResponse videoDetailsResponse = youtubeService.getVideoDetails(videoIdsToSave);
+		// 2. 상세 정보 조회
+		YoutubeVideoResponse videoDetailsResponse = youtubeService.getVideoDetails(videoIdsToProcess);
 
 		if (videoDetailsResponse == null || videoDetailsResponse.items() == null) {
 			return 0;
 		}
 
-		// 3. 엔티티 변환 및 저장
-		List<Video> videosToSave = videoDetailsResponse.items().stream()
-			.map(item -> buildVideoEntity(
-				item.id(),
-				item.snippet().title(),
-				item.snippet().thumbnails(),
-				item.snippet().publishedAt(),
-				item.statistics(),
-				channel
-			))
-			.toList();
+		// 3. Upsert (생성 또는 수정)
+		List<Video> videosToSave = new ArrayList<>();
+
+		for (YoutubeVideoResponse.VideoItem item : videoDetailsResponse.items()) {
+			Video video = videoRepository.findByYoutubeVideoId(item.id())
+				.orElse(null);
+
+			if (video == null) {
+				// 신규 생성
+				video = buildVideoEntity(
+					item.id(),
+					item.snippet().title(),
+					item.snippet().thumbnails(),
+					item.snippet().publishedAt(),
+					item.statistics(),
+					channel
+				);
+			} else {
+				// 기존 정보 업데이트
+				String bestThumbnail = youtubeService.extractBestThumbnailUrl(item.snippet().thumbnails());
+				video.updateInfo(item.snippet().title(), bestThumbnail);
+
+				if (item.statistics() != null) {
+					video.updateStatistics(
+						parseCount(item.statistics().viewCount()),
+						parseCount(item.statistics().likeCount()),
+						parseCount(item.statistics().commentCount())
+					);
+				}
+			}
+			videosToSave.add(video);
+		}
 
 		if (!videosToSave.isEmpty()) {
 			videoRepository.saveAll(videosToSave);
-			log.info("[{}] 신규 영상 {}개 저장 (기준: {} 이후)",
-				channel.getChannelName(), videosToSave.size(), searchAfter);
+			log.info("[{}] 영상 {}개 동기화(추가/갱신) 완료", channel.getChannelName(), videosToSave.size());
 			return videosToSave.size();
 		}
 
@@ -269,6 +290,54 @@ public class YoutubeSyncService {
 		if (!commentsToSave.isEmpty()) {
 			commentRepository.saveAll(commentsToSave);
 			log.info("[댓글 Sync] {} - 신규 댓글 {}개 저장", video.getTitle(), commentsToSave.size());
+		}
+	}
+
+	/**
+	 * 특정 시점(publishedAfter) 이후에 게시된 비디오들의 통계(조회수, 좋아요 등)를 갱신합니다.
+	 * Search API를 사용하지 않고 DB에 있는 ID로 Videos API만 호출하므로 Quota 소모가 적습니다.
+	 */
+	@Transactional
+	public void syncVideoStatisticsByPublishedAfter(LocalDateTime publishedAfter) {
+		List<Video> targetVideos = videoRepository.findByPublishedAtAfter(publishedAfter);
+
+		if (targetVideos.isEmpty()) {
+			return;
+		}
+
+		log.info("### 영상 통계 갱신 시작 (기준: {} 이후, 대상: {}개) ###", publishedAfter, targetVideos.size());
+
+		// 50개씩 처리 (Youtube API 제한)
+		int batchSize = 50;
+		for (int i = 0; i < targetVideos.size(); i += batchSize) {
+			List<Video> batch = targetVideos.subList(i, Math.min(i + batchSize, targetVideos.size()));
+			updateBatchVideoStatistics(batch);
+		}
+	}
+
+	private void updateBatchVideoStatistics(List<Video> videos) {
+		List<String> videoIds = videos.stream()
+			.map(Video::getYoutubeVideoId)
+			.toList();
+
+		YoutubeVideoResponse response = youtubeService.getVideoDetails(videoIds);
+
+		if (response == null || response.items() == null) {
+			return;
+		}
+
+		Map<String, YoutubeVideoResponse.VideoItem> responseMap = response.items().stream()
+			.collect(Collectors.toMap(YoutubeVideoResponse.VideoItem::id, item -> item));
+
+		for (Video video : videos) {
+			YoutubeVideoResponse.VideoItem item = responseMap.get(video.getYoutubeVideoId());
+			if (item != null && item.statistics() != null) {
+				video.updateStatistics(
+					parseCount(item.statistics().viewCount()),
+					parseCount(item.statistics().likeCount()),
+					parseCount(item.statistics().commentCount())
+				);
+			}
 		}
 	}
 
