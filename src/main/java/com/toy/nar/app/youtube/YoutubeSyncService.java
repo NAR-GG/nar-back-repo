@@ -147,18 +147,36 @@ public class YoutubeSyncService {
 			return 0;
 		}
 
-		List<Video> videosToSave = searchResponse.items().stream()
+		// 1. 저장 대상 비디오 ID 필터링
+		List<String> videoIdsToSave = searchResponse.items().stream()
 			.filter(item -> {
 				OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
 				LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
 				return publishedAtKst.isAfter(searchAfter);
 			})
 			.filter(item -> !videoRepository.existsByYoutubeVideoId(item.id().videoId()))
+			.map(item -> item.id().videoId())
+			.toList();
+
+		if (videoIdsToSave.isEmpty()) {
+			return 0;
+		}
+
+		// 2. 비디오 상세 정보(통계 포함) 조회
+		YoutubeVideoResponse videoDetailsResponse = youtubeService.getVideoDetails(videoIdsToSave);
+
+		if (videoDetailsResponse == null || videoDetailsResponse.items() == null) {
+			return 0;
+		}
+
+		// 3. 엔티티 변환 및 저장
+		List<Video> videosToSave = videoDetailsResponse.items().stream()
 			.map(item -> buildVideoEntity(
-				item.id().videoId(),
+				item.id(),
 				item.snippet().title(),
 				item.snippet().thumbnails(),
 				item.snippet().publishedAt(),
+				item.statistics(),
 				channel
 			))
 			.toList();
@@ -193,6 +211,7 @@ public class YoutubeSyncService {
 				item.snippet().title(),
 				item.snippet().thumbnails(),
 				item.snippet().publishedAt(),
+				item.statistics(),
 				channel
 			);
 			videoRepository.save(video);
@@ -214,7 +233,8 @@ public class YoutubeSyncService {
 		}
 	}
 
-	private Video buildVideoEntity(String videoId, String title, Map<String, YoutubeSearchResponse.Thumbnail> thumbnails, String publishedAtStr, Channel channel) {
+	private Video buildVideoEntity(String videoId, String title, Map<String, YoutubeSearchResponse.Thumbnail> thumbnails,
+		String publishedAtStr, YoutubeVideoResponse.VideoStatistics statistics, Channel channel) {
 		String thumbnailUrl = youtubeService.extractBestThumbnailUrl(thumbnails);
 
 		OffsetDateTime odt = OffsetDateTime.parse(publishedAtStr);
@@ -223,14 +243,32 @@ public class YoutubeSyncService {
 		String videoUrl = (channel.getChannelType() == ChannelType.SHORTS)
 			? YOUTUBE_SHORTS_URL + videoId
 			: YOUTUBE_WATCH_URL + videoId;
-
-		return Video.builder()
+		
+		Video.VideoBuilder builder = Video.builder()
 			.channel(channel)
 			.youtubeVideoId(videoId)
 			.title(title)
 			.thumbnailUrl(thumbnailUrl)
 			.videoUrl(videoUrl)
-			.publishedAt(publishedAtKst)
-			.build();
+			.publishedAt(publishedAtKst);
+
+		if (statistics != null) {
+			builder.viewCount(parseCount(statistics.viewCount()))
+				.likeCount(parseCount(statistics.likeCount()))
+				.commentCount(parseCount(statistics.commentCount()));
+		}
+
+		return builder.build();
+	}
+
+	private Long parseCount(String count) {
+		if (count == null || count.isBlank()) {
+			return 0L;
+		}
+		try {
+			return Long.parseLong(count);
+		} catch (NumberFormatException e) {
+			return 0L;
+		}
 	}
 }

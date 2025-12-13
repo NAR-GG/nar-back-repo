@@ -1,0 +1,3 @@
+ALTER TABLE video ADD COLUMN view_count BIGINT;
+ALTER TABLE video ADD COLUMN like_count BIGINT;
+ALTER TABLE video ADD COLUMN comment_count BIGINT;

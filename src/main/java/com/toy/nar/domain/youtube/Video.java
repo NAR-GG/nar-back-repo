@@ -49,4 +49,10 @@ public class Video {
 	private String videoUrl;
 
 	private LocalDateTime publishedAt;
+
+	private Long viewCount;
+
+	private Long likeCount;
+
+	private Long commentCount;
 }
