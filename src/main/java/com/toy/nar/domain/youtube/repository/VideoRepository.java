@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import com.toy.nar.domain.youtube.Channel;
@@ -32,4 +33,6 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
 
 	@Query("SELECT MAX(v.publishedAt) FROM Video v WHERE v.channel = :channel")
 	LocalDateTime findLatestPublishedAtByChannel(@Param("channel") Channel channel);
+
+	List<Video> findByPublishedAtAfter(LocalDateTime publishedAt);
 }

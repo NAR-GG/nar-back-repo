@@ -21,6 +21,8 @@ public class YoutubeService {
 
 	private static final String PART_SNIPPET = "snippet";
 	private static final String PART_CHANNEL_INFO = "snippet,contentDetails";
+	private static final String PART_VIDEO_DETAILS = "snippet,statistics";
+	private static final String PART_COMMENT_SNIPPET = "snippet";
 	private static final String TYPE_VIDEO = "video";
 	private static final String ORDER_DATE = "date";
 
@@ -136,13 +138,49 @@ public class YoutubeService {
 		return youtubeWebClient.get()
 			.uri(uriBuilder -> uriBuilder
 				.path("/videos")
-				.queryParam("part", PART_SNIPPET)
+				.queryParam("part", PART_VIDEO_DETAILS)
 				.queryParam("id", videoId)
 				.queryParam("key", properties.getKey())
 				.build()
 			)
 			.retrieve()
 			.bodyToMono(YoutubeVideoResponse.class)
+			.block();
+	}
+
+	public YoutubeVideoResponse getVideoDetails(List<String> videoIds) {
+		if (videoIds == null || videoIds.isEmpty()) {
+			return null;
+		}
+
+		String idParam = String.join(",", videoIds);
+
+		return youtubeWebClient.get()
+			.uri(uriBuilder -> uriBuilder
+				.path("/videos")
+				.queryParam("part", PART_VIDEO_DETAILS)
+				.queryParam("id", idParam)
+				.queryParam("key", properties.getKey())
+				.build()
+			)
+			.retrieve()
+			.bodyToMono(YoutubeVideoResponse.class)
+			.block();
+	}
+
+	public com.toy.nar.app.youtube.dto.YoutubeCommentResponse getVideoComments(String videoId) {
+		return youtubeWebClient.get()
+			.uri(uriBuilder -> uriBuilder
+				.path("/commentThreads")
+				.queryParam("part", PART_COMMENT_SNIPPET)
+				.queryParam("videoId", videoId)
+				.queryParam("maxResults", 50)
+				.queryParam("order", "time")
+				.queryParam("key", properties.getKey())
+				.build()
+			)
+			.retrieve()
+			.bodyToMono(com.toy.nar.app.youtube.dto.YoutubeCommentResponse.class)
 			.block();
 	}
 }

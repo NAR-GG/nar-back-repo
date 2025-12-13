@@ -12,13 +12,16 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.toy.nar.app.youtube.dto.YoutubeCommentResponse;
 import com.toy.nar.app.youtube.dto.YoutubeSearchResponse;
 import com.toy.nar.app.youtube.dto.YoutubeVideoResponse;
 import com.toy.nar.common.util.YoutubeProperties;
 import com.toy.nar.domain.youtube.Channel;
 import com.toy.nar.domain.youtube.ChannelType;
+import com.toy.nar.domain.youtube.Comment;
 import com.toy.nar.domain.youtube.Video;
 import com.toy.nar.domain.youtube.repository.ChannelRepository;
+import com.toy.nar.domain.youtube.repository.CommentRepository;
 import com.toy.nar.domain.youtube.repository.VideoRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -32,6 +35,7 @@ public class YoutubeSyncService {
 	private final YoutubeService youtubeService;
 	private final ChannelRepository channelRepository;
 	private final VideoRepository videoRepository;
+	private final CommentRepository commentRepository;
 	private final YoutubeProperties youtubeProperties;
 
 	private static final ZoneId ZONE_KST = ZoneId.of("Asia/Seoul");
@@ -132,8 +136,9 @@ public class YoutubeSyncService {
 	}
 
 	private int syncSingleChannelVideos(Channel channel, LocalDateTime defaultSince) {
-		LocalDateTime lastSavedAt = videoRepository.findLatestPublishedAtByChannel(channel);
-		LocalDateTime searchAfter = (lastSavedAt != null) ? lastSavedAt : defaultSince;
+		// [수정] 통계(조회수, 좋아요 등) 업데이트를 위해
+		// DB 저장 여부와 상관없이 무조건 '기준 시간(defaultSince, 1주일 전)' 이후의 영상을 모두 조회합니다.
+		LocalDateTime searchAfter = defaultSince;
 
 		String videoDurationParam = (channel.getChannelType() == ChannelType.SHORTS) ? "short" : null;
 
@@ -147,26 +152,64 @@ public class YoutubeSyncService {
 			return 0;
 		}
 
-		List<Video> videosToSave = searchResponse.items().stream()
+		// 1. 대상 비디오 ID 추출 (날짜 필터링만 수행)
+		List<String> videoIdsToProcess = searchResponse.items().stream()
 			.filter(item -> {
 				OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
 				LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
+				// '검색 기준 시간' 이후 영상만 처리
 				return publishedAtKst.isAfter(searchAfter);
 			})
-			.filter(item -> !videoRepository.existsByYoutubeVideoId(item.id().videoId()))
-			.map(item -> buildVideoEntity(
-				item.id().videoId(),
-				item.snippet().title(),
-				item.snippet().thumbnails(),
-				item.snippet().publishedAt(),
-				channel
-			))
+			.map(item -> item.id().videoId())
 			.toList();
+
+		if (videoIdsToProcess.isEmpty()) {
+			return 0;
+		}
+
+		// 2. 상세 정보 조회
+		YoutubeVideoResponse videoDetailsResponse = youtubeService.getVideoDetails(videoIdsToProcess);
+
+		if (videoDetailsResponse == null || videoDetailsResponse.items() == null) {
+			return 0;
+		}
+
+		// 3. Upsert (생성 또는 수정)
+		List<Video> videosToSave = new ArrayList<>();
+
+		for (YoutubeVideoResponse.VideoItem item : videoDetailsResponse.items()) {
+			Video video = videoRepository.findByYoutubeVideoId(item.id())
+				.orElse(null);
+
+			if (video == null) {
+				// 신규 생성
+				video = buildVideoEntity(
+					item.id(),
+					item.snippet().title(),
+					item.snippet().thumbnails(),
+					item.snippet().publishedAt(),
+					item.statistics(),
+					channel
+				);
+			} else {
+				// 기존 정보 업데이트
+				String bestThumbnail = youtubeService.extractBestThumbnailUrl(item.snippet().thumbnails());
+				video.updateInfo(item.snippet().title(), bestThumbnail);
+
+				if (item.statistics() != null) {
+					video.updateStatistics(
+						parseCount(item.statistics().viewCount()),
+						parseCount(item.statistics().likeCount()),
+						parseCount(item.statistics().commentCount())
+					);
+				}
+			}
+			videosToSave.add(video);
+		}
 
 		if (!videosToSave.isEmpty()) {
 			videoRepository.saveAll(videosToSave);
-			log.info("[{}] 신규 영상 {}개 저장 (기준: {} 이후)",
-				channel.getChannelName(), videosToSave.size(), searchAfter);
+			log.info("[{}] 영상 {}개 동기화(추가/갱신) 완료", channel.getChannelName(), videosToSave.size());
 			return videosToSave.size();
 		}
 
@@ -193,11 +236,108 @@ public class YoutubeSyncService {
 				item.snippet().title(),
 				item.snippet().thumbnails(),
 				item.snippet().publishedAt(),
+				item.statistics(),
 				channel
 			);
 			videoRepository.save(video);
 
 			log.info("[PubSub] 실시간 신규 영상 저장 완료: {} - {}", channel.getChannelName(), video.getTitle());
+		}
+	}
+
+	@Transactional
+	public void syncRecentComments() {
+		LocalDateTime oneDayAgo = LocalDateTime.now(ZONE_KST).minusDays(1);
+		List<Video> recentVideos = videoRepository.findByPublishedAtAfter(oneDayAgo);
+
+		log.info("### 최근 24시간 영상 댓글 동기화 시작. 대상: {}개 ###", recentVideos.size());
+
+		for (Video video : recentVideos) {
+			try {
+				syncCommentsForVideo(video);
+			} catch (Exception e) {
+				log.error("댓글 동기화 실패: {} (ID: {})", video.getTitle(), video.getYoutubeVideoId(), e);
+			}
+		}
+	}
+
+	private void syncCommentsForVideo(Video video) {
+		YoutubeCommentResponse response = youtubeService.getVideoComments(video.getYoutubeVideoId());
+
+		if (response == null || response.items() == null) {
+			return;
+		}
+
+		List<Comment> commentsToSave = response.items().stream()
+			.map(item -> item.snippet().topLevelComment())
+			.filter(comment -> !commentRepository.existsByYoutubeCommentId(comment.id()))
+			.map(comment -> {
+				OffsetDateTime odt = OffsetDateTime.parse(comment.snippet().publishedAt());
+				LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
+
+				return Comment.builder()
+					.video(video)
+					.youtubeCommentId(comment.id())
+					.authorDisplayName(comment.snippet().authorDisplayName())
+					.authorProfileImageUrl(comment.snippet().authorProfileImageUrl())
+					.textDisplay(comment.snippet().textDisplay())
+					.likeCount(comment.snippet().likeCount())
+					.publishedAt(publishedAtKst)
+					.build();
+			})
+			.toList();
+
+		if (!commentsToSave.isEmpty()) {
+			commentRepository.saveAll(commentsToSave);
+			log.info("[댓글 Sync] {} - 신규 댓글 {}개 저장", video.getTitle(), commentsToSave.size());
+		}
+	}
+
+	/**
+	 * 특정 시점(publishedAfter) 이후에 게시된 비디오들의 통계(조회수, 좋아요 등)를 갱신합니다.
+	 * Search API를 사용하지 않고 DB에 있는 ID로 Videos API만 호출하므로 Quota 소모가 적습니다.
+	 */
+	@Transactional
+	public void syncVideoStatisticsByPublishedAfter(LocalDateTime publishedAfter) {
+		List<Video> targetVideos = videoRepository.findByPublishedAtAfter(publishedAfter);
+
+		if (targetVideos.isEmpty()) {
+			return;
+		}
+
+		log.info("### 영상 통계 갱신 시작 (기준: {} 이후, 대상: {}개) ###", publishedAfter, targetVideos.size());
+
+		// 50개씩 처리 (Youtube API 제한)
+		int batchSize = 50;
+		for (int i = 0; i < targetVideos.size(); i += batchSize) {
+			List<Video> batch = targetVideos.subList(i, Math.min(i + batchSize, targetVideos.size()));
+			updateBatchVideoStatistics(batch);
+		}
+	}
+
+	private void updateBatchVideoStatistics(List<Video> videos) {
+		List<String> videoIds = videos.stream()
+			.map(Video::getYoutubeVideoId)
+			.toList();
+
+		YoutubeVideoResponse response = youtubeService.getVideoDetails(videoIds);
+
+		if (response == null || response.items() == null) {
+			return;
+		}
+
+		Map<String, YoutubeVideoResponse.VideoItem> responseMap = response.items().stream()
+			.collect(Collectors.toMap(YoutubeVideoResponse.VideoItem::id, item -> item));
+
+		for (Video video : videos) {
+			YoutubeVideoResponse.VideoItem item = responseMap.get(video.getYoutubeVideoId());
+			if (item != null && item.statistics() != null) {
+				video.updateStatistics(
+					parseCount(item.statistics().viewCount()),
+					parseCount(item.statistics().likeCount()),
+					parseCount(item.statistics().commentCount())
+				);
+			}
 		}
 	}
 
@@ -214,7 +354,8 @@ public class YoutubeSyncService {
 		}
 	}
 
-	private Video buildVideoEntity(String videoId, String title, Map<String, YoutubeSearchResponse.Thumbnail> thumbnails, String publishedAtStr, Channel channel) {
+	private Video buildVideoEntity(String videoId, String title, Map<String, YoutubeSearchResponse.Thumbnail> thumbnails,
+		String publishedAtStr, YoutubeVideoResponse.VideoStatistics statistics, Channel channel) {
 		String thumbnailUrl = youtubeService.extractBestThumbnailUrl(thumbnails);
 
 		OffsetDateTime odt = OffsetDateTime.parse(publishedAtStr);
@@ -223,14 +364,32 @@ public class YoutubeSyncService {
 		String videoUrl = (channel.getChannelType() == ChannelType.SHORTS)
 			? YOUTUBE_SHORTS_URL + videoId
 			: YOUTUBE_WATCH_URL + videoId;
-
-		return Video.builder()
+		
+		Video.VideoBuilder builder = Video.builder()
 			.channel(channel)
 			.youtubeVideoId(videoId)
 			.title(title)
 			.thumbnailUrl(thumbnailUrl)
 			.videoUrl(videoUrl)
-			.publishedAt(publishedAtKst)
-			.build();
+			.publishedAt(publishedAtKst);
+
+		if (statistics != null) {
+			builder.viewCount(parseCount(statistics.viewCount()))
+				.likeCount(parseCount(statistics.likeCount()))
+				.commentCount(parseCount(statistics.commentCount()));
+		}
+
+		return builder.build();
+	}
+
+	private Long parseCount(String count) {
+		if (count == null || count.isBlank()) {
+			return 0L;
+		}
+		try {
+			return Long.parseLong(count);
+		} catch (NumberFormatException e) {
+			return 0L;
+		}
 	}
 }

@@ -4,66 +4,56 @@ import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 @Entity
-@Table(name = "video")
+@Table(name = "comment")
 @Getter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @ToString
-public class Video {
+public class Comment {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@Column(name = "video_id")
+	@Column(name = "comment_id")
 	private Long id;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "channel_id")
-	private Channel channel;
+	@JoinColumn(name = "video_id", nullable = false)
+	@ToString.Exclude
+	private Video video;
 
-	@Column(name = "youtube_video_id", nullable = false, unique = true)
-	private String youtubeVideoId;
+	@Column(name = "youtube_comment_id", nullable = false, unique = true)
+	private String youtubeCommentId;
 
-	private String title;
+	@Column(name = "author_display_name")
+	private String authorDisplayName;
 
-	private String thumbnailUrl;
+	@Column(name = "author_profile_image_url")
+	private String authorProfileImageUrl;
 
-	private String videoUrl;
+	@Lob
+	@Column(name = "text_display", columnDefinition = "TEXT")
+	private String textDisplay;
 
-	private LocalDateTime publishedAt;
-
-	private Long viewCount;
-
+	@Column(name = "like_count")
 	private Long likeCount;
 
-	private Long commentCount;
-
-	public void updateStatistics(Long viewCount, Long likeCount, Long commentCount) {
-		this.viewCount = viewCount;
-		this.likeCount = likeCount;
-		this.commentCount = commentCount;
-	}
-
-	public void updateInfo(String title, String thumbnailUrl) {
-		this.title = title;
-		this.thumbnailUrl = thumbnailUrl;
-	}
+	@Column(name = "published_at")
+	private LocalDateTime publishedAt;
 }

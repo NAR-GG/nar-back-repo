@@ -12,8 +12,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.web.bind.annotation.PathVariable;
+
+import com.toy.nar.app.youtube.CommentService;
 import com.toy.nar.app.youtube.VideoService;
 import com.toy.nar.app.youtube.YoutubeSyncService;
+import com.toy.nar.app.youtube.dto.CommentResponse;
 import com.toy.nar.app.youtube.dto.VideoListResponse;
 
 import io.swagger.v3.oas.annotations.Hidden;
@@ -29,6 +33,7 @@ public class YoutubeController {
 
 	private final YoutubeSyncService youtubeSyncService;
 	private final VideoService videoService;
+	private final CommentService commentService;
 
 	@Operation(summary = "최신 영상 목록 조회", description = "전체, 프로팀, 쇼츠 카테고리별로 최신순 영상을 페이징 조회합니다.")
 	@GetMapping("/api/story/videos")
@@ -40,6 +45,17 @@ public class YoutubeController {
 		@PageableDefault(size = 20) Pageable pageable
 	) {
 		return ResponseEntity.ok(videoService.getVideosByCategory(category, pageable));
+	}
+
+	@Operation(summary = "영상 댓글 조회", description = "특정 영상의 댓글을 최신순 또는 인기순으로 조회합니다.")
+	@GetMapping("/api/story/videos/{videoId}/comments")
+	public ResponseEntity<Page<CommentResponse>> getVideoComments(
+		@Parameter(description = "유튜브 비디오 ID") @PathVariable String videoId,
+		@Parameter(description = "정렬 기준 (recent: 최신순, popular: 인기순)", example = "recent")
+		@RequestParam(defaultValue = "recent") String sort,
+		@Parameter(description = "페이징 정보 (기본 20개)") @PageableDefault(size = 20) Pageable pageable
+	) {
+		return ResponseEntity.ok(commentService.getComments(videoId, sort, pageable));
 	}
 
 	@Hidden
@@ -55,6 +71,14 @@ public class YoutubeController {
 	public ResponseEntity<String> syncLatestVideos() {
 		youtubeSyncService.initChannelsFromProperties();
 		return ResponseEntity.ok("Video synchronization completed for last week.");
+	}
+
+	@Hidden
+	@Operation(summary = "[관리자용] 댓글 동기화 (최근 24시간 영상)", description = "최근 24시간 내 업로드된 영상들의 댓글을 수집합니다.")
+	@PostMapping("/api/youtube/comments/sync")
+	public ResponseEntity<String> syncRecentComments() {
+		youtubeSyncService.syncRecentComments();
+		return ResponseEntity.ok("Recent comments synchronization started.");
 	}
 }
 
