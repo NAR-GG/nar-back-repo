@@ -15,12 +15,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 
-import com.toy.nar.common.config.QueryCountConfig;
 import com.toy.nar.domain.youtube.Channel;
 import com.toy.nar.domain.youtube.ChannelType;
 import com.toy.nar.domain.youtube.Video;
