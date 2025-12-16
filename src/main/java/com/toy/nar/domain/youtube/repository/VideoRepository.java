@@ -2,11 +2,13 @@ package com.toy.nar.domain.youtube.repository;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -31,6 +33,11 @@ public interface VideoRepository extends JpaRepository<Video, Long>, JpaSpecific
 	// 2. 카테고리(ChannelType)별 조회
 	@EntityGraph(attributePaths = "channel")
 	Page<Video> findByChannel_ChannelType(ChannelType channelType, Pageable pageable);
+
+	// 3. Specification(동적 쿼리) 조회 시에도 Channel 패치 조인 적용
+	@Override
+	@EntityGraph(attributePaths = "channel")
+	Page<Video> findAll(@Nullable Specification<Video> spec, Pageable pageable);
 
 	@Query("SELECT MAX(v.publishedAt) FROM Video v WHERE v.channel = :channel")
 	LocalDateTime findLatestPublishedAtByChannel(@Param("channel") Channel channel);

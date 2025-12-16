@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
@@ -51,16 +52,11 @@ public class YoutubeController {
 		@RequestParam(defaultValue = "0") int page,
 
 		@Parameter(description = "페이지 크기", example = "20")
-		@RequestParam(defaultValue = "20") int size,
-
-		@Parameter(hidden = true) Pageable pageable
+		@RequestParam(defaultValue = "20") int size
 	) {
-		// Swagger에서 Pageable의 sort 파라미터가 노출되어 혼동을 주는 것을 방지하기 위해
-		// page, size만 명시적으로 받고 Pageable은 내부적으로 생성하거나 hidden 처리된 파라미터로 받습니다.
-		// Service 메서드는 Pageable을 그대로 받으므로, 여기서 새로 만들어줍니다.
-		Pageable newPageable = org.springframework.data.domain.PageRequest.of(page, size);
+		Pageable pageable = PageRequest.of(page, size);
 		
-		return ResponseEntity.ok(videoService.getVideos(category, sort, period, newPageable));
+		return ResponseEntity.ok(videoService.getVideos(category, sort, period, pageable));
 	}
 
 	@Operation(summary = "영상 댓글 조회", description = "특정 영상의 댓글을 최신순 또는 인기순으로 조회합니다.")
