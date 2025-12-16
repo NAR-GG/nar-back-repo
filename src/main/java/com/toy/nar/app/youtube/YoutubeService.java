@@ -34,7 +34,7 @@ public class YoutubeService {
 	 * 채널의 최신 영상 검색
 	 * @param videoDuration "short"이면 쇼츠, null이면 모든 길이의 영상(일반 영상 포함)
 	 */
-	public YoutubeSearchResponse searchLatestVideos(String channelId, long maxResults, String videoDuration) {
+	public YoutubeSearchResponse searchLatestVideos(String channelId, long maxResults, String videoDuration, String pageToken) {
 		return youtubeWebClient.get()
 			.uri(uriBuilder -> {
 				var builder = uriBuilder
@@ -48,6 +48,10 @@ public class YoutubeService {
 
 				if (videoDuration != null) {
 					builder.queryParam("videoDuration", videoDuration);
+				}
+				
+				if (pageToken != null && !pageToken.isBlank()) {
+					builder.queryParam("pageToken", pageToken);
 				}
 
 				return builder.build();

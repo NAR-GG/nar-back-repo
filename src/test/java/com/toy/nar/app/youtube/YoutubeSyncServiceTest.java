@@ -76,9 +76,9 @@ class YoutubeSyncServiceTest {
 		);
 		SearchId searchId = new SearchId("youtube#video", "video123");
 		SearchItem searchItem = new SearchItem(searchId, searchSnippet);
-		YoutubeSearchResponse searchResponse = new YoutubeSearchResponse(List.of(searchItem));
+		YoutubeSearchResponse searchResponse = new YoutubeSearchResponse(null, null, null, List.of(searchItem));
 
-		when(youtubeService.searchLatestVideos(eq("UC_test_channel"), anyLong(), any())).thenReturn(searchResponse);
+		when(youtubeService.searchLatestVideos(eq("UC_test_channel"), anyLong(), any(), any())).thenReturn(searchResponse);
 
 		// 2. Mock Details Response (with Statistics)
 		VideoStatistics statistics = new VideoStatistics("1000", "50", "10");
@@ -117,9 +117,9 @@ class YoutubeSyncServiceTest {
 		);
 		SearchId searchId = new SearchId("youtube#video", "video123");
 		SearchItem searchItem = new SearchItem(searchId, searchSnippet);
-		YoutubeSearchResponse searchResponse = new YoutubeSearchResponse(List.of(searchItem));
+		YoutubeSearchResponse searchResponse = new YoutubeSearchResponse(null, null, null, List.of(searchItem));
 
-		when(youtubeService.searchLatestVideos(eq("UC_test_channel"), anyLong(), any())).thenReturn(searchResponse);
+		when(youtubeService.searchLatestVideos(eq("UC_test_channel"), anyLong(), any(), any())).thenReturn(searchResponse);
 
 		VideoStatistics statistics = new VideoStatistics("5000", "100", "20"); // Updated stats
 		VideoItem videoItem = new VideoItem("video123", searchSnippet, statistics);
