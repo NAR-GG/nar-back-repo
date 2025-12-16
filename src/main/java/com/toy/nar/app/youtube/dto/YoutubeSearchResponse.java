@@ -4,8 +4,13 @@ import java.util.List;
 import java.util.Map;
 
 public record YoutubeSearchResponse(
+	String nextPageToken,
+	String prevPageToken,
+	PageInfo pageInfo,
 	List<SearchItem> items
 ) {
+	public record PageInfo(Integer totalResults, Integer resultsPerPage) {}
+
 	public record SearchItem(SearchId id, SearchSnippet snippet) {}
 
 	public record SearchId(String kind, String videoId) {}

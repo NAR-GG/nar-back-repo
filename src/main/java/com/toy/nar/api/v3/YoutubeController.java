@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
@@ -35,16 +36,27 @@ public class YoutubeController {
 	private final VideoService videoService;
 	private final CommentService commentService;
 
-	@Operation(summary = "최신 영상 목록 조회", description = "전체, 프로팀, 쇼츠 카테고리별로 최신순 영상을 페이징 조회합니다.")
+	@Operation(summary = "최신 영상 목록 조회", description = "카테고리, 정렬, 기간별로 영상을 조회합니다.")
 	@GetMapping("/api/story/videos")
 	public ResponseEntity<Page<VideoListResponse>> getVideos(
 		@Parameter(description = "카테고리 (all: 전체, pro: 프로팀, shorts: 쇼츠 채널)", example = "all")
 		@RequestParam(defaultValue = "all") String category,
 
-		@Parameter(description = "페이징 정보 (기본 20개)")
-		@PageableDefault(size = 20) Pageable pageable
+		@Parameter(description = "정렬 기준 (latest: 최신순, views: 조회수순, likes: 좋아요순)", example = "latest")
+		@RequestParam(defaultValue = "latest") String sort,
+
+		@Parameter(description = "기간 필터 (all: 전체, week: 최근 1주, month: 최근 1달)", example = "all")
+		@RequestParam(defaultValue = "all") String period,
+
+		@Parameter(description = "페이지 번호 (0부터 시작)", example = "0")
+		@RequestParam(defaultValue = "0") int page,
+
+		@Parameter(description = "페이지 크기", example = "20")
+		@RequestParam(defaultValue = "20") int size
 	) {
-		return ResponseEntity.ok(videoService.getVideosByCategory(category, pageable));
+		Pageable pageable = PageRequest.of(page, size);
+		
+		return ResponseEntity.ok(videoService.getVideos(category, sort, period, pageable));
 	}
 
 	@Operation(summary = "영상 댓글 조회", description = "특정 영상의 댓글을 최신순 또는 인기순으로 조회합니다.")
@@ -71,6 +83,14 @@ public class YoutubeController {
 	public ResponseEntity<String> syncLatestVideos() {
 		youtubeSyncService.initChannelsFromProperties();
 		return ResponseEntity.ok("Video synchronization completed for last week.");
+	}
+
+	@Hidden
+	@Operation(summary = "[관리자용] 최근 1달 영상 동기화", description = "최근 30일간의 영상 데이터를 수집합니다 (초기 세팅용).")
+	@PostMapping("/api/youtube/sync/month")
+	public ResponseEntity<String> syncLatestMonthVideos() {
+		youtubeSyncService.syncLastMonthVideos();
+		return ResponseEntity.ok("Video synchronization completed for last month (30 days).");
 	}
 
 	@Hidden

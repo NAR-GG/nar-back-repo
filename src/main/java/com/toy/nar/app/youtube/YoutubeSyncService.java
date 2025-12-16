@@ -113,6 +113,19 @@ public class YoutubeSyncService {
 	 */
 	@Transactional
 	public void syncLastWeekVideos() {
+		syncVideosByPeriod(7);
+	}
+
+	/**
+	 * [관리자용 옵션] 최근 1달 영상 데이터 적재
+	 * 초기 세팅 시 사용 권장
+	 */
+	@Transactional
+	public void syncLastMonthVideos() {
+		syncVideosByPeriod(30);
+	}
+
+	private void syncVideosByPeriod(int daysAgo) {
 		List<Channel> channels = channelRepository.findAll();
 
 		if (channels.isEmpty()) {
@@ -120,13 +133,13 @@ public class YoutubeSyncService {
 			return;
 		}
 
-		LocalDateTime oneWeekAgo = LocalDateTime.now(ZONE_KST).minusDays(7);
-		log.info("### 비디오 Sync 시작. 기준 시간(KST): {} (대상 채널: {}개) ###", oneWeekAgo, channels.size());
+		LocalDateTime searchAfter = LocalDateTime.now(ZONE_KST).minusDays(daysAgo);
+		log.info("### 비디오 Sync 시작. 기준: 최근 {}일 ({} 이후), 대상 채널: {}개 ###", daysAgo, searchAfter, channels.size());
 
 		int totalSaved = 0;
 		for (Channel channel : channels) {
 			try {
-				totalSaved += syncSingleChannelVideos(channel, oneWeekAgo);
+				totalSaved += syncSingleChannelVideos(channel, searchAfter);
 			} catch (Exception e) {
 				log.error("채널 비디오 동기화 실패: {} ({})", channel.getChannelName(), channel.getYoutubeChannelId(), e);
 			}
@@ -135,46 +148,75 @@ public class YoutubeSyncService {
 		log.info("### 비디오 전체 동기화 완료. 총 {}개의 신규 영상 저장됨 ###", totalSaved);
 	}
 
-	private int syncSingleChannelVideos(Channel channel, LocalDateTime defaultSince) {
+	private int syncSingleChannelVideos(Channel channel, LocalDateTime searchAfter) {
 		// [수정] 통계(조회수, 좋아요 등) 업데이트를 위해
-		// DB 저장 여부와 상관없이 무조건 '기준 시간(defaultSince, 1주일 전)' 이후의 영상을 모두 조회합니다.
-		LocalDateTime searchAfter = defaultSince;
-
+		// DB 저장 여부와 상관없이 무조건 '기준 시간(searchAfter)' 이후의 영상을 모두 조회합니다.
+		
 		String videoDurationParam = (channel.getChannelType() == ChannelType.SHORTS) ? "short" : null;
+		String nextPageToken = null;
+		int totalProcessed = 0;
 
-		YoutubeSearchResponse searchResponse = youtubeService.searchLatestVideos(
-			channel.getYoutubeChannelId(),
-			50,
-			videoDurationParam
-		);
+		do {
+			YoutubeSearchResponse searchResponse = youtubeService.searchLatestVideos(
+				channel.getYoutubeChannelId(),
+				50,
+				videoDurationParam,
+				nextPageToken
+			);
 
-		if (searchResponse == null || searchResponse.items() == null) {
-			return 0;
-		}
+			if (searchResponse == null || searchResponse.items() == null || searchResponse.items().isEmpty()) {
+				break;
+			}
 
-		// 1. 대상 비디오 ID 추출 (날짜 필터링만 수행)
-		List<String> videoIdsToProcess = searchResponse.items().stream()
-			.filter(item -> {
+			// 1. 대상 비디오 ID 추출 (날짜 필터링만 수행)
+			List<String> videoIdsToProcess = new ArrayList<>();
+			boolean stopFetching = false;
+
+			for (var item : searchResponse.items()) {
 				OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
 				LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
-				// '검색 기준 시간' 이후 영상만 처리
-				return publishedAtKst.isAfter(searchAfter);
-			})
-			.map(item -> item.id().videoId())
-			.toList();
 
-		if (videoIdsToProcess.isEmpty()) {
-			return 0;
+				if (publishedAtKst.isAfter(searchAfter)) {
+					videoIdsToProcess.add(item.id().videoId());
+				} else {
+					// 검색된 영상이 기준 시간 이전이라면 더 이상 과거 영상을 조회할 필요 없음
+					// (Youtube Search API가 최신순 정렬(order=date)이라고 가정)
+					stopFetching = true;
+				}
+			}
+
+			if (videoIdsToProcess.isEmpty()) {
+				if (stopFetching) break; // 이번 페이지에 대상이 없고, 날짜도 지났으면 종료
+				// 이번 페이지에 대상은 없지만, 아직 날짜가 안 지났으면 다음 페이지 조회 (드문 케이스)
+				nextPageToken = searchResponse.nextPageToken();
+				continue;
+			}
+
+			// 2. 상세 정보 조회 및 저장
+			totalProcessed += fetchDetailsAndSave(videoIdsToProcess, channel);
+
+			if (stopFetching) {
+				break;
+			}
+
+			nextPageToken = searchResponse.nextPageToken();
+
+		} while (nextPageToken != null && !nextPageToken.isBlank());
+
+		if (totalProcessed > 0) {
+			log.info("[{}] 영상 {}개 동기화(추가/갱신) 완료", channel.getChannelName(), totalProcessed);
 		}
 
-		// 2. 상세 정보 조회
-		YoutubeVideoResponse videoDetailsResponse = youtubeService.getVideoDetails(videoIdsToProcess);
+		return totalProcessed;
+	}
+
+	private int fetchDetailsAndSave(List<String> videoIds, Channel channel) {
+		YoutubeVideoResponse videoDetailsResponse = youtubeService.getVideoDetails(videoIds);
 
 		if (videoDetailsResponse == null || videoDetailsResponse.items() == null) {
 			return 0;
 		}
 
-		// 3. Upsert (생성 또는 수정)
 		List<Video> videosToSave = new ArrayList<>();
 
 		for (YoutubeVideoResponse.VideoItem item : videoDetailsResponse.items()) {
@@ -209,7 +251,6 @@ public class YoutubeSyncService {
 
 		if (!videosToSave.isEmpty()) {
 			videoRepository.saveAll(videosToSave);
-			log.info("[{}] 영상 {}개 동기화(추가/갱신) 완료", channel.getChannelName(), videosToSave.size());
 			return videosToSave.size();
 		}
 

@@ -50,11 +50,14 @@ public class Video {
 
 	private LocalDateTime publishedAt;
 
-	private Long viewCount;
+	@Builder.Default
+	private Long viewCount = 0L;
 
-	private Long likeCount;
+	@Builder.Default
+	private Long likeCount = 0L;
 
-	private Long commentCount;
+	@Builder.Default
+	private Long commentCount = 0L;
 
 	public void updateStatistics(Long viewCount, Long likeCount, Long commentCount) {
 		this.viewCount = viewCount;
