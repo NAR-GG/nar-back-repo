@@ -95,9 +95,13 @@ public class VideoService {
 	}
 
 	private Sort createSort(String sort) {
-		if ("popular".equalsIgnoreCase(sort)) {
-			// 인기순: 조회수 내림차순 -> (동률 시) 최신순
+		if ("views".equalsIgnoreCase(sort)) {
+			// 조회수순: 조회수 내림차순 -> (동률 시) 최신순
 			return Sort.by(Sort.Direction.DESC, "viewCount", "publishedAt");
+		}
+		if ("likes".equalsIgnoreCase(sort)) {
+			// 좋아요순: 좋아요 내림차순 -> (동률 시) 최신순
+			return Sort.by(Sort.Direction.DESC, "likeCount", "publishedAt");
 		}
 		// 기본: 최신순
 		return Sort.by(Sort.Direction.DESC, "publishedAt");

@@ -41,16 +41,26 @@ public class YoutubeController {
 		@Parameter(description = "카테고리 (all: 전체, pro: 프로팀, shorts: 쇼츠 채널)", example = "all")
 		@RequestParam(defaultValue = "all") String category,
 
-		@Parameter(description = "정렬 기준 (latest: 최신순, popular: 인기순/조회수순)", example = "latest")
+		@Parameter(description = "정렬 기준 (latest: 최신순, views: 조회수순, likes: 좋아요순)", example = "latest")
 		@RequestParam(defaultValue = "latest") String sort,
 
 		@Parameter(description = "기간 필터 (all: 전체, week: 최근 1주, month: 최근 1달)", example = "all")
 		@RequestParam(defaultValue = "all") String period,
 
-		@Parameter(description = "페이징 정보 (기본 20개)")
-		@PageableDefault(size = 20) Pageable pageable
+		@Parameter(description = "페이지 번호 (0부터 시작)", example = "0")
+		@RequestParam(defaultValue = "0") int page,
+
+		@Parameter(description = "페이지 크기", example = "20")
+		@RequestParam(defaultValue = "20") int size,
+
+		@Parameter(hidden = true) Pageable pageable
 	) {
-		return ResponseEntity.ok(videoService.getVideos(category, sort, period, pageable));
+		// Swagger에서 Pageable의 sort 파라미터가 노출되어 혼동을 주는 것을 방지하기 위해
+		// page, size만 명시적으로 받고 Pageable은 내부적으로 생성하거나 hidden 처리된 파라미터로 받습니다.
+		// Service 메서드는 Pageable을 그대로 받으므로, 여기서 새로 만들어줍니다.
+		Pageable newPageable = org.springframework.data.domain.PageRequest.of(page, size);
+		
+		return ResponseEntity.ok(videoService.getVideos(category, sort, period, newPageable));
 	}
 
 	@Operation(summary = "영상 댓글 조회", description = "특정 영상의 댓글을 최신순 또는 인기순으로 조회합니다.")
