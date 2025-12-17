@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.toy.nar.app.youtube.dto.YoutubeCommentResponse;
+import com.toy.nar.app.youtube.dto.YoutubePlaylistResponse;
 import com.toy.nar.app.youtube.dto.YoutubeSearchResponse;
 import com.toy.nar.app.youtube.dto.YoutubeVideoResponse;
 import com.toy.nar.common.util.YoutubeProperties;
@@ -148,63 +149,82 @@ public class YoutubeSyncService {
 		log.info("### 비디오 전체 동기화 완료. 총 {}개의 신규 영상 저장됨 ###", totalSaved);
 	}
 
+	/**
+	 * [리팩토링] PlaylistItems API를 사용하여 영상 목록을 수집합니다. (비용 1 unit)
+	 */
 	private int syncSingleChannelVideos(Channel channel, LocalDateTime searchAfter) {
-		// [수정] 통계(조회수, 좋아요 등) 업데이트를 위해
-		// DB 저장 여부와 상관없이 무조건 '기준 시간(searchAfter)' 이후의 영상을 모두 조회합니다.
-		
-		String videoDurationParam = (channel.getChannelType() == ChannelType.SHORTS) ? "short" : null;
+		String uploadPlaylistId = channel.getUploadPlaylistId();
+
+		// 1. Upload Playlist ID가 없으면 긴급 조회
+		if (uploadPlaylistId == null || uploadPlaylistId.isBlank()) {
+			try {
+				var channelInfo = youtubeService.getChannelInfo(channel.getYoutubeChannelId());
+				if (channelInfo != null && channelInfo.items() != null && !channelInfo.items().isEmpty()) {
+					uploadPlaylistId = channelInfo.items().get(0).contentDetails().relatedPlaylists().uploads();
+					channel.updateUploadPlaylistId(uploadPlaylistId); 
+					channelRepository.save(channel);
+					log.info("[{}] Upload Playlist ID 업데이트 완료: {}", channel.getChannelName(), uploadPlaylistId);
+				}
+			} catch (Exception e) {
+				log.error("채널 정보 조회 실패(Upload Playlist ID 확보 중): {}", channel.getChannelName(), e);
+				return 0;
+			}
+		}
+
+		if (uploadPlaylistId == null) {
+			log.warn("Upload Playlist ID를 찾을 수 없어 동기화 스킵: {}", channel.getChannelName());
+			return 0;
+		}
+
 		String nextPageToken = null;
 		int totalProcessed = 0;
 
+		// 2. PlaylistItems 반복 조회
 		do {
-			YoutubeSearchResponse searchResponse = youtubeService.searchLatestVideos(
-				channel.getYoutubeChannelId(),
-				50,
-				videoDurationParam,
+			YoutubePlaylistResponse playlistResponse = youtubeService.getPlaylistItems(
+				uploadPlaylistId,
 				nextPageToken
 			);
 
-			if (searchResponse == null || searchResponse.items() == null || searchResponse.items().isEmpty()) {
+			if (playlistResponse == null || playlistResponse.items() == null || playlistResponse.items().isEmpty()) {
 				break;
 			}
 
-			// 1. 대상 비디오 ID 추출 (날짜 필터링만 수행)
 			List<String> videoIdsToProcess = new ArrayList<>();
 			boolean stopFetching = false;
 
-			for (var item : searchResponse.items()) {
+			for (var item : playlistResponse.items()) {
 				OffsetDateTime odt = OffsetDateTime.parse(item.snippet().publishedAt());
 				LocalDateTime publishedAtKst = odt.atZoneSameInstant(ZONE_KST).toLocalDateTime();
 
 				if (publishedAtKst.isAfter(searchAfter)) {
-					videoIdsToProcess.add(item.id().videoId());
+					// ResourceId에서 Video ID 추출
+					videoIdsToProcess.add(item.snippet().resourceId().videoId());
 				} else {
-					// 검색된 영상이 기준 시간 이전이라면 더 이상 과거 영상을 조회할 필요 없음
-					// (Youtube Search API가 최신순 정렬(order=date)이라고 가정)
+					// 기준 시간 이전 영상이 나오면 중단 (최신순 정렬 가정)
 					stopFetching = true;
 				}
 			}
 
 			if (videoIdsToProcess.isEmpty()) {
-				if (stopFetching) break; // 이번 페이지에 대상이 없고, 날짜도 지났으면 종료
-				// 이번 페이지에 대상은 없지만, 아직 날짜가 안 지났으면 다음 페이지 조회 (드문 케이스)
-				nextPageToken = searchResponse.nextPageToken();
+				if (stopFetching) break;
+				nextPageToken = playlistResponse.nextPageToken();
 				continue;
 			}
 
-			// 2. 상세 정보 조회 및 저장
+			// 3. 상세 정보 조회 및 저장
 			totalProcessed += fetchDetailsAndSave(videoIdsToProcess, channel);
 
 			if (stopFetching) {
 				break;
 			}
 
-			nextPageToken = searchResponse.nextPageToken();
+			nextPageToken = playlistResponse.nextPageToken();
 
 		} while (nextPageToken != null && !nextPageToken.isBlank());
 
 		if (totalProcessed > 0) {
-			log.info("[{}] 영상 {}개 동기화(추가/갱신) 완료", channel.getChannelName(), totalProcessed);
+			log.info("[{}] 영상 {}개 동기화(추가/갱신) 완료 (PlaylistItems API)", channel.getChannelName(), totalProcessed);
 		}
 
 		return totalProcessed;

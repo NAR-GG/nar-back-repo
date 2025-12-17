@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import com.toy.nar.app.youtube.dto.YoutubeChannelResponse;
+import com.toy.nar.app.youtube.dto.YoutubePlaylistResponse;
 import com.toy.nar.app.youtube.dto.YoutubeSearchResponse;
 import com.toy.nar.app.youtube.dto.YoutubeVideoResponse;
 import com.toy.nar.common.util.YoutubeApiProperties;
@@ -28,6 +29,30 @@ public class YoutubeService {
 
 	private final WebClient youtubeWebClient;
 	private final YoutubeApiProperties properties;
+
+	/**
+	 * [SyncService 사용] PlaylistItems API를 통해 채널의 영상 목록 조회 (비용 1 unit)
+	 */
+	public YoutubePlaylistResponse getPlaylistItems(String playlistId, String pageToken) {
+		return youtubeWebClient.get()
+			.uri(uriBuilder -> {
+				var builder = uriBuilder
+					.path("/playlistItems")
+					.queryParam("part", PART_SNIPPET)
+					.queryParam("playlistId", playlistId)
+					.queryParam("maxResults", 50)
+					.queryParam("key", properties.getKey());
+
+				if (pageToken != null && !pageToken.isBlank()) {
+					builder.queryParam("pageToken", pageToken);
+				}
+
+				return builder.build();
+			})
+			.retrieve()
+			.bodyToMono(YoutubePlaylistResponse.class)
+			.block();
+	}
 
 	/**
 	 * [SyncService 사용]

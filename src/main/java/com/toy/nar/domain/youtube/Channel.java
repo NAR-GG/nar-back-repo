@@ -42,4 +42,7 @@ public class Channel {
 	@Enumerated(EnumType.STRING)
 	@Column(name = "channel_type")
 	private ChannelType channelType;
+	public void updateUploadPlaylistId(String uploadPlaylistId) {
+		this.uploadPlaylistId = uploadPlaylistId;
+	}
 }
