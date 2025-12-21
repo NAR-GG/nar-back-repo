@@ -31,11 +31,4 @@ public class CategoryController {
 		return ResponseEntity.ok(tree);
 	}
 
-	@GetMapping("/teams")
-	public ResponseEntity<List<TeamSummary>> getTeams(
-		@RequestParam String leagueName,
-		@RequestParam String split) {
-		List<TeamSummary> teams = categoryService.getTeamSummaries(leagueName, split);
-		return ResponseEntity.ok(teams);
-	}
 }
