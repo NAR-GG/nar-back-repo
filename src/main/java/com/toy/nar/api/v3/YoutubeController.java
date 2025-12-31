@@ -100,5 +100,21 @@ public class YoutubeController {
 		youtubeSyncService.syncRecentComments();
 		return ResponseEntity.ok("Recent comments synchronization started.");
 	}
+
+	@Hidden
+	@Operation(summary = "[관리자용] 인기 영상 댓글 동기화 (최근 1주일)", description = "최근 7일간 조회수/좋아요 상위 영상들의 댓글(최대 50개)을 수집합니다.")
+	@PostMapping("/api/youtube/comments/sync/top-week")
+	public ResponseEntity<String> syncTopWeekComments() {
+		youtubeSyncService.syncTopVideosComments(7);
+		return ResponseEntity.ok("Top videos comments synchronization (Last Week) started.");
+	}
+
+	@Hidden
+	@Operation(summary = "[관리자용] 인기 영상 댓글 동기화 (최근 1달)", description = "최근 30일간 조회수/좋아요 상위 영상들의 댓글(최대 50개)을 수집합니다.")
+	@PostMapping("/api/youtube/comments/sync/top-month")
+	public ResponseEntity<String> syncTopMonthComments() {
+		youtubeSyncService.syncTopVideosComments(30);
+		return ResponseEntity.ok("Top videos comments synchronization (Last Month) started.");
+	}
 }
 
