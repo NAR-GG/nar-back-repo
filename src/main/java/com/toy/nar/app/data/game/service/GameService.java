@@ -80,7 +80,8 @@ public class GameService {
 				// 방어 코드: 선수나 챔피언 정보가 누락된 경우 안전하게 처리
 				String playerName = (p.getPlayer() != null) ? p.getPlayer().getName() : "Unknown";
 				String championName = (p.getChampion() != null) ? p.getChampion().getChampionNameEn() : "Unknown";
-				return new GameResponseDto.PlayerInGameDto(playerName, championName);
+				String position = p.getPosition();
+				return new GameResponseDto.PlayerInGameDto(playerName, championName, position);
 			})
 			.toList();
 

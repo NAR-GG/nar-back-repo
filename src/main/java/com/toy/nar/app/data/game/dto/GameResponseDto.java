@@ -21,6 +21,7 @@ public record GameResponseDto(
 
 	public record PlayerInGameDto(
 		String playerName,
-		String championName
+		String championName,
+		String position
 	) {}
 }
