@@ -1,5 +1,5 @@
 CREATE TABLE comment (
-    comment_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    comment_id INTEGER PRIMARY KEY AUTOINCREMENT,
     video_id BIGINT NOT NULL,
     youtube_comment_id VARCHAR(255) NOT NULL UNIQUE,
     author_display_name VARCHAR(255),
