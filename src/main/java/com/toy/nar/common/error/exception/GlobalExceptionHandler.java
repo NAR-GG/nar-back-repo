@@ -29,7 +29,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 	// 그 외 모든 예외 처리 (500)
 	@ExceptionHandler(Exception.class)
 	protected ResponseEntity<ErrorResponse> handleException(Exception e) {
-		log.error("handleEntityNotFoundException : {}", e.getMessage());
+		log.error("handleException : {}", e.getMessage());
 		return ErrorResponse.toResponseEntity(ErrorCode.INTERNAL_SERVER_ERROR);
 	}
 }
