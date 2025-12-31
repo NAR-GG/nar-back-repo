@@ -355,6 +355,42 @@ public class YoutubeSyncService {
 	}
 
 	/**
+	 * [관리자용] 기간 내 상위 인기 영상들의 댓글을 동기화합니다.
+	 * - 대상: 최근 days일 이내 업로드된 영상 중 조회수 Top 20 & 좋아요 Top 20
+	 * - 범위: 각 영상당 댓글 최대 50개 (API 1회 호출)
+	 * - 비용: 최대 40 unit (중복 제외 시 더 적음)
+	 */
+	@Transactional
+	public void syncTopVideosComments(int days) {
+		LocalDateTime searchAfter = LocalDateTime.now(ZONE_KST).minusDays(days);
+		
+		// 1. 조회수 Top 20
+		List<Video> topViews = videoRepository.findTop20ByPublishedAtAfterOrderByViewCountDesc(searchAfter);
+		// 2. 좋아요 Top 20
+		List<Video> topLikes = videoRepository.findTop20ByPublishedAtAfterOrderByLikeCountDesc(searchAfter);
+
+		// 3. 중복 제거 (Set)
+		Set<Video> targetVideos = new java.util.HashSet<>();
+		targetVideos.addAll(topViews);
+		targetVideos.addAll(topLikes);
+
+		log.info("### [Admin] 인기 영상 댓글 동기화 시작 (기간: 최근 {}일, 대상: {}개) ###", days, targetVideos.size());
+
+		int successCount = 0;
+		for (Video video : targetVideos) {
+			try {
+				// 이미 1회 호출 시 50개 제한이 걸려있으므로 그대로 사용
+				syncCommentsForVideo(video);
+				successCount++;
+			} catch (Exception e) {
+				log.error("댓글 동기화 실패: {} (ID: {})", video.getTitle(), video.getYoutubeVideoId(), e);
+			}
+		}
+		
+		log.info("### [Admin] 인기 영상 댓글 동기화 완료 (성공: {}/{}) ###", successCount, targetVideos.size());
+	}
+
+	/**
 	 * 특정 시점(publishedAfter) 이후에 게시된 비디오들의 통계(조회수, 좋아요 등)를 갱신합니다.
 	 * Search API를 사용하지 않고 DB에 있는 ID로 Videos API만 호출하므로 Quota 소모가 적습니다.
 	 */

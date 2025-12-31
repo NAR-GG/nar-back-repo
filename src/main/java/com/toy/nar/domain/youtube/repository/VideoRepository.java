@@ -43,4 +43,10 @@ public interface VideoRepository extends JpaRepository<Video, Long>, JpaSpecific
 	LocalDateTime findLatestPublishedAtByChannel(@Param("channel") Channel channel);
 
 	List<Video> findByPublishedAtAfter(LocalDateTime publishedAt);
+
+	// 기간 내 조회수 상위 20개
+	List<Video> findTop20ByPublishedAtAfterOrderByViewCountDesc(LocalDateTime publishedAt);
+
+	// 기간 내 좋아요 상위 20개
+	List<Video> findTop20ByPublishedAtAfterOrderByLikeCountDesc(LocalDateTime publishedAt);
 }
