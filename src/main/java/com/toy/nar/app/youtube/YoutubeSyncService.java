@@ -398,6 +398,12 @@ public class YoutubeSyncService {
 					parseCount(item.statistics().likeCount()),
 					parseCount(item.statistics().commentCount())
 				);
+				// 통계 갱신 시 댓글도 함께 동기화 (Gap 최소화)
+				try {
+					syncCommentsForVideo(video);
+				} catch (Exception e) {
+					log.error("통계 갱신 중 댓글 동기화 실패: {} (ID: {})", video.getTitle(), video.getYoutubeVideoId(), e);
+				}
 			}
 		}
 	}
