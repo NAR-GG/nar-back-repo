@@ -77,16 +77,14 @@ jobs:
             docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
             docker stop nar-gg-container || true
             docker rm nar-gg-container || true
-                        
             docker run -d --name nar-gg-container -p 8080:8080 \
               -m 768m \
               -e JAVA_OPTS="-Xmx512m" \
               -e SLACK_WEBHOOK_URL="${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -e DB_URL="${{ secrets.DB_URL }}" \
               -e GOOGLE_DRIVE_CSV_FILE_ID="${{ secrets.GOOGLE_DRIVE_CSV_FILE_ID }}" \
               -e YOUTUBE_API_KEY="${{ secrets.YOUTUBE_API_KEY }}" \
               -e LOL_ESPORTS_KEY="${{ secrets.LOL_ESPORTS_KEY }}" \
-              -e SPRING_DATASOURCE_URL="${{ secrets.DB_URL }}" \
-              -e SPRING_DATASOURCE_DRIVER_CLASS_NAME="org.sqlite.JDBC" \
               -v /home/ubuntu/lol_esports_analysis_test.db:/home/ubuntu/lol_esports_analysis_test.db \
               ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
             
