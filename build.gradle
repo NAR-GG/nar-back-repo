@@ -58,6 +58,7 @@ dependencies {
 	implementation 'org.flywaydb:flyway-core'
 
 	implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml'
+	implementation 'org.jsoup:jsoup:1.16.1'
 }
 
 clean {
