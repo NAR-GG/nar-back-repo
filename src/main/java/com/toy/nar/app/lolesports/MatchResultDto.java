@@ -11,6 +11,7 @@ public class MatchResultDto {
 	private String leagueName;      // LCK, LPL, WORLDS...
 	private String matchTitle;      // T1 vs GEN
 	private String matchDate;       // 경기 시간
+	private String state;           // 경기 상태 (completed, unstarted, inProgress)
 	private String score;           // 3 : 1
 	private TeamInfo blueTeam;
 	private TeamInfo redTeam;

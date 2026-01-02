@@ -49,9 +49,8 @@ public class WorldsService {
 		List<JsonNode> targetEvents = new ArrayList<>();
 		if (eventsNode.isArray()) {
 			for (JsonNode event : eventsNode) {
-				// "완료된 매치"만 필터링해서 리스트에 담음
-				if ("completed".equalsIgnoreCase(event.path("state").asText())
-					&& "match".equalsIgnoreCase(event.path("type").asText())) {
+				// 모든 매치 필터링 (state 체크 제거)
+				if ("match".equalsIgnoreCase(event.path("type").asText())) {
 					targetEvents.add(event);
 				}
 			}
@@ -96,38 +95,40 @@ public class WorldsService {
 			.bodyToMono(JsonNode.class)
 			.map(root -> {
 				// 기존 fetchMatchDetails 내부 로직과 동일하게 파싱
-								JsonNode event = root.path("data").path("event");
-								JsonNode match = event.path("match");
-								JsonNode teams = match.path("teams");
-				
-								if (teams.size() < 2) return null; // 유효하지 않은 데이터
-				
-								JsonNode teamA = teams.get(0);
-								JsonNode teamB = teams.get(1);
-								int winsA = teamA.path("result").path("gameWins").asInt(0);
-								int winsB = teamB.path("result").path("gameWins").asInt(0);
-				
-								List<MatchResultDto.SetVod> setVods = new ArrayList<>();
-								JsonNode games = match.path("games");
-								int setNum = 1;
-				
-								if (games.isArray()) {
-									for (JsonNode game : games) {
-										if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
-										String vodUrl = findBestVodUrl(game.path("vods"));
-				
-										setVods.add(MatchResultDto.SetVod.builder()
-											.setNumber(setNum++)
-											.vodUrl(vodUrl)
-											.build());
-									}
-								}
+				JsonNode event = root.path("data").path("event");
+				JsonNode match = event.path("match");
+				JsonNode teams = match.path("teams");
+				String state = event.path("state").asText("unstarted"); // 상태 추출
+
+				if (teams.size() < 2) return null; // 유효하지 않은 데이터
+
+				JsonNode teamA = teams.get(0);
+				JsonNode teamB = teams.get(1);
+				int winsA = teamA.path("result").path("gameWins").asInt(0);
+				int winsB = teamB.path("result").path("gameWins").asInt(0);
+
+				List<MatchResultDto.SetVod> setVods = new ArrayList<>();
+				JsonNode games = match.path("games");
+				int setNum = 1;
+
+				if (games.isArray()) {
+					for (JsonNode game : games) {
+						if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
+						String vodUrl = findBestVodUrl(game.path("vods"));
+
+						setVods.add(MatchResultDto.SetVod.builder()
+							.setNumber(setNum++)
+							.vodUrl(vodUrl)
+							.build());
+					}
+				}
 
 				// DTO 생성 후 반환
 				return MatchResultDto.builder()
 					.matchId(eventId)
 					.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 					.matchDate(matchDate)
+					.state(state) // 상태 설정
 					.score(winsA + " : " + winsB)
 					.blueTeam(MatchResultDto.TeamInfo.builder().code(teamA.path("code").asText()).name(teamA.path("name").asText()).wins(winsA).build())
 					.redTeam(MatchResultDto.TeamInfo.builder().code(teamB.path("code").asText()).name(teamB.path("name").asText()).wins(winsB).build())
@@ -152,8 +153,7 @@ public class WorldsService {
 		if (eventsNode.isArray()) {
 			for (JsonNode event : eventsNode) {
 				// 완료된 '매치'만 필터링 (type check 추가 권장)
-				if ("completed".equalsIgnoreCase(event.path("state").asText())
-					&& "match".equalsIgnoreCase(event.path("type").asText())) {
+				if ("match".equalsIgnoreCase(event.path("type").asText())) {
 					events.add(event);
 				}
 			}
@@ -178,39 +178,42 @@ public class WorldsService {
 		JsonNode root = callApi("/persisted/gw/getEventDetails", "id", eventId);
 		if (root == null) return null;
 
-		        		JsonNode event = root.path("data").path("event");
-		        		JsonNode match = event.path("match");
-		        		JsonNode teams = match.path("teams");
-		        
-		        		if (teams.size() < 2) return null;
-		        
-		        		// 팀 정보 파싱
-		        		JsonNode teamA = teams.get(0);
-		        		JsonNode teamB = teams.get(1);
-		        		int winsA = teamA.path("result").path("gameWins").asInt(0);
-		        		int winsB = teamB.path("result").path("gameWins").asInt(0);
-		        
-		        		// 세트별 VOD 파싱
-		        		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
-		        		JsonNode games = match.path("games");
-		        		int setNum = 1;
-		        
-		        		if (games.isArray()) {
-		        			for (JsonNode game : games) {
-		        				// 게임이 완료된 것만 (unneeded 제외)
-		        				if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
-		        
-		        				String vodUrl = findBestVodUrl(game.path("vods"));
-		        				
-		        				setVods.add(MatchResultDto.SetVod.builder()
-		        					.setNumber(setNum++)
-		        					.vodUrl(vodUrl)
-		        					.build());
-		        			}
-		        		}		return MatchResultDto.builder()
+		JsonNode event = root.path("data").path("event");
+		JsonNode match = event.path("match");
+		JsonNode teams = match.path("teams");
+		String state = event.path("state").asText("unstarted"); // 상태 추출
+
+		if (teams.size() < 2) return null;
+
+		// 팀 정보 파싱
+		JsonNode teamA = teams.get(0);
+		JsonNode teamB = teams.get(1);
+		int winsA = teamA.path("result").path("gameWins").asInt(0);
+		int winsB = teamB.path("result").path("gameWins").asInt(0);
+
+		// 세트별 VOD 파싱
+		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
+		JsonNode games = match.path("games");
+		int setNum = 1;
+
+		if (games.isArray()) {
+			for (JsonNode game : games) {
+				// 게임이 완료된 것만 (unneeded 제외)
+				if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
+
+				String vodUrl = findBestVodUrl(game.path("vods"));
+
+				setVods.add(MatchResultDto.SetVod.builder()
+					.setNumber(setNum++)
+					.vodUrl(vodUrl)
+					.build());
+			}
+		}
+		return MatchResultDto.builder()
 			.matchId(eventId)
 			.matchTitle(teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 			.matchDate(matchDate) // [수정] 넘겨받은 날짜 사용
+			.state(state) // 상태 설정
 			.score(winsA + " : " + winsB)
 			.blueTeam(MatchResultDto.TeamInfo.builder()
 				.code(teamA.path("code").asText())
