@@ -205,7 +205,7 @@ public class LeagueMatchService {
 			.leagueName(leagueSlug)
 			.matchTitle(dto.getMatchTitle())
 			.matchDate(matchDate)
-			.state("completed") // 일단 completed만 가져오므로 고정, 필요시 DTO에 state 추가
+			.state(dto.getState()) // [수정] DTO에서 상태 가져오기
 			.blueTeamCode(dto.getBlueTeam().getCode())
 			.blueTeamName(dto.getBlueTeam().getName())
 			.blueScore(dto.getBlueTeam().getWins())
@@ -233,6 +233,7 @@ public class LeagueMatchService {
 			.leagueName(entity.getLeagueName())
 			.matchTitle(entity.getMatchTitle())
 			.matchDate(entity.getMatchDate().toString()) // ISO format string
+			.state(entity.getState()) // [수정] Entity 상태 DTO로 전달
 			.score(entity.getBlueScore() + " : " + entity.getRedScore())
 			.blueTeam(MatchResultDto.TeamInfo.builder()
 				.code(entity.getBlueTeamCode())
