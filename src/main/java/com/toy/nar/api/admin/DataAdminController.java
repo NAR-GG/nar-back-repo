@@ -20,13 +20,15 @@ import com.toy.nar.app.data.maintenance.DataVerificationService;
 import com.toy.nar.app.data.maintenance.GameCleanupService;
 import com.toy.nar.app.data.source.GoogleDriveDataSyncService;
 
+import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-@Profile({"local", "dev"})
+@Profile({"local", "dev", "prod"})
 @RestController
 @RequestMapping("/api/admin/data")
 @RequiredArgsConstructor
+@Hidden
 @Slf4j
 public class DataAdminController {
 
