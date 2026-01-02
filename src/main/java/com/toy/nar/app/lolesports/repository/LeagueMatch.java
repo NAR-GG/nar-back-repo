@@ -1,0 +1,65 @@
+package com.toy.nar.app.lolesports.repository;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "league_match")
+@Getter
+@Builder
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+public class LeagueMatch {
+
+	@Id
+	private String id;
+
+	@Column(nullable = false)
+	private String leagueName;
+
+	private String matchTitle;
+	private LocalDateTime matchDate;
+	private String state;
+
+	private String blueTeamCode;
+	private String blueTeamName;
+	private Integer blueScore;
+
+	private String redTeamCode;
+	private String redTeamName;
+	private Integer redScore;
+
+	private boolean hasVod;
+
+	@Column(columnDefinition = "TEXT")
+	private String matchDetailsJson;
+
+	private LocalDateTime lastUpdated;
+
+	public void update(String matchTitle, LocalDateTime matchDate, String state,
+					   String blueTeamCode, String blueTeamName, Integer blueScore,
+					   String redTeamCode, String redTeamName, Integer redScore,
+					   boolean hasVod, String matchDetailsJson, LocalDateTime lastUpdated) {
+		this.matchTitle = matchTitle;
+		this.matchDate = matchDate;
+		this.state = state;
+		this.blueTeamCode = blueTeamCode;
+		this.blueTeamName = blueTeamName;
+		this.blueScore = blueScore;
+		this.redTeamCode = redTeamCode;
+		this.redTeamName = redTeamName;
+		this.redScore = redScore;
+		this.hasVod = hasVod;
+		this.matchDetailsJson = matchDetailsJson;
+		this.lastUpdated = lastUpdated;
+	}
+}

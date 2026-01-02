@@ -7,6 +7,8 @@ import java.util.List;
 @Data
 @Builder
 public class MatchResultDto {
+	private String matchId;         // DB 저장/조회용 ID
+	private String leagueName;      // LCK, LPL, WORLDS...
 	private String matchTitle;      // T1 vs GEN
 	private String matchDate;       // 경기 시간
 	private String score;           // 3 : 1

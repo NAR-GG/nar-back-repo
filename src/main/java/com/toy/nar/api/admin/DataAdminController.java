@@ -42,8 +42,24 @@ public class DataAdminController {
 
 	// Google Drive 서비스
 	private final DriveTestService driveTestService;
+	
+	// LoL Esports 서비스
+	private final com.toy.nar.app.lolesports.LeagueMatchService leagueMatchService;
 
 	// == 데이터 동기화 (Sync) ==
+	@PostMapping("/sync/matches/history")
+	public ResponseEntity<Map<String, Object>> syncMatchHistory() {
+		log.info("Requesting full match history sync for ALL target leagues");
+		
+		int syncedCount = leagueMatchService.syncAllLeaguesFullHistory();
+		
+		return ResponseEntity.ok(Map.of(
+			"success", true,
+			"syncedCount", syncedCount,
+			"message", "모든 리그의 전체 히스토리 동기화가 완료되었습니다."
+		));
+	}
+
 	@PostMapping("/sync")
 	public ResponseEntity<Map<String, Object>> syncData() {
 		log.info("Google Drive sync requested via API");
