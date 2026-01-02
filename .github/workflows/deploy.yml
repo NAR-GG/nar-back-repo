@@ -86,6 +86,17 @@ jobs:
               -e LOL_ESPORTS_KEY="${{ secrets.LOL_ESPORTS_KEY }}" \
               -v /home/ubuntu/lol_esports_analysis_test.db:/home/ubuntu/lol_esports_analysis_test.db \
               ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
+
+            echo "Deploying SQLite Web..."
+            docker pull coleifer/sqlite-web
+            docker stop sqlite-web-container || true
+            docker rm sqlite-web-container || true
+            docker run -d --name sqlite-web-container \
+              -p 8081:8080 \
+              -v /home/ubuntu/lol_esports_analysis_test.db:/data/lol_esports_analysis_test.db \
+              -e SQLITE_WEB_PASSWORD="${{ secrets.SQLITE_WEB_PASSWORD }}" \
+              coleifer/sqlite-web \
+              sqlite_web -H 0.0.0.0 -x /data/lol_esports_analysis_test.db
             
             echo "Deploying Dozzle..."
             docker pull amir20/dozzle:latest
