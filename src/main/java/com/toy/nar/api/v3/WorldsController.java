@@ -19,18 +19,21 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class WorldsController {
 
-	private final WorldsService worldsService;
+	private final com.toy.nar.app.lolesports.LeagueMatchService leagueMatchService;
 
 	@GetMapping("/api/worlds/recent")
-	public List<MatchResultDto> getRecentMatches() {
-		return worldsService.getRecent3Matches();
+	public List<MatchResultDto> getRecentMatches(@RequestParam(required = false, defaultValue = "LCK") String league) {
+		return leagueMatchService.getRecentMatchesFromDb(league);
 	}
 
 	@GetMapping("/api/matches")
 	public ResponseEntity<MatchResponseWrapper> getWorldsMatches(
-		@RequestParam(required = false) String pageToken) {
+		@RequestParam(required = false) String pageToken,
+		@RequestParam(required = false) String league,
+		@RequestParam(required = false) String date) {
 
-		MatchResponseWrapper response = worldsService.getWorldsMatches(pageToken);
+		// DB 조회 방식 (날짜 필터 추가)
+		MatchResponseWrapper response = leagueMatchService.getMatchesFromDb(league, date);
 		return ResponseEntity.ok(response);
 	}
 }

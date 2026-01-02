@@ -21,16 +21,25 @@ public class WorldsService {
 
 	private final WebClient webClient;
 
-	private static final String WORLDS_LEAGUE_ID = "98767975604431411";
-	// LCK ID
-	private static final String LCK_LEAGUE_ID = "98767991310872058";
+	private static final java.util.Map<String, String> LEAGUE_IDS = java.util.Map.of(
+		"LCK", "98767991310872058",
+		"LPL", "98767991314006698",
+		"LEC", "98767991302996019",
+		"LCS", "98767991299243165",
+		"PCS", "98767991332355509",
+		"VCS", "98767991349978712",
+		"WORLDS", "98767975604431411",
+		"MSI", "98767991325878492"
+	);
 
 	@Value("${lolesports.riot-api.key}")
 	private String RIOT_API_KEY;
 
-	public MatchResponseWrapper getWorldsMatches(String pageToken) {
+	public MatchResponseWrapper getWorldsMatches(String pageToken, String leagueSlug) {
+		String leagueId = LEAGUE_IDS.getOrDefault(leagueSlug != null ? leagueSlug.toUpperCase() : "LCK", LEAGUE_IDS.get("LCK"));
+		
 		// 1. [Schedule API] 전체 일정 조회 (이건 한 번만 하니까 block 해도 됨)
-		JsonNode scheduleRoot = callScheduleApi(pageToken);
+		JsonNode scheduleRoot = callScheduleApi(pageToken, leagueId);
 		if (scheduleRoot == null) return MatchResponseWrapper.builder().matches(List.of()).build();
 
 		JsonNode dataNode = scheduleRoot.path("data").path("schedule");
@@ -87,34 +96,36 @@ public class WorldsService {
 			.bodyToMono(JsonNode.class)
 			.map(root -> {
 				// 기존 fetchMatchDetails 내부 로직과 동일하게 파싱
-				JsonNode event = root.path("data").path("event");
-				JsonNode match = event.path("match");
-				JsonNode teams = match.path("teams");
-
-				if (teams.size() < 2) return null; // 유효하지 않은 데이터
-
-				JsonNode teamA = teams.get(0);
-				JsonNode teamB = teams.get(1);
-				int winsA = teamA.path("result").path("gameWins").asInt(0);
-				int winsB = teamB.path("result").path("gameWins").asInt(0);
-
-				List<MatchResultDto.SetVod> setVods = new ArrayList<>();
-				JsonNode games = match.path("games");
-				int setNum = 1;
-
-				if (games.isArray()) {
-					for (JsonNode game : games) {
-						if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
-						String vodUrl = findBestVodUrl(game.path("vods"));
-						setVods.add(MatchResultDto.SetVod.builder()
-							.setNumber(setNum++)
-							.vodUrl(vodUrl)
-							.build());
-					}
-				}
+								JsonNode event = root.path("data").path("event");
+								JsonNode match = event.path("match");
+								JsonNode teams = match.path("teams");
+				
+								if (teams.size() < 2) return null; // 유효하지 않은 데이터
+				
+								JsonNode teamA = teams.get(0);
+								JsonNode teamB = teams.get(1);
+								int winsA = teamA.path("result").path("gameWins").asInt(0);
+								int winsB = teamB.path("result").path("gameWins").asInt(0);
+				
+								List<MatchResultDto.SetVod> setVods = new ArrayList<>();
+								JsonNode games = match.path("games");
+								int setNum = 1;
+				
+								if (games.isArray()) {
+									for (JsonNode game : games) {
+										if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
+										String vodUrl = findBestVodUrl(game.path("vods"));
+				
+										setVods.add(MatchResultDto.SetVod.builder()
+											.setNumber(setNum++)
+											.vodUrl(vodUrl)
+											.build());
+									}
+								}
 
 				// DTO 생성 후 반환
 				return MatchResultDto.builder()
+					.matchId(eventId)
 					.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 					.matchDate(matchDate)
 					.score(winsA + " : " + winsB)
@@ -129,9 +140,10 @@ public class WorldsService {
 			});
 	}
 
-	public List<MatchResultDto> getRecent3Matches() {
+	public List<MatchResultDto> getRecent3Matches(String leagueSlug) {
+		String leagueId = LEAGUE_IDS.getOrDefault(leagueSlug != null ? leagueSlug.toUpperCase() : "LCK", LEAGUE_IDS.get("LCK"));
 		// 1. [Schedule API] 전체 일정 조회
-		JsonNode scheduleRoot = callApi("/persisted/gw/getSchedule", "leagueId", LCK_LEAGUE_ID);
+		JsonNode scheduleRoot = callApi("/persisted/gw/getSchedule", "leagueId", leagueId);
 		if (scheduleRoot == null) return List.of();
 
 		List<JsonNode> events = new ArrayList<>();
@@ -166,38 +178,37 @@ public class WorldsService {
 		JsonNode root = callApi("/persisted/gw/getEventDetails", "id", eventId);
 		if (root == null) return null;
 
-		JsonNode event = root.path("data").path("event");
-		JsonNode match = event.path("match");
-		JsonNode teams = match.path("teams");
-
-		if (teams.size() < 2) return null;
-
-		// 팀 정보 파싱
-		JsonNode teamA = teams.get(0);
-		JsonNode teamB = teams.get(1);
-		int winsA = teamA.path("result").path("gameWins").asInt(0);
-		int winsB = teamB.path("result").path("gameWins").asInt(0);
-
-		// 세트별 VOD 파싱
-		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
-		JsonNode games = match.path("games");
-		int setNum = 1;
-
-		if (games.isArray()) {
-			for (JsonNode game : games) {
-				// 게임이 완료된 것만 (unneeded 제외)
-				if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
-
-				String vodUrl = findBestVodUrl(game.path("vods"));
-
-				setVods.add(MatchResultDto.SetVod.builder()
-					.setNumber(setNum++)
-					.vodUrl(vodUrl)
-					.build());
-			}
-		}
-
-		return MatchResultDto.builder()
+		        		JsonNode event = root.path("data").path("event");
+		        		JsonNode match = event.path("match");
+		        		JsonNode teams = match.path("teams");
+		        
+		        		if (teams.size() < 2) return null;
+		        
+		        		// 팀 정보 파싱
+		        		JsonNode teamA = teams.get(0);
+		        		JsonNode teamB = teams.get(1);
+		        		int winsA = teamA.path("result").path("gameWins").asInt(0);
+		        		int winsB = teamB.path("result").path("gameWins").asInt(0);
+		        
+		        		// 세트별 VOD 파싱
+		        		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
+		        		JsonNode games = match.path("games");
+		        		int setNum = 1;
+		        
+		        		if (games.isArray()) {
+		        			for (JsonNode game : games) {
+		        				// 게임이 완료된 것만 (unneeded 제외)
+		        				if (!"completed".equalsIgnoreCase(game.path("state").asText())) continue;
+		        
+		        				String vodUrl = findBestVodUrl(game.path("vods"));
+		        				
+		        				setVods.add(MatchResultDto.SetVod.builder()
+		        					.setNumber(setNum++)
+		        					.vodUrl(vodUrl)
+		        					.build());
+		        			}
+		        		}		return MatchResultDto.builder()
+			.matchId(eventId)
 			.matchTitle(teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 			.matchDate(matchDate) // [수정] 넘겨받은 날짜 사용
 			.score(winsA + " : " + winsB)
@@ -299,7 +310,7 @@ public class WorldsService {
 		return url;
 	}
 
-	private JsonNode callScheduleApi(String pageToken) {
+	private JsonNode callScheduleApi(String pageToken, String leagueId) {
 		return webClient.get()
 			.uri(uriBuilder -> {
 				uriBuilder
@@ -307,7 +318,7 @@ public class WorldsService {
 					.host("esports-api.lolesports.com")
 					.path("/persisted/gw/getSchedule")
 					.queryParam("hl", "ko-KR")
-					.queryParam("leagueId", LCK_LEAGUE_ID);
+					.queryParam("leagueId", leagueId);
 
 				// 토큰이 있을 때만 파라미터 추가
 				if (pageToken != null && !pageToken.isEmpty()) {
