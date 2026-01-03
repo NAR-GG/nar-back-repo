@@ -20,12 +20,12 @@ public class PostController {
 	private final InvenParserService invenParserService;
 
 	@GetMapping("/test-opgg")
-	public List<OpggPostDto> testOpgg() {
-		return opggParserService.parseEsportsPosts();
+	public List<OpggPostDto> testOpgg(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "recent") String sort) {
+		return opggParserService.parseEsportsPosts(sort);
 	}
 
 	@GetMapping("/test-inven")
-	public List<InvenPostDto> testInven() {
-		return invenParserService.parseInvenPosts();
+	public List<InvenPostDto> testInven(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "recent") String sort) {
+		return invenParserService.parseInvenPosts(sort);
 	}
 }

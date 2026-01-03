@@ -20,9 +20,15 @@ public class OpggParserService {
 		this.objectMapper = objectMapper;
 	}
 
-	public List<OpggPostDto> parseEsportsPosts() {
+	public List<OpggPostDto> parseEsportsPosts(String sortType) {
 		List<OpggPostDto> postList = new ArrayList<>();
-		String url = "https://talk.op.gg/s/lol/esports";
+		
+		// sortType이 없으면 기본값 recent
+		if (sortType == null || sortType.isEmpty()) {
+			sortType = "recent";
+		}
+		
+		String url = "https://talk.op.gg/s/lol/esports?sort=" + sortType;
 
 		try {
 			// 1. Jsoup으로 HTML 가져오기 (User-Agent 설정은 필수)
