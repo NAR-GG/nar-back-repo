@@ -23,8 +23,8 @@ public class OpggParserService {
 	public List<OpggPostDto> parseEsportsPosts(String sortType) {
 		List<OpggPostDto> postList = new ArrayList<>();
 		
-		// sortType이 없으면 기본값 recent
-		if (sortType == null || sortType.isEmpty()) {
+		// 클라이언트 파라미터(latest) -> OP.GG 파라미터(recent) 매핑
+		if (sortType == null || sortType.isEmpty() || "latest".equalsIgnoreCase(sortType)) {
 			sortType = "recent";
 		}
 		
