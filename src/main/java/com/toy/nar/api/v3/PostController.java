@@ -10,6 +10,9 @@ import com.toy.nar.app.community.OpggParserService;
 import com.toy.nar.app.community.dto.InvenPostDto;
 import com.toy.nar.app.community.dto.OpggPostDto;
 
+import com.toy.nar.app.community.NaverParserService;
+import com.toy.nar.app.community.dto.NaverPostDto;
+
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -18,6 +21,7 @@ public class PostController {
 
 	private final OpggParserService opggParserService;
 	private final InvenParserService invenParserService;
+	private final NaverParserService naverParserService;
 
 	@GetMapping("/test-opgg")
 	public List<OpggPostDto> testOpgg(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "latest") String sort) {
@@ -27,5 +31,10 @@ public class PostController {
 	@GetMapping("/test-inven")
 	public List<InvenPostDto> testInven(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "latest") String sort) {
 		return invenParserService.parseInvenPosts(sort);
+	}
+
+	@GetMapping("/test-naver")
+	public List<NaverPostDto> testNaver(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "latest") String sort) {
+		return naverParserService.parseNaverPosts(sort);
 	}
 }
