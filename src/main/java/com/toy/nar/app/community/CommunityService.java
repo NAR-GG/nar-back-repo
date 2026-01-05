@@ -163,6 +163,7 @@ public class CommunityService {
 	public void deletePostsOlderThan(int days) {
 		LocalDateTime cutoffDate = LocalDateTime.now().minusDays(days);
 		communityPostRepository.deleteByCreatedAtBefore(cutoffDate);
-		log.info("Deleted community posts older than {} days", days);
+		esportsNewsRepository.deleteByCreatedAtBefore(cutoffDate);
+		log.info("Deleted community posts and news older than {} days (before {})", days, cutoffDate);
 	}
 }
