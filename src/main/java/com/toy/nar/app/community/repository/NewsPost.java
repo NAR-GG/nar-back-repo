@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "esports_news", indexes = {
+@Table(name = "news_post", indexes = {
 	@Index(name = "idx_news_url", columnList = "postUrl", unique = true),
 	@Index(name = "idx_news_date", columnList = "createdAt DESC")
 })
@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
-public class EsportsNews {
+public class NewsPost {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

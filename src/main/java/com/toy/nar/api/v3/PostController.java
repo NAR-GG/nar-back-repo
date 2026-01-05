@@ -11,13 +11,16 @@ import com.toy.nar.app.community.dto.InvenPostDto;
 import com.toy.nar.app.community.dto.OpggPostDto;
 
 import com.toy.nar.app.community.repository.CommunityPost;
-import com.toy.nar.app.community.repository.EsportsNews;
+import com.toy.nar.app.community.repository.NewsPost;
 import com.toy.nar.app.community.CommunityService;
 import com.toy.nar.app.community.NaverParserService;
 import com.toy.nar.app.community.dto.NaverPostDto;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -40,7 +43,7 @@ public class PostController {
 	}
 
 	@GetMapping("/api/community/news")
-	public List<EsportsNews> getTop5News() {
+	public List<NewsPost> getTop5News() {
 		return communityService.getTop5News();
 	}
 

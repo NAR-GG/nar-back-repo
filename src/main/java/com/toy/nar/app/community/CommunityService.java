@@ -24,7 +24,7 @@ public class CommunityService {
 	private final NaverParserService naverParserService;
 	private final NaverNewsService naverNewsService;
 	private final CommunityPostRepository communityPostRepository;
-	private final EsportsNewsRepository esportsNewsRepository;
+	private final NewsPostRepository newsPostRepository;
 
 	/**
 	 * 모든 커뮤니티 및 뉴스를 동기화합니다.
@@ -155,15 +155,15 @@ public class CommunityService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<EsportsNews> getTop5News() {
-		return esportsNewsRepository.findAllByOrderByCreatedAtDesc(org.springframework.data.domain.PageRequest.of(0, 5));
+	public List<NewsPost> getTop5News() {
+		return newsPostRepository.findAllByOrderByCreatedAtDesc(org.springframework.data.domain.PageRequest.of(0, 5));
 	}
 
 	@Transactional
 	public void deletePostsOlderThan(int days) {
 		LocalDateTime cutoffDate = LocalDateTime.now().minusDays(days);
 		communityPostRepository.deleteByCreatedAtBefore(cutoffDate);
-		esportsNewsRepository.deleteByCreatedAtBefore(cutoffDate);
+		newsPostRepository.deleteByCreatedAtBefore(cutoffDate);
 		log.info("Deleted community posts and news older than {} days (before {})", days, cutoffDate);
 	}
 }

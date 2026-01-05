@@ -3,8 +3,8 @@ package com.toy.nar.app.community;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toy.nar.app.community.dto.NaverNewsDto;
-import com.toy.nar.app.community.repository.EsportsNews;
-import com.toy.nar.app.community.repository.EsportsNewsRepository;
+import com.toy.nar.app.community.repository.NewsPost;
+import com.toy.nar.app.community.repository.NewsPostRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -25,7 +25,7 @@ import java.util.Optional;
 public class NaverNewsService {
 
 	private final ObjectMapper objectMapper;
-	private final EsportsNewsRepository esportsNewsRepository;
+	private final NewsPostRepository newsPostRepository;
 
 	@Transactional
 	public void syncNaverNews(String sortType) {
@@ -72,13 +72,13 @@ public class NaverNewsService {
 	}
 
 	private void saveOrUpdate(NaverNewsDto dto) {
-		Optional<EsportsNews> existing = esportsNewsRepository.findByPostUrl(dto.getPostUrl());
+		Optional<NewsPost> existing = newsPostRepository.findByPostUrl(dto.getPostUrl());
 		LocalDateTime createdAt = LocalDateTime.ofInstant(Instant.ofEpochMilli(dto.getCreatedAt()), ZoneId.systemDefault());
 
 		if (existing.isPresent()) {
 			existing.get().update(dto.getTitle(), dto.getSubContent(), dto.getThumbnail());
 		} else {
-			esportsNewsRepository.save(EsportsNews.builder()
+			newsPostRepository.save(NewsPost.builder()
 				.title(dto.getTitle())
 				.subContent(dto.getSubContent())
 				.thumbnail(dto.getThumbnail())

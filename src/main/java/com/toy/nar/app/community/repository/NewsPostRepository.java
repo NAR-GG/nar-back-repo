@@ -7,10 +7,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-public interface EsportsNewsRepository extends JpaRepository<EsportsNews, Long> {
-	Optional<EsportsNews> findByPostUrl(String postUrl);
+public interface NewsPostRepository extends JpaRepository<NewsPost, Long> {
+	Optional<NewsPost> findByPostUrl(String postUrl);
 	
-	List<EsportsNews> findAllByOrderByCreatedAtDesc(Pageable pageable);
+	List<NewsPost> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
 	void deleteByCreatedAtBefore(LocalDateTime dateTime);
 }
