@@ -3,9 +3,7 @@ package com.toy.nar.app.community;
 import com.toy.nar.app.community.dto.InvenPostDto;
 import com.toy.nar.app.community.dto.NaverPostDto;
 import com.toy.nar.app.community.dto.OpggPostDto;
-import com.toy.nar.app.community.repository.CommunityPost;
-import com.toy.nar.app.community.repository.CommunityPostRepository;
-import com.toy.nar.app.community.repository.CommunityType;
+import com.toy.nar.app.community.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,17 +22,29 @@ public class CommunityService {
 	private final OpggParserService opggParserService;
 	private final InvenParserService invenParserService;
 	private final NaverParserService naverParserService;
+	private final NaverNewsService naverNewsService;
 	private final CommunityPostRepository communityPostRepository;
+	private final NewsPostRepository newsPostRepository;
 
 	/**
-	 * 모든 커뮤니티의 인기글/최신글을 가져와 DB에 저장/업데이트합니다.
-	 * @param sortType "latest" or "popular"
+	 * 모든 커뮤니티 및 뉴스를 동기화합니다.
 	 */
+	@Transactional
+	public void syncAll(String sortType) {
+		syncAllCommunities(sortType);
+		syncNaverNews(sortType);
+	}
+
 	@Transactional
 	public void syncAllCommunities(String sortType) {
 		syncOpgg(sortType);
 		syncInven(sortType);
 		syncNaver(sortType);
+	}
+
+	@Transactional
+	public void syncNaverNews(String sortType) {
+		naverNewsService.syncNaverNews(sortType);
 	}
 
 	@Transactional
@@ -46,7 +56,7 @@ public class CommunityService {
 				dto.getTitle(),
 				dto.getAuthor(),
 				dto.getPostUrl(),
-				dto.getCreatedAt(), // OP.GG는 ISO 포맷 등으로 옴 (파싱 필요할 수 있음)
+				dto.getCreatedAt(),
 				dto.getViewCount(),
 				dto.getVoteCount(),
 				dto.getCommentCount()
@@ -64,7 +74,7 @@ public class CommunityService {
 				dto.getTitle(),
 				dto.getAuthor(),
 				dto.getPostUrl(),
-				dto.getCreatedAt(), // InvenParserService에서 이미 yyyy-MM-dd HH:mm:ss로 변환됨
+				dto.getCreatedAt(),
 				dto.getViewCount(),
 				dto.getVoteCount(),
 				dto.getCommentCount()
@@ -82,7 +92,7 @@ public class CommunityService {
 				dto.getTitle(),
 				dto.getAuthor(),
 				dto.getPostUrl(),
-				dto.getCreatedAt(), // NaverParserService에서 이미 yyyy-MM-dd HH:mm:ss로 변환됨
+				dto.getCreatedAt(),
 				dto.getViewCount(),
 				dto.getVoteCount(),
 				dto.getCommentCount()
@@ -99,10 +109,8 @@ public class CommunityService {
 			Optional<CommunityPost> existingPost = communityPostRepository.findByPostUrl(url);
 
 			if (existingPost.isPresent()) {
-				// 이미 존재하면 통계(조회수, 추천수, 댓글수) 업데이트
 				existingPost.get().updateStatistics(viewCount, voteCount, commentCount);
 			} else {
-				// 없으면 새로 저장
 				CommunityPost newPost = CommunityPost.builder()
 					.communityType(type)
 					.title(title)
@@ -124,7 +132,6 @@ public class CommunityService {
 	private LocalDateTime parseDateTime(String dateTimeStr) {
 		if (dateTimeStr == null) return LocalDateTime.now();
 		try {
-			// OP.GG의 경우 ISO 포맷(T 포함)일 수 있고, 나머지는 yyyy-MM-dd HH:mm:ss
 			if (dateTimeStr.contains("T")) {
 				return LocalDateTime.parse(dateTimeStr, DateTimeFormatter.ISO_DATE_TIME);
 			} else {
@@ -143,15 +150,20 @@ public class CommunityService {
 		if ("popular".equalsIgnoreCase(sortType)) {
 			return communityPostRepository.findAllByOrderByVoteCountDesc(pageable);
 		} else {
-			// default: latest
 			return communityPostRepository.findAllByOrderByCreatedAtDesc(pageable);
 		}
+	}
+
+	@Transactional(readOnly = true)
+	public List<NewsPost> getTop5News() {
+		return newsPostRepository.findAllByOrderByCreatedAtDesc(org.springframework.data.domain.PageRequest.of(0, 5));
 	}
 
 	@Transactional
 	public void deletePostsOlderThan(int days) {
 		LocalDateTime cutoffDate = LocalDateTime.now().minusDays(days);
 		communityPostRepository.deleteByCreatedAtBefore(cutoffDate);
-		log.info("Deleted community posts older than {} days (before {})", days, cutoffDate);
+		newsPostRepository.deleteByCreatedAtBefore(cutoffDate);
+		log.info("Deleted community posts and news older than {} days (before {})", days, cutoffDate);
 	}
 }
