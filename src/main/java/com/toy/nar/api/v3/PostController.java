@@ -10,10 +10,13 @@ import com.toy.nar.app.community.OpggParserService;
 import com.toy.nar.app.community.dto.InvenPostDto;
 import com.toy.nar.app.community.dto.OpggPostDto;
 
+import com.toy.nar.app.community.repository.CommunityPost;
+import com.toy.nar.app.community.CommunityService;
 import com.toy.nar.app.community.NaverParserService;
 import com.toy.nar.app.community.dto.NaverPostDto;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.PostMapping;
 
 @RestController
 @RequiredArgsConstructor
@@ -22,6 +25,18 @@ public class PostController {
 	private final OpggParserService opggParserService;
 	private final InvenParserService invenParserService;
 	private final NaverParserService naverParserService;
+	private final CommunityService communityService;
+
+	@PostMapping("/api/community/sync")
+	public String syncCommunities(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "latest") String sort) {
+		communityService.syncAllCommunities(sort);
+		return "Synced all communities with sort: " + sort;
+	}
+
+	@GetMapping("/api/community/top5")
+	public List<CommunityPost> getTop5Posts(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "latest") String sort) {
+		return communityService.getTop5Posts(sort);
+	}
 
 	@GetMapping("/test-opgg")
 	public List<OpggPostDto> testOpgg(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "latest") String sort) {
