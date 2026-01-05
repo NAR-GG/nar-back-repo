@@ -59,7 +59,7 @@ public class NaverNewsService {
 						.title(node.path("title").asText())
 						.subContent(node.path("subContent").asText())
 						.thumbnail(node.path("thumbnail").asText())
-						.postUrl(node.path("linkUrl").asText())
+						.postUrl(normalizeUrl(node.path("linkUrl").asText()))
 						.officeName(node.path("officeName").asText())
 						.createdAt(node.path("createdAt").asLong())
 						.build());
@@ -71,13 +71,29 @@ public class NaverNewsService {
 		return newsList;
 	}
 
+	private String normalizeUrl(String url) {
+		if (url == null) return "";
+		int queryIndex = url.indexOf("?");
+		if (queryIndex != -1) {
+			return url.substring(0, queryIndex);
+		}
+		return url;
+	}
+
 	private void saveOrUpdate(NaverNewsDto dto) {
-		Optional<NewsPost> existing = newsPostRepository.findByPostUrl(dto.getPostUrl());
+		// 1. URL로 먼저 찾기
+		Optional<NewsPost> existingByUrl = newsPostRepository.findByPostUrl(dto.getPostUrl());
+		
+		// 2. URL로 없으면 제목으로 찾기 (혹시 모를 중복 방지)
+		Optional<NewsPost> existing = existingByUrl.isPresent() ? existingByUrl : newsPostRepository.findByTitle(dto.getTitle());
+
 		LocalDateTime createdAt = LocalDateTime.ofInstant(Instant.ofEpochMilli(dto.getCreatedAt()), ZoneId.systemDefault());
 
 		if (existing.isPresent()) {
+			// 존재하면 업데이트
 			existing.get().update(dto.getTitle(), dto.getSubContent(), dto.getThumbnail());
 		} else {
+			// 둘 다 없으면 신규 저장
 			newsPostRepository.save(NewsPost.builder()
 				.title(dto.getTitle())
 				.subContent(dto.getSubContent())

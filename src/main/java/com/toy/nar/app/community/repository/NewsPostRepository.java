@@ -10,6 +10,8 @@ import java.util.Optional;
 public interface NewsPostRepository extends JpaRepository<NewsPost, Long> {
 	Optional<NewsPost> findByPostUrl(String postUrl);
 	
+	Optional<NewsPost> findByTitle(String title);
+	
 	List<NewsPost> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
 	void deleteByCreatedAtBefore(LocalDateTime dateTime);
