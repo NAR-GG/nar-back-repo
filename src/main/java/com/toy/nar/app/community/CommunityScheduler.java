@@ -16,12 +16,12 @@ public class CommunityScheduler {
 	// cron = "초 분 시 일 월 요일"
 	@Scheduled(cron = "0 0/10 * * * *")
 	public void syncCommunityData() {
-		log.info("Starting scheduled community sync...");
+		log.info("Starting scheduled community and news sync...");
 		try {
-			// 최신글 동기화
-			communityService.syncAllCommunities("latest");
-			// 인기글 동기화 (인기글 탭에만 있는 글도 있을 수 있으므로)
-			communityService.syncAllCommunities("popular");
+			// 최신글 & 뉴스 동기화
+			communityService.syncAll("latest");
+			// 인기글 & 뉴스 동기화
+			communityService.syncAll("popular");
 		} catch (Exception e) {
 			log.error("Scheduled community sync failed", e);
 		}
