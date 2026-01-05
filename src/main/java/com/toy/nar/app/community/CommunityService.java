@@ -32,7 +32,11 @@ public class CommunityService {
 	@Transactional
 	public void syncAll(String sortType) {
 		syncAllCommunities(sortType);
-		syncNaverNews(sortType);
+		
+		// 뉴스는 '최신순'일 때만 동기화 (인기순 호출 시 중복 방지 및 최신 뉴스 집중)
+		if ("latest".equalsIgnoreCase(sortType)) {
+			syncNaverNews("latest");
+		}
 	}
 
 	@Transactional
