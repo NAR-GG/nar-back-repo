@@ -1,5 +1,8 @@
 package com.toy.nar.api.v3;
 
+import com.toy.nar.app.analysis.dto.ChampionAnalysisResponse;
+import com.toy.nar.app.analysis.dto.ChampionStatsDto;
+import com.toy.nar.app.analysis.service.ChampionAnalysisService;
 import com.toy.nar.app.community.CommunityService;
 import com.toy.nar.app.community.repository.CommunityPost;
 import com.toy.nar.app.community.repository.NewsPost;
@@ -16,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@Tag(name = "6. Home API", description = "홈 화면용 데이터 제공 API (경기 일정, 커뮤니티, 뉴스)")
+@Tag(name = "6. Home API", description = "홈 화면용 데이터 제공 API (경기 일정, 커뮤니티, 뉴스, 챔피언 통계)")
 @RestController
 @RequestMapping("/api/home")
 @RequiredArgsConstructor
@@ -24,6 +27,7 @@ public class HomeController {
 
 	private final LeagueMatchService leagueMatchService;
 	private final CommunityService communityService;
+	private final ChampionAnalysisService championAnalysisService;
 
 	@Operation(summary = "경기 일정 조회 (날짜별)", description = "특정 날짜의 모든 리그 경기 일정을 조회합니다. 날짜 미입력 시 전체 리그의 최신 경기를 반환합니다.")
 	@GetMapping("/schedule")
@@ -48,5 +52,11 @@ public class HomeController {
 	@GetMapping("/news")
 	public List<NewsPost> getTop5News() {
 		return communityService.getTop5News();
+	}
+
+	@Operation(summary = "최근 패치 모스트 챔피언 TOP 5 조회", description = "LCK 리그의 가장 최신 패치 버전에서 픽률이 높은 상위 5개 챔피언의 통계(승률, 경기수)를 조회합니다.")
+	@GetMapping("/champion/top5")
+	public ChampionAnalysisResponse getTop5Champions() {
+		return championAnalysisService.getMostPlayedChampionsByLatestPatch();
 	}
 }
