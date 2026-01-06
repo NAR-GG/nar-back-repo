@@ -5,14 +5,46 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.toy.nar.app.analysis.dto.ChampionBanStatsDto;
+import com.toy.nar.app.analysis.dto.ChampionStatsDto;
 import com.toy.nar.app.schedule.dto.ScheduleItemDto;
 import com.toy.nar.domain.game.entity.Game;
 
 public interface GameRepository extends JpaRepository<Game, Long>, GameRepositoryCustom {
+
+	@Query("SELECT MAX(g.patch) FROM Game g JOIN g.league l WHERE l.leagueName = :leagueName")
+	String findLatestPatchByLeague(@Param("leagueName") String leagueName);
+
+	@Query("SELECT l.seasonYear FROM Game g JOIN g.league l WHERE l.leagueName = :leagueName AND g.patch = :patch ORDER BY g.actualGameStartTime DESC")
+	List<Integer> findYearsByLeagueAndPatch(@Param("leagueName") String leagueName, @Param("patch") String patch, Pageable pageable);
+
+	@Query("SELECT new com.toy.nar.app.analysis.dto.ChampionStatsDto(" +
+		"   c.championNameKr, c.championNameEn, COUNT(gp), SUM(CASE WHEN gp.isWin = true THEN 1 ELSE 0 END)) " +
+		"FROM GameParticipant gp JOIN gp.champion c " +
+		"WHERE gp.game.patch = :patch AND gp.game.league.leagueName = :leagueName " +
+		"GROUP BY c.championNameKr, c.championNameEn " +
+		"ORDER BY COUNT(gp) DESC, (SUM(CASE WHEN gp.isWin = true THEN 1 ELSE 0 END) * 1.0 / COUNT(gp)) DESC")
+	List<ChampionStatsDto> findChampionStatsByPatchAndLeague(@Param("patch") String patch, @Param("leagueName") String leagueName, Pageable pageable);
+
+	@Query("SELECT new com.toy.nar.app.analysis.dto.ChampionBanStatsDto(" +
+		"   c.championNameKr, c.championNameEn, COUNT(b)) " +
+		"FROM Ban b JOIN b.game g JOIN b.bannedChampion c " +
+		"WHERE g.patch = :patch AND g.league.leagueName = :leagueName " +
+		"GROUP BY c.championNameKr, c.championNameEn " +
+		"ORDER BY COUNT(b) DESC")
+	List<ChampionBanStatsDto> findChampionBanStatsByPatchAndLeague(@Param("patch") String patch, @Param("leagueName") String leagueName);
+
+	@Query("SELECT new com.toy.nar.app.analysis.dto.ChampionStatsDto(" +
+		"   c.championNameKr, c.championNameEn, COUNT(gp), SUM(CASE WHEN gp.isWin = true THEN 1 ELSE 0 END)) " +
+		"FROM GameParticipant gp JOIN gp.champion c " +
+		"WHERE gp.game.patch = :patch AND gp.game.league.leagueName = :leagueName AND c.championNameKr IN :championNames " +
+		"GROUP BY c.championNameKr, c.championNameEn")
+	List<ChampionStatsDto> findChampionStatsByNamesAndPatch(@Param("patch") String patch, @Param("leagueName") String leagueName, @Param("championNames") List<String> championNames);
 
 	@Query("SELECT g.gameOriginId FROM Game g WHERE g.gameOriginId IN :gameIds")
 	Set<String> findExistingGameIds(@Param("gameIds") Set<String> gameIds);
