@@ -10,12 +10,47 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.toy.nar.app.analysis.dto.PlayerStatsDto;
 import com.toy.nar.app.analysis.dto.ChampionBanStatsDto;
 import com.toy.nar.app.analysis.dto.ChampionStatsDto;
 import com.toy.nar.app.schedule.dto.ScheduleItemDto;
 import com.toy.nar.domain.game.entity.Game;
 
 public interface GameRepository extends JpaRepository<Game, Long>, GameRepositoryCustom {
+
+	@Query("SELECT new com.toy.nar.app.analysis.dto.PlayerStatsDto(" +
+		"   gp.team.name, gp.player.name, gp.player.imageUrl, COUNT(gp), " +
+		"   (SUM(s.kills) + SUM(s.assists)) * 1.0 / (CASE WHEN SUM(s.deaths) = 0 THEN 1 ELSE SUM(s.deaths) END)) " +
+		"FROM GameParticipant gp " +
+		"JOIN gp.stat s " +
+		"JOIN gp.game g " +
+		"JOIN g.league l " +
+		"WHERE g.patch = :patch AND l.leagueName = :leagueName " +
+		"GROUP BY gp.player.name, gp.team.name, gp.player.imageUrl " +
+		"ORDER BY (SUM(s.kills) + SUM(s.assists)) * 1.0 / (CASE WHEN SUM(s.deaths) = 0 THEN 1 ELSE SUM(s.deaths) END) DESC")
+	List<PlayerStatsDto> findTopKdaPlayersByPatchAndLeague(@Param("patch") String patch, @Param("leagueName") String leagueName, Pageable pageable);
+
+	@Query("SELECT new com.toy.nar.app.analysis.dto.PlayerStatsDto(" +
+		"   gp.team.name, gp.player.name, gp.player.imageUrl, COUNT(gp), AVG(s.earnedGpm)) " +
+		"FROM GameParticipant gp " +
+		"JOIN gp.stat s " +
+		"JOIN gp.game g " +
+		"JOIN g.league l " +
+		"WHERE g.patch = :patch AND l.leagueName = :leagueName " +
+		"GROUP BY gp.player.name, gp.team.name, gp.player.imageUrl " +
+		"ORDER BY AVG(s.earnedGpm) DESC")
+	List<PlayerStatsDto> findTopGpmPlayersByPatchAndLeague(@Param("patch") String patch, @Param("leagueName") String leagueName, Pageable pageable);
+
+	@Query("SELECT new com.toy.nar.app.analysis.dto.PlayerStatsDto(" +
+		"   gp.team.name, gp.player.name, gp.player.imageUrl, COUNT(gp), AVG(s.dpm)) " +
+		"FROM GameParticipant gp " +
+		"JOIN gp.stat s " +
+		"JOIN gp.game g " +
+		"JOIN g.league l " +
+		"WHERE g.patch = :patch AND l.leagueName = :leagueName " +
+		"GROUP BY gp.player.name, gp.team.name, gp.player.imageUrl " +
+		"ORDER BY AVG(s.dpm) DESC")
+	List<PlayerStatsDto> findTopDpmPlayersByPatchAndLeague(@Param("patch") String patch, @Param("leagueName") String leagueName, Pageable pageable);
 
 	@Query("SELECT MAX(g.patch) FROM Game g JOIN g.league l WHERE l.leagueName = :leagueName")
 	String findLatestPatchByLeague(@Param("leagueName") String leagueName);
