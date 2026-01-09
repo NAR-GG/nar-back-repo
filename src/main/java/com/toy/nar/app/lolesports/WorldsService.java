@@ -106,6 +106,11 @@ public class WorldsService {
 				JsonNode teamB = teams.get(1);
 				int winsA = teamA.path("result").path("gameWins").asInt(0);
 				int winsB = teamB.path("result").path("gameWins").asInt(0);
+				
+				String imageA = teamA.path("image").asText("");
+				String imageB = teamB.path("image").asText("");
+				if (imageA.startsWith("http:")) imageA = imageA.replace("http:", "https:");
+				if (imageB.startsWith("http:")) imageB = imageB.replace("http:", "https:");
 
 				List<MatchResultDto.SetVod> setVods = new ArrayList<>();
 				JsonNode games = match.path("games");
@@ -130,8 +135,16 @@ public class WorldsService {
 					.matchDate(matchDate)
 					.state(state) // 상태 설정
 					.score(winsA + " : " + winsB)
-					.blueTeam(MatchResultDto.TeamInfo.builder().code(teamA.path("code").asText()).name(teamA.path("name").asText()).wins(winsA).build())
-					.redTeam(MatchResultDto.TeamInfo.builder().code(teamB.path("code").asText()).name(teamB.path("name").asText()).wins(winsB).build())
+					.blueTeam(MatchResultDto.TeamInfo.builder()
+						.code(teamA.path("code").asText())
+						.name(teamA.path("name").asText())
+						.imageUrl(imageA)
+						.wins(winsA).build())
+					.redTeam(MatchResultDto.TeamInfo.builder()
+						.code(teamB.path("code").asText())
+						.name(teamB.path("name").asText())
+						.imageUrl(imageB)
+						.wins(winsB).build())
 					.sets(setVods)
 					.build();
 			})
@@ -190,6 +203,11 @@ public class WorldsService {
 		JsonNode teamB = teams.get(1);
 		int winsA = teamA.path("result").path("gameWins").asInt(0);
 		int winsB = teamB.path("result").path("gameWins").asInt(0);
+		
+		String imageA = teamA.path("image").asText("");
+		String imageB = teamB.path("image").asText("");
+		if (imageA.startsWith("http:")) imageA = imageA.replace("http:", "https:");
+		if (imageB.startsWith("http:")) imageB = imageB.replace("http:", "https:");
 
 		// 세트별 VOD 파싱
 		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
@@ -218,11 +236,13 @@ public class WorldsService {
 			.blueTeam(MatchResultDto.TeamInfo.builder()
 				.code(teamA.path("code").asText())
 				.name(teamA.path("name").asText())
+				.imageUrl(imageA)
 				.wins(winsA)
 				.build())
 			.redTeam(MatchResultDto.TeamInfo.builder()
 				.code(teamB.path("code").asText())
 				.name(teamB.path("name").asText())
+				.imageUrl(imageB)
 				.wins(winsB)
 				.build())
 			.sets(setVods)
