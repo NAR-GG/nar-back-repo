@@ -32,7 +32,7 @@ public class HomeController {
 	private final ChampionAnalysisService championAnalysisService;
 	private final PlayerAnalysisService playerAnalysisService;
 
-	@Operation(summary = "경기 일정 조회 (날짜별)", description = "특정 날짜의 모든 리그 경기 일정을 조회합니다. 날짜 미입력 시 전체 리그의 최신 경기를 반환합니다.")
+	@Operation(summary = "경기 일정 조회 (날짜별)", description = "특정 날짜의 모든 리그 경기 일정을 조회합니다. 날짜 미입력 시 전체 리그의 최신 경기를 반환합니다. [state : (completed, unstarted, inProgress)]")
 	@GetMapping("/schedule")
 	public List<MatchResultDto> getSchedule(
 		@Parameter(description = "조회할 날짜 (YYYY-MM-DD)", example = "2026-01-04") 
