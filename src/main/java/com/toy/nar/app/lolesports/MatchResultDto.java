@@ -22,6 +22,7 @@ public class MatchResultDto {
 	public static class TeamInfo {
 		private String code;        // T1
 		private String name;        // T1
+		private String imageUrl;    // 팀 로고 이미지 URL
 		private int wins;           // 승리 횟수
 	}
 

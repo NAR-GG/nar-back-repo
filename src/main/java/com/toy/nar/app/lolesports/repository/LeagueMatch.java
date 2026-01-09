@@ -32,10 +32,12 @@ public class LeagueMatch {
 
 	private String blueTeamCode;
 	private String blueTeamName;
+	private String blueTeamImageUrl;
 	private Integer blueScore;
 
 	private String redTeamCode;
 	private String redTeamName;
+	private String redTeamImageUrl;
 	private Integer redScore;
 
 	private boolean hasVod;
@@ -46,17 +48,19 @@ public class LeagueMatch {
 	private LocalDateTime lastUpdated;
 
 	public void update(String matchTitle, LocalDateTime matchDate, String state,
-					   String blueTeamCode, String blueTeamName, Integer blueScore,
-					   String redTeamCode, String redTeamName, Integer redScore,
+					   String blueTeamCode, String blueTeamName, String blueTeamImageUrl, Integer blueScore,
+					   String redTeamCode, String redTeamName, String redTeamImageUrl, Integer redScore,
 					   boolean hasVod, String matchDetailsJson, LocalDateTime lastUpdated) {
 		this.matchTitle = matchTitle;
 		this.matchDate = matchDate;
 		this.state = state;
 		this.blueTeamCode = blueTeamCode;
 		this.blueTeamName = blueTeamName;
+		this.blueTeamImageUrl = blueTeamImageUrl;
 		this.blueScore = blueScore;
 		this.redTeamCode = redTeamCode;
 		this.redTeamName = redTeamName;
+		this.redTeamImageUrl = redTeamImageUrl;
 		this.redScore = redScore;
 		this.hasVod = hasVod;
 		this.matchDetailsJson = matchDetailsJson;
