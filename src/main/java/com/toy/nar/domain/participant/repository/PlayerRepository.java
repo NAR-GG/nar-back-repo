@@ -1,19 +1,23 @@
 package com.toy.nar.domain.participant.repository;
 
+import com.toy.nar.domain.participant.entity.Player;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
-import com.toy.nar.domain.participant.entity.Player;
-
 public interface PlayerRepository extends JpaRepository<Player, Long> {
+	Optional<Player> findByName(String name);
 
-	@Query("SELECT p FROM Player p WHERE p.name IN :names")
-	List<Player> findAllByNameInIgnoreCase(@Param("names") Set<String> names);
+	List<Player> findAllByNameInIgnoreCase(Set<String> names);
+
+	@Query("SELECT DISTINCT p FROM Player p " +
+		"JOIN GameParticipant gp ON gp.player = p " +
+		"JOIN gp.game g " +
+		"JOIN g.league l " +
+		"WHERE l.leagueName = :leagueName")
+	List<Player> findPlayersByLeagueName(@Param("leagueName") String leagueName);
 }

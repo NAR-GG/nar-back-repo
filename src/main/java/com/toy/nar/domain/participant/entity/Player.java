@@ -34,12 +34,20 @@ public class Player {
 	@Column(name = "player_name", nullable = false, unique = true, length = 100)
 	private String name;
 
+	@Column(name = "image_url")
+	private String imageUrl;
+
 	@Builder
-	public Player(String name) {
+	public Player(String name, String imageUrl) {
 		this.name = Objects.requireNonNull(name, "Player name must not be null");
+		this.imageUrl = imageUrl;
 	}
 
 	public void setName(String name) {
 		this.name = name;
+	}
+
+	public void setImageUrl(String imageUrl) {
+		this.imageUrl = imageUrl;
 	}
 }
