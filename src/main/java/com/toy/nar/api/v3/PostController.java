@@ -16,12 +16,11 @@ import com.toy.nar.app.community.CommunityService;
 import com.toy.nar.app.community.NaverParserService;
 import com.toy.nar.app.community.dto.NaverPostDto;
 
+import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.GetMapping;
-import java.util.List;
 
+@Hidden
 @RestController
 @RequiredArgsConstructor
 public class PostController {
