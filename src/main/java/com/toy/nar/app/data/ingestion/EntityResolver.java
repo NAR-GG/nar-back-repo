@@ -265,6 +265,7 @@ public class EntityResolver {
 				}
 				log.info("Finished processing new entities.");
 			}
+		}
 	}
 	
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -274,8 +275,6 @@ public class EntityResolver {
 		} catch (Exception e) {
 			log.warn("Failed to save entity (duplicate or error): {}. Skipping.", getNameFromEntity(entity));
 			return null;
-		}
-	}
 		}
 	}
 
