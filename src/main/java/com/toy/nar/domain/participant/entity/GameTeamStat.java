@@ -83,6 +83,9 @@ public class GameTeamStat {
 	private Integer oppTurretPlates;
 	private Integer inhibitors;
 	private Integer oppInhibitors;
+	
+	// === 데미지 ===
+	private Integer damageToTowers;
 
 
 
@@ -139,6 +142,8 @@ public class GameTeamStat {
 			.oppTurretPlates(dto.getOppTurretplates())
 			.inhibitors(dto.getInhibitors())
 			.oppInhibitors(dto.getOppInhibitors())
+			// 데미지
+			.damageToTowers(dto.getDamagetotowers())
 			.build();
 	}
 
