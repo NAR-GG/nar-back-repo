@@ -28,6 +28,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.annotation.Autowired;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -37,6 +41,10 @@ public class EntityResolver {
 	private final TeamRepository teamRepository;
 	private final PlayerRepository playerRepository;
 	private final ChampionRepository championRepository;
+	
+	@Autowired
+	@Lazy
+	private EntityResolver self;
 
 	@Getter private final Map<LeagueIdentifier, League> leagueCache = new ConcurrentHashMap<>();
 	@Getter private final Map<String, Team> teamCache = new ConcurrentHashMap<>();
@@ -229,30 +237,45 @@ public class EntityResolver {
 			List<T> newEntities = new ArrayList<>(uniqueEntitiesToCreate.values());
 
 			if (!newEntities.isEmpty()) {
-				log.info("Attempting to save {} new entities.", newEntities.size());
+				log.info("Processing {} potentially new entities.", newEntities.size());
 				
 				for (T entity : newEntities) {
-					try {
-						T saved = repository.save(entity);
-						String normalizedName = getNameFromEntity(saved);
-						cache.put(normalizedName, saved);
-					} catch (Exception e) {
-						log.warn("Failed to save entity (likely duplicate): {}. Trying to fetch from DB...", getNameFromEntity(entity));
+					String nameToCheck = getNameFromEntity(entity);
+					// 저장 전 DB 중복 체크 (안정성 확보)
+					List<T> found = findInDb.apply(Set.of(nameToCheck));
+					
+					if (!found.isEmpty()) {
+						T existing = found.get(0);
+						String normalizedName = getNameFromEntity(existing); // 또는 entity의 normalizedName
+						// 만약 DB 이름과 현재 이름의 normalized 결과가 같다면
+						cache.put(storageNormalizer.apply(nameToCheck), existing);
+					} else {
 						try {
-							String nameToCheck = getNameFromEntity(entity);
-							// DB에서 다시 조회 시도
-							List<T> found = findInDb.apply(Set.of(nameToCheck));
-							if (!found.isEmpty()) {
-								T existing = found.get(0);
-								cache.put(getNameFromEntity(existing), existing);
+							// 별도 트랜잭션으로 저장 시도 (실패 시 메인 트랜잭션 보호)
+							T saved = self.safeSave(repository, entity);
+							if (saved != null) {
+								String normalizedName = getNameFromEntity(saved);
+								cache.put(normalizedName, saved);
 							}
-						} catch (Exception ex) {
-							log.error("Could not recover entity: {}", getNameFromEntity(entity), ex);
+						} catch (Exception e) {
+							// safeSave 내부에서 이미 로그를 찍었을 것임.
+							// 여기서는 추가 조치 불필요.
 						}
 					}
 				}
 				log.info("Finished processing new entities.");
 			}
+	}
+	
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public <T> T safeSave(JpaRepository<T, ?> repository, T entity) {
+		try {
+			return repository.save(entity);
+		} catch (Exception e) {
+			log.warn("Failed to save entity (duplicate or error): {}. Skipping.", getNameFromEntity(entity));
+			return null;
+		}
+	}
 		}
 	}
 
