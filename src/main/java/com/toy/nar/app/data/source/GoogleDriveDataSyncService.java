@@ -30,8 +30,7 @@ public class GoogleDriveDataSyncService {
 	private final CacheEvictionService cacheEvictionService;
 	private final SyncStatusRepository syncStatusRepository;
 
-	@Value("${google.drive.csv-file-id}")
-	private String csvFileId;
+	private String csvFileId = "1hnpbrUpBMS1TZI7IovfpKeZfWJH1Aptm";
 
 	@Scheduled(cron = "0 30 4,10,16,22 * * ?", zone = "Asia/Seoul")
 	public void scheduledSyncFromGoogleDrive() {
