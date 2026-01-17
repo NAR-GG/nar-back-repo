@@ -3,6 +3,7 @@ package com.toy.nar.app.data.source;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -29,7 +30,8 @@ public class GoogleDriveDataSyncService {
 	private final CacheEvictionService cacheEvictionService;
 	private final SyncStatusRepository syncStatusRepository;
 
-	private static final String CSV_FILE_ID = "1v6LRphp2kYciU4SXp0PCjEMuev1bDejc";
+	@Value("${google.drive.csv-file-id}")
+	private String csvFileId;
 
 	@Scheduled(cron = "0 30 4,10,16,22 * * ?", zone = "Asia/Seoul")
 	public void scheduledSyncFromGoogleDrive() {
@@ -67,7 +69,7 @@ public class GoogleDriveDataSyncService {
 
 			// 1. Google Drive에서 스트림으로 다운로드
 			InputStream csvStream = drive.files()
-				.get(CSV_FILE_ID)
+				.get(csvFileId)
 				.executeMediaAsInputStream();
 
 			// 2. 기존 검증된 로직으로 처리
@@ -101,7 +103,7 @@ public class GoogleDriveDataSyncService {
 	public String checkFileStatus() {
 		try {
 			var fileMetadata = drive.files()
-				.get(CSV_FILE_ID)
+				.get(csvFileId)
 				.setFields("id,name,size,modifiedTime")
 				.execute();
 

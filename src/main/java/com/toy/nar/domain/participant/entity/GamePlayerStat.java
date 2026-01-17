@@ -42,6 +42,7 @@ public class GamePlayerStat {
 
 	// === 데미지 ===
 	private Integer damageToChampions;
+	private Integer damageToTowers;
 	private Double dpm;
 	private Double damageShare;
 	private Double damageTakenPerMinute;
@@ -154,6 +155,7 @@ public class GamePlayerStat {
 			.isFirstBloodVictim(toBoolean(dto.getFirstbloodvictim()))
 			// 데미지
 			.damageToChampions(dto.getDamagetochampions())
+			.damageToTowers(dto.getDamagetotowers())
 			.dpm(dto.getDpm())
 			.damageShare(dto.getDamageshare())
 			.damageTakenPerMinute(dto.getDamagetakenperminute())

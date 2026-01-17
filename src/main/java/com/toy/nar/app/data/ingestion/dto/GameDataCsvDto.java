@@ -100,8 +100,8 @@ public class GameDataCsvDto {
 	@CsvBindByName(column = "towers") private Integer towers;
 	@CsvBindByName(column = "opp_towers") private Integer oppTowers;
 	@CsvBindByName(column = "firstmidtower") private Integer firstmidtower;
-	@CsvBindByName(column = "firsttoptower") private Integer firsttoptower;
-	@CsvBindByName(column = "firstbottower") private Integer firstbottower;
+	@CsvBindByName(column = "firsttoptower", required = false) private Integer firsttoptower;
+	@CsvBindByName(column = "firstbottower", required = false) private Integer firstbottower;
 	@CsvBindByName(column = "firsttothreetowers") private Integer firsttothreetowers;
 	@CsvBindByName(column = "turretplates") private Integer turretplates;
 	@CsvBindByName(column = "opp_turretplates") private Integer oppTurretplates;
@@ -110,6 +110,7 @@ public class GameDataCsvDto {
 
 	// === 데미지 관련 ===
 	@CsvBindByName(column = "damagetochampions") private Integer damagetochampions;
+	@CsvBindByName(column = "damagetotowers", required = false) private Integer damagetotowers;
 	@CsvBindByName(column = "dpm") private Double dpm;
 	@CsvBindByName(column = "damageshare") private Double damageshare;
 	@CsvBindByName(column = "damagetakenperminute") private Double damagetakenperminute;
