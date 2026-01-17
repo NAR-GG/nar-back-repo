@@ -230,13 +230,28 @@ public class EntityResolver {
 
 			if (!newEntities.isEmpty()) {
 				log.info("Attempting to save {} new entities.", newEntities.size());
-				List<T> savedEntities = repository.saveAll(newEntities);
-
-				savedEntities.forEach(entity -> {
-					String normalizedName = getNameFromEntity(entity);
-					cache.put(normalizedName, entity);
-				});
-				log.info("Saved and cached {} new {}(s).", savedEntities.size(), savedEntities.get(0).getClass().getSimpleName());
+				
+				for (T entity : newEntities) {
+					try {
+						T saved = repository.save(entity);
+						String normalizedName = getNameFromEntity(saved);
+						cache.put(normalizedName, saved);
+					} catch (Exception e) {
+						log.warn("Failed to save entity (likely duplicate): {}. Trying to fetch from DB...", getNameFromEntity(entity));
+						try {
+							String nameToCheck = getNameFromEntity(entity);
+							// DB에서 다시 조회 시도
+							List<T> found = findInDb.apply(Set.of(nameToCheck));
+							if (!found.isEmpty()) {
+								T existing = found.get(0);
+								cache.put(getNameFromEntity(existing), existing);
+							}
+						} catch (Exception ex) {
+							log.error("Could not recover entity: {}", getNameFromEntity(entity), ex);
+						}
+					}
+				}
+				log.info("Finished processing new entities.");
 			}
 		}
 	}
