@@ -132,6 +132,11 @@ public class WorldsService {
 					}
 				}
 
+				// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+				if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
+					finalState = "completed";
+				}
+
 				// DTO 생성 후 반환
 				return MatchResultDto.builder()
 					.matchId(eventId)
@@ -234,6 +239,12 @@ public class WorldsService {
 					.build());
 			}
 		}
+
+		// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+		if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
+			finalState = "completed";
+		}
+
 		return MatchResultDto.builder()
 			.matchId(eventId)
 			.matchTitle(teamA.path("code").asText() + " vs " + teamB.path("code").asText())
@@ -285,6 +296,11 @@ public class WorldsService {
 		
 		String apiState = event.path("state").asText("unstarted");
 		String finalState = (matchState != null && !matchState.isEmpty()) ? matchState : apiState;
+
+		// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+		if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
+			finalState = "completed";
+		}
 
 		return MatchResultDto.builder()
 			.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText()) // "결승 | T1 vs GEN"
