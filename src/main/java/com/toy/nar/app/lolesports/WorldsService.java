@@ -56,10 +56,8 @@ public class WorldsService {
 			}
 		}
 
-		// 2. [병렬 처리 핵심] Flux를 사용하여 동시에 API 쏘기
+		// 2. [병렬 처리 핵심] Flux를 사용하여 동시에 API 쏘기 (동시성 제한 추가)
 		List<MatchResultDto> matchResults = reactor.core.publisher.Flux.fromIterable(targetEvents)
-			.parallel() // 병렬 레일 시작
-			.runOn(reactor.core.scheduler.Schedulers.boundedElastic()) // 쓰레드 풀 지정
 			.flatMap(event -> {
 				String matchId = event.path("match").path("id").asText();
 				String startTime = event.path("startTime").asText();
@@ -68,12 +66,11 @@ public class WorldsService {
 
 				// 비동기로 상세 정보 가져오기
 				return fetchMatchDetailsAsync(matchId, startTime, blockName, state);
-			})
-			.sequential() // 다시 하나의 스트림으로 합침
-			// 날짜 내림차순 정렬 (병렬 처리는 순서가 뒤섞이므로 정렬 필수)
+			}, 5) // 동시 실행 수 5개로 제한 (시스템 부하 방지)
+			// 날짜 내림차순 정렬
 			.sort((a, b) -> b.getMatchDate().compareTo(a.getMatchDate()))
 			.collectList()
-			.block(); // 모든 병렬 작업이 끝날 때까지 여기서 딱 1번만 대기 (약 1~2초 소요)
+			.block(); // 모든 작업이 끝날 때까지 대기
 
 		return MatchResponseWrapper.builder()
 			.matches(matchResults)
@@ -132,9 +129,24 @@ public class WorldsService {
 					}
 				}
 
-				// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+				// [보정 1] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경 (VOD 우선)
 				if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
 					finalState = "completed";
+				}
+
+				// [보정 2] 상태가 completed인데, 실제 게임들이 모두 unstarted이고 VOD도 없다면 unstarted로 정정 (LPL 가짜 완료 방지)
+				boolean allGamesUnstarted = true;
+				if (games.isArray() && games.size() > 0) {
+					for (JsonNode game : games) {
+						if (!"unstarted".equalsIgnoreCase(game.path("state").asText())) {
+							allGamesUnstarted = false;
+							break;
+						}
+					}
+					// 게임 정보는 있는데 모두 unstarted이고 VOD도 없으면 -> 아직 시작 안 한 것
+					if (allGamesUnstarted && setVods.isEmpty() && "completed".equalsIgnoreCase(finalState)) {
+						finalState = "unstarted";
+					}
 				}
 
 				// DTO 생성 후 반환
@@ -240,9 +252,23 @@ public class WorldsService {
 			}
 		}
 
-		// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+		// [보정 1] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
 		if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
 			finalState = "completed";
+		}
+
+		// [보정 2] 상태가 completed인데, 실제 게임들이 모두 unstarted이고 VOD도 없다면 unstarted로 정정 (LPL 가짜 완료 방지)
+		boolean allGamesUnstarted = true;
+		if (games.isArray() && games.size() > 0) {
+			for (JsonNode game : games) {
+				if (!"unstarted".equalsIgnoreCase(game.path("state").asText())) {
+					allGamesUnstarted = false;
+					break;
+				}
+			}
+			if (allGamesUnstarted && setVods.isEmpty() && "completed".equalsIgnoreCase(finalState)) {
+				finalState = "unstarted";
+			}
 		}
 
 		return MatchResultDto.builder()
@@ -297,9 +323,23 @@ public class WorldsService {
 		String apiState = event.path("state").asText("unstarted");
 		String finalState = (matchState != null && !matchState.isEmpty()) ? matchState : apiState;
 
-		// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+		// [보정 1] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
 		if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
 			finalState = "completed";
+		}
+		
+		// [보정 2] 상태가 completed인데, 실제 게임들이 모두 unstarted이고 VOD도 없다면 unstarted로 정정 (LPL 가짜 완료 방지)
+		boolean allGamesUnstarted = true;
+		if (games.isArray() && games.size() > 0) {
+			for (JsonNode game : games) {
+				if (!"unstarted".equalsIgnoreCase(game.path("state").asText())) {
+					allGamesUnstarted = false;
+					break;
+				}
+			}
+			if (allGamesUnstarted && setVods.isEmpty() && "completed".equalsIgnoreCase(finalState)) {
+				finalState = "unstarted";
+			}
 		}
 
 		return MatchResultDto.builder()
