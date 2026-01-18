@@ -64,9 +64,10 @@ public class WorldsService {
 				String matchId = event.path("match").path("id").asText();
 				String startTime = event.path("startTime").asText();
 				String blockName = event.path("blockName").asText();
+				String state = event.path("state").asText("unstarted"); // 상태 추출
 
 				// 비동기로 상세 정보 가져오기
-				return fetchMatchDetailsAsync(matchId, startTime, blockName);
+				return fetchMatchDetailsAsync(matchId, startTime, blockName, state);
 			})
 			.sequential() // 다시 하나의 스트림으로 합침
 			// 날짜 내림차순 정렬 (병렬 처리는 순서가 뒤섞이므로 정렬 필수)
@@ -80,7 +81,7 @@ public class WorldsService {
 			.build();
 	}
 
-	private reactor.core.publisher.Mono<MatchResultDto> fetchMatchDetailsAsync(String eventId, String matchDate, String stageName) {
+	private reactor.core.publisher.Mono<MatchResultDto> fetchMatchDetailsAsync(String eventId, String matchDate, String stageName, String matchState) {
 		return webClient.get()
 			.uri(uri -> uri
 				.scheme("https")
@@ -98,7 +99,10 @@ public class WorldsService {
 				JsonNode event = root.path("data").path("event");
 				JsonNode match = event.path("match");
 				JsonNode teams = match.path("teams");
-				String state = event.path("state").asText("unstarted"); // 상태 추출
+				
+				// [수정] 스케줄 목록에서 가져온 state 우선 사용
+				String apiState = event.path("state").asText("unstarted");
+				String finalState = (matchState != null && !matchState.isEmpty()) ? matchState : apiState;
 
 				if (teams.size() < 2) return null; // 유효하지 않은 데이터
 
@@ -128,12 +132,17 @@ public class WorldsService {
 					}
 				}
 
+				// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+				if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
+					finalState = "completed";
+				}
+
 				// DTO 생성 후 반환
 				return MatchResultDto.builder()
 					.matchId(eventId)
 					.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 					.matchDate(matchDate)
-					.state(state) // 상태 설정
+					.state(finalState) // 상태 설정
 					.score(winsA + " : " + winsB)
 					.blueTeam(MatchResultDto.TeamInfo.builder()
 						.code(teamA.path("code").asText())
@@ -180,21 +189,24 @@ public class WorldsService {
 			.map(event -> {
 				String matchId = event.path("match").path("id").asText();
 				String matchDate = event.path("startTime").asText(); // [수정] 날짜 추출
-				return fetchMatchDetails(matchId, matchDate);        // [수정] 날짜 전달
+				String state = event.path("state").asText("unstarted"); // [수정] 상태 추출
+				return fetchMatchDetails(matchId, matchDate, state);        // [수정] 날짜, 상태 전달
 			})
 			.filter(dto -> dto != null) // 혹시 모를 null 제거
 			.toList();
 	}
 
-	// [수정] matchDate를 인자로 받음
-	private MatchResultDto fetchMatchDetails(String eventId, String matchDate) {
+	// [수정] matchDate, matchState를 인자로 받음
+	private MatchResultDto fetchMatchDetails(String eventId, String matchDate, String matchState) {
 		JsonNode root = callApi("/persisted/gw/getEventDetails", "id", eventId);
 		if (root == null) return null;
 
 		JsonNode event = root.path("data").path("event");
 		JsonNode match = event.path("match");
 		JsonNode teams = match.path("teams");
-		String state = event.path("state").asText("unstarted"); // 상태 추출
+		
+		String apiState = event.path("state").asText("unstarted");
+		String finalState = (matchState != null && !matchState.isEmpty()) ? matchState : apiState;
 
 		if (teams.size() < 2) return null;
 
@@ -227,11 +239,17 @@ public class WorldsService {
 					.build());
 			}
 		}
+
+		// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+		if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
+			finalState = "completed";
+		}
+
 		return MatchResultDto.builder()
 			.matchId(eventId)
 			.matchTitle(teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 			.matchDate(matchDate) // [수정] 넘겨받은 날짜 사용
-			.state(state) // 상태 설정
+			.state(finalState) // 상태 설정
 			.score(winsA + " : " + winsB)
 			.blueTeam(MatchResultDto.TeamInfo.builder()
 				.code(teamA.path("code").asText())
@@ -249,7 +267,7 @@ public class WorldsService {
 			.build();
 	}
 
-	private MatchResultDto fetchMatchDetails(String eventId, String matchDate, String stageName) {
+	private MatchResultDto fetchMatchDetails(String eventId, String matchDate, String stageName, String matchState) {
 		JsonNode root = callApi("/persisted/gw/getEventDetails", "id", eventId);
 		if (root == null) return null;
 
@@ -275,10 +293,19 @@ public class WorldsService {
 				setVods.add(MatchResultDto.SetVod.builder().setNumber(setNum++).vodUrl(vodUrl).build());
 			}
 		}
+		
+		String apiState = event.path("state").asText("unstarted");
+		String finalState = (matchState != null && !matchState.isEmpty()) ? matchState : apiState;
+
+		// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+		if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
+			finalState = "completed";
+		}
 
 		return MatchResultDto.builder()
 			.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText()) // "결승 | T1 vs GEN"
 			.matchDate(matchDate)
+			.state(finalState)
 			.score(winsA + " : " + winsB)
 			.blueTeam(MatchResultDto.TeamInfo.builder().code(teamA.path("code").asText()).name(teamA.path("name").asText()).wins(winsA).build())
 			.redTeam(MatchResultDto.TeamInfo.builder().code(teamB.path("code").asText()).name(teamB.path("name").asText()).wins(winsB).build())
