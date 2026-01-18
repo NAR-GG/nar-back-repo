@@ -29,7 +29,6 @@ public class LeagueMatchService {
 	public static final List<String> TARGET_LEAGUES = List.of("LCK", "LPL", "LEC", "LCS", "MSI", "WORLDS");
 
 	// [Scheduler용] 특정 리그의 최신 경기를 가져와 DB에 저장 (1페이지)
-	@Transactional
 	public void syncMatches(String leagueSlug) {
 		log.info("Starting sync for league: {}", leagueSlug);
 		// 1. 외부 API에서 데이터 가져오기 (1페이지 분량, pageToken=null)
@@ -41,7 +40,7 @@ public class LeagueMatchService {
 			return;
 		}
 
-		// 2. DB에 저장 (Upsert)
+		// 2. DB에 저장 (Upsert) - 트랜잭션은 repository.save()에서 개별적으로 처리됨
 		for (MatchResultDto dto : matches) {
 			try {
 				LeagueMatch entity = convertToEntity(dto, leagueSlug);
@@ -54,7 +53,6 @@ public class LeagueMatchService {
 	}
 
 	// [Admin용] 모든 대상 리그의 전체 과거 데이터 동기화
-	@Transactional
 	public int syncAllLeaguesFullHistory() {
 		log.info("Starting FULL history sync for ALL target leagues: {}", TARGET_LEAGUES);
 		int totalSynced = 0;
@@ -72,7 +70,6 @@ public class LeagueMatchService {
 	}
 
 	// [Admin용] 특정 리그의 전체 과거 데이터 동기화
-	@Transactional
 	public int syncFullHistory(String leagueSlug) {
 		log.info("Starting FULL history sync for league: {}", leagueSlug);
 		String pageToken = null;
