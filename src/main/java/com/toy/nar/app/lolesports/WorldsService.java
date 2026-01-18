@@ -132,9 +132,24 @@ public class WorldsService {
 					}
 				}
 
-				// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+				// [보정 1] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경 (VOD 우선)
 				if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
 					finalState = "completed";
+				}
+
+				// [보정 2] 상태가 completed인데, 실제 게임들이 모두 unstarted이고 VOD도 없다면 unstarted로 정정 (LPL 가짜 완료 방지)
+				boolean allGamesUnstarted = true;
+				if (games.isArray() && games.size() > 0) {
+					for (JsonNode game : games) {
+						if (!"unstarted".equalsIgnoreCase(game.path("state").asText())) {
+							allGamesUnstarted = false;
+							break;
+						}
+					}
+					// 게임 정보는 있는데 모두 unstarted이고 VOD도 없으면 -> 아직 시작 안 한 것
+					if (allGamesUnstarted && setVods.isEmpty() && "completed".equalsIgnoreCase(finalState)) {
+						finalState = "unstarted";
+					}
 				}
 
 				// DTO 생성 후 반환
@@ -240,9 +255,23 @@ public class WorldsService {
 			}
 		}
 
-		// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+		// [보정 1] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
 		if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
 			finalState = "completed";
+		}
+
+		// [보정 2] 상태가 completed인데, 실제 게임들이 모두 unstarted이고 VOD도 없다면 unstarted로 정정 (LPL 가짜 완료 방지)
+		boolean allGamesUnstarted = true;
+		if (games.isArray() && games.size() > 0) {
+			for (JsonNode game : games) {
+				if (!"unstarted".equalsIgnoreCase(game.path("state").asText())) {
+					allGamesUnstarted = false;
+					break;
+				}
+			}
+			if (allGamesUnstarted && setVods.isEmpty() && "completed".equalsIgnoreCase(finalState)) {
+				finalState = "unstarted";
+			}
 		}
 
 		return MatchResultDto.builder()
@@ -297,9 +326,23 @@ public class WorldsService {
 		String apiState = event.path("state").asText("unstarted");
 		String finalState = (matchState != null && !matchState.isEmpty()) ? matchState : apiState;
 
-		// [보정] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
+		// [보정 1] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경
 		if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
 			finalState = "completed";
+		}
+		
+		// [보정 2] 상태가 completed인데, 실제 게임들이 모두 unstarted이고 VOD도 없다면 unstarted로 정정 (LPL 가짜 완료 방지)
+		boolean allGamesUnstarted = true;
+		if (games.isArray() && games.size() > 0) {
+			for (JsonNode game : games) {
+				if (!"unstarted".equalsIgnoreCase(game.path("state").asText())) {
+					allGamesUnstarted = false;
+					break;
+				}
+			}
+			if (allGamesUnstarted && setVods.isEmpty() && "completed".equalsIgnoreCase(finalState)) {
+				finalState = "unstarted";
+			}
 		}
 
 		return MatchResultDto.builder()
