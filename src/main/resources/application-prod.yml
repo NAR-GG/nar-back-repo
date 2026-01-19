@@ -6,9 +6,9 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
-    database-platform: org.hibernate.community.dialect.MySQLDialect
+    database-platform: org.hibernate.dialect.MySQL8Dialect
     hibernate:
-      ddl-auto: update  # Flyway 대신 Hibernate가 스키마 관리
+      ddl-auto: none
     properties:
       hibernate:
         show_sql: false
@@ -18,7 +18,8 @@ spring:
           order_inserts: true
     open-in-view: false
   flyway:
-    enabled: false  # Flyway Community는 MySQL 8.0 미지원
+    enabled: true
+    baseline-on-migrate: true
 
 notification:
   enabled: true
