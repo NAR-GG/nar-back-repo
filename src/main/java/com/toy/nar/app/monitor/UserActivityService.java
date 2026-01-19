@@ -40,7 +40,7 @@ public class UserActivityService {
 	/**
 	 * 1분마다 실행되어 5분이 지난 오래된 사용자 정보를 삭제합니다.
 	 */
-	@Scheduled(fixedRate = 60 * 1000)
+	// @Scheduled(fixedRate = 60 * 1000)
 	public void cleanupOldUsers() {
 		long now = clock.millis();
 		userActivity.entrySet()

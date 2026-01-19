@@ -14,7 +14,7 @@ public class CommunityScheduler {
 
 	// 1. 데이터 동기화: 10분마다 실행 (최신글 & 인기글)
 	// cron = "초 분 시 일 월 요일"
-	@Scheduled(cron = "0 0/10 * * * *")
+	// @Scheduled(cron = "0 0/10 * * * *")
 	public void syncCommunityData() {
 		log.info("Starting scheduled community and news sync...");
 		try {
@@ -29,7 +29,7 @@ public class CommunityScheduler {
 	}
 
 	// 2. 오래된 데이터 삭제: 매일 새벽 4시 실행
-	@Scheduled(cron = "0 0 4 * * *")
+	// @Scheduled(cron = "0 0 4 * * *")
 	public void cleanupOldData() {
 		log.info("Starting scheduled community cleanup...");
 		try {

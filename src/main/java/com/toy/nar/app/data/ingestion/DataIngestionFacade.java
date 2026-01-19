@@ -45,7 +45,7 @@ public class DataIngestionFacade {
 	private final SyncStatusRepository syncStatusRepository;
 	private final GameTeamStatRepository gameTeamStatRepository;
 
-	private static final int CHUNK_SIZE = 5000;
+	private static final int CHUNK_SIZE = 500;
 
 	public DataIngestionResult ingestFromStream(InputStream csvStream, String lastProcessedGameId) throws Exception {
 		log.info("[Starting] Starting stream-based CSV data ingestion");
