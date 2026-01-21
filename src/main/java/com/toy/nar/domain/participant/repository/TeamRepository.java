@@ -19,4 +19,7 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
 	@Query("SELECT t FROM Team t LEFT JOIN FETCH t.leagueTeams WHERE t.name IN :names")
 	List<Team> findAllByNameInWithLeagueTeams(@Param("names") Set<String> names);
+
+	@Query("SELECT t FROM Team t WHERE LOWER(t.name) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+	List<Team> findByNameContainingIgnoreCase(@Param("keyword") String keyword);
 }
