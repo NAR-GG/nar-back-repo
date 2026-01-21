@@ -357,8 +357,19 @@ public class YoutubeSyncService {
 				.toList();
 
 		if (!commentsToSave.isEmpty()) {
-			commentRepository.saveAll(commentsToSave);
-			log.info("[댓글 Sync] {} - 신규 댓글 {}개 저장", video.getTitle(), commentsToSave.size());
+			int savedCount = 0;
+			for (Comment comment : commentsToSave) {
+				try {
+					commentRepository.save(comment);
+					savedCount++;
+				} catch (org.springframework.dao.DataIntegrityViolationException e) {
+					// 중복 댓글은 무시 (동시 실행 스케줄러가 이미 저장한 경우)
+					log.debug("중복 댓글 스킵: {}", comment.getYoutubeCommentId());
+				}
+			}
+			if (savedCount > 0) {
+				log.info("[댓글 Sync] {} - 신규 댓글 {}개 저장", video.getTitle(), savedCount);
+			}
 		}
 	}
 
