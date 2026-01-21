@@ -1,4 +1,4 @@
-package com.toy.nar.api.v1;
+package com.toy.nar.api.v3;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
