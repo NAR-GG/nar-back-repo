@@ -24,7 +24,7 @@ import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-@Profile({"local", "dev", "prod"})
+@Profile({ "local", "dev", "prod" })
 @RestController
 @RequestMapping("/api/admin/data")
 @RequiredArgsConstructor
@@ -44,7 +44,7 @@ public class DataAdminController {
 
 	// Google Drive 서비스
 	private final DriveTestService driveTestService;
-	
+
 	// LoL Esports 서비스
 	private final com.toy.nar.app.lolesports.LeagueMatchService leagueMatchService;
 
@@ -52,14 +52,29 @@ public class DataAdminController {
 	@PostMapping("/sync/matches/history")
 	public ResponseEntity<Map<String, Object>> syncMatchHistory() {
 		log.info("Requesting full match history sync for ALL target leagues");
-		
+
 		int syncedCount = leagueMatchService.syncAllLeaguesFullHistory();
-		
+
 		return ResponseEntity.ok(Map.of(
-			"success", true,
-			"syncedCount", syncedCount,
-			"message", "모든 리그의 전체 히스토리 동기화가 완료되었습니다."
-		));
+				"success", true,
+				"syncedCount", syncedCount,
+				"message", "모든 리그의 전체 히스토리 동기화가 완료되었습니다."));
+	}
+
+	@PostMapping("/sync/matches/quick")
+	public ResponseEntity<Map<String, Object>> syncMatchesQuick(
+			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "LCK") String league) {
+		log.info("Quick sync requested for league: {}", league);
+
+		long start = System.currentTimeMillis();
+		leagueMatchService.syncMatches(league);
+		long elapsed = System.currentTimeMillis() - start;
+
+		return ResponseEntity.ok(Map.of(
+				"success", true,
+				"league", league,
+				"elapsedMs", elapsed,
+				"message", league + " 최신 동기화가 완료되었습니다."));
 	}
 
 	@PostMapping("/sync")
@@ -72,34 +87,29 @@ public class DataAdminController {
 		String summary = result.getSummary() != null ? result.getSummary() : "요약 정보 없음";
 		String source = result.source() != null ? result.source() : "출처 정보 없음";
 
-
 		if (result.isSuccess()) {
 			return ResponseEntity.ok(Map.of(
-				"success", true,
-				"message", "동기화가 성공적으로 완료되었습니다",
-				"summary", summary,
-				"data", Map.of(
-					"totalRowsProcessed", result.totalRowsProcessed(),
-					"newGamesAdded", result.newGamesAdded(),
-					"skippedGames", result.skippedGames(),
-					"invalidGames", result.invalidGames(),
-					"failedGames", result.failedGames(),
-					"processingTimeMs", result.processingTimeMs(),
-					"successRate", result.successRate()
-				)
-			));
+					"success", true,
+					"message", "동기화가 성공적으로 완료되었습니다",
+					"summary", summary,
+					"data", Map.of(
+							"totalRowsProcessed", result.totalRowsProcessed(),
+							"newGamesAdded", result.newGamesAdded(),
+							"skippedGames", result.skippedGames(),
+							"invalidGames", result.invalidGames(),
+							"failedGames", result.failedGames(),
+							"processingTimeMs", result.processingTimeMs(),
+							"successRate", result.successRate())));
 		} else {
 			return ResponseEntity.status(500).body(Map.of(
-				"success", false,
-				"message", "동기화 중 오류가 발생했습니다",
-				"error", errorMessage,
-				"summary", result.getSummary() != null ? result.getSummary() : "요약 정보 없음",
-				"data", Map.of(
-					"totalRowsProcessed", result.totalRowsProcessed(),
-					"processingTimeMs", result.processingTimeMs(),
-					"source", source
-				)
-			));
+					"success", false,
+					"message", "동기화 중 오류가 발생했습니다",
+					"error", errorMessage,
+					"summary", result.getSummary() != null ? result.getSummary() : "요약 정보 없음",
+					"data", Map.of(
+							"totalRowsProcessed", result.totalRowsProcessed(),
+							"processingTimeMs", result.processingTimeMs(),
+							"source", source)));
 		}
 	}
 
@@ -110,10 +120,9 @@ public class DataAdminController {
 		String fileStatus = googleDriveDataSyncService.checkFileStatus();
 
 		return ResponseEntity.ok(Map.of(
-			"success", true,
-			"message", "파일 상태 확인 완료",
-			"fileStatus", fileStatus
-		));
+				"success", true,
+				"message", "파일 상태 확인 완료",
+				"fileStatus", fileStatus));
 	}
 
 	// == 데이터 정합성 검사 (Integrity) ==
@@ -133,7 +142,7 @@ public class DataAdminController {
 		} catch (Exception e) {
 			log.error("Failed to analyze data status", e);
 			return ResponseEntity.status(500)
-				.body(Map.of("error", "데이터 상태 분석 중 오류가 발생했습니다: " + e.getMessage()));
+					.body(Map.of("error", "데이터 상태 분석 중 오류가 발생했습니다: " + e.getMessage()));
 		}
 	}
 
@@ -153,7 +162,7 @@ public class DataAdminController {
 		} catch (Exception e) {
 			log.error("Failed to delete incomplete games", e);
 			return ResponseEntity.status(500)
-				.body(Map.of("error", "불완전한 게임 삭제 중 오류가 발생했습니다: " + e.getMessage()));
+					.body(Map.of("error", "불완전한 게임 삭제 중 오류가 발생했습니다: " + e.getMessage()));
 		}
 	}
 
@@ -191,12 +200,11 @@ public class DataAdminController {
 	@PostMapping("/test-notification")
 	public ResponseEntity<String> testNotification() {
 		notificationService.sendSuccessNotification(
-			DataSyncResult.success()
-				.toBuilder()
-				.source("TEST")
-				.processingTimeMs(100)
-				.build()
-		);
+				DataSyncResult.success()
+						.toBuilder()
+						.source("TEST")
+						.processingTimeMs(100)
+						.build());
 		return ResponseEntity.ok("Slack 알림 완료");
 	}
 

@@ -30,6 +30,15 @@ public class WorldsService {
 			"WORLDS", "98767975604431411",
 			"MSI", "98767991325878492");
 
+	// 리그별 기본 라이브 스트림 URL (inProgress 상태에서 streams가 없을 때 사용)
+	private static final java.util.Map<String, String> DEFAULT_LIVE_STREAMS = java.util.Map.of(
+			"LCK", "https://play.sooplive.co.kr/aflol",
+			"LPL", "https://www.twitch.tv/lpl",
+			"LEC", "https://www.twitch.tv/lec",
+			"LCS", "https://www.twitch.tv/lcs",
+			"WORLDS", "https://www.twitch.tv/riotgames",
+			"MSI", "https://www.twitch.tv/riotgames");
+
 	@Value("${lolesports.riot-api.key}")
 	private String RIOT_API_KEY;
 
@@ -157,6 +166,13 @@ public class WorldsService {
 
 					// DTO 생성 후 반환
 					String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
+					// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
+					if ((liveStreamUrl == null || liveStreamUrl.isEmpty())
+							&& "inProgress".equalsIgnoreCase(finalState)) {
+						String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
+						liveStreamUrl = DEFAULT_LIVE_STREAMS.getOrDefault(leagueSlug,
+								"https://play.sooplive.co.kr/aflol");
+					}
 					return MatchResultDto.builder()
 							.matchId(eventId)
 							.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs "
@@ -288,11 +304,12 @@ public class WorldsService {
 			}
 		}
 
+		String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
 		return MatchResultDto.builder()
 				.matchId(eventId)
 				.matchTitle(teamA.path("code").asText() + " vs " + teamB.path("code").asText())
-				.matchDate(matchDate) // [수정] 넘겨받은 날짜 사용
-				.state(finalState) // 상태 설정
+				.matchDate(matchDate)
+				.state(finalState)
 				.score(winsA + " : " + winsB)
 				.blueTeam(MatchResultDto.TeamInfo.builder()
 						.code(teamA.path("code").asText())
@@ -307,6 +324,7 @@ public class WorldsService {
 						.wins(winsB)
 						.build())
 				.sets(setVods)
+				.liveStreamUrl(liveStreamUrl)
 				.build();
 	}
 
@@ -363,12 +381,9 @@ public class WorldsService {
 			}
 		}
 
+		String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
 		return MatchResultDto.builder()
-				.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText()) // "결승
-																													// |
-																													// T1
-																													// vs
-																													// GEN"
+				.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 				.matchDate(matchDate)
 				.state(finalState)
 				.score(winsA + " : " + winsB)
@@ -377,6 +392,7 @@ public class WorldsService {
 				.redTeam(MatchResultDto.TeamInfo.builder().code(teamB.path("code").asText())
 						.name(teamB.path("name").asText()).wins(winsB).build())
 				.sets(setVods)
+				.liveStreamUrl(liveStreamUrl)
 				.build();
 	}
 
