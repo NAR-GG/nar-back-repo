@@ -305,6 +305,11 @@ public class WorldsService {
 		}
 
 		String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
+		// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
+		if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
+			String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
+			liveStreamUrl = DEFAULT_LIVE_STREAMS.getOrDefault(leagueSlug, "https://play.sooplive.co.kr/aflol");
+		}
 		return MatchResultDto.builder()
 				.matchId(eventId)
 				.matchTitle(teamA.path("code").asText() + " vs " + teamB.path("code").asText())
@@ -382,6 +387,11 @@ public class WorldsService {
 		}
 
 		String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
+		// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
+		if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
+			String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
+			liveStreamUrl = DEFAULT_LIVE_STREAMS.getOrDefault(leagueSlug, "https://play.sooplive.co.kr/aflol");
+		}
 		return MatchResultDto.builder()
 				.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 				.matchDate(matchDate)
