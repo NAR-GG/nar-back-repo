@@ -27,6 +27,15 @@ public class LeagueMatchService {
 	private final ObjectMapper objectMapper;
 
 	public static final List<String> TARGET_LEAGUES = List.of("LCK", "LPL", "LEC", "LCS", "MSI", "WORLDS");
+	
+	private static final java.util.Map<String, String> DEFAULT_LIVE_STREAMS = java.util.Map.of(
+			"LCK", "https://play.sooplive.co.kr/aflol",
+			"LPL", "https://www.twitch.tv/lpl",
+			"LEC", "https://www.twitch.tv/lec",
+			"LCS", "https://www.twitch.tv/lcs",
+			"WORLDS", "https://www.twitch.tv/riotgames",
+			"MSI", "https://www.twitch.tv/riotgames"
+	);
 
 	// [Scheduler용] 특정 리그의 최신 경기를 가져와 DB에 저장 (1페이지)
 	public void syncMatches(String leagueSlug) {
@@ -226,6 +235,11 @@ public class LeagueMatchService {
 		} catch (JsonProcessingException e) {
 			log.error("JSON parsing failed for match: {}", entity.getId(), e);
 		}
+		
+		String liveStreamUrl = null;
+		if ("inProgress".equalsIgnoreCase(entity.getState())) {
+			liveStreamUrl = DEFAULT_LIVE_STREAMS.get(entity.getLeagueName().toUpperCase());
+		}
 
 		return MatchResultDto.builder()
 			.matchId(entity.getId())
@@ -247,6 +261,7 @@ public class LeagueMatchService {
 				.wins(entity.getRedScore())
 				.build())
 			.sets(sets)
+			.liveStreamUrl(liveStreamUrl)
 			.build();
 	}
 }
