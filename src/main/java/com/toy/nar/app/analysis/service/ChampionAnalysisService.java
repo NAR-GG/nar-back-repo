@@ -40,18 +40,21 @@ public class ChampionAnalysisService {
 		List<Integer> years = gameRepository.findYearsByLeagueAndPatch(targetLeague, latestPatch, PageRequest.of(0, 1));
 		String year = years.isEmpty() ? "" : String.valueOf(years.get(0));
 
+		// 해당 패치의 전체 게임 수 조회 (픽률/밴률 계산용)
+		long totalGamesInPatch = gameRepository.countByPatchAndLeague(latestPatch, targetLeague);
+
 		// 3. 픽률/승률 통계 TOP 5 조회
 		List<ChampionStatsDto> pickStats = gameRepository.findChampionStatsByPatchAndLeague(latestPatch, targetLeague,
 				PageRequest.of(0, 5));
+		
+		// 픽률 계산
+		pickStats.forEach(stat -> stat.calculatePickRate(totalGamesInPatch));
 
 		// 4. 밴률 통계 TOP 5 조회
 		List<ChampionBanStatsDto> top5Bans = gameRepository
 				.findChampionBanStatsByPatchAndLeague(latestPatch, targetLeague)
 				.stream().limit(5).collect(Collectors.toList());
 		
-		// 해당 패치의 전체 게임 수 조회 (밴률 계산용)
-		long totalGamesInPatch = gameRepository.countByPatchAndLeague(latestPatch, targetLeague);
-
 		// 5. 밴된 챔피언들의 픽/승률 통계 조회
 		if (!top5Bans.isEmpty()) {
 			List<String> bannedChampionNames = top5Bans.stream()
