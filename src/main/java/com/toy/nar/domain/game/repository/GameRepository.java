@@ -156,4 +156,7 @@ public interface GameRepository extends JpaRepository<Game, Long>, GameRepositor
 	default List<Game> findRecentGamesByBothTeams(List<Long> team1Ids, List<Long> team2Ids, int limit) {
 		return findRecentGamesByBothTeams(team1Ids, team2Ids, org.springframework.data.domain.PageRequest.of(0, limit));
 	}
+
+	@Query("SELECT COUNT(g) FROM Game g JOIN g.league l WHERE g.patch = :patch AND l.leagueName = :leagueName")
+	long countByPatchAndLeague(@Param("patch") String patch, @Param("leagueName") String leagueName);
 }

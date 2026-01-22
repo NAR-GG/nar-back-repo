@@ -48,6 +48,9 @@ public class ChampionAnalysisService {
 		List<ChampionBanStatsDto> top5Bans = gameRepository
 				.findChampionBanStatsByPatchAndLeague(latestPatch, targetLeague)
 				.stream().limit(5).collect(Collectors.toList());
+		
+		// 해당 패치의 전체 게임 수 조회 (밴률 계산용)
+		long totalGamesInPatch = gameRepository.countByPatchAndLeague(latestPatch, targetLeague);
 
 		// 5. 밴된 챔피언들의 픽/승률 통계 조회
 		if (!top5Bans.isEmpty()) {
@@ -61,7 +64,10 @@ public class ChampionAnalysisService {
 					.collect(Collectors.toMap(ChampionStatsDto::getChampionNameKr, stats -> stats));
 
 			// 6. 데이터 조합
-			top5Bans.forEach(banStat -> banStat.setPickWinStats(pickWinStatsMap.get(banStat.getChampionNameKr())));
+			top5Bans.forEach(banStat -> {
+				banStat.setPickWinStats(pickWinStatsMap.get(banStat.getChampionNameKr()));
+				banStat.calculateBanRate(totalGamesInPatch);
+			});
 		}
 
 		return ChampionAnalysisResponse.builder()
