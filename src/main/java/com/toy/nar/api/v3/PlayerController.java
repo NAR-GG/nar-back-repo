@@ -2,7 +2,11 @@ package com.toy.nar.api.v3;
 
 import com.toy.nar.app.participant.dto.PlayerImageSyncResult;
 import com.toy.nar.app.participant.service.PlayerService;
+import com.toy.nar.app.player.PlayerProfileCrawlerService;
+import com.toy.nar.app.player.PlayerProfileDto;
+import com.toy.nar.app.player.PlayerProfileSyncResult;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -15,13 +19,14 @@ import org.springframework.web.bind.annotation.*;
 public class PlayerController {
 
 	private final PlayerService playerService;
+	private final PlayerProfileCrawlerService playerProfileCrawlerService;
 
 	@Operation(summary = "선수 이미지 URL 수동 업데이트", description = "특정 선수의 이미지 URL을 수동으로 업데이트합니다.")
 	@PostMapping("/{playerId}/image")
 	public ResponseEntity<String> updatePlayerImage(
-		@PathVariable Long playerId,
-		@RequestParam String imageUrl) {
-		
+			@PathVariable Long playerId,
+			@RequestParam String imageUrl) {
+
 		playerService.updatePlayerImage(playerId, imageUrl);
 		return ResponseEntity.ok("Player image updated successfully.");
 	}
@@ -38,5 +43,19 @@ public class PlayerController {
 	public ResponseEntity<String> resetAllPlayerImages() {
 		int count = playerService.resetAllPlayerImages();
 		return ResponseEntity.ok("Reset images for " + count + " players.");
+	}
+
+	@Operation(summary = "선수 프로필 크롤링", description = "TrackingThePros에서 선수 프로필 정보(본명, 생년월일, 팀, 포지션 등)를 크롤링합니다.")
+	@GetMapping("/profile/{gameName}")
+	public PlayerProfileDto getPlayerProfile(
+			@Parameter(description = "선수 활동명", example = "Faker") @PathVariable String gameName) {
+		return playerProfileCrawlerService.crawlPlayerProfile(gameName);
+	}
+
+	@Operation(summary = "LCK 선수 프로필 일괄 동기화", description = "LCK 리그 선수들의 프로필 정보를 TrackingThePros에서 크롤링하여 DB에 저장합니다. 실패한 선수 목록을 반환합니다.")
+	@PostMapping("/sync-profiles")
+	public ResponseEntity<PlayerProfileSyncResult> syncLckPlayerProfiles() {
+		PlayerProfileSyncResult result = playerService.syncLckPlayerProfiles();
+		return ResponseEntity.ok(result);
 	}
 }
