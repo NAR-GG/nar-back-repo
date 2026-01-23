@@ -37,6 +37,21 @@ public class Player {
 	@Column(name = "image_url")
 	private String imageUrl;
 
+	@Column(name = "real_name", length = 100)
+	private String realName;
+
+	@Column(name = "birth_date", length = 10)
+	private String birthDate;
+
+	@Column(name = "age")
+	private Integer age;
+
+	@Column(name = "role", length = 20)
+	private String role;
+
+	@Column(name = "game_accounts", columnDefinition = "JSON")
+	private String gameAccounts;
+
 	@Builder
 	public Player(String name, String imageUrl) {
 		this.name = Objects.requireNonNull(name, "Player name must not be null");
@@ -49,5 +64,14 @@ public class Player {
 
 	public void setImageUrl(String imageUrl) {
 		this.imageUrl = imageUrl;
+	}
+
+	public void updateProfile(String realName, String birthDate, Integer age,
+			String role, String gameAccounts) {
+		this.realName = realName;
+		this.birthDate = birthDate;
+		this.age = age;
+		this.role = role;
+		this.gameAccounts = gameAccounts;
 	}
 }
