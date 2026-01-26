@@ -37,20 +37,23 @@ public class EntityResolver {
 	private final TeamRepository teamRepository;
 	private final PlayerRepository playerRepository;
 	private final ChampionRepository championRepository;
-	
-	@Getter private final Map<LeagueIdentifier, League> leagueCache = new ConcurrentHashMap<>();
-	@Getter private final Map<String, Team> teamCache = new ConcurrentHashMap<>();
-	@Getter private final Map<String, Player> playerCache = new ConcurrentHashMap<>();
-	@Getter private final Map<String, Champion> championCache = new ConcurrentHashMap<>();
+
+	@Getter
+	private final Map<LeagueIdentifier, League> leagueCache = new ConcurrentHashMap<>();
+	@Getter
+	private final Map<String, Team> teamCache = new ConcurrentHashMap<>();
+	@Getter
+	private final Map<String, Player> playerCache = new ConcurrentHashMap<>();
+	@Getter
+	private final Map<String, Champion> championCache = new ConcurrentHashMap<>();
 
 	@Transactional(readOnly = true)
 	public void initializeCaches() {
 		if (championCache.isEmpty()) {
 			championCache.putAll(championRepository.findAll().stream()
-				.collect(Collectors.toMap(
-					champion -> NameNormalizer.normalizeChampionName(champion.getChampionNameEn()),
-					Function.identity()
-				)));
+					.collect(Collectors.toMap(
+							champion -> NameNormalizer.normalizeChampionName(champion.getChampionNameEn()),
+							Function.identity())));
 			log.info("Initialized Champion cache with {} entries.", championCache.size());
 		}
 	}
@@ -58,54 +61,57 @@ public class EntityResolver {
 	@Transactional
 	public void resolveEntitiesFromChunk(List<GameDataCsvDto> chunk) {
 		Set<String> requiredTeamNames = chunk.stream()
-			.map(GameDataCsvDto::getTeamname)
-			.collect(Collectors.toSet());
+				.map(GameDataCsvDto::getTeamname)
+				.collect(Collectors.toSet());
 		Set<String> requiredPlayerNames = chunk.stream()
-			.map(GameDataCsvDto::getPlayername)
-			.collect(Collectors.toSet());
+				.map(GameDataCsvDto::getPlayername)
+				.collect(Collectors.toSet());
 		Set<LeagueIdentifier> requiredLeagueIds = chunk.stream()
-			.map(LeagueIdentifier::fromDto).collect(Collectors.toSet());
+				.map(LeagueIdentifier::fromDto).collect(Collectors.toSet());
 
 		resolveTeams(requiredTeamNames);
 		resolvePlayers(requiredPlayerNames);
 		log.debug("Resolving {} leagues from chunk.", requiredLeagueIds.size());
 		resolveLeagues(requiredLeagueIds, requiredTeamNames);
-		log.debug("After resolve: League cache size: {}, Champion cache size: {}", leagueCache.size(), championCache.size());
+		log.debug("After resolve: League cache size: {}, Champion cache size: {}", leagueCache.size(),
+				championCache.size());
 	}
 
 	private void resolveTeams(Set<String> originalNames) {
 		resolveEntitiesByName(
-			originalNames,
-			NameNormalizer::normalizeTeamName,
-			teamCache,
-			teamRepository::findAllByNameInWithLeagueTeams,
-			name -> Team.builder().name(name).build(),
-			teamRepository
-		);
+				originalNames,
+				NameNormalizer::normalizeTeamName,
+				teamCache,
+				teamRepository::findAllByNameInWithLeagueTeams,
+				name -> Team.builder().name(name).build(),
+				teamRepository);
 	}
 
 	private void resolvePlayers(Set<String> originalNames) {
 		resolveEntitiesByName(
-			originalNames,
-			NameNormalizer::normalizePlayerName,
-			playerCache,
-			playerRepository::findAllByNameInIgnoreCase,
-			name -> Player.builder().name(name).build(),
-			playerRepository
-		);
+				originalNames,
+				NameNormalizer::normalizePlayerName,
+				playerCache,
+				playerRepository::findAllByNameInIgnoreCase,
+				name -> Player.builder().name(name).build(),
+				playerRepository);
 	}
+
 	public Team resolveTeam(String teamName) {
-		if (!StringUtils.hasText(teamName)) return null;
+		if (!StringUtils.hasText(teamName))
+			return null;
 		return teamCache.get(NameNormalizer.normalizeTeamName(teamName.trim()));
 	}
 
 	public Player resolvePlayer(String playerName) {
-		if (!StringUtils.hasText(playerName)) return null;
+		if (!StringUtils.hasText(playerName))
+			return null;
 		return playerCache.get(NameNormalizer.normalizePlayerName(playerName.trim()));
 	}
 
 	public Champion resolveChampion(String championName) {
-		if (!StringUtils.hasText(championName)) return null;
+		if (!StringUtils.hasText(championName))
+			return null;
 		return championCache.get(NameNormalizer.normalizeChampionName(championName.trim()));
 	}
 
@@ -116,45 +122,45 @@ public class EntityResolver {
 	@Transactional
 	public void resolveLeagues(Set<LeagueIdentifier> requiredIds, Set<String> requiredTeamNames) {
 		Set<LeagueIdentifier> missingInCache = requiredIds.stream()
-			.filter(id -> !leagueCache.containsKey(id))
-			.collect(Collectors.toSet());
+				.filter(id -> !leagueCache.containsKey(id))
+				.collect(Collectors.toSet());
 
 		if (missingInCache.isEmpty()) {
 			return;
 		}
 
 		Set<String> leagueNamesToFind = missingInCache.stream()
-			.map(LeagueIdentifier::name)
-			.collect(Collectors.toSet());
+				.map(LeagueIdentifier::name)
+				.collect(Collectors.toSet());
 		Set<Integer> yearsToFind = missingInCache.stream()
-			.map(LeagueIdentifier::year)
-			.collect(Collectors.toSet());
+				.map(LeagueIdentifier::year)
+				.collect(Collectors.toSet());
 		List<League> foundLeagues = leagueRepository.findLeaguesWithTeamsByIdentifiers(leagueNamesToFind, yearsToFind);
 
 		Map<LeagueIdentifier, League> foundLeaguesMap = foundLeagues.stream()
-			.collect(Collectors.toMap(LeagueIdentifier::fromEntity, Function.identity()));
+				.collect(Collectors.toMap(LeagueIdentifier::fromEntity, Function.identity()));
 		leagueCache.putAll(foundLeaguesMap);
 
 		List<League> leaguesToCreate = new ArrayList<>();
 		missingInCache.stream()
-			.filter(id -> !foundLeaguesMap.containsKey(id))
-			.forEach(id -> {
-				League newLeague = League.builder()
-					.leagueName(id.name())
-					.seasonYear(id.year())
-					.seasonSplit(id.split())
-					.isPlayoffs(id.isPlayoffs())
-					.build();
+				.filter(id -> !foundLeaguesMap.containsKey(id))
+				.forEach(id -> {
+					League newLeague = League.builder()
+							.leagueName(id.name())
+							.seasonYear(id.year())
+							.seasonSplit(id.split())
+							.isPlayoffs(id.isPlayoffs())
+							.build();
 
-				requiredTeamNames.forEach(teamName -> {
-					String teamLookupKey = NameNormalizer.normalizeTeamName(teamName);
-					Team team = teamCache.get(teamLookupKey);
-					if (team != null) {
-						newLeague.addLeagueTeam(team);
-					}
+					requiredTeamNames.forEach(teamName -> {
+						String teamLookupKey = NameNormalizer.normalizeTeamName(teamName);
+						Team team = teamCache.get(teamLookupKey);
+						if (team != null) {
+							newLeague.addLeagueTeam(team);
+						}
+					});
+					leaguesToCreate.add(newLeague);
 				});
-				leaguesToCreate.add(newLeague);
-			});
 
 		if (!leaguesToCreate.isEmpty()) {
 			log.info("Creating {} new leagues.", leaguesToCreate.size());
@@ -166,20 +172,20 @@ public class EntityResolver {
 	}
 
 	private <T, ID> void resolveEntitiesByName(
-		Set<String> originalNames,
-		Function<String, String> storageNormalizer,
-		Map<String, T> cache,
-		Function<Set<String>, List<T>> findInDb,
-		Function<String, T> entityCreator,
-		JpaRepository<T, ID> repository
-	) {
+			Set<String> originalNames,
+			Function<String, String> storageNormalizer,
+			Map<String, T> cache,
+			Function<Set<String>, List<T>> findInDb,
+			Function<String, T> entityCreator,
+			JpaRepository<T, ID> repository) {
 		Set<String> newNormalizedNames = originalNames.stream()
-			.filter(StringUtils::hasText)
-			.map(name -> storageNormalizer.apply(name.trim()))
-			.filter(normalizedName -> !cache.containsKey(normalizedName))
-			.collect(Collectors.toSet());
+				.filter(StringUtils::hasText)
+				.map(name -> storageNormalizer.apply(name.trim()))
+				.filter(normalizedName -> !cache.containsKey(normalizedName))
+				.collect(Collectors.toSet());
 
-		if (newNormalizedNames.isEmpty()) return;
+		if (newNormalizedNames.isEmpty())
+			return;
 
 		log.debug("Querying DB for {} with keys: {}", repository.getClass().getSimpleName(), newNormalizedNames);
 		List<T> existingEntities = findInDb.apply(newNormalizedNames);
@@ -189,18 +195,19 @@ public class EntityResolver {
 			String normalizedName = getNameFromEntity(entity);
 			cache.put(normalizedName, entity);
 		});
-		
+
 		Set<String> namesOfExistingEntities = existingEntities.stream()
-			.map(this::getNameFromEntity)
-			.collect(Collectors.toSet());
+				.map(this::getNameFromEntity)
+				.collect(Collectors.toSet());
 
 		List<T> entitiesToCreate = newNormalizedNames.stream()
-			.filter(normalizedName -> !namesOfExistingEntities.contains(normalizedName))
-			.map(entityCreator)
-			.collect(Collectors.toList());
+				.filter(normalizedName -> !namesOfExistingEntities.contains(normalizedName))
+				.map(entityCreator)
+				.collect(Collectors.toList());
 
 		if (!entitiesToCreate.isEmpty()) {
-			log.info("Creating {} new entities for {}.", entitiesToCreate.size(), repository.getClass().getSimpleName());
+			log.info("Creating {} new entities for {}.", entitiesToCreate.size(),
+					repository.getClass().getSimpleName());
 			List<T> savedEntities = repository.saveAll(entitiesToCreate);
 			log.info("Successfully created {} new entities.", savedEntities.size());
 
@@ -224,7 +231,7 @@ public class EntityResolver {
 		leagueCache.clear();
 		teamCache.clear();
 		playerCache.clear();
-		championCache.clear(); 
+		championCache.clear();
 		log.info("EntityResolver caches cleared.");
 	}
 }

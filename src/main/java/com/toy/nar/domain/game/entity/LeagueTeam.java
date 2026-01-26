@@ -21,19 +21,16 @@ import lombok.ToString;
 import com.toy.nar.domain.participant.entity.Team;
 
 @Entity
-@Table(name = "league_teams",
-	uniqueConstraints = {
-		@UniqueConstraint(columnNames = {"league_id", "team_id"})
-	},
-	indexes = {
+@Table(name = "league_teams", uniqueConstraints = {
+		@UniqueConstraint(columnNames = { "league_id", "team_id" })
+}, indexes = {
 		@Index(name = "idx_league_teams_league", columnList = "league_id"),
 		@Index(name = "idx_league_teams_team", columnList = "team_id")
-	}
-)
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = {"league", "team"})
-@ToString(exclude = {"league", "team"})
+@EqualsAndHashCode(of = { "league", "team" })
+@ToString(exclude = { "league", "team" })
 public class LeagueTeam {
 
 	@Id

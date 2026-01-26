@@ -27,7 +27,7 @@ import com.toy.nar.domain.participant.entity.Team;
 
 @Entity
 @Table(name = "leagues", uniqueConstraints = {
-	@UniqueConstraint(columnNames = {"league_name", "season_year", "season_split", "is_playoffs"})
+		@UniqueConstraint(columnNames = { "league_name", "season_year", "season_split", "is_playoffs" })
 }) // 복합 유니크 제약 조건 추가
 @Getter // Lombok: Getter 자동 생성
 @NoArgsConstructor(access = AccessLevel.PROTECTED) // Lombok: 기본 생성자
@@ -57,9 +57,9 @@ public class League {
 	public void addLeagueTeam(Team team) {
 		if (!hasTeam(team)) {
 			LeagueTeam leagueTeam = LeagueTeam.builder()
-				.league(this)
-				.team(team)
-				.build();
+					.league(this)
+					.team(team)
+					.build();
 			this.leagueTeams.add(leagueTeam);
 
 		}
@@ -70,7 +70,7 @@ public class League {
 			return false;
 		}
 		return leagueTeams.stream()
-			.anyMatch(lt -> lt.getTeam().getId().equals(team.getId()));
+				.anyMatch(lt -> lt.getTeam().getId().equals(team.getId()));
 	}
 
 	@Builder // Lombok: 빌더 패턴 생성자
@@ -83,8 +83,10 @@ public class League {
 
 	@Override
 	public boolean equals(Object o) {
-		if (this == o) return true;
-		if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) return false;
+		if (this == o)
+			return true;
+		if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o))
+			return false;
 		League league = (League) o;
 		return id != null && Objects.equals(id, league.id);
 	}
