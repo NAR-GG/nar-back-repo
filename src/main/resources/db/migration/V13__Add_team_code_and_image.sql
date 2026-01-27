@@ -1,0 +1,2 @@
+ALTER TABLE team ADD COLUMN team_code VARCHAR(10);
+ALTER TABLE team ADD COLUMN team_image_url VARCHAR(255);
