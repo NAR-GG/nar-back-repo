@@ -40,9 +40,9 @@ public class LeagueTeamInitializer {
 			Team team = (Team) pair[1];
 
 			LeagueTeam leagueTeam = LeagueTeam.builder()
-				.league(league)
-				.team(team)
-				.build();
+					.league(league)
+					.team(team)
+					.build();
 			leagueTeamsToSave.add(leagueTeam);
 		}
 

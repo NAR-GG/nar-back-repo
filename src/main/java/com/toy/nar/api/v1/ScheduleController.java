@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.toy.nar.app.lolesports.LeagueMatchService;
 import com.toy.nar.app.schedule.ScheduleService;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto;
 import com.toy.nar.app.schedule.dto.ScheduleResponseDto;
@@ -27,24 +28,30 @@ import lombok.RequiredArgsConstructor;
 public class ScheduleController {
 
 	private final ScheduleService scheduleService;
+	private final LeagueMatchService leagueMatchService;
 
 	@Operation(summary = "일별 경기 일정 조회", description = "특정 날짜의 경기 목록을 조회합니다. (캘린더 클릭 시 사용)")
 	@ApiErrorCode(ErrorCode.INVALID_INPUT_VALUE)
 	@GetMapping("")
 	public ResponseEntity<ScheduleResponseDto> getDailySchedule(
-		@RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
-	) {
+			@RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 		ScheduleResponseDto schedule = scheduleService.getDailySchedule(date);
 		return ResponseEntity.ok(schedule);
 	}
 
 	@Operation(summary = "매치 상세 정보 조회", description = "특정 매치(Match)의 세부 정보를 조회합니다.")
-	@ApiErrorCode({ErrorCode.INVALID_MATCH_ID, ErrorCode.MATCH_NOT_FOUND})
+	@ApiErrorCode({ ErrorCode.INVALID_MATCH_ID, ErrorCode.MATCH_NOT_FOUND })
 	@GetMapping("/matches/{matchId}/detail")
 	public ResponseEntity<MatchDetailResponseDto> getMatchDetail(
-		@PathVariable String matchId
-	) {
+			@PathVariable String matchId) {
 		MatchDetailResponseDto detail = scheduleService.getMatchDetail(matchId);
 		return ResponseEntity.ok(detail);
+	}
+
+	@Operation(summary = "과거 경기 이력 수동 동기화", description = "Lolesports의 모든 대상 리그에 대해 과거 경기 이력을 수동으로 동기화합니다.")
+	@org.springframework.web.bind.annotation.PostMapping("/sync/history")
+	public ResponseEntity<String> syncHistory() {
+		int count = leagueMatchService.syncAllLeaguesFullHistory();
+		return ResponseEntity.ok("Synced " + count + " matches.");
 	}
 }

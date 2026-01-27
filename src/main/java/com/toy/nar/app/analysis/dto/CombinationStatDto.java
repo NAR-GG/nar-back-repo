@@ -26,23 +26,9 @@ public class CombinationStatDto {
 	}
 
 	// Getters
-	public List<String> getChampions() {
-		return champions;
-	}
-
-	public long getFrequency() {
-		return frequency;
-	}
-
-	public long getWinCount() {
-		return winCount;
-	}
-
-	public LocalDateTime getLatestGameDate() {
-		return latestGameDate;
-	}
-
-	public String getLatestPatch() {
-		return latestPatch;
-	}
+	public List<String> getChampions() { return champions; }
+	public long getFrequency() { return frequency; }
+	public long getWinCount() { return winCount; }
+	public LocalDateTime getLatestGameDate() { return latestGameDate; }
+	public String getLatestPatch() { return latestPatch; }
 }

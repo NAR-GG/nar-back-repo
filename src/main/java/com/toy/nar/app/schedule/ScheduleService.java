@@ -1,5 +1,6 @@
 package com.toy.nar.app.schedule;
 
+import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.schedule.dto.*;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto.PlayerPickDto;
@@ -32,6 +33,8 @@ public class ScheduleService {
 	private final ScheduleCacheableService scheduleCacheableService;
 	private final MatchDetailCacheableService matchDetailCacheableService;
 	private final GameRepository gameRepository;
+	private final GameParticipantRepository gameParticipantRepository;
+	private final LeagueMatchRepository leagueMatchRepository;
 
 	/**
 	 * 일정 조회 공개 메서드.
@@ -51,23 +54,255 @@ public class ScheduleService {
 	/**
 	 * 매치 상세 정보 조회 서비스
 	 */
-	@Transactional(readOnly = true)
 	public MatchDetailResponseDto getMatchDetail(String matchId) {
-		Set<Long> gameIds = decodeMatchId(matchId);
-		if (gameIds.isEmpty()) {
-			throw new CustomException(ErrorCode.MATCH_NOT_FOUND);
+		// 1. Try to decode matchId as gameIds (internal DB format)
+		Set<Long> gameIds = Collections.emptySet();
+		try {
+			gameIds = decodeMatchId(matchId);
+		} catch (CustomException e) {
+			// If decoding fails, it might be a lolesports matchId (string)
+			// Proceed to fallback
 		}
 
-		// 대표 게임 ID 하나로 날짜를 확인합니다.
-		Long representativeGameId = gameIds.iterator().next();
-		LocalDate matchDate = gameRepository.findById(representativeGameId)
-			.map(game -> game.getScheduledGameStartTime().atZone(ZoneId.of("UTC")).withZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDate())
-			.orElse(LocalDate.now());
+		if (!gameIds.isEmpty()) {
+			// 대표 게임 ID 하나로 날짜를 확인합니다.
+			Long representativeGameId = gameIds.iterator().next();
+			Optional<Game> gameOpt = gameRepository.findById(representativeGameId);
+			if (gameOpt.isPresent()) {
+				Game game = gameOpt.get();
+				LocalDate matchDate = game.getActualGameStartTime()
+						.atZone(ZoneId.of("UTC"))
+						.withZoneSameInstant(ZoneId.of("Asia/Seoul"))
+						.toLocalDate();
 
-		if (matchDate.isEqual(LocalDate.now(ZoneId.of("Asia/Seoul")))) {
-			return matchDetailCacheableService.getTodayMatchDetail(matchId);
+				if (matchDate.isEqual(LocalDate.now(ZoneId.of("Asia/Seoul")))) {
+					return matchDetailCacheableService.getTodayMatchDetail(matchId);
+				}
+				return matchDetailCacheableService.getPastMatchDetail(matchId);
+			}
 		}
-		return matchDetailCacheableService.getPastMatchDetail(matchId);
+
+		// 2. Fallback: Check LeagueMatchRepository (Lolesports data)
+		return leagueMatchRepository.findById(matchId)
+				.map(this::convertLeagueMatchToDetailDto)
+				.orElseThrow(() -> new CustomException(ErrorCode.MATCH_NOT_FOUND));
+	}
+
+	private MatchDetailResponseDto convertLeagueMatchToDetailDto(
+			com.toy.nar.app.lolesports.repository.LeagueMatch leagueMatch) {
+
+		String normalizedBlueTeamName = com.toy.nar.common.util.NameNormalizer
+				.normalizeTeamName(leagueMatch.getBlueTeamName());
+		String normalizedRedTeamName = com.toy.nar.common.util.NameNormalizer
+				.normalizeTeamName(leagueMatch.getRedTeamName());
+
+		// Format scheduled time from matchDate (LocalDateTime), converting UTC to KST
+		String scheduledTime = leagueMatch.getMatchDate() != null
+				? leagueMatch.getMatchDate().atZone(java.time.ZoneId.of("UTC"))
+						.withZoneSameInstant(java.time.ZoneId.of("Asia/Seoul"))
+						.toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+				: "";
+
+		// Create TeamResultDto for each team
+		TeamResultDto teamA = new TeamResultDto(normalizedBlueTeamName,
+				leagueMatch.getBlueScore() != null ? leagueMatch.getBlueScore() : 0);
+		TeamResultDto teamB = new TeamResultDto(normalizedRedTeamName,
+				leagueMatch.getRedScore() != null ? leagueMatch.getRedScore() : 0);
+
+		// Parse VOD info and find matching games
+		List<GameDetailDto> gameDetails = parseGameDetailsFromLeagueMatch(leagueMatch);
+
+		// Determine consistency based on whether any game details have a valid ID
+		boolean isSynced = gameDetails.stream().anyMatch(d -> d.id() != null);
+
+		// Create summary
+		MatchSummaryDto summary = MatchSummaryDto.builder()
+				.matchId(leagueMatch.getId())
+				.scheduledTime(scheduledTime)
+				.leagueInfo(leagueMatch.getLeagueName())
+				.matchStatus(leagueMatch.getState())
+				.isSynced(isSynced)
+				.teamA(teamA)
+				.teamB(teamB)
+				.build();
+
+		return new MatchDetailResponseDto(summary, gameDetails);
+	}
+
+	private List<GameDetailDto> parseGameDetailsFromLeagueMatch(
+			com.toy.nar.app.lolesports.repository.LeagueMatch leagueMatch) {
+
+		// 1. Parse VOD info from JSON first
+		Map<Integer, String> vodBySetNumber = parseVodMap(leagueMatch.getMatchDetailsJson());
+		log.debug("Parsed {} VODs for match {}", vodBySetNumber.size(), leagueMatch.getId());
+
+		// 2. Try to find matching Game data by date and team names
+		LocalDateTime matchDate = leagueMatch.getMatchDate();
+		if (matchDate == null) {
+			log.debug("No matchDate for match {}, returning VOD-only details", leagueMatch.getId());
+			return createVodOnlyDetails(leagueMatch, vodBySetNumber);
+		}
+
+		// LeagueMatch.matchDate is stored as UTC, convert to KST date range for Game
+		// query
+		// Game.scheduledGameStartTime is in UTC, so we query with UTC range
+		LocalDateTime startOfDayUtc = matchDate.toLocalDate().atStartOfDay();
+		LocalDateTime endOfDayUtc = startOfDayUtc.plusDays(1);
+		log.debug("Searching games from {} to {} (UTC) for match {}", startOfDayUtc, endOfDayUtc, leagueMatch.getId());
+
+		// Get games on this date
+		List<ScheduleItemDto> scheduleItems = gameRepository.findScheduleItemsByDate(startOfDayUtc, endOfDayUtc);
+		log.debug("Found {} schedule items on this date", scheduleItems.size());
+
+		// Group by team pairs and find matching games
+		String blueTeamNormalized = com.toy.nar.common.util.NameNormalizer
+				.normalizeTeamName(leagueMatch.getBlueTeamName());
+		String redTeamNormalized = com.toy.nar.common.util.NameNormalizer
+				.normalizeTeamName(leagueMatch.getRedTeamName());
+		log.debug("Looking for teams: blue='{}' (from '{}'), red='{}' (from '{}')",
+				blueTeamNormalized, leagueMatch.getBlueTeamName(),
+				redTeamNormalized, leagueMatch.getRedTeamName());
+
+		Set<Long> matchingGameIds = findMatchingGameIds(scheduleItems, blueTeamNormalized, redTeamNormalized);
+		log.debug("Found {} matching game IDs: {}", matchingGameIds.size(), matchingGameIds);
+
+		if (matchingGameIds.isEmpty()) {
+			log.debug("No matching games found, returning VOD-only details");
+			return createVodOnlyDetails(leagueMatch, vodBySetNumber);
+		}
+
+		// 3. Get full game details from GameParticipant
+		List<GameParticipant> participants = gameParticipantRepository.findGameDetailsByGameIds(matchingGameIds);
+		log.debug("Retrieved {} participants for merged details", participants.size());
+
+		// 4. Build GameDetailDto merging VOD with Game data
+		return buildMergedGameDetails(participants, vodBySetNumber, blueTeamNormalized, redTeamNormalized);
+	}
+
+	private Map<Integer, String> parseVodMap(String matchDetailsJson) {
+		Map<Integer, String> vodMap = new HashMap<>();
+		if (matchDetailsJson == null || matchDetailsJson.isBlank()) {
+			return vodMap;
+		}
+		try {
+			com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+			List<com.toy.nar.app.lolesports.MatchResultDto.SetVod> sets = objectMapper.readValue(
+					matchDetailsJson,
+					new com.fasterxml.jackson.core.type.TypeReference<List<com.toy.nar.app.lolesports.MatchResultDto.SetVod>>() {
+					});
+			for (com.toy.nar.app.lolesports.MatchResultDto.SetVod setVod : sets) {
+				vodMap.put(setVod.getSetNumber(), setVod.getVodUrl());
+			}
+		} catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+			log.warn("Failed to parse matchDetailsJson: {}", e.getMessage());
+		}
+		return vodMap;
+	}
+
+	private Set<Long> findMatchingGameIds(List<ScheduleItemDto> scheduleItems, String blueTeam, String redTeam) {
+		// Group schedule items by game ID
+		Map<Long, Set<String>> teamsByGameId = scheduleItems.stream()
+				.collect(Collectors.groupingBy(
+						ScheduleItemDto::gameId,
+						Collectors.mapping(
+								item -> com.toy.nar.common.util.NameNormalizer.normalizeTeamName(item.teamName()),
+								Collectors.toSet())));
+
+		// Find games where both teams participated
+		return teamsByGameId.entrySet().stream()
+				.filter(entry -> {
+					Set<String> teams = entry.getValue();
+					return teams.contains(blueTeam) && teams.contains(redTeam);
+				})
+				.map(Map.Entry::getKey)
+				.collect(Collectors.toSet());
+	}
+
+	private List<GameDetailDto> createVodOnlyDetails(
+			com.toy.nar.app.lolesports.repository.LeagueMatch leagueMatch,
+			Map<Integer, String> vodBySetNumber) {
+		List<GameDetailDto> details = new ArrayList<>();
+		String blueTeam = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(leagueMatch.getBlueTeamName());
+		String redTeam = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(leagueMatch.getRedTeamName());
+
+		for (Map.Entry<Integer, String> entry : vodBySetNumber.entrySet()) {
+			details.add(new GameDetailDto(
+					null,
+					entry.getKey(),
+					0,
+					entry.getValue(),
+					new GameDetailDto.TeamPicksDto(blueTeam, false, Collections.emptyList()),
+					new GameDetailDto.TeamPicksDto(redTeam, false, Collections.emptyList())));
+		}
+		return details.stream()
+				.sorted(Comparator.comparingInt(GameDetailDto::gameNumber))
+				.toList();
+	}
+
+	private List<GameDetailDto> buildMergedGameDetails(
+			List<GameParticipant> participants,
+			Map<Integer, String> vodBySetNumber,
+			String blueTeamName, String redTeamName) {
+
+		// Group by game
+		Map<Long, List<GameParticipant>> participantsByGame = participants.stream()
+				.collect(Collectors.groupingBy(p -> p.getGame().getId()));
+
+		List<GameDetailDto> details = new ArrayList<>();
+		for (List<GameParticipant> gameParticipants : participantsByGame.values()) {
+			Game game = gameParticipants.get(0).getGame();
+
+			// Group by side
+			Map<String, List<GameParticipant>> bySide = gameParticipants.stream()
+					.collect(Collectors.groupingBy(GameParticipant::getSide));
+
+			// Get VOD for this game number
+			String vodUrl = vodBySetNumber.get(game.getGameNumber());
+
+			GameDetailDto.TeamPicksDto blueTeam = createTeamPicksDto(bySide.get("Blue"));
+			GameDetailDto.TeamPicksDto redTeam = createTeamPicksDto(bySide.get("Red"));
+
+			details.add(new GameDetailDto(
+					game.getId(),
+					game.getGameNumber(),
+					game.getGameLengthSeconds(),
+					vodUrl,
+					blueTeam,
+					redTeam));
+		}
+
+		return details.stream()
+				.sorted(Comparator.comparingInt(GameDetailDto::gameNumber))
+				.toList();
+	}
+
+	private GameDetailDto.TeamPicksDto createTeamPicksDto(List<GameParticipant> teamParticipants) {
+		if (teamParticipants == null || teamParticipants.isEmpty()) {
+			return new GameDetailDto.TeamPicksDto("Unknown", false, Collections.emptyList());
+		}
+		String teamName = teamParticipants.get(0).getTeam().getName();
+		boolean isWin = teamParticipants.get(0).getIsWin();
+
+		List<GameDetailDto.PlayerPickDto> players = teamParticipants.stream()
+				.map(p -> new GameDetailDto.PlayerPickDto(
+						p.getPosition(),
+						p.getPlayer().getName(),
+						p.getChampion().getChampionNameEn()))
+				.sorted(Comparator.comparing(p -> getPositionOrder(p.position())))
+				.toList();
+
+		return new GameDetailDto.TeamPicksDto(teamName, isWin, players);
+	}
+
+	private int getPositionOrder(String position) {
+		return switch (position.toLowerCase()) {
+			case "top" -> 1;
+			case "jng", "jungle" -> 2;
+			case "mid" -> 3;
+			case "bot", "adc" -> 4;
+			case "sup", "support" -> 5;
+			default -> 99;
+		};
 	}
 
 	private Set<Long> decodeMatchId(String matchId) {
@@ -78,11 +313,12 @@ public class ScheduleService {
 			byte[] decodedBytes = Base64.getDecoder().decode(matchId);
 			String[] idStrings = new String(decodedBytes).split(",");
 			return Arrays.stream(idStrings)
-				.map(Long::parseLong)
-				.collect(Collectors.toSet());
+					.map(Long::parseLong)
+					.collect(Collectors.toSet());
 		} catch (IllegalArgumentException e) {
-			// Base64 형식이 아니거나, 파싱 불가능한 문자가 들어왔을 때
-			log.warn("Invalid matchId format: {}", matchId);
+			// Lolesports matchId는 Base64가 아니므로 여기서 실패하는 것은 정상입니다.
+			// LeagueMatchRepository fallback으로 처리됩니다.
+			log.debug("MatchId '{}' is not Base64 encoded, will try LeagueMatch lookup", matchId);
 			throw new CustomException(ErrorCode.INVALID_MATCH_ID);
 		} catch (Exception e) {
 			log.error("Error decoding matchId: {}", matchId, e);

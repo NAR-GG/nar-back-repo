@@ -19,8 +19,8 @@ public interface LeagueTeamRepository extends JpaRepository<LeagueTeam, Long> {
 
 	@Query("SELECT lt.team FROM LeagueTeam lt WHERE lt.league.leagueName = :leagueName AND lt.league.seasonYear = :seasonYear AND lt.league.seasonSplit = :seasonSplit")
 	List<Team> findTeamsByLeagueParams(@Param("leagueName") String leagueName,
-		@Param("seasonYear") Integer seasonYear,
-		@Param("seasonSplit") String seasonSplit);
+			@Param("seasonYear") Integer seasonYear,
+			@Param("seasonSplit") String seasonSplit);
 
 	@Modifying
 	int deleteByLeague_LeagueName(String leagueName);

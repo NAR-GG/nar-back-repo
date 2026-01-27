@@ -33,7 +33,7 @@ public class GameRecordService {
 	public GameRecordDto getGameRecord(Long gameId) {
 		// 1. Repository에서 한 번의 쿼리로 모든 데이터를 가져옴
 		Game game = gameRepository.findGameDetailsById(gameId)
-			.orElseThrow(() -> new CustomException(ErrorCode.MATCH_NOT_FOUND));
+				.orElseThrow(() -> new CustomException(ErrorCode.MATCH_NOT_FOUND));
 
 		// 2. 해당 게임의 TeamStat을 조회 (Blue/Red 팀별로)
 		List<GameTeamStat> statList = gameTeamStatRepository.findByGameId(game.getId());
@@ -44,7 +44,7 @@ public class GameRecordService {
 		}
 
 		Map<String, GameTeamStat> teamStats = statList.stream()
-			.collect(Collectors.toMap(stat -> stat.getTeam().getName(), stat -> stat));
+				.collect(Collectors.toMap(stat -> stat.getTeam().getName(), stat -> stat));
 
 		// 3. 블루/레드 팀 이름 식별 (데이터 무결성 체크 포함)
 		String blueTeamName = findTeamNameBySide(game, "Blue");
@@ -58,46 +58,46 @@ public class GameRecordService {
 
 		// 3-2. Player 정보 변환 (핵심 로직)
 		List<PlayerRecordDto> playerRecordDtos = game.getParticipants().stream()
-			.distinct()
-			.map(p -> {
-				String teamName = p.getTeam().getName();
-				GameTeamStat teamStat = teamStats.get(teamName);
+				.distinct()
+				.map(p -> {
+					String teamName = p.getTeam().getName();
+					GameTeamStat teamStat = teamStats.get(teamName);
 
-				// 특정 팀의 스탯이 매핑되지 않는다면 데이터 오류
-				if (teamStat == null) {
-					log.error("Team stat missing for team: {} in game: {}", teamName, gameId);
-					throw new CustomException(ErrorCode.DATA_INTEGRITY_ERROR);
-				}
-				return PlayerRecordDto.from(p, teamStat);
-			}).toList();
+					// 특정 팀의 스탯이 매핑되지 않는다면 데이터 오류
+					if (teamStat == null) {
+						log.error("Team stat missing for team: {} in game: {}", teamName, gameId);
+						throw new CustomException(ErrorCode.DATA_INTEGRITY_ERROR);
+					}
+					return PlayerRecordDto.from(p, teamStat);
+				}).toList();
 
 		// 3-3. 최종 GameRecordDto 조립
 		GameRecordDto recordDto = new GameRecordDto(
-			game.getGameOriginId(), "complete", game.getLeague().getLeagueName(),
-			game.getLeague().getSeasonYear(), game.getLeague().getSeasonSplit(), game.getLeague().getIsPlayoffs() ? 1 : 0,
-			game.getActualGameStartTime().toLocalDate().toString(), game.getGameNumber(), game.getPatch(),
-			game.getGameLengthSeconds(), bansDto, playerRecordDtos
-		);
+				game.getGameOriginId(), "complete", game.getLeague().getLeagueName(),
+				game.getLeague().getSeasonYear(), game.getLeague().getSeasonSplit(),
+				game.getLeague().getIsPlayoffs() ? 1 : 0,
+				game.getActualGameStartTime().toLocalDate().toString(), game.getGameNumber(), game.getPatch(),
+				game.getGameLengthSeconds(), bansDto, playerRecordDtos);
 
 		return recordDto;
 	}
 
 	private String findTeamNameBySide(Game game, String side) {
 		return game.getParticipants().stream()
-			.filter(p -> p.getSide().equalsIgnoreCase(side))
-			.findFirst()
-			.map(p -> p.getTeam().getName())
-			.orElseThrow(() -> {
-				log.error("No participant found for side {} in game {}", side, game.getId());
-				return new CustomException(ErrorCode.DATA_INTEGRITY_ERROR);
-			});
+				.filter(p -> p.getSide().equalsIgnoreCase(side))
+				.findFirst()
+				.map(p -> p.getTeam().getName())
+				.orElseThrow(() -> {
+					log.error("No participant found for side {} in game {}", side, game.getId());
+					return new CustomException(ErrorCode.DATA_INTEGRITY_ERROR);
+				});
 	}
 
 	// Helper Method: 팀 이름별 밴 리스트 추출
 	private List<String> extractBansByTeam(Game game, String teamName) {
 		return game.getBans().stream()
-			.filter(b -> b.getTeam().getName().equals(teamName))
-			.map(b -> b.getBannedChampion().getChampionNameEn())
-			.toList();
+				.filter(b -> b.getTeam().getName().equals(teamName))
+				.map(b -> b.getBannedChampion().getChampionNameEn())
+				.toList();
 	}
 }

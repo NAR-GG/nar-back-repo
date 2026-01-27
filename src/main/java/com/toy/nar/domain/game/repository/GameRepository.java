@@ -18,6 +18,8 @@ import com.toy.nar.domain.game.entity.Game;
 
 public interface GameRepository extends JpaRepository<Game, Long>, GameRepositoryCustom {
 
+	List<Game> findAllByActualGameStartTimeBetween(LocalDateTime start, LocalDateTime end);
+
 	@Query("SELECT new com.toy.nar.app.analysis.dto.PlayerStatsDto(" +
 			"   gp.team.name, gp.player.name, gp.player.imageUrl, COUNT(gp), " +
 			"   (SUM(s.kills) + SUM(s.assists)) * 1.0 / (CASE WHEN SUM(s.deaths) = 0 THEN 1 ELSE SUM(s.deaths) END)) " +
@@ -126,12 +128,12 @@ public interface GameRepository extends JpaRepository<Game, Long>, GameRepositor
 	Optional<Game> findGameDetailsById(@Param("gameId") Long gameId);
 
 	@Query("SELECT new com.toy.nar.app.schedule.dto.ScheduleItemDto(" +
-			"   g.id, l.leagueName, l.seasonSplit, g.scheduledGameStartTime, t.name, p.isWin) " +
+			"   g.id, l.leagueName, l.seasonSplit, g.actualGameStartTime, t.name, p.isWin) " +
 			"FROM Game g " +
 			"JOIN g.participants p " +
 			"JOIN p.team t " +
 			"JOIN g.league l " +
-			"WHERE g.scheduledGameStartTime >= :start AND g.scheduledGameStartTime < :end")
+			"WHERE g.actualGameStartTime >= :start AND g.actualGameStartTime < :end")
 	List<ScheduleItemDto> findScheduleItemsByDate(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
 	@Query("SELECT DISTINCT g FROM Game g " +
