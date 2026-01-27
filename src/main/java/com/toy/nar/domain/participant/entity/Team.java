@@ -41,15 +41,28 @@ public class Team {
 	@Column(name = "team_name", nullable = false, unique = true, length = 100)
 	private String name;
 
+	@Column(name = "team_code", length = 10)
+	private String code;
+
+	@Column(name = "team_image_url")
+	private String imageUrl;
+
 	@OneToMany(mappedBy = "team", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
 	private List<LeagueTeam> leagueTeams = new ArrayList<>();
 
 	@Builder
-	public Team(String name) {
+	public Team(String name, String code, String imageUrl) {
 		this.name = Objects.requireNonNull(name, "Team name must not be null");
+		this.code = code;
+		this.imageUrl = imageUrl;
 	}
 
 	public void setName(String name) {
 		this.name = name;
+	}
+
+	public void updateMetadata(String code, String imageUrl) {
+		this.code = code;
+		this.imageUrl = imageUrl;
 	}
 }
