@@ -31,15 +31,16 @@ import com.toy.nar.app.data.ingestion.dto.GameDataCsvDto;
 
 @Entity
 @Table(name = "games", indexes = {
-	@Index(name = "idx_scheduled_time", columnList = "scheduled_game_start_time"),
-	@Index(name = "idx_game_league", columnList = "league_id")
+		@Index(name = "idx_scheduled_time", columnList = "scheduled_game_start_time"),
+		@Index(name = "idx_game_league", columnList = "league_id"),
+		@Index(name = "idx_actual_game_start_time", columnList = "actual_game_start_time")
 })
 @Getter
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(of = "id")
-@ToString(exclude = {"league", "bans"})
+@ToString(exclude = { "league", "bans" })
 public class Game {
 
 	@Id
@@ -80,7 +81,6 @@ public class Game {
 	@Column(name = "ckpm", nullable = false)
 	private Double ckpm;
 
-
 	public void addParticipant(GameParticipant participant) {
 		participants.add(participant);
 		participant.assignGame(this);
@@ -88,14 +88,14 @@ public class Game {
 
 	public static Game from(GameDataCsvDto dto, League league, LocalDateTime scheduledGameStartTime) {
 		return Game.builder()
-			.gameOriginId(dto.getGameid())
-			.league(league)
-			.actualGameStartTime(LocalDateTime.parse(dto.getDate(), GameProcessor.CSV_DATE_FORMATTER))
-			.scheduledGameStartTime(scheduledGameStartTime)
-			.gameNumber(dto.getGame())
-			.patch(dto.getPatch())
-			.gameLengthSeconds(dto.getGamelength())
-			.ckpm(dto.getCkpm())
-			.build();
+				.gameOriginId(dto.getGameid())
+				.league(league)
+				.actualGameStartTime(LocalDateTime.parse(dto.getDate(), GameProcessor.CSV_DATE_FORMATTER))
+				.scheduledGameStartTime(scheduledGameStartTime)
+				.gameNumber(dto.getGame())
+				.patch(dto.getPatch())
+				.gameLengthSeconds(dto.getGamelength())
+				.ckpm(dto.getCkpm())
+				.build();
 	}
 }
