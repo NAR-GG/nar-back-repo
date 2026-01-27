@@ -47,7 +47,8 @@ public class MatchDetailFinder {
 							.toList();
 					return new GameInfoForSummary(
 							game.getId(),
-							game.getScheduledGameStartTime(),
+							game.getScheduledGameStartTime() != null ? game.getScheduledGameStartTime()
+									: game.getActualGameStartTime(),
 							game.getLeague().getLeagueName(),
 							game.getLeague().getSeasonSplit(),
 							participantInfos);
@@ -71,7 +72,7 @@ public class MatchDetailFinder {
 							participantsBySide.get("Red"));
 
 					return new MatchDetailResponseDto.GameDetailDto(game.getId(), game.getGameNumber(),
-							game.getGameLengthSeconds(), blueTeam, redTeam);
+							game.getGameLengthSeconds(), null, blueTeam, redTeam);
 				})
 				.sorted(Comparator.comparing(MatchDetailResponseDto.GameDetailDto::gameNumber))
 				.toList();
@@ -116,7 +117,15 @@ public class MatchDetailFinder {
 				.withZoneSameInstant(ZoneId.of("Asia/Seoul"))
 				.format(DateTimeFormatter.ofPattern("HH:mm"));
 
-		return new MatchSummaryDto(matchId, scheduledTime, leagueInfo, teamA, teamB);
+		return MatchSummaryDto.builder()
+				.matchId(matchId)
+				.scheduledTime(scheduledTime)
+				.leagueInfo(leagueInfo)
+				.matchStatus("completed")
+				.isSynced(true)
+				.teamA(teamA)
+				.teamB(teamB)
+				.build();
 	}
 
 	private MatchDetailResponseDto.GameDetailDto.TeamPicksDto createTeamPicksDto(

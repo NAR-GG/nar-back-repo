@@ -29,6 +29,8 @@ public class MatchResultDto {
 
 	@Data
 	@Builder
+	@lombok.NoArgsConstructor
+	@lombok.AllArgsConstructor
 	public static class SetVod {
 		private int setNumber; // 1세트, 2세트...
 		private String vodUrl; // 한국어 유튜브 링크 (시간 포함)
