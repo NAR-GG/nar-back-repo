@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -29,13 +28,10 @@ public class LeagueMatchService {
 
 	public static final List<String> TARGET_LEAGUES = List.of("LCK", "LPL", "LEC", "LCS", "MSI", "WORLDS");
 
-	private static final java.util.Map<String, String> DEFAULT_LIVE_STREAMS = java.util.Map.of(
-			"LCK", "https://play.sooplive.co.kr/aflol",
-			"LPL", "https://www.twitch.tv/lpl",
-			"LEC", "https://www.twitch.tv/lec",
-			"LCS", "https://www.twitch.tv/lcs",
-			"WORLDS", "https://www.twitch.tv/riotgames",
-			"MSI", "https://www.twitch.tv/riotgames");
+	private static final java.util.Map<String, String> DEFAULT_LIVE_STREAMS = java.util.Map.of("LCK",
+			"https://play.sooplive.co.kr/aflol", "LPL", "https://www.twitch.tv/lpl", "LEC", "https://www.twitch.tv/lec",
+			"LCS", "https://www.twitch.tv/lcs", "WORLDS", "https://www.twitch.tv/riotgames", "MSI",
+			"https://www.twitch.tv/riotgames");
 
 	// [Scheduler용] 특정 리그의 최신 경기를 가져와 DB에 저장 (1페이지)
 	public void syncMatches(String leagueSlug) {
@@ -173,26 +169,21 @@ public class LeagueMatchService {
 			// 날짜가 없을 때
 			if (isAllLeagues) {
 				// 전체 리그 최신순 50개 (findAll + sort)
-				entities = leagueMatchRepository.findAll(
-						org.springframework.data.domain.PageRequest.of(0, 50,
+				entities = leagueMatchRepository
+						.findAll(org.springframework.data.domain.PageRequest.of(0, 50,
 								org.springframework.data.domain.Sort
 										.by(org.springframework.data.domain.Sort.Direction.DESC, "matchDate")))
 						.getContent();
 			} else {
 				// 특정 리그 최신순 50개
-				entities = leagueMatchRepository.findByLeagueNameOrderByMatchDateDesc(
-						leagueSlug, org.springframework.data.domain.PageRequest.of(0, 50));
+				entities = leagueMatchRepository.findByLeagueNameOrderByMatchDateDesc(leagueSlug,
+						org.springframework.data.domain.PageRequest.of(0, 50));
 			}
 		}
 
-		List<MatchResultDto> dtos = entities.stream()
-				.map(this::convertToDto)
-				.collect(Collectors.toList());
+		List<MatchResultDto> dtos = entities.stream().map(this::convertToDto).collect(Collectors.toList());
 
-		return MatchResponseWrapper.builder()
-				.matches(dtos)
-				.nextPageToken(null)
-				.build();
+		return MatchResponseWrapper.builder().matches(dtos).nextPageToken(null).build();
 	}
 
 	@Transactional(readOnly = true)
@@ -215,24 +206,16 @@ public class LeagueMatchService {
 		boolean hasVod = dto.getSets() != null && !dto.getSets().isEmpty()
 				&& dto.getSets().stream().anyMatch(s -> s.getVodUrl() != null && !s.getVodUrl().isEmpty());
 
-		return LeagueMatch.builder()
-				.id(dto.getMatchId())
-				.leagueName(leagueSlug)
-				.matchTitle(dto.getMatchTitle())
-				.matchDate(matchDate)
-				.state(dto.getState()) // [수정] DTO에서 상태 가져오기
-				.blueTeamCode(dto.getBlueTeam().getCode())
-				.blueTeamName(dto.getBlueTeam().getName())
-				.blueTeamImageUrl(dto.getBlueTeam().getImageUrl())
-				.blueScore(dto.getBlueTeam().getWins())
-				.redTeamCode(dto.getRedTeam().getCode())
-				.redTeamName(dto.getRedTeam().getName())
-				.redTeamImageUrl(dto.getRedTeam().getImageUrl())
-				.redScore(dto.getRedTeam().getWins())
-				.hasVod(hasVod)
-				.matchDetailsJson(jsonDetails)
-				.lastUpdated(LocalDateTime.now())
-				.build();
+		return LeagueMatch.builder().id(dto.getMatchId()).leagueName(leagueSlug).matchTitle(dto.getMatchTitle())
+				.matchDate(matchDate).state(dto.getState()) // [수정]
+															// DTO에서
+															// 상태
+															// 가져오기
+				.blueTeamCode(dto.getBlueTeam().getCode()).blueTeamName(dto.getBlueTeam().getName())
+				.blueTeamImageUrl(dto.getBlueTeam().getImageUrl()).blueScore(dto.getBlueTeam().getWins())
+				.redTeamCode(dto.getRedTeam().getCode()).redTeamName(dto.getRedTeam().getName())
+				.redTeamImageUrl(dto.getRedTeam().getImageUrl()).redScore(dto.getRedTeam().getWins()).hasVod(hasVod)
+				.matchDetailsJson(jsonDetails).lastUpdated(LocalDateTime.now()).build();
 	}
 
 	private MatchResultDto convertToDto(LeagueMatch entity) {
@@ -251,91 +234,148 @@ public class LeagueMatchService {
 			liveStreamUrl = DEFAULT_LIVE_STREAMS.get(entity.getLeagueName().toUpperCase());
 		}
 
-		return MatchResultDto.builder()
-				.matchId(entity.getId())
-				.leagueName(entity.getLeagueName())
-				.matchTitle(entity.getMatchTitle())
-				.matchDate(entity.getMatchDate().toString()) // ISO format string
+		return MatchResultDto.builder().matchId(entity.getId()).leagueName(entity.getLeagueName())
+				.matchTitle(entity.getMatchTitle()).matchDate(entity.getMatchDate().toString()) // ISO
+																								// format
+																								// string
 				.state(entity.getState()) // [수정] Entity 상태 DTO로 전달
 				.score(entity.getBlueScore() + " : " + entity.getRedScore())
-				.blueTeam(MatchResultDto.TeamInfo.builder()
-						.code(entity.getBlueTeamCode())
-						.name(entity.getBlueTeamName())
-						.imageUrl(entity.getBlueTeamImageUrl())
-						.wins(entity.getBlueScore())
-						.build())
-				.redTeam(MatchResultDto.TeamInfo.builder()
-						.code(entity.getRedTeamCode())
-						.name(entity.getRedTeamName())
-						.imageUrl(entity.getRedTeamImageUrl())
-						.wins(entity.getRedScore())
-						.build())
-				.sets(sets)
-				.liveStreamUrl(liveStreamUrl)
-				.build();
+				.blueTeam(
+						MatchResultDto.TeamInfo.builder().code(entity.getBlueTeamCode()).name(entity.getBlueTeamName())
+								.imageUrl(entity.getBlueTeamImageUrl()).wins(entity.getBlueScore()).build())
+				.redTeam(MatchResultDto.TeamInfo.builder().code(entity.getRedTeamCode()).name(entity.getRedTeamName())
+						.imageUrl(entity.getRedTeamImageUrl()).wins(entity.getRedScore()).build())
+				.sets(sets).liveStreamUrl(liveStreamUrl).build();
 	}
+
+	private final com.toy.nar.domain.game.repository.GameRepository gameRepository;
 
 	@Transactional
 	protected void updateTeamMetadataFromMatches(List<MatchResultDto> matches) {
 		if (matches == null || matches.isEmpty())
 			return;
 
-		// 1. Collect unique team metadata
-		// Map<String(NormalizedName), TeamInfo>
-		java.util.Map<String, MatchResultDto.TeamInfo> teamInfoMap = new java.util.HashMap<>();
+		log.info("Starting context-aware team metadata sync for {} matches...", matches.size());
 
-		java.util.function.Consumer<MatchResultDto.TeamInfo> collector = info -> {
-			if (info != null && info.getName() != null) {
-				String normName = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(info.getName());
-				// Only if code or image is present, we consider it efficient metadata source
-				if ((info.getCode() != null && !info.getCode().isEmpty()) ||
-						(info.getImageUrl() != null && !info.getImageUrl().isEmpty())) {
-					teamInfoMap.putIfAbsent(normName, info);
-				}
-			}
-		};
+		// 1. Calculate Date Range (Min/Max) to fetch Games efficiently
+		LocalDateTime minDate = LocalDateTime.MAX;
+		LocalDateTime maxDate = LocalDateTime.MIN;
+		boolean hasValidDate = false;
 
 		for (MatchResultDto match : matches) {
-			collector.accept(match.getBlueTeam());
-			collector.accept(match.getRedTeam());
-		}
-
-		if (teamInfoMap.isEmpty())
-			return;
-
-		// 2. Fetch existing Teams
-		List<com.toy.nar.domain.participant.entity.Team> existingTeams = teamRepository
-				.findAllByNameInIgnoreCase(teamInfoMap.keySet());
-
-		// 3. Update Metadata
-		for (com.toy.nar.domain.participant.entity.Team team : existingTeams) {
-			String normName = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(team.getName());
-
-			MatchResultDto.TeamInfo info = teamInfoMap.get(normName);
-			if (info != null) {
-				boolean updated = false;
-				String newCode = info.getCode();
-				String newImage = info.getImageUrl();
-
-				// Only update if valuable
-				if (newCode != null && !newCode.isEmpty()) {
-					if (!newCode.equals(team.getCode()))
-						updated = true;
-				} else {
-					newCode = team.getCode(); // Keep old
-				}
-
-				if (newImage != null && !newImage.isEmpty()) {
-					if (!newImage.equals(team.getImageUrl()))
-						updated = true;
-				} else {
-					newImage = team.getImageUrl(); // Keep old
-				}
-
-				if (updated) {
-					team.updateMetadata(newCode, newImage);
+			if (match.getMatchDate() != null) {
+				try {
+					LocalDateTime mDate = LocalDateTime.parse(match.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
+					if (mDate.isBefore(minDate))
+						minDate = mDate;
+					if (mDate.isAfter(maxDate))
+						maxDate = mDate;
+					hasValidDate = true;
+				} catch (Exception e) {
+					// ignore invalid dates in this pass
 				}
 			}
 		}
+
+		if (!hasValidDate) {
+			log.warn("No valid match dates found for sync.");
+			return;
+		}
+
+		// Buffer of 24 hours
+		LocalDateTime searchStart = minDate.minusHours(24);
+		LocalDateTime searchEnd = maxDate.plusHours(24);
+
+		List<com.toy.nar.domain.game.entity.Game> candidateGames = gameRepository
+				.findAllWithParticipantsByActualGameStartTimeBetween(searchStart, searchEnd);
+
+		log.info("Found {} candidate games in DB for the date range.", candidateGames.size());
+
+		// 2. Iterate and Match
+		int updatedCount = 0;
+		for (MatchResultDto match : matches) {
+			try {
+				LocalDateTime matchDate = LocalDateTime.parse(match.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
+				String normBlue = com.toy.nar.common.util.NameNormalizer
+						.normalizeTeamName(match.getBlueTeam().getName());
+				String normRed = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(match.getRedTeam().getName());
+
+				// Find matching Game
+				com.toy.nar.domain.game.entity.Game matchedGame = candidateGames.stream().filter(game -> {
+					// Check Date
+					if (!game.getActualGameStartTime().toLocalDate().equals(matchDate.toLocalDate())) {
+						return false;
+					}
+
+					// Check Teams
+					String gBlue = getTeamNameFromGame(game, "Blue");
+					String gRed = getTeamNameFromGame(game, "Red");
+					String normGBlue = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(gBlue);
+					String normGRed = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(gRed);
+
+					// Match Logic: (B==B && R==R) || (B==R && R==B)
+					return (normGBlue.equalsIgnoreCase(normBlue) && normGRed.equalsIgnoreCase(normRed))
+							|| (normGBlue.equalsIgnoreCase(normRed) && normGRed.equalsIgnoreCase(normBlue));
+				}).findFirst().orElse(null);
+
+				if (matchedGame != null) {
+					// 3. Update Teams using Matched Game's participants
+					// We need to know which participant corresponds to which DTO team
+					// Since we matched fuzzy, let's rematch explicitly to be sure who is who
+					updatedCount += updateTeamIfMatched(matchedGame, match.getBlueTeam());
+					updatedCount += updateTeamIfMatched(matchedGame, match.getRedTeam());
+				}
+			} catch (Exception e) {
+				log.warn("Error processing match metadata sync for matchId: {}", match.getMatchId(), e);
+			}
+		}
+
+		log.info("Team metadata sync completed. Updated {} team entities.", updatedCount);
+	}
+
+	private int updateTeamIfMatched(com.toy.nar.domain.game.entity.Game game, MatchResultDto.TeamInfo info) {
+		if (info == null || info.getName() == null)
+			return 0;
+		if ((info.getCode() == null || info.getCode().isEmpty())
+				&& (info.getImageUrl() == null || info.getImageUrl().isEmpty())) {
+			return 0;
+		}
+
+		String normInfoName = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(info.getName());
+
+		// Find the participant team entity + strict match check
+		return game.getParticipants().stream().map(p -> p.getTeam()).filter(team -> {
+			String normTeamName = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(team.getName());
+			return normTeamName.equalsIgnoreCase(normInfoName);
+		}).findFirst().map(team -> {
+			boolean updated = false;
+			String newCode = info.getCode();
+			String newImage = info.getImageUrl();
+
+			if (newCode != null && !newCode.isEmpty() && !newCode.equals(team.getCode())) {
+				updated = true;
+			} else {
+				newCode = team.getCode();
+			}
+
+			if (newImage != null && !newImage.isEmpty() && !newImage.equals(team.getImageUrl())) {
+				updated = true;
+			} else {
+				newImage = team.getImageUrl();
+			}
+
+			if (updated) {
+				log.info("Syncing metadata for matched team '{}' (Game ID: {})", team.getName(), game.getId());
+				team.updateMetadata(newCode, newImage);
+				teamRepository.save(team);
+				return 1;
+			}
+			return 0;
+		}).orElse(0);
+	}
+
+	private String getTeamNameFromGame(com.toy.nar.domain.game.entity.Game game, String side) {
+		return game.getParticipants().stream().filter(p -> p.getSide().equalsIgnoreCase(side)).findFirst()
+				.map(p -> p.getTeam().getName()).orElse("");
 	}
 }
