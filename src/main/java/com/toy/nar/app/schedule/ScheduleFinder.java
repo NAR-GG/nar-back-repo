@@ -134,6 +134,7 @@ public class ScheduleFinder {
 				.matchId(leagueMatch.getId())
 				.scheduledTime(scheduledTime)
 				.leagueInfo(leagueMatch.getLeagueName())
+				.matchTitle(leagueMatch.getMatchTitle())
 				.matchStatus(leagueMatch.getState())
 				.isSynced(isSynced)
 				.teamA(teamA)

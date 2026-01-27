@@ -140,6 +140,7 @@ public class MatchDetailFinder {
 				.matchId(matchId)
 				.scheduledTime(scheduledTime)
 				.leagueInfo(leagueInfo)
+				.matchTitle(leagueInfo) // Internal items don't have separate title, reuse leagueInfo
 				.matchStatus("completed")
 				.isSynced(true)
 				.teamA(teamA)
