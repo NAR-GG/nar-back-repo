@@ -43,7 +43,11 @@ public class MatchDetailFinder {
 		List<GameInfoForSummary> gamesForSummary = games.stream()
 				.map(game -> {
 					List<ParticipantInfo> participantInfos = game.getParticipants().stream()
-							.map(p -> new ParticipantInfo(p.getTeam().getName(), p.getIsWin()))
+							.map(p -> new ParticipantInfo(
+									p.getTeam().getName(),
+									p.getTeam().getCode(),
+									p.getTeam().getImageUrl(),
+									p.getIsWin()))
 							.toList();
 					return new GameInfoForSummary(
 							game.getId(),
@@ -107,8 +111,23 @@ public class MatchDetailFinder {
 				teamBScore++;
 		}
 
-		TeamResultDto teamA = new TeamResultDto(teamAName, teamAScore);
-		TeamResultDto teamB = new TeamResultDto(teamBName, teamBScore);
+		// Find metadata for teams
+		String teamACode = firstGame.participants().stream()
+				.filter(p -> p.teamName().equals(teamAName))
+				.findFirst().map(ParticipantInfo::teamCode).orElse(null);
+		String teamAImage = firstGame.participants().stream()
+				.filter(p -> p.teamName().equals(teamAName))
+				.findFirst().map(ParticipantInfo::teamImageUrl).orElse(null);
+
+		String teamBCode = firstGame.participants().stream()
+				.filter(p -> p.teamName().equals(teamBName))
+				.findFirst().map(ParticipantInfo::teamCode).orElse(null);
+		String teamBImage = firstGame.participants().stream()
+				.filter(p -> p.teamName().equals(teamBName))
+				.findFirst().map(ParticipantInfo::teamImageUrl).orElse(null);
+
+		TeamResultDto teamA = new TeamResultDto(teamAName, teamACode, teamAImage, teamAScore);
+		TeamResultDto teamB = new TeamResultDto(teamBName, teamBCode, teamBImage, teamBScore);
 
 		String matchId = encodeMatchId(matchGames.stream().map(GameInfoForSummary::gameId).collect(Collectors.toSet()));
 		String leagueInfo = String.format("%s %s", firstGame.leagueName(), firstGame.seasonSplit());

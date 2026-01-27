@@ -104,9 +104,16 @@ public class ScheduleService {
 				: "";
 
 		// Create TeamResultDto for each team
-		TeamResultDto teamA = new TeamResultDto(normalizedBlueTeamName,
+		// Create TeamResultDto for each team
+		TeamResultDto teamA = new TeamResultDto(
+				normalizedBlueTeamName,
+				leagueMatch.getBlueTeamCode(),
+				leagueMatch.getBlueTeamImageUrl(),
 				leagueMatch.getBlueScore() != null ? leagueMatch.getBlueScore() : 0);
-		TeamResultDto teamB = new TeamResultDto(normalizedRedTeamName,
+		TeamResultDto teamB = new TeamResultDto(
+				normalizedRedTeamName,
+				leagueMatch.getRedTeamCode(),
+				leagueMatch.getRedTeamImageUrl(),
 				leagueMatch.getRedScore() != null ? leagueMatch.getRedScore() : 0);
 
 		// Parse VOD info and find matching games

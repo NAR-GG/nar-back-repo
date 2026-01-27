@@ -81,9 +81,15 @@ public class ScheduleFinder {
 						.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
 				: "";
 
-		TeamResultDto teamA = new TeamResultDto(normalizedBlueTeamName,
+		TeamResultDto teamA = new TeamResultDto(
+				normalizedBlueTeamName,
+				leagueMatch.getBlueTeamCode(),
+				leagueMatch.getBlueTeamImageUrl(),
 				leagueMatch.getBlueScore() != null ? leagueMatch.getBlueScore() : 0);
-		TeamResultDto teamB = new TeamResultDto(normalizedRedTeamName,
+		TeamResultDto teamB = new TeamResultDto(
+				normalizedRedTeamName,
+				leagueMatch.getRedTeamCode(),
+				leagueMatch.getRedTeamImageUrl(),
 				leagueMatch.getRedScore() != null ? leagueMatch.getRedScore() : 0);
 
 		// Check if any game in dailyGames matches this LeagueMatch
@@ -141,72 +147,6 @@ public class ScheduleFinder {
 				.findFirst()
 				.map(p -> p.getTeam().getName())
 				.orElse("");
-	}
-
-	private MatchSummaryDto createMatchSummaryFromScheduleItems(List<List<ScheduleItemDto>> matchGames) {
-		List<GameInfoForSummary> gamesForSummary = matchGames.stream()
-				.map(gameParticipants -> {
-					ScheduleItemDto representative = gameParticipants.get(0);
-					List<ParticipantInfo> participantInfos = gameParticipants.stream()
-							.map(p -> new ParticipantInfo(p.teamName(), p.isWin()))
-							.toList();
-					return new GameInfoForSummary(
-							representative.gameId(),
-							representative.scheduledGameStartTime(),
-							representative.leagueName(),
-							representative.seasonSplit(),
-							participantInfos);
-				})
-				.toList();
-		return createMatchSummary(gamesForSummary);
-	}
-
-	private MatchSummaryDto createMatchSummary(List<GameInfoForSummary> matchGames) {
-		if (matchGames.isEmpty() || matchGames.get(0).participants().isEmpty()) {
-			return null;
-		}
-		GameInfoForSummary firstGame = matchGames.get(0);
-
-		List<String> sortedTeamNames = firstGame.participants().stream()
-				.map(ParticipantInfo::teamName).distinct().sorted().toList();
-		if (sortedTeamNames.size() < 2) {
-			return null;
-		}
-		String teamAName = sortedTeamNames.get(0);
-		String teamBName = sortedTeamNames.get(1);
-
-		int teamAScore = 0;
-		int teamBScore = 0;
-		for (GameInfoForSummary game : matchGames) {
-			String winnerTeam = game.participants().stream()
-					.filter(ParticipantInfo::isWin)
-					.map(ParticipantInfo::teamName)
-					.findFirst().orElse("");
-			if (winnerTeam.equals(teamAName))
-				teamAScore++;
-			else if (winnerTeam.equals(teamBName))
-				teamBScore++;
-		}
-
-		TeamResultDto teamA = new TeamResultDto(teamAName, teamAScore);
-		TeamResultDto teamB = new TeamResultDto(teamBName, teamBScore);
-
-		String matchId = encodeMatchId(matchGames.stream().map(GameInfoForSummary::gameId).collect(Collectors.toSet()));
-		String leagueInfo = String.format("%s %s", firstGame.leagueName(), firstGame.seasonSplit());
-		String scheduledTime = firstGame.scheduledGameStartTime()
-				.atZone(ZoneId.of("UTC"))
-				.withZoneSameInstant(ZoneId.of("Asia/Seoul"))
-				.format(DateTimeFormatter.ofPattern("HH:mm"));
-
-		return MatchSummaryDto.builder()
-				.matchId(matchId)
-				.scheduledTime(scheduledTime)
-				.leagueInfo(leagueInfo)
-				.matchStatus("completed")
-				.isSynced(true)
-				.teamA(teamA)
-				.teamB(teamB)
-				.build();
 	}
 
 	private String encodeMatchId(Set<Long> gameIds) {
