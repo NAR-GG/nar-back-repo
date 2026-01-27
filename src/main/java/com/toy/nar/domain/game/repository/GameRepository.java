@@ -20,6 +20,10 @@ public interface GameRepository extends JpaRepository<Game, Long>, GameRepositor
 
 	List<Game> findAllByActualGameStartTimeBetween(LocalDateTime start, LocalDateTime end);
 
+	@Query("SELECT DISTINCT g FROM Game g LEFT JOIN FETCH g.participants p LEFT JOIN FETCH p.team WHERE g.actualGameStartTime BETWEEN :start AND :end")
+	List<Game> findAllWithParticipantsByActualGameStartTimeBetween(@Param("start") LocalDateTime start,
+			@Param("end") LocalDateTime end);
+
 	@Query("SELECT new com.toy.nar.app.analysis.dto.PlayerStatsDto(" +
 			"   gp.team.name, gp.player.name, gp.player.imageUrl, COUNT(gp), " +
 			"   (SUM(s.kills) + SUM(s.assists)) * 1.0 / (CASE WHEN SUM(s.deaths) = 0 THEN 1 ELSE SUM(s.deaths) END)) " +
