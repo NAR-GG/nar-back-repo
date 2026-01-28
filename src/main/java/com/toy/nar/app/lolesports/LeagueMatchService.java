@@ -56,7 +56,7 @@ public class LeagueMatchService {
 		}
 
 		// 3. Team Metadata Sync
-		updateTeamMetadataFromMatches(matches);
+		// updateTeamMetadataFromMatches(matches);
 
 		log.info("Synced {} matches for league: {}", matches.size(), leagueSlug);
 	}
@@ -109,7 +109,7 @@ public class LeagueMatchService {
 				}
 
 				// Team Metadata Sync per page
-				updateTeamMetadataFromMatches(matches);
+				// updateTeamMetadataFromMatches(matches);
 
 				pageToken = response.getNextPageToken();
 				if (pageToken == null || pageToken.isEmpty()) {
@@ -250,87 +250,89 @@ public class LeagueMatchService {
 
 	private final com.toy.nar.domain.game.repository.GameRepository gameRepository;
 
-	@Transactional
+	// @Transactional // Removed to avoid holding all entities in memory for the
+	// whole duration
 	protected void updateTeamMetadataFromMatches(List<MatchResultDto> matches) {
 		if (matches == null || matches.isEmpty())
 			return;
 
 		log.info("Starting context-aware team metadata sync for {} matches...", matches.size());
 
-		// 1. Calculate Date Range (Min/Max) to fetch Games efficiently
-		LocalDateTime minDate = LocalDateTime.MAX;
-		LocalDateTime maxDate = LocalDateTime.MIN;
-		boolean hasValidDate = false;
-
-		for (MatchResultDto match : matches) {
-			if (match.getMatchDate() != null) {
-				try {
-					LocalDateTime mDate = LocalDateTime.parse(match.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
-					if (mDate.isBefore(minDate))
-						minDate = mDate;
-					if (mDate.isAfter(maxDate))
-						maxDate = mDate;
-					hasValidDate = true;
-				} catch (Exception e) {
-					// ignore invalid dates in this pass
-				}
-			}
-		}
-
-		if (!hasValidDate) {
-			log.warn("No valid match dates found for sync.");
-			return;
-		}
-
-		// Buffer of 24 hours
-		LocalDateTime searchStart = minDate.minusHours(24);
-		LocalDateTime searchEnd = maxDate.plusHours(24);
-
-		List<com.toy.nar.domain.game.entity.Game> candidateGames = gameRepository
-				.findAllWithParticipantsByActualGameStartTimeBetween(searchStart, searchEnd);
-
-		log.info("Found {} candidate games in DB for the date range.", candidateGames.size());
-
-		// 2. Iterate and Match
-		int updatedCount = 0;
-		for (MatchResultDto match : matches) {
-			try {
-				LocalDateTime matchDate = LocalDateTime.parse(match.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
-				String normBlue = com.toy.nar.common.util.NameNormalizer
-						.normalizeTeamName(match.getBlueTeam().getName());
-				String normRed = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(match.getRedTeam().getName());
-
-				// Find matching Game
-				com.toy.nar.domain.game.entity.Game matchedGame = candidateGames.stream().filter(game -> {
-					// Check Date
-					if (!game.getActualGameStartTime().toLocalDate().equals(matchDate.toLocalDate())) {
-						return false;
+		// Group matches by Date (yyyy-MM-dd) to avoid fetching huge range if dates are
+		// scattered
+		java.util.Map<java.time.LocalDate, List<MatchResultDto>> matchesByDate = matches.stream()
+				.filter(m -> m.getMatchDate() != null)
+				.collect(Collectors.groupingBy(m -> {
+					try {
+						return LocalDateTime.parse(m.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME).toLocalDate();
+					} catch (Exception e) {
+						return java.time.LocalDate.MIN; // Should filter invalid before, but safe fallback
 					}
+				}));
 
-					// Check Teams
-					String gBlue = getTeamNameFromGame(game, "Blue");
-					String gRed = getTeamNameFromGame(game, "Red");
-					String normGBlue = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(gBlue);
-					String normGRed = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(gRed);
+		int totalUpdated = 0;
 
-					// Match Logic: (B==B && R==R) || (B==R && R==B)
-					return (normGBlue.equalsIgnoreCase(normBlue) && normGRed.equalsIgnoreCase(normRed))
-							|| (normGBlue.equalsIgnoreCase(normRed) && normGRed.equalsIgnoreCase(normBlue));
-				}).findFirst().orElse(null);
+		for (java.util.Map.Entry<java.time.LocalDate, List<MatchResultDto>> entry : matchesByDate.entrySet()) {
+			java.time.LocalDate date = entry.getKey();
+			List<MatchResultDto> dailyMatches = entry.getValue();
 
-				if (matchedGame != null) {
-					// 3. Update Teams using Matched Game's participants
-					// We need to know which participant corresponds to which DTO team
-					// Since we matched fuzzy, let's rematch explicitly to be sure who is who
-					updatedCount += updateTeamIfMatched(matchedGame, match.getBlueTeam());
-					updatedCount += updateTeamIfMatched(matchedGame, match.getRedTeam());
-				}
-			} catch (Exception e) {
-				log.warn("Error processing match metadata sync for matchId: {}", match.getMatchId(), e);
+			if (date.equals(java.time.LocalDate.MIN))
+				continue;
+
+			// Fetch games for this specific date (+/- 1 day buffer)
+			LocalDateTime searchStart = date.atStartOfDay().minusHours(24);
+			LocalDateTime searchEnd = date.atTime(23, 59, 59).plusHours(24);
+
+			log.info("Processing {} matches for date: {} (Window: {} - {})", dailyMatches.size(), date, searchStart,
+					searchEnd);
+
+			List<com.toy.nar.domain.game.entity.Game> candidateGames = gameRepository
+					.findAllWithParticipantsByActualGameStartTimeBetween(searchStart, searchEnd);
+
+			log.debug("Found {} candidate games in DB for date {}.", candidateGames.size(), date);
+
+			for (MatchResultDto match : dailyMatches) {
+				totalUpdated += processSingleMatchSync(match, candidateGames);
 			}
 		}
 
-		log.info("Team metadata sync completed. Updated {} team entities.", updatedCount);
+		log.info("Team metadata sync completed. Updated {} team entities.", totalUpdated);
+	}
+
+	private int processSingleMatchSync(MatchResultDto match, List<com.toy.nar.domain.game.entity.Game> candidateGames) {
+		try {
+			LocalDateTime matchDate = LocalDateTime.parse(match.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
+			String normBlue = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(match.getBlueTeam().getName());
+			String normRed = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(match.getRedTeam().getName());
+
+			// Find matching Game
+			com.toy.nar.domain.game.entity.Game matchedGame = candidateGames.stream().filter(game -> {
+				// Check Date (redundant if window is tight, but safe)
+				if (!game.getActualGameStartTime().toLocalDate().equals(matchDate.toLocalDate())) {
+					return false;
+				}
+
+				// Check Teams
+				String gBlue = getTeamNameFromGame(game, "Blue");
+				String gRed = getTeamNameFromGame(game, "Red");
+				String normGBlue = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(gBlue);
+				String normGRed = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(gRed);
+
+				// Match Logic
+				return (normGBlue.equalsIgnoreCase(normBlue) && normGRed.equalsIgnoreCase(normRed))
+						|| (normGBlue.equalsIgnoreCase(normRed) && normGRed.equalsIgnoreCase(normBlue));
+			}).findFirst().orElse(null);
+
+			if (matchedGame != null) {
+				int count = 0;
+				count += updateTeamIfMatched(matchedGame, match.getBlueTeam());
+				count += updateTeamIfMatched(matchedGame, match.getRedTeam());
+				return count;
+			}
+		} catch (Exception e) {
+			log.warn("Error processing match metadata sync for matchId: {}", match.getMatchId(), e);
+		}
+		return 0;
 	}
 
 	private int updateTeamIfMatched(com.toy.nar.domain.game.entity.Game game, MatchResultDto.TeamInfo info) {
