@@ -372,9 +372,18 @@ public class YoutubeSyncService {
 					transactionTemplate.setPropagationBehavior(
 							PROPAGATION_REQUIRES_NEW);
 
-					transactionTemplate.execute(status -> commentRepository.save(comment));
+					Boolean isSaved = transactionTemplate.execute(status -> {
+						// 중복 저장 방지를 위한 이중 체크 (Race Condition 방지)
+						if (commentRepository.existsByYoutubeCommentId(comment.getYoutubeCommentId())) {
+							return Boolean.FALSE;
+						}
+						commentRepository.save(comment);
+						return Boolean.TRUE;
+					});
 
-					savedCount++;
+					if (Boolean.TRUE.equals(isSaved)) {
+						savedCount++;
+					}
 				} catch (Exception e) {
 					// 중복 댓글(DataIntegrityViolationException) 등 저장 실패 시 로그만 남기고 계속 진행
 					log.debug("댓글 저장 실패 (중복 등): {} - {}", comment.getYoutubeCommentId(), e.getMessage());
