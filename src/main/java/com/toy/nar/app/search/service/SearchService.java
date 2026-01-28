@@ -16,6 +16,8 @@ import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import com.toy.nar.domain.game.repository.GameRepository;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.TeamRepository;
+import com.toy.nar.domain.search.document.SearchDocument;
+import com.toy.nar.domain.search.repository.SearchDocumentRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,11 +31,13 @@ public class SearchService {
     private final TeamRepository teamRepository;
     private final GameRepository gameRepository;
     private final GameParticipantRepository gameParticipantRepository;
+    private final SearchDocumentRepository searchDocumentRepository;
 
     /**
      * 팀 vs 팀 경기 자동완성 검색
+     * 초성 검색, 한글 검색, 영문 검색 모두 지원 (Elasticsearch + Nori)
      * 
-     * @param query 검색어 (예: "T1vsGeng", "t1 vs geng", "T1 Geng")
+     * @param query 검색어 (예: "T1vsGeng", "ㅈㅈ", "젠지")
      * @param limit 최대 결과 수
      */
     public SearchAutocompleteResponse searchMatchAutocomplete(String query, int limit) {
@@ -48,10 +52,10 @@ public class SearchService {
             return SearchAutocompleteResponse.empty();
         }
 
-        // 2. 각 키워드별로 팀 검색
+        // 2. 각 키워드별로 Elasticsearch에서 팀 검색 (초성/한글/영문 지원)
         List<List<Team>> teamsByKeyword = new ArrayList<>();
         for (String keyword : teamKeywords) {
-            List<Team> teams = teamRepository.findByNameContainingIgnoreCase(keyword);
+            List<Team> teams = findTeamsByKeyword(keyword);
             if (!teams.isEmpty()) {
                 teamsByKeyword.add(teams);
             }
@@ -108,6 +112,30 @@ public class SearchService {
     }
 
     /**
+     * Elasticsearch를 활용한 팀 검색 (초성/한글/영문 지원)
+     * ES에 데이터가 없으면 MySQL로 폴백
+     */
+    private List<Team> findTeamsByKeyword(String keyword) {
+        try {
+            // ES에서 검색
+            List<SearchDocument> docs = searchDocumentRepository.searchByTypeAndKeyword("TEAM", keyword);
+
+            if (!docs.isEmpty()) {
+                // 정확도를 위해 가장 점수가 높은 상위 1개 팀만 사용
+                // (edge_ngram으로 인해 유사도가 낮은 팀들도 검색될 수 있음)
+                Long bestMatchTeamId = docs.get(0).getEntityId();
+                return teamRepository.findAllById(List.of(bestMatchTeamId));
+            }
+        } catch (Exception e) {
+            // ES 연결 실패 시 로그만 남기고 폴백
+            log.warn("Elasticsearch 검색 실패, MySQL로 폴백: {}", e.getMessage());
+        }
+
+        // 폴백: MySQL에서 검색
+        return teamRepository.findByNameContainingIgnoreCase(keyword);
+    }
+
+    /**
      * 게임 목록을 MatchSuggestionDto로 변환
      */
     private List<MatchSuggestionDto> convertToSuggestions(List<Game> games, int limit) {
@@ -137,16 +165,28 @@ public class SearchService {
                 continue;
 
             String blueTeamName = blueTeam.get(0).getTeam().getName();
+            String blueTeamCode = blueTeam.get(0).getTeam().getCode();
+            String blueTeamImageUrl = blueTeam.get(0).getTeam().getImageUrl();
+
             String redTeamName = redTeam.get(0).getTeam().getName();
+            String redTeamCode = redTeam.get(0).getTeam().getCode();
+            String redTeamImageUrl = redTeam.get(0).getTeam().getImageUrl();
+
             Boolean blueWin = blueTeam.get(0).getIsWin();
 
             suggestions.add(MatchSuggestionDto.of(
                     game.getId(),
                     blueTeamName,
+                    blueTeamCode,
+                    blueTeamImageUrl,
                     redTeamName,
+                    redTeamCode,
+                    redTeamImageUrl,
                     blueWin,
                     game.getLeague().getLeagueName(),
-                    game.getActualGameStartTime()));
+                    game.getActualGameStartTime(),
+                    game.getPatch(),
+                    game.getGameNumber()));
 
             if (suggestions.size() >= limit)
                 break;

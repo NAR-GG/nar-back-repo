@@ -21,6 +21,9 @@ spring:
     enabled: false
     baseline-on-migrate: true
 
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URI}
+
 notification:
   enabled: true
   slack:
