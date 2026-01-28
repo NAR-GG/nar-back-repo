@@ -1,5 +1,7 @@
 package com.toy.nar.app.youtube;
 
+import static org.springframework.transaction.TransactionDefinition.*;
+
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -10,7 +12,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.toy.nar.app.youtube.dto.YoutubeCommentResponse;
 import com.toy.nar.app.youtube.dto.YoutubePlaylistResponse;
@@ -38,6 +42,7 @@ public class YoutubeSyncService {
 	private final VideoRepository videoRepository;
 	private final CommentRepository commentRepository;
 	private final YoutubeProperties youtubeProperties;
+	private final PlatformTransactionManager transactionManager;
 
 	private static final ZoneId ZONE_KST = ZoneId.of("Asia/Seoul");
 	private static final String YOUTUBE_WATCH_URL = "https://www.youtube.com/watch?v=";
@@ -360,11 +365,19 @@ public class YoutubeSyncService {
 			int savedCount = 0;
 			for (Comment comment : commentsToSave) {
 				try {
-					commentRepository.save(comment);
+					// 트랜잭션을 분리하여(REQUIRES_NEW) 하나의 댓글 저장이 실패해도
+					// 전체 트랜잭션(영상 통계 업데이트)이 롤백되지 않도록 함
+					var transactionTemplate = new TransactionTemplate(
+							transactionManager);
+					transactionTemplate.setPropagationBehavior(
+							PROPAGATION_REQUIRES_NEW);
+
+					transactionTemplate.execute(status -> commentRepository.save(comment));
+
 					savedCount++;
-				} catch (org.springframework.dao.DataIntegrityViolationException e) {
-					// 중복 댓글은 무시 (동시 실행 스케줄러가 이미 저장한 경우)
-					log.debug("중복 댓글 스킵: {}", comment.getYoutubeCommentId());
+				} catch (Exception e) {
+					// 중복 댓글(DataIntegrityViolationException) 등 저장 실패 시 로그만 남기고 계속 진행
+					log.debug("댓글 저장 실패 (중복 등): {} - {}", comment.getYoutubeCommentId(), e.getMessage());
 				}
 			}
 			if (savedCount > 0) {
