@@ -373,12 +373,16 @@ public class YoutubeSyncService {
 							PROPAGATION_REQUIRES_NEW);
 
 					Boolean isSaved = transactionTemplate.execute(status -> {
-						// 중복 저장 방지를 위한 이중 체크 (Race Condition 방지)
-						if (commentRepository.existsByYoutubeCommentId(comment.getYoutubeCommentId())) {
-							return Boolean.FALSE;
-						}
-						commentRepository.save(comment);
-						return Boolean.TRUE;
+						int result = commentRepository.insertIgnore(
+								comment.getVideo().getId(),
+								comment.getYoutubeCommentId(),
+								comment.getAuthorDisplayName(),
+								comment.getAuthorProfileImageUrl(),
+								comment.getTextDisplay(),
+								comment.getLikeCount(),
+								comment.getPublishedAt());
+
+						return result > 0 ? Boolean.TRUE : Boolean.FALSE;
 					});
 
 					if (Boolean.TRUE.equals(isSaved)) {
