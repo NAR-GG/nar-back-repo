@@ -25,19 +25,10 @@ public class WorldsService {
 			"LPL", "98767991314006698",
 			"LEC", "98767991302996019",
 			"LCS", "98767991299243165",
-			"PCS", "98767991332355509",
+			"PCS", "98767975604431411",
 			"VCS", "98767991349978712",
 			"WORLDS", "98767975604431411",
 			"MSI", "98767991325878492");
-
-	// 리그별 기본 라이브 스트림 URL (inProgress 상태에서 streams가 없을 때 사용)
-	private static final java.util.Map<String, String> DEFAULT_LIVE_STREAMS = java.util.Map.of(
-			"LCK", "https://play.sooplive.co.kr/aflol",
-			"LPL", "https://www.twitch.tv/lpl",
-			"LEC", "https://www.twitch.tv/lec",
-			"LCS", "https://www.twitch.tv/lcs",
-			"WORLDS", "https://www.twitch.tv/riotgames",
-			"MSI", "https://www.twitch.tv/riotgames");
 
 	@Value("${lolesports.riot-api.key}")
 	private String RIOT_API_KEY;
@@ -170,8 +161,7 @@ public class WorldsService {
 					if ((liveStreamUrl == null || liveStreamUrl.isEmpty())
 							&& "inProgress".equalsIgnoreCase(finalState)) {
 						String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
-						liveStreamUrl = DEFAULT_LIVE_STREAMS.getOrDefault(leagueSlug,
-								"https://play.sooplive.co.kr/aflol");
+						liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
 					}
 					return MatchResultDto.builder()
 							.matchId(eventId)
@@ -308,7 +298,7 @@ public class WorldsService {
 		// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
 		if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
 			String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
-			liveStreamUrl = DEFAULT_LIVE_STREAMS.getOrDefault(leagueSlug, "https://play.sooplive.co.kr/aflol");
+			liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
 		}
 		return MatchResultDto.builder()
 				.matchId(eventId)
@@ -390,7 +380,7 @@ public class WorldsService {
 		// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
 		if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
 			String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
-			liveStreamUrl = DEFAULT_LIVE_STREAMS.getOrDefault(leagueSlug, "https://play.sooplive.co.kr/aflol");
+			liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
 		}
 		return MatchResultDto.builder()
 				.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText())

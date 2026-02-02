@@ -5,8 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -20,7 +18,7 @@ public class MatchSyncScheduler {
 	@Scheduled(cron = "0 0/30 * * * *")
 	public void syncAllLeagues() {
 		log.info("Starting scheduled match sync...");
-		for (String league : LeagueMatchService.TARGET_LEAGUES) {
+		for (String league : LeagueConstants.TARGET_LEAGUES) {
 			try {
 				leagueMatchService.syncMatches(league);
 				// API 부하 방지를 위해 리그 간 5초 딜레이
