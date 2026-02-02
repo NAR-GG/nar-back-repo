@@ -1,11 +1,17 @@
 package com.toy.nar.app.schedule;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toy.nar.app.lolesports.LeagueConstants;
+import com.toy.nar.app.lolesports.MatchResultDto;
 import com.toy.nar.app.schedule.dto.ScheduleItemDto;
 import com.toy.nar.app.schedule.dto.ScheduleResponseDto;
 import com.toy.nar.app.schedule.dto.MatchSummaryDto;
 import com.toy.nar.app.schedule.dto.TeamResultDto;
 import com.toy.nar.domain.game.repository.GameRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +22,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -23,6 +30,7 @@ public class ScheduleFinder {
 
 	private final GameRepository gameRepository;
 	private final com.toy.nar.app.lolesports.repository.LeagueMatchRepository leagueMatchRepository;
+	private final ObjectMapper objectMapper;
 
 	// ScheduleService에 있던 내부 record들을 데이터와 가장 가까운 이곳으로 이동
 	private record GameInfoForSummary(
@@ -36,9 +44,6 @@ public class ScheduleFinder {
 	private record ParticipantInfo(String teamName, boolean isWin) {
 	}
 
-	private static final Set<String> ALLOWED_LEAGUES = Set.of("LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI",
-			"WORLDS");
-
 	public ScheduleResponseDto createScheduleResponseDto(LocalDate date) {
 		// Use only LeagueMatch data (Lolesports) for the schedule list
 		LocalDateTime startOfDayKst = date.atStartOfDay();
@@ -47,7 +52,7 @@ public class ScheduleFinder {
 		// 1. Fetch all LeagueMatch data
 		List<com.toy.nar.app.lolesports.repository.LeagueMatch> leagueMatches = leagueMatchRepository
 				.findByDateRange(startOfDayKst, endOfDayKst).stream()
-				.filter(match -> ALLOWED_LEAGUES.contains(match.getLeagueName().toUpperCase()))
+				.filter(match -> LeagueConstants.ALLOWED_LEAGUES.contains(match.getLeagueName().toUpperCase()))
 				.toList();
 
 		// 2. Fetch all Game data for the same day (plus/minus buffer for timezone diffs
@@ -130,6 +135,14 @@ public class ScheduleFinder {
 			return leagueMatchDate.equals(gameDate);
 		});
 
+		String liveStreamUrl = null;
+		if ("inProgress".equalsIgnoreCase(leagueMatch.getState())) {
+			liveStreamUrl = LeagueConstants.LIVE_STREAM_URLS.get(leagueMatch.getLeagueName().toUpperCase());
+		}
+
+		// Parse VOD sets from matchDetailsJson
+		List<MatchSummaryDto.SetVodDto> sets = parseSetVods(leagueMatch.getMatchDetailsJson());
+
 		return MatchSummaryDto.builder()
 				.matchId(leagueMatch.getId())
 				.scheduledTime(scheduledTime)
@@ -139,7 +152,27 @@ public class ScheduleFinder {
 				.isSynced(isSynced)
 				.teamA(teamA)
 				.teamB(teamB)
+				.liveStreamUrl(liveStreamUrl)
+				.sets(sets)
 				.build();
+	}
+
+	private List<MatchSummaryDto.SetVodDto> parseSetVods(String matchDetailsJson) {
+		if (matchDetailsJson == null || matchDetailsJson.isBlank()) {
+			return Collections.emptyList();
+		}
+		try {
+			List<MatchResultDto.SetVod> setVods = objectMapper.readValue(
+					matchDetailsJson,
+					new TypeReference<List<MatchResultDto.SetVod>>() {
+					});
+			return setVods.stream()
+					.map(sv -> new MatchSummaryDto.SetVodDto(sv.getSetNumber(), sv.getVodUrl()))
+					.toList();
+		} catch (JsonProcessingException e) {
+			log.warn("Failed to parse matchDetailsJson: {}", e.getMessage());
+			return Collections.emptyList();
+		}
 	}
 
 	private String getTeamNameFromGame(com.toy.nar.domain.game.entity.Game game, String side) {

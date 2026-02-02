@@ -26,13 +26,6 @@ public class LeagueMatchService {
 	private final WorldsService worldsService;
 	private final ObjectMapper objectMapper;
 
-	public static final List<String> TARGET_LEAGUES = List.of("LCK", "LPL", "LEC", "LCS", "MSI", "WORLDS");
-
-	private static final java.util.Map<String, String> DEFAULT_LIVE_STREAMS = java.util.Map.of("LCK",
-			"https://play.sooplive.co.kr/aflol", "LPL", "https://www.twitch.tv/lpl", "LEC", "https://www.twitch.tv/lec",
-			"LCS", "https://www.twitch.tv/lcs", "WORLDS", "https://www.twitch.tv/riotgames", "MSI",
-			"https://www.twitch.tv/riotgames");
-
 	// [Scheduler용] 특정 리그의 최신 경기를 가져와 DB에 저장 (1페이지)
 	public void syncMatches(String leagueSlug) {
 		log.info("Starting sync for league: {}", leagueSlug);
@@ -63,9 +56,9 @@ public class LeagueMatchService {
 
 	// [Admin용] 모든 대상 리그의 전체 과거 데이터 동기화
 	public int syncAllLeaguesFullHistory() {
-		log.info("Starting FULL history sync for ALL target leagues: {}", TARGET_LEAGUES);
+		log.info("Starting FULL history sync for ALL target leagues: {}", LeagueConstants.TARGET_LEAGUES);
 		int totalSynced = 0;
-		for (String league : TARGET_LEAGUES) {
+		for (String league : LeagueConstants.TARGET_LEAGUES) {
 			try {
 				totalSynced += syncFullHistory(league);
 				// 리그 사이에는 넉넉하게 10초 대기 (API 차단 방지)
@@ -231,7 +224,7 @@ public class LeagueMatchService {
 
 		String liveStreamUrl = null;
 		if ("inProgress".equalsIgnoreCase(entity.getState())) {
-			liveStreamUrl = DEFAULT_LIVE_STREAMS.get(entity.getLeagueName().toUpperCase());
+			liveStreamUrl = LeagueConstants.LIVE_STREAM_URLS.get(entity.getLeagueName().toUpperCase());
 		}
 
 		return MatchResultDto.builder().matchId(entity.getId()).leagueName(entity.getLeagueName())
