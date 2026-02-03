@@ -31,8 +31,8 @@ public class TeamRadarStatsDto {
     private Double goldDiffAt20;
     /** 25@GD - 25분 골드차 평균 */
     private Double goldDiffAt25;
-    /** GDM - 분당 골드차 */
-    private Double goldDiffPerMin;
+    /** GSPD - Gold Slope Percent Difference (시간당 골드 기울기 차이) */
+    private Double gspd;
 
     // === 전투 ===
     /** CKPM - 분당 합산 킬 (Combined Kills Per Minute) */
