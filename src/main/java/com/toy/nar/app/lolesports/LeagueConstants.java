@@ -30,7 +30,7 @@ public final class LeagueConstants {
      */
     public static final Map<String, String> LIVE_STREAM_URLS = Map.of(
             "LCK", "https://play.sooplive.co.kr/aflol",
-            "LPL", "https://www.twitch.tv/lpl",
+            "LPL", "https://chzzk.naver.com/live/92b762ef6fac0cc8c68bc080868ad582",
             "LEC", "https://www.twitch.tv/lec",
             "LCS", "https://www.twitch.tv/lcs",
             "WORLDS", "https://www.twitch.tv/riotgames",

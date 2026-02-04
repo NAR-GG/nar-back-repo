@@ -137,7 +137,7 @@ public class ScheduleFinder {
 
 		String liveStreamUrl = null;
 		if ("inProgress".equalsIgnoreCase(leagueMatch.getState())) {
-			liveStreamUrl = LeagueConstants.LIVE_STREAM_URLS.get(leagueMatch.getLeagueName().toUpperCase());
+			liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueMatch.getLeagueName());
 		}
 
 		// Parse VOD sets from matchDetailsJson
