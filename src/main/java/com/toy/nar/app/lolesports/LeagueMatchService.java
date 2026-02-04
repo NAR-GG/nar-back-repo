@@ -224,7 +224,7 @@ public class LeagueMatchService {
 
 		String liveStreamUrl = null;
 		if ("inProgress".equalsIgnoreCase(entity.getState())) {
-			liveStreamUrl = LeagueConstants.LIVE_STREAM_URLS.get(entity.getLeagueName().toUpperCase());
+			liveStreamUrl = LeagueConstants.getLiveStreamUrl(entity.getLeagueName());
 		}
 
 		return MatchResultDto.builder().matchId(entity.getId()).leagueName(entity.getLeagueName())
