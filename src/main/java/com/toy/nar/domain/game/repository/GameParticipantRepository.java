@@ -86,4 +86,64 @@ public interface GameParticipantRepository
 				AND YEAR(g.actualGameStartTime) = :year
 			""")
 	List<GameParticipant> findByTeamIdAndYearWithStats(@Param("teamId") Long teamId, @Param("year") int year);
+
+	/**
+	 * 팀-포지션별 모스트 픽 조회 (팀 랭킹용)
+	 */
+	@Query(value = """
+			SELECT t.team_id, gp.position, c.champion_name_en, COUNT(*) as pick_count,
+			       c.image_url, SUM(CASE WHEN gp.is_win = 1 THEN 1 ELSE 0 END) as wins
+			FROM game_participants gp
+			JOIN teams t ON gp.team_id = t.team_id
+			JOIN champions c ON gp.champion_id = c.champion_id
+			JOIN games g ON gp.game_id = g.game_id
+			JOIN leagues l ON g.league_id = l.league_id
+			WHERE (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+			  AND (:leagueNames IS NULL OR l.league_name IN (:leagueNames))
+			  AND (:splits IS NULL OR l.season_split IN (:splits))
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (:side IS NULL OR gp.side = :side)
+			GROUP BY t.team_id, gp.position, c.champion_id, c.champion_name_en, c.image_url
+			ORDER BY t.team_id, gp.position, pick_count DESC
+			""", nativeQuery = true)
+	List<Object[]> findMostPicksByTeamAndPosition(
+			@Param("year") Integer year,
+			@Param("leagueNames") List<String> leagueNames,
+			@Param("splits") List<String> splits,
+			@Param("patch") String patch,
+			@Param("side") String side);
+
+	/**
+	 * 팀-챔피언별 상대 챔피언 매치업 조회 (호버 시 상대 챔피언 표시용)
+	 * 같은 게임, 같은 포지션의 상대팀 챔피언 카운트
+	 */
+	@Query(value = """
+			SELECT gp.team_id, gp.position, c1.champion_name_en as my_champion,
+			       c2.champion_name_en as opponent_champion, c2.image_url as opponent_image_url,
+			       COUNT(*) as match_count,
+			       SUM(CASE WHEN gp.is_win = 1 THEN 1 ELSE 0 END) as wins
+			FROM game_participants gp
+			JOIN game_participants opp ON gp.game_id = opp.game_id
+			                           AND gp.position = opp.position
+			                           AND gp.team_id != opp.team_id
+			JOIN champions c1 ON gp.champion_id = c1.champion_id
+			JOIN champions c2 ON opp.champion_id = c2.champion_id
+			JOIN teams t ON gp.team_id = t.team_id
+			JOIN games g ON gp.game_id = g.game_id
+			JOIN leagues l ON g.league_id = l.league_id
+			WHERE (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+			  AND (:leagueNames IS NULL OR l.league_name IN (:leagueNames))
+			  AND (:splits IS NULL OR l.season_split IN (:splits))
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (:side IS NULL OR gp.side = :side)
+			GROUP BY gp.team_id, gp.position, c1.champion_id, c1.champion_name_en,
+			         c2.champion_id, c2.champion_name_en, c2.image_url
+			ORDER BY gp.team_id, gp.position, c1.champion_name_en, match_count DESC
+			""", nativeQuery = true)
+	List<Object[]> findOpponentMatchupsByTeamAndPosition(
+			@Param("year") Integer year,
+			@Param("leagueNames") List<String> leagueNames,
+			@Param("splits") List<String> splits,
+			@Param("patch") String patch,
+			@Param("side") String side);
 }

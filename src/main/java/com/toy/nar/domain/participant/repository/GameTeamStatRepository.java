@@ -59,4 +59,52 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 				AND l.leagueName = :leagueName
 			""")
 	List<GameTeamStat> findByYearAndLeagueName(@Param("year") int year, @Param("leagueName") String leagueName);
+
+	/**
+	 * 필터 기반 팀별 승률 통계 조회 (팀 랭킹용)
+	 */
+	@Query(value = """
+			SELECT t.team_id, t.team_name, t.team_code, t.team_image_url,
+			       SUM(CASE WHEN gts.result = 1 THEN 1 ELSE 0 END) as wins,
+			       COUNT(*) as total_games
+			FROM game_team_stat gts
+			JOIN teams t ON gts.team_id = t.team_id
+			JOIN games g ON gts.game_id = g.game_id
+			JOIN leagues l ON g.league_id = l.league_id
+			LEFT JOIN game_participants gp ON gp.game_id = g.game_id AND gp.team_id = t.team_id
+			WHERE (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+			  AND (:leagueNames IS NULL OR l.league_name IN (:leagueNames))
+			  AND (:splits IS NULL OR l.season_split IN (:splits))
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (:side IS NULL OR gp.side = :side)
+			GROUP BY t.team_id, t.team_name, t.team_code, t.team_image_url
+			ORDER BY wins / total_games DESC, wins DESC
+			""", nativeQuery = true)
+	List<Object[]> findTeamStatsByFilter(
+			@Param("year") Integer year,
+			@Param("leagueNames") List<String> leagueNames,
+			@Param("splits") List<String> splits,
+			@Param("patch") String patch,
+			@Param("side") String side);
+
+	/**
+	 * 필터 기반 전체 게임 수 조회 (밴률 계산용)
+	 */
+	@Query(value = """
+			SELECT COUNT(DISTINCT g.game_id)
+			FROM games g
+			JOIN leagues l ON g.league_id = l.league_id
+			LEFT JOIN game_participants gp ON gp.game_id = g.game_id
+			WHERE (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+			  AND (:leagueNames IS NULL OR l.league_name IN (:leagueNames))
+			  AND (:splits IS NULL OR l.season_split IN (:splits))
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (:side IS NULL OR gp.side = :side)
+			""", nativeQuery = true)
+	long countGamesByFilter(
+			@Param("year") Integer year,
+			@Param("leagueNames") List<String> leagueNames,
+			@Param("splits") List<String> splits,
+			@Param("patch") String patch,
+			@Param("side") String side);
 }
