@@ -155,6 +155,20 @@ public class WorldsService {
 						}
 					}
 
+					// [보정 3] 상태가 completed인데, 진행 중인 게임(inProgress)이 있다면 inProgress로 정정
+					boolean hasInProgressGame = false;
+					if (games.isArray()) {
+						for (JsonNode game : games) {
+							if ("inProgress".equalsIgnoreCase(game.path("state").asText())) {
+								hasInProgressGame = true;
+								break;
+							}
+						}
+					}
+					if (hasInProgressGame) {
+						finalState = "inProgress";
+					}
+
 					// DTO 생성 후 반환
 					String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
 					// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
@@ -292,6 +306,20 @@ public class WorldsService {
 			if (allGamesUnstarted && setVods.isEmpty() && "completed".equalsIgnoreCase(finalState)) {
 				finalState = "unstarted";
 			}
+		}
+
+		// [보정 3] 상태가 completed인데, 진행 중인 게임(inProgress)이 있다면 inProgress로 정정
+		boolean hasInProgressGame = false;
+		if (games.isArray()) {
+			for (JsonNode game : games) {
+				if ("inProgress".equalsIgnoreCase(game.path("state").asText())) {
+					hasInProgressGame = true;
+					break;
+				}
+			}
+		}
+		if (hasInProgressGame) {
+			finalState = "inProgress";
 		}
 
 		String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
