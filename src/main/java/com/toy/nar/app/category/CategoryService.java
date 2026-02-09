@@ -25,42 +25,42 @@ public class CategoryService {
 	private final LeagueRepository leagueRepository;
 	private final LeagueTeamRepository leagueTeamRepository;
 
-	public CategoryTree buildCategoryTree() {
-		List<CategoryQueryDto> flatData = leagueRepository.findAllCategoryDataByYear(2025);
+	public CategoryTree buildCategoryTree(int year) {
+		List<CategoryQueryDto> flatData = leagueRepository.findAllCategoryDataByYear(year);
 		List<LeagueCategory> leagueCategories = flatData.stream()
-			.collect(Collectors.groupingBy(CategoryQueryDto::leagueName))
-			.entrySet().stream()
-			.map(leagueEntity -> {
-				String leagueName = leagueEntity.getKey();
+				.collect(Collectors.groupingBy(CategoryQueryDto::leagueName))
+				.entrySet().stream()
+				.map(leagueEntity -> {
+					String leagueName = leagueEntity.getKey();
 
-				List<SplitCategory> splitCategories = leagueEntity.getValue().stream()
-					.collect(Collectors.groupingBy(CategoryQueryDto::splitName))
-					.entrySet().stream()
-					.map(splitEntry -> {
-						String splitName = splitEntry.getKey();
+					List<SplitCategory> splitCategories = leagueEntity.getValue().stream()
+							.collect(Collectors.groupingBy(CategoryQueryDto::splitName))
+							.entrySet().stream()
+							.map(splitEntry -> {
+								String splitName = splitEntry.getKey();
 
-						List<TeamSummary> teams = splitEntry.getValue().stream()
-							.filter(dto -> dto.teamName() != null)
-							.map(dto -> new TeamSummary(dto.teamId(), dto.teamName()))
-							.distinct()
-							.sorted(Comparator.comparing(TeamSummary::name))
-							.toList();
+								List<TeamSummary> teams = splitEntry.getValue().stream()
+										.filter(dto -> dto.teamName() != null)
+										.map(dto -> new TeamSummary(dto.teamId(), dto.teamName()))
+										.distinct()
+										.sorted(Comparator.comparing(TeamSummary::name))
+										.toList();
 
-						Long leagueId = splitEntry.getValue().get(0).leagueId();
-						return new SplitCategory(splitName, leagueId, teams);
-					}).toList();
+								Long leagueId = splitEntry.getValue().get(0).leagueId();
+								return new SplitCategory(splitName, leagueId, teams);
+							}).toList();
 
-				return new LeagueCategory(leagueName, splitCategories);
-			}).toList();
-		SeasonCategory season2025 = new SeasonCategory(2025, leagueCategories);
-		return new CategoryTree(List.of(season2025));
+					return new LeagueCategory(leagueName, splitCategories);
+				}).toList();
+		SeasonCategory seasonCategory = new SeasonCategory(year, leagueCategories);
+		return new CategoryTree(List.of(seasonCategory));
 	}
 
 	private SeasonCategory buildSeason2025() {
 		List<String> leagueNames = leagueRepository.findDistinctLeagueNames();
 		List<LeagueCategory> leagues = leagueNames.stream()
-			.map(this::buildLeagueCategory)
-			.toList();
+				.map(this::buildLeagueCategory)
+				.toList();
 
 		return new SeasonCategory(2025, leagues);
 	}
@@ -68,8 +68,8 @@ public class CategoryService {
 	private LeagueCategory buildLeagueCategory(String leagueName) {
 		List<String> splits = leagueRepository.findSplitsByLeague(leagueName, 2025);
 		List<SplitCategory> splitCategories = splits.stream()
-			.map(split -> buildSplitCategory(leagueName, split))
-			.toList();
+				.map(split -> buildSplitCategory(leagueName, split))
+				.toList();
 
 		return new LeagueCategory(leagueName, splitCategories);
 	}
@@ -77,8 +77,9 @@ public class CategoryService {
 	private SplitCategory buildSplitCategory(String leagueName, String split) {
 		// 정규시즌과 플레이오프 구분 없이 해당 리그-스플릿의 대표 League 선택
 		League league = leagueRepository.findByLeagueNameAndSeasonSplitAndIsPlayoffs(leagueName, split, false)
-			.orElseGet(() -> leagueRepository.findByLeagueNameAndSeasonSplitAndIsPlayoffs(leagueName, split, true)
-				.orElseThrow(() -> new IllegalStateException("League not found for " + leagueName + " " + split)));
+				.orElseGet(() -> leagueRepository.findByLeagueNameAndSeasonSplitAndIsPlayoffs(leagueName, split, true)
+						.orElseThrow(
+								() -> new IllegalStateException("League not found for " + leagueName + " " + split)));
 
 		List<TeamSummary> teams = getTeamSummaries(leagueName, split);
 
@@ -87,8 +88,8 @@ public class CategoryService {
 
 	public List<TeamSummary> getTeamSummaries(String leagueName, String split) {
 		return leagueTeamRepository.findTeamsByLeagueParams(leagueName, 2025, split)
-			.stream()
-			.map(team -> new TeamSummary(team.getId(), team.getName()))
-			.toList();
+				.stream()
+				.map(team -> new TeamSummary(team.getId(), team.getName()))
+				.toList();
 	}
 }

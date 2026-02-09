@@ -26,8 +26,9 @@ public class CategoryController {
 
 	@Operation(summary = "카테고리 계층 구조 조회", description = "리그 > 시즌 > 팀 순서로 구성된 전체 트리 데이터를 반환합니다.")
 	@GetMapping("/tree")
-	public ResponseEntity<CategoryTree> getCategoryTree() {
-		CategoryTree tree = categoryService.buildCategoryTree();
+	public ResponseEntity<CategoryTree> getCategoryTree(
+			@RequestParam(value = "year", defaultValue = "2026") int year) {
+		CategoryTree tree = categoryService.buildCategoryTree(year);
 		return ResponseEntity.ok(tree);
 	}
 

@@ -10,14 +10,17 @@ import org.springframework.data.repository.query.Param;
 
 import com.toy.nar.app.category.dto.CategoryQueryDto;
 import com.toy.nar.domain.game.entity.League;
+import com.toy.nar.domain.participant.entity.GameTeamStat;
 
 public interface LeagueRepository extends JpaRepository<League, Long> {
 
-	@Query("SELECT new com.toy.nar.app.category.dto.CategoryQueryDto(l.leagueName, l.seasonSplit, l.id, t.id, t.name) " +
-		"FROM League l " +
-		"LEFT JOIN l.leagueTeams lt " +
-		"LEFT JOIN lt.team t " +
-		"WHERE l.seasonYear = :year")
+	@Query("SELECT DISTINCT new com.toy.nar.app.category.dto.CategoryQueryDto(l.leagueName, l.seasonSplit, l.id, t.id, t.name) "
+			+
+			"FROM GameTeamStat gts " +
+			"JOIN gts.game g " +
+			"JOIN g.league l " +
+			"JOIN gts.team t " +
+			"WHERE l.seasonYear = :year")
 	List<CategoryQueryDto> findAllCategoryDataByYear(@Param("year") int year);
 
 	@Query("SELECT DISTINCT l.leagueName FROM League l WHERE l.seasonYear = 2025")
@@ -27,15 +30,14 @@ public interface LeagueRepository extends JpaRepository<League, Long> {
 	List<String> findSplitsByLeague(@Param("leagueName") String leagueName, @Param("seasonYear") Integer seasonYear);
 
 	Optional<League> findByLeagueNameAndSeasonYearAndSeasonSplitAndIsPlayoffs(
-		String leagueName, int seasonYear, String seasonSplit, boolean isPlayoffs);
+			String leagueName, int seasonYear, String seasonSplit, boolean isPlayoffs);
 
 	@Query("SELECT l FROM League l WHERE l.leagueName = :leagueName AND l.seasonSplit = :seasonSplit AND l.isPlayoffs = :isPlayoffs")
-	Optional<League> findByLeagueNameAndSeasonSplitAndIsPlayoffs(@Param("leagueName") String leagueName, @Param("seasonSplit") String seasonSplit, @Param("isPlayoffs") Boolean isPlayoffs);
+	Optional<League> findByLeagueNameAndSeasonSplitAndIsPlayoffs(@Param("leagueName") String leagueName,
+			@Param("seasonSplit") String seasonSplit, @Param("isPlayoffs") Boolean isPlayoffs);
 
 	@Query("SELECT DISTINCT l FROM League l LEFT JOIN FETCH l.leagueTeams WHERE l.leagueName IN :leagueNames AND l.seasonYear IN :years")
 	List<League> findLeaguesWithTeamsByIdentifiers(
-		@Param("leagueNames") Set<String> leagueNames,
-		@Param("years") Set<Integer> years
-	);
+			@Param("leagueNames") Set<String> leagueNames,
+			@Param("years") Set<Integer> years);
 }
-
