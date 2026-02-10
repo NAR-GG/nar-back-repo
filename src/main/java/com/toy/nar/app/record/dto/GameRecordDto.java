@@ -15,6 +15,7 @@ public record GameRecordDto(
 		String patch,
 		int gamelength,
 		BansDto bans,
+		FearlessDto fearless, // 피어리스 드래프트 (이전 세트 픽 챔피언)
 		List<PlayerRecordDto> players,
 		SetNavigationDto setNav // 세트 네비게이션 정보
 ) {

@@ -15,6 +15,7 @@ public record MatchDetailResponseDto(
 		public record TeamPicksDto(
 				String teamName,
 				boolean isWin,
+				List<String> bans,
 				List<PlayerPickDto> players) {
 		}
 
