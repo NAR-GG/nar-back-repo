@@ -1,6 +1,7 @@
 package com.toy.nar.app.record;
 
 import com.toy.nar.app.record.dto.BansDto;
+import com.toy.nar.app.record.dto.FearlessDto;
 import com.toy.nar.app.record.dto.GameRecordDto;
 import com.toy.nar.app.record.dto.PlayerRecordDto;
 import com.toy.nar.app.record.dto.SetNavigationDto;
@@ -19,9 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -57,10 +56,16 @@ public class GameRecordService {
 		// 4. Bans 변환
 		List<String> blueBans = extractBansByTeam(game, blueTeam.getName());
 		List<String> redBans = extractBansByTeam(game, redTeam.getName());
-
 		BansDto bansDto = new BansDto(blueBans, redBans);
 
-		// 5. Player 정보 변환
+		// 5. Fearless Draft: 이전 세트에서 사용된 챔피언을 별도 필드로 제공
+		List<Game> relatedGames = findRelatedGames(game, blueTeam.getName(), redTeam.getName());
+		Map<String, List<String>> fearlessBlue = getFearlessPicks(relatedGames, blueTeam.getName(),
+				game.getGameNumber());
+		Map<String, List<String>> fearlessRed = getFearlessPicks(relatedGames, redTeam.getName(), game.getGameNumber());
+		FearlessDto fearlessDto = new FearlessDto(fearlessBlue, fearlessRed);
+
+		// 6. Player 정보 변환
 		List<PlayerRecordDto> playerRecordDtos = game.getParticipants().stream()
 				.distinct()
 				.map(p -> {
@@ -74,16 +79,16 @@ public class GameRecordService {
 					return PlayerRecordDto.from(p, teamStat);
 				}).toList();
 
-		// 6. 세트 네비게이션 정보 조회
+		// 7. 세트 네비게이션 정보 조회
 		SetNavigationDto setNav = buildSetNavigation(game, blueTeam, redTeam);
 
-		// 7. 최종 GameRecordDto 조립
+		// 8. 최종 GameRecordDto 조립
 		return new GameRecordDto(
 				game.getGameOriginId(), "complete", game.getLeague().getLeagueName(),
 				game.getLeague().getSeasonYear(), game.getLeague().getSeasonSplit(),
 				game.getLeague().getIsPlayoffs() ? 1 : 0,
 				game.getActualGameStartTime().toLocalDate().toString(), game.getGameNumber(), game.getPatch(),
-				game.getGameLengthSeconds(), bansDto, playerRecordDtos, setNav);
+				game.getGameLengthSeconds(), bansDto, fearlessDto, playerRecordDtos, setNav);
 	}
 
 	/**
@@ -184,5 +189,26 @@ public class GameRecordService {
 				.filter(b -> b.getTeam().getName().equals(teamName))
 				.map(b -> b.getBannedChampion().getChampionNameEn())
 				.toList();
+	}
+
+	/**
+	 * Fearless Draft: 이전 세트에서 해당 팀이 픽한 챔피언을 포지션별로 그룹핑하여 반환
+	 */
+	private Map<String, List<String>> getFearlessPicks(List<Game> relatedGames, String teamName,
+			int currentGameNumber) {
+		Map<String, List<String>> picksByPosition = new LinkedHashMap<>();
+
+		for (Game g : relatedGames) {
+			if (g.getGameNumber() >= currentGameNumber) {
+				continue;
+			}
+			g.getParticipants().stream()
+					.filter(p -> p.getTeam().getName().equals(teamName))
+					.forEach(p -> picksByPosition
+							.computeIfAbsent(p.getPosition().toLowerCase(), k -> new ArrayList<>())
+							.add(p.getChampion().getChampionNameEn()));
+		}
+
+		return picksByPosition;
 	}
 }

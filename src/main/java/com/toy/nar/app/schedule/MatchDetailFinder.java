@@ -39,7 +39,9 @@ public class MatchDetailFinder {
 			// 조회된 데이터가 없으면 null을 반환하여 캐시되지 않도록 합니다.
 			return null;
 		}
-		List<Game> games = participants.stream().map(GameParticipant::getGame).distinct().toList();
+		List<Game> games = participants.stream().map(GameParticipant::getGame).distinct()
+				.sorted(Comparator.comparingInt(Game::getGameNumber)).toList();
+
 		List<GameInfoForSummary> gamesForSummary = games.stream()
 				.map(game -> {
 					List<ParticipantInfo> participantInfos = game.getParticipants().stream()
@@ -61,27 +63,75 @@ public class MatchDetailFinder {
 
 		MatchSummaryDto summary = createMatchSummary(gamesForSummary);
 
+		List<MatchDetailResponseDto.GameDetailDto> gameDetails = createGameDetails(participants, null);
+
+		return new MatchDetailResponseDto(summary, gameDetails);
+	}
+
+	public List<MatchDetailResponseDto.GameDetailDto> createGameDetails(List<GameParticipant> participants,
+			Map<Integer, String> vodMap) {
+		List<Game> games = participants.stream().map(GameParticipant::getGame).distinct()
+				.sorted(Comparator.comparingInt(Game::getGameNumber)).toList();
+
 		Map<Long, List<GameParticipant>> participantsByGame = participants.stream()
 				.collect(Collectors.groupingBy(p -> p.getGame().getId()));
 
-		List<MatchDetailResponseDto.GameDetailDto> gameDetails = participantsByGame.values().stream()
-				.map(gameParticipants -> {
-					Game game = gameParticipants.get(0).getGame();
-					Map<String, List<GameParticipant>> participantsBySide = gameParticipants.stream()
-							.collect(Collectors.groupingBy(GameParticipant::getSide));
+		// Fearless Draft Logic: Accumulate picks from previous games
+		Map<String, Set<String>> teamAccumulatedPicks = new HashMap<>();
 
-					MatchDetailResponseDto.GameDetailDto.TeamPicksDto blueTeam = createTeamPicksDto(
-							participantsBySide.get("Blue"));
-					MatchDetailResponseDto.GameDetailDto.TeamPicksDto redTeam = createTeamPicksDto(
-							participantsBySide.get("Red"));
+		List<MatchDetailResponseDto.GameDetailDto> gameDetails = new ArrayList<>();
+		for (Game game : games) {
+			List<GameParticipant> gameParticipants = participantsByGame.get(game.getId());
+			Map<String, List<GameParticipant>> participantsBySide = gameParticipants.stream()
+					.collect(Collectors.groupingBy(GameParticipant::getSide));
 
-					return new MatchDetailResponseDto.GameDetailDto(game.getId(), game.getGameNumber(),
-							game.getGameLengthSeconds(), null, blueTeam, redTeam);
-				})
-				.sorted(Comparator.comparing(MatchDetailResponseDto.GameDetailDto::gameNumber))
-				.toList();
+			List<GameParticipant> blueSide = participantsBySide.get("Blue");
+			List<GameParticipant> redSide = participantsBySide.get("Red");
 
-		return new MatchDetailResponseDto(summary, gameDetails);
+			// Get team names
+			String blueTeamName = blueSide != null && !blueSide.isEmpty() ? blueSide.get(0).getTeam().getName() : "";
+			String redTeamName = redSide != null && !redSide.isEmpty() ? redSide.get(0).getTeam().getName() : "";
+
+			// Initialize accumulated picks if not present
+			teamAccumulatedPicks.putIfAbsent(blueTeamName, new HashSet<>());
+			teamAccumulatedPicks.putIfAbsent(redTeamName, new HashSet<>());
+
+			// Get current game bans
+			Set<String> blueTeamBans = game.getBans().stream()
+					.filter(b -> b.getTeam().getName().equals(blueTeamName))
+					.map(b -> b.getBannedChampion().getChampionNameEn())
+					.collect(Collectors.toSet());
+
+			Set<String> redTeamBans = game.getBans().stream()
+					.filter(b -> b.getTeam().getName().equals(redTeamName))
+					.map(b -> b.getBannedChampion().getChampionNameEn())
+					.collect(Collectors.toSet());
+
+			// Add accumulated picks to bans (Fearless Draft)
+			blueTeamBans.addAll(teamAccumulatedPicks.get(blueTeamName));
+			redTeamBans.addAll(teamAccumulatedPicks.get(redTeamName));
+
+			// Create DTOs with accumulated bans
+			MatchDetailResponseDto.GameDetailDto.TeamPicksDto blueTeamDto = createTeamPicksDto(blueSide,
+					new ArrayList<>(blueTeamBans));
+			MatchDetailResponseDto.GameDetailDto.TeamPicksDto redTeamDto = createTeamPicksDto(redSide,
+					new ArrayList<>(redTeamBans));
+
+			String vodUrl = vodMap != null ? vodMap.get(game.getGameNumber()) : null;
+
+			gameDetails.add(new MatchDetailResponseDto.GameDetailDto(game.getId(), game.getGameNumber(),
+					game.getGameLengthSeconds(), vodUrl, blueTeamDto, redTeamDto));
+
+			// Update accumulated picks for next games
+			if (blueSide != null) {
+				blueSide.forEach(
+						p -> teamAccumulatedPicks.get(blueTeamName).add(p.getChampion().getChampionNameEn()));
+			}
+			if (redSide != null) {
+				redSide.forEach(p -> teamAccumulatedPicks.get(redTeamName).add(p.getChampion().getChampionNameEn()));
+			}
+		}
+		return gameDetails;
 	}
 
 	private MatchSummaryDto createMatchSummary(List<GameInfoForSummary> matchGames) {
@@ -149,12 +199,16 @@ public class MatchDetailFinder {
 	}
 
 	private MatchDetailResponseDto.GameDetailDto.TeamPicksDto createTeamPicksDto(
-			List<GameParticipant> teamParticipants) {
+			List<GameParticipant> teamParticipants, List<String> bans) {
 		if (teamParticipants == null || teamParticipants.isEmpty()) {
-			return new MatchDetailResponseDto.GameDetailDto.TeamPicksDto("Unknown", false, Collections.emptyList());
+			return new MatchDetailResponseDto.GameDetailDto.TeamPicksDto("Unknown", false, Collections.emptyList(),
+					Collections.emptyList());
 		}
 		String teamName = teamParticipants.get(0).getTeam().getName();
 		boolean isWin = teamParticipants.get(0).getIsWin();
+
+		// Ensure bans list is not null
+		List<String> validBans = bans != null ? bans : Collections.emptyList();
 
 		List<MatchDetailResponseDto.GameDetailDto.PlayerPickDto> players = teamParticipants.stream()
 				.map(p -> new MatchDetailResponseDto.GameDetailDto.PlayerPickDto(p.getPosition(),
@@ -162,7 +216,7 @@ public class MatchDetailFinder {
 				.sorted(Comparator.comparing(p -> getPositionOrder(p.position())))
 				.toList();
 
-		return new MatchDetailResponseDto.GameDetailDto.TeamPicksDto(teamName, isWin, players);
+		return new MatchDetailResponseDto.GameDetailDto.TeamPicksDto(teamName, isWin, validBans, players);
 	}
 
 	private String encodeMatchId(Set<Long> gameIds) {

@@ -3,8 +3,7 @@ package com.toy.nar.app.schedule;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.schedule.dto.*;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto;
-import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto.PlayerPickDto;
-import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto.TeamPicksDto;
+
 import com.toy.nar.common.error.ErrorCode;
 import com.toy.nar.common.error.exception.CustomException;
 import com.toy.nar.domain.game.entity.Game;
@@ -14,14 +13,13 @@ import com.toy.nar.domain.game.repository.GameRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.Cacheable;
+
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -35,6 +33,7 @@ public class ScheduleService {
 	private final GameRepository gameRepository;
 	private final GameParticipantRepository gameParticipantRepository;
 	private final LeagueMatchRepository leagueMatchRepository;
+	private final MatchDetailFinder matchDetailFinder;
 
 	/**
 	 * 일정 조회 공개 메서드.
@@ -239,8 +238,8 @@ public class ScheduleService {
 					entry.getKey(),
 					0,
 					entry.getValue(),
-					new GameDetailDto.TeamPicksDto(blueTeam, false, Collections.emptyList()),
-					new GameDetailDto.TeamPicksDto(redTeam, false, Collections.emptyList())));
+					new GameDetailDto.TeamPicksDto(blueTeam, false, Collections.emptyList(), Collections.emptyList()),
+					new GameDetailDto.TeamPicksDto(redTeam, false, Collections.emptyList(), Collections.emptyList())));
 		}
 		return details.stream()
 				.sorted(Comparator.comparingInt(GameDetailDto::gameNumber))
@@ -252,65 +251,7 @@ public class ScheduleService {
 			Map<Integer, String> vodBySetNumber,
 			String blueTeamName, String redTeamName) {
 
-		// Group by game
-		Map<Long, List<GameParticipant>> participantsByGame = participants.stream()
-				.collect(Collectors.groupingBy(p -> p.getGame().getId()));
-
-		List<GameDetailDto> details = new ArrayList<>();
-		for (List<GameParticipant> gameParticipants : participantsByGame.values()) {
-			Game game = gameParticipants.get(0).getGame();
-
-			// Group by side
-			Map<String, List<GameParticipant>> bySide = gameParticipants.stream()
-					.collect(Collectors.groupingBy(GameParticipant::getSide));
-
-			// Get VOD for this game number
-			String vodUrl = vodBySetNumber.get(game.getGameNumber());
-
-			GameDetailDto.TeamPicksDto blueTeam = createTeamPicksDto(bySide.get("Blue"));
-			GameDetailDto.TeamPicksDto redTeam = createTeamPicksDto(bySide.get("Red"));
-
-			details.add(new GameDetailDto(
-					game.getId(),
-					game.getGameNumber(),
-					game.getGameLengthSeconds(),
-					vodUrl,
-					blueTeam,
-					redTeam));
-		}
-
-		return details.stream()
-				.sorted(Comparator.comparingInt(GameDetailDto::gameNumber))
-				.toList();
-	}
-
-	private GameDetailDto.TeamPicksDto createTeamPicksDto(List<GameParticipant> teamParticipants) {
-		if (teamParticipants == null || teamParticipants.isEmpty()) {
-			return new GameDetailDto.TeamPicksDto("Unknown", false, Collections.emptyList());
-		}
-		String teamName = teamParticipants.get(0).getTeam().getName();
-		boolean isWin = teamParticipants.get(0).getIsWin();
-
-		List<GameDetailDto.PlayerPickDto> players = teamParticipants.stream()
-				.map(p -> new GameDetailDto.PlayerPickDto(
-						p.getPosition(),
-						p.getPlayer().getName(),
-						p.getChampion().getChampionNameEn()))
-				.sorted(Comparator.comparing(p -> getPositionOrder(p.position())))
-				.toList();
-
-		return new GameDetailDto.TeamPicksDto(teamName, isWin, players);
-	}
-
-	private int getPositionOrder(String position) {
-		return switch (position.toLowerCase()) {
-			case "top" -> 1;
-			case "jng", "jungle" -> 2;
-			case "mid" -> 3;
-			case "bot", "adc" -> 4;
-			case "sup", "support" -> 5;
-			default -> 99;
-		};
+		return matchDetailFinder.createGameDetails(participants, vodBySetNumber);
 	}
 
 	private Set<Long> decodeMatchId(String matchId) {
