@@ -3,6 +3,9 @@ package com.toy.nar.app.search.service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -66,16 +69,20 @@ public class SearchService {
         }
 
         // 3. 경기 검색
+        // 매치 그룹핑을 위해 limit보다 더 많은 게임을 조회해야 함 (Bo3, Bo5 고려)
+        // 안전하게 limit * 5 게임 조회 후 그룹핑 과정에서 limit 개수만큼 자름
+        int gameSearchLimit = limit * 5;
+
         List<Game> games;
         if (teamsByKeyword.size() >= 2) {
             // 두 팀 모두 포함된 경기 검색 (AND 조건)
             List<Long> team1Ids = teamsByKeyword.get(0).stream().map(Team::getId).toList();
             List<Long> team2Ids = teamsByKeyword.get(1).stream().map(Team::getId).toList();
-            games = gameRepository.findRecentGamesByBothTeams(team1Ids, team2Ids, limit);
+            games = gameRepository.findRecentGamesByBothTeams(team1Ids, team2Ids, gameSearchLimit);
         } else {
             // 한 팀만 입력된 경우, 해당 팀이 포함된 경기 검색
             List<Long> teamIds = teamsByKeyword.get(0).stream().map(Team::getId).toList();
-            games = gameRepository.findRecentGamesByTeamIds(teamIds, limit);
+            games = gameRepository.findRecentGamesByTeamIds(teamIds, gameSearchLimit);
         }
 
         if (games.isEmpty()) {
@@ -152,6 +159,9 @@ public class SearchService {
     /**
      * 게임 목록을 MatchSuggestionDto로 변환
      */
+    /**
+     * 게임 목록을 MatchSuggestionDto로 변환 (같은 매치의 게임들을 하나로 그룹핑)
+     */
     private List<MatchSuggestionDto> convertToSuggestions(List<Game> games, int limit) {
         List<Long> gameIds = games.stream().map(Game::getId).toList();
 
@@ -161,46 +171,112 @@ public class SearchService {
                 .stream()
                 .collect(Collectors.groupingBy(p -> p.getGame().getId()));
 
+        // 1. 날짜 + 참여팀 기준으로 게임 그룹핑 (LinkedHashMap으로 순서 유지)
+        // 키 형식: "YYYY-MM-DD_TeamCode1_TeamCode2"
+        Map<String, List<Game>> matchGroups = games.stream()
+                .collect(Collectors.groupingBy(
+                        game -> {
+                            String date = (game.getScheduledGameStartTime() != null
+                                    ? game.getScheduledGameStartTime()
+                                    : game.getActualGameStartTime()).toLocalDate().toString();
+
+                            List<GameParticipant> participants = participantsByGameId.get(game.getId());
+                            if (participants == null || participants.isEmpty()) {
+                                return date + "_" + game.getId(); // 참여자 없으면 게임 ID로 분리
+                            }
+
+                            String teams = participants.stream()
+                                    .map(GameParticipant::getTeam)
+                                    .filter(Objects::nonNull)
+                                    .map(Team::getCode)
+                                    .filter(Objects::nonNull)
+                                    .sorted()
+                                    .collect(Collectors.joining("_"));
+
+                            return date + "_" + teams;
+                        },
+                        LinkedHashMap::new,
+                        Collectors.toList()));
+
         List<MatchSuggestionDto> suggestions = new ArrayList<>();
 
-        for (Game game : games) {
-            List<GameParticipant> participants = participantsByGameId.get(game.getId());
-            if (participants == null || participants.isEmpty())
+        for (List<Game> matchGames : matchGroups.values()) {
+            if (matchGames.isEmpty())
                 continue;
 
-            // Blue/Red 팀 분리
-            Map<String, List<GameParticipant>> bySide = participants.stream()
+            // gameNumber 기준 오름차순 정렬 (Null safe)
+            matchGames
+                    .sort(Comparator.comparing(Game::getGameNumber, Comparator.nullsFirst(Comparator.naturalOrder())));
+
+            Game firstGame = matchGames.get(0);
+            List<GameParticipant> firstGameParticipants = participantsByGameId.get(firstGame.getId());
+            if (firstGameParticipants == null || firstGameParticipants.isEmpty()) {
+                continue;
+            }
+
+            // game1의 Blue 팀을 Team A, Red 팀을 Team B로 정의 (기준점)
+            Map<String, List<GameParticipant>> bySide = firstGameParticipants.stream()
                     .collect(Collectors.groupingBy(GameParticipant::getSide));
 
-            List<GameParticipant> blueTeam = bySide.get("Blue");
-            List<GameParticipant> redTeam = bySide.get("Red");
+            List<GameParticipant> blueTeamParticipants = bySide.get("Blue");
+            List<GameParticipant> redTeamParticipants = bySide.get("Red");
 
-            if (blueTeam == null || blueTeam.isEmpty() || redTeam == null || redTeam.isEmpty())
+            if (blueTeamParticipants == null || blueTeamParticipants.isEmpty() ||
+                    redTeamParticipants == null || redTeamParticipants.isEmpty()) {
+                continue;
+            }
+
+            Team teamAEntity = blueTeamParticipants.get(0).getTeam();
+            Team teamBEntity = redTeamParticipants.get(0).getTeam();
+
+            if (teamAEntity == null || teamBEntity == null)
                 continue;
 
-            String blueTeamName = blueTeam.get(0).getTeam().getName();
-            String blueTeamCode = blueTeam.get(0).getTeam().getCode();
-            String blueTeamImageUrl = blueTeam.get(0).getTeam().getImageUrl();
+            String teamAName = teamAEntity.getName();
 
-            String redTeamName = redTeam.get(0).getTeam().getName();
-            String redTeamCode = redTeam.get(0).getTeam().getCode();
-            String redTeamImageUrl = redTeam.get(0).getTeam().getImageUrl();
+            // 점수 계산
+            int teamAScore = 0;
+            int teamBScore = 0;
 
-            Boolean blueWin = blueTeam.get(0).getIsWin();
+            for (Game game : matchGames) {
+                List<GameParticipant> participants = participantsByGameId.get(game.getId());
+                if (participants == null)
+                    continue;
+
+                // 해당 게임에서 Team A(이름 기준)가 이겼는지 확인
+                boolean teamAWonThisGame = participants.stream()
+                        .filter(p -> p.getTeam() != null && Objects.equals(p.getTeam().getName(), teamAName))
+                        .findFirst()
+                        .map(p -> Boolean.TRUE.equals(p.getIsWin()))
+                        .orElse(false);
+
+                if (teamAWonThisGame) {
+                    teamAScore++;
+                } else {
+                    teamBScore++;
+                }
+            }
+
+            // 승자 결정 (현재 스코어 기준)
+            String winnerName = (teamAScore > teamBScore) ? teamAEntity.getName() : teamBEntity.getName();
+            boolean isBlueWin = winnerName.equals(teamAName);
 
             suggestions.add(MatchSuggestionDto.of(
-                    game.getId(),
-                    blueTeamName,
-                    blueTeamCode,
-                    blueTeamImageUrl,
-                    redTeamName,
-                    redTeamCode,
-                    redTeamImageUrl,
-                    blueWin,
-                    game.getLeague().getLeagueName(),
-                    game.getActualGameStartTime(),
-                    game.getPatch(),
-                    game.getGameNumber()));
+                    firstGame.getId(),
+                    teamAEntity.getName(),
+                    teamAEntity.getCode(),
+                    teamAEntity.getImageUrl(),
+                    teamAScore,
+                    teamBEntity.getName(),
+                    teamBEntity.getCode(),
+                    teamBEntity.getImageUrl(),
+                    teamBScore,
+                    isBlueWin,
+                    firstGame.getLeague().getLeagueName(),
+                    firstGame.getScheduledGameStartTime() != null
+                            ? firstGame.getScheduledGameStartTime()
+                            : firstGame.getActualGameStartTime(),
+                    firstGame.getPatch()));
 
             if (suggestions.size() >= limit)
                 break;

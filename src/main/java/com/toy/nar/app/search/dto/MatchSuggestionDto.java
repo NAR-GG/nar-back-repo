@@ -6,37 +6,33 @@ import lombok.Builder;
 
 @Builder
 public record MatchSuggestionDto(
-        Long gameId,
-        String blueTeamName,
-        String blueTeamCode,
-        String blueTeamImageUrl,
-        String redTeamName,
-        String redTeamCode,
-        String redTeamImageUrl,
-        Boolean blueWin,
-        String leagueName,
-        LocalDateTime gameDate,
-        String patch,
-        Integer gameNumber,
-        String label) {
-    public static MatchSuggestionDto of(Long gameId,
-            String blueTeamName, String blueTeamCode, String blueTeamImageUrl,
-            String redTeamName, String redTeamCode, String redTeamImageUrl,
-            Boolean blueWin, String leagueName, LocalDateTime gameDate,
-            String patch, Integer gameNumber) {
+                Long gameId,
+                String blueTeamName,
+                String blueTeamCode,
+                String blueTeamImageUrl,
+                int blueTeamScore,
+                String redTeamName,
+                String redTeamCode,
+                String redTeamImageUrl,
+                int redTeamScore,
+                Boolean blueWin,
+                String leagueName,
+                LocalDateTime gameDate,
+                String patch) {
 
-        String result = blueWin ? blueTeamName + " WIN" : redTeamName + " WIN";
-        String label = blueTeamName + " vs " + redTeamName + " (" + result + ")";
+        public static MatchSuggestionDto of(Long gameId,
+                        String blueTeamName, String blueTeamCode, String blueTeamImageUrl, int blueTeamScore,
+                        String redTeamName, String redTeamCode, String redTeamImageUrl, int redTeamScore,
+                        Boolean blueWin, String leagueName, LocalDateTime gameDate,
+                        String patch) {
 
-        return new MatchSuggestionDto(
-                gameId,
-                blueTeamName, blueTeamCode, blueTeamImageUrl,
-                redTeamName, redTeamCode, redTeamImageUrl,
-                blueWin,
-                leagueName,
-                gameDate,
-                patch,
-                gameNumber,
-                label);
-    }
+                return new MatchSuggestionDto(
+                                gameId,
+                                blueTeamName, blueTeamCode, blueTeamImageUrl, blueTeamScore,
+                                redTeamName, redTeamCode, redTeamImageUrl, redTeamScore,
+                                blueWin,
+                                leagueName,
+                                gameDate,
+                                patch);
+        }
 }
