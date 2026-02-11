@@ -49,7 +49,7 @@ public class LeagueMatchService {
 		}
 
 		// 3. Team Metadata Sync
-		// updateTeamMetadataFromMatches(matches);
+		updateTeamMetadataFromMatches(matches);
 
 		log.info("Synced {} matches for league: {}", matches.size(), leagueSlug);
 	}
@@ -102,7 +102,7 @@ public class LeagueMatchService {
 				}
 
 				// Team Metadata Sync per page
-				// updateTeamMetadataFromMatches(matches);
+				updateTeamMetadataFromMatches(matches);
 
 				pageToken = response.getNextPageToken();
 				if (pageToken == null || pageToken.isEmpty()) {

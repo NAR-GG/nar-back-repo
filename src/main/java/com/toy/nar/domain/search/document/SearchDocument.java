@@ -47,6 +47,12 @@ public class SearchDocument {
     @Field(type = FieldType.Text, analyzer = "nori_analyzer")
     private String aliases; // "젠지, 겐지, GenG"
 
+    @Field(type = FieldType.Keyword)
+    private String teamCode; // "T1", "GEN", "C9"
+
+    @Field(type = FieldType.Keyword)
+    private String teamImageUrl;
+
     public static SearchDocument ofTeam(Long teamId, String name, String nameKorean) {
         String normalized = normalize(name);
         return SearchDocument.builder()

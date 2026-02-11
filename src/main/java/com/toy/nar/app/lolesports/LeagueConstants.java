@@ -17,7 +17,7 @@ public final class LeagueConstants {
      * 동기화 및 API 대상 리그 목록
      */
     public static final List<String> TARGET_LEAGUES = List.of(
-            "LCK", "LPL", "LEC", "LCS", "MSI", "WORLDS");
+            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS");
 
     /**
      * 일정 조회 시 허용되는 리그 목록 (TARGET_LEAGUES + 추가 리그)
