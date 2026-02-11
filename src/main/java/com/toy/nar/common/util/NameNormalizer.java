@@ -69,6 +69,12 @@ public class NameNormalizer {
 		TEAM_NAME_MAPPINGS.put("ultra prime", "Ultra Prime");
 		TEAM_NAME_MAPPINGS.put("rare atom", "Rare Atom");
 		TEAM_NAME_MAPPINGS.put("jd gaming", "Jd Gaming");
+
+		// LCS
+		TEAM_NAME_MAPPINGS.put("cloud9 kia", "Cloud9");
+		TEAM_NAME_MAPPINGS.put("team liquid alienware", "Team Liquid");
+		TEAM_NAME_MAPPINGS.put("immortals progressive", "Immortals Progressive");
+		TEAM_NAME_MAPPINGS.put("nrg kia", "Nrg Kia");
 	}
 
 	/**

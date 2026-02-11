@@ -75,14 +75,22 @@ public class SearchIndexService {
     }
 
     /**
-     * 모든 팀 데이터를 ES에 동기화
+     * 모든 팀 데이터를 ES에 동기화 (team_code가 있는 주요 리그 팀만)
      */
-    @Transactional(readOnly = true)
     public int syncAllTeams() {
+        // 기존 TEAM 인덱스 전체 삭제 후 재생성 (team_code 없는 팀 제거)
+        searchDocumentRepository.deleteByEntityType("TEAM");
+        log.info("### [SearchIndex] 기존 TEAM 인덱스 삭제 완료 ###");
+
         List<Team> teams = teamRepository.findAll();
         int count = 0;
 
         for (Team team : teams) {
+            // team_code가 없는 팀은 인덱싱 제외 (주요 리그 팀만 인덱싱)
+            if (team.getCode() == null || team.getCode().isBlank()) {
+                continue;
+            }
+
             String name = team.getName();
             String nameKorean = KOREAN_TEAM_NAMES.getOrDefault(name.toLowerCase(), null);
 
@@ -92,7 +100,7 @@ public class SearchIndexService {
                 chosung = HangulUtil.extractChosung(nameKorean);
             }
 
-            // SearchDocument 생성 시 초성도 autocomplete에 포함
+            // SearchDocument 생성 시 teamCode도 autocomplete에 포함
             SearchDocument doc = SearchDocument.builder()
                     .id("TEAM_" + team.getId())
                     .entityType("TEAM")
@@ -100,14 +108,17 @@ public class SearchIndexService {
                     .name(name)
                     .nameKorean(nameKorean)
                     .nameNormalized(name.toLowerCase().replaceAll("[^a-z0-9가-힣]", ""))
-                    .autocomplete(name + " " + (nameKorean != null ? nameKorean : "") + " " + chosung)
+                    .autocomplete(
+                            name + " " + (nameKorean != null ? nameKorean : "") + " " + chosung + " " + team.getCode())
+                    .teamCode(team.getCode())
+                    .teamImageUrl(team.getImageUrl())
                     .build();
 
             searchDocumentRepository.save(doc);
             count++;
         }
 
-        log.info("### [SearchIndex] 팀 동기화 완료: {}개 (한글 매핑 적용) ###", count);
+        log.info("### [SearchIndex] 팀 동기화 완료: {}개 (주요 리그 팀만, 한글 매핑 적용) ###", count);
         return count;
     }
 
@@ -142,11 +153,17 @@ public class SearchIndexService {
     }
 
     /**
-     * 단일 팀 인덱싱
+     * 단일 팀 인덱싱 (team_code 없으면 제외)
      */
     public void indexTeam(Team team) {
+        // team_code가 없는 팀은 인덱싱 제외
+        if (team.getCode() == null || team.getCode().isBlank()) {
+            log.debug("Skipping indexing for team without code: {}", team.getName());
+            return;
+        }
+
         String name = team.getName();
-        String nameKorean = KOREAN_TEAM_NAMES.getOrDefault(name, null);
+        String nameKorean = KOREAN_TEAM_NAMES.getOrDefault(name.toLowerCase(), null);
         String chosung = (nameKorean != null) ? HangulUtil.extractChosung(nameKorean) : "";
 
         SearchDocument doc = SearchDocument.builder()
@@ -156,7 +173,10 @@ public class SearchIndexService {
                 .name(name)
                 .nameKorean(nameKorean)
                 .nameNormalized(name.toLowerCase().replaceAll("[^a-z0-9가-힣]", ""))
-                .autocomplete(name + " " + (nameKorean != null ? nameKorean : "") + " " + chosung)
+                .autocomplete(
+                        name + " " + (nameKorean != null ? nameKorean : "") + " " + chosung + " " + team.getCode())
+                .teamCode(team.getCode())
+                .teamImageUrl(team.getImageUrl())
                 .build();
 
         searchDocumentRepository.save(doc);

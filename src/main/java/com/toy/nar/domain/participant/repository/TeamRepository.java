@@ -22,4 +22,10 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
 	@Query("SELECT t FROM Team t WHERE LOWER(t.name) LIKE LOWER(CONCAT('%', :keyword, '%'))")
 	List<Team> findByNameContainingIgnoreCase(@Param("keyword") String keyword);
+
+	@Query("SELECT t FROM Team t WHERE LOWER(t.name) LIKE LOWER(CONCAT('%', :keyword, '%')) AND t.code IS NOT NULL")
+	List<Team> findByNameContainingIgnoreCaseAndCodeIsNotNull(@Param("keyword") String keyword);
+
+	@Query("SELECT t FROM Team t WHERE LOWER(t.code) = LOWER(:code) AND t.code IS NOT NULL")
+	List<Team> findByCodeIgnoreCase(@Param("code") String code);
 }
