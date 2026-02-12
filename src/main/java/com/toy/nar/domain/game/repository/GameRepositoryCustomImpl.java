@@ -68,6 +68,10 @@ public class GameRepositoryCustomImpl implements GameRepositoryCustom {
 	}
 
 	private void applyFilterConditions(StringBuilder jpql, Map<String, Object> parameters, MultiCombinationFilterDto filter) {
+		if (filter.getYear() != null) {
+			jpql.append(" AND l.seasonYear = :year");
+			parameters.put("year", filter.getYear());
+		}
 		if (!CollectionUtils.isEmpty(filter.getLeagueNames())) {
 			jpql.append(" AND l.leagueName IN (:leagueNames)");
 			parameters.put("leagueNames", filter.getLeagueNames());
