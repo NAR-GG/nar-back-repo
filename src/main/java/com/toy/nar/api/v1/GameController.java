@@ -33,6 +33,7 @@ public class GameController {
 	@Operation(summary = "최근 게임 목록 검색", description = "리그, 시즌, 팀 필터를 적용하여 최근 게임 목록을 페이징 처리해 반환합니다.")
 	@GetMapping
 	public ResponseEntity<Page<GameResponseDto>> getRecentGames(
+		@RequestParam(value = "year", required = false) Integer year,
 		@RequestParam(value = "leagueNames", required = false) List<String> leagueNames,
 		@RequestParam(value = "splits", required = false) List<String> splits,
 		@RequestParam(value = "teamNames", required = false) List<String> teamNames,
@@ -43,6 +44,7 @@ public class GameController {
 		@RequestParam(defaultValue = "DESC") String sort) {
 
 		MultiCombinationFilterDto filter = MultiCombinationFilterDto.builder()
+			.year(year)
 			.leagueNames(leagueNames)
 			.splits(splits)
 			.teamNames(teamNames)
