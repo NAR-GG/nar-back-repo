@@ -146,4 +146,119 @@ public interface GameParticipantRepository
 			@Param("splits") List<String> splits,
 			@Param("patch") String patch,
 			@Param("side") String side);
+
+	/**
+	 * 팀 페이지 - 선수 기록 집계.
+	 */
+	@Query(value = """
+			SELECT
+				p.player_id,
+				p.player_name,
+				p.image_url,
+				gp.position,
+				COUNT(*) AS games_played,
+				SUM(CASE WHEN gp.is_win = 1 THEN 1 ELSE 0 END) AS wins,
+				SUM(COALESCE(gps.kills, 0)) AS total_kills,
+				SUM(COALESCE(gps.deaths, 0)) AS total_deaths,
+				SUM(COALESCE(gps.assists, 0)) AS total_assists,
+				SUM(CASE WHEN gps.is_first_blood_kill = 1 THEN 1 ELSE 0 END) AS first_kill_count,
+				SUM(CASE WHEN gps.is_first_blood_victim = 1 THEN 1 ELSE 0 END) AS first_death_count,
+				SUM(COALESCE(gps.penta_kills, 0)) AS penta_kill_count,
+				AVG(
+					CASE
+						WHEN COALESCE(gts.team_kills, 0) > 0
+							THEN ((COALESCE(gps.kills, 0) + COALESCE(gps.assists, 0)) * 100.0) / gts.team_kills
+						ELSE 0
+					END
+				) AS avg_kill_participation_pct,
+				AVG(COALESCE(gps.damage_share, 0)) * 100 AS avg_damage_share_pct,
+				AVG(COALESCE(gps.earned_gold_share, 0)) * 100 AS avg_gold_share_pct,
+				AVG(COALESCE(gps.vision_score, 0)) AS avg_vision_score,
+				AVG(COALESCE(gps.vspm, 0)) AS avg_vspm
+			FROM game_participants gp
+			JOIN players p ON p.player_id = gp.player_id
+			JOIN games g ON g.game_id = gp.game_id
+			JOIN leagues l ON l.league_id = g.league_id
+			JOIN game_player_stat gps ON gps.game_participant_id = gp.participant_game_id
+			JOIN game_team_stat gts ON gts.game_id = gp.game_id AND gts.team_id = gp.team_id
+			WHERE gp.team_id = :teamId
+			  AND l.league_name = :leagueName
+			  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+			  AND (:split IS NULL OR l.season_split = :split)
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (:side IS NULL OR UPPER(gp.side) = :side)
+			GROUP BY p.player_id, p.player_name, p.image_url, gp.position
+			ORDER BY
+				CASE gp.position
+					WHEN 'top' THEN 1
+					WHEN 'jng' THEN 2
+					WHEN 'mid' THEN 3
+					WHEN 'bot' THEN 4
+					WHEN 'sup' THEN 5
+					ELSE 99
+				END,
+				games_played DESC
+			""", nativeQuery = true)
+	List<Object[]> findTeamPlayerRecords(
+			@Param("teamId") Long teamId,
+			@Param("leagueName") String leagueName,
+			@Param("year") Integer year,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side);
+
+	/**
+	 * 팀 페이지 - 플레이한 챔피언 집계(선수별).
+	 */
+	@Query(value = """
+			SELECT
+				p.player_id,
+				p.player_name,
+				p.image_url,
+				gp.position,
+				c.champion_id,
+				c.champion_name_kr,
+				c.champion_name_en,
+				c.image_url AS champion_image_url,
+				COUNT(*) AS games_played,
+				SUM(CASE WHEN gp.is_win = 1 THEN 1 ELSE 0 END) AS wins,
+				SUM(COALESCE(gps.kills, 0)) AS total_kills,
+				SUM(COALESCE(gps.deaths, 0)) AS total_deaths,
+				SUM(COALESCE(gps.assists, 0)) AS total_assists,
+				MAX(g.actual_game_start_time) AS last_used_at
+			FROM game_participants gp
+			JOIN players p ON p.player_id = gp.player_id
+			JOIN champions c ON c.champion_id = gp.champion_id
+			JOIN games g ON g.game_id = gp.game_id
+			JOIN leagues l ON l.league_id = g.league_id
+			JOIN game_player_stat gps ON gps.game_participant_id = gp.participant_game_id
+			WHERE gp.team_id = :teamId
+			  AND l.league_name = :leagueName
+			  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+			  AND (:split IS NULL OR l.season_split = :split)
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (:side IS NULL OR UPPER(gp.side) = :side)
+			GROUP BY
+				p.player_id, p.player_name, p.image_url, gp.position,
+				c.champion_id, c.champion_name_kr, c.champion_name_en, c.image_url
+			ORDER BY
+				CASE gp.position
+					WHEN 'top' THEN 1
+					WHEN 'jng' THEN 2
+					WHEN 'mid' THEN 3
+					WHEN 'bot' THEN 4
+					WHEN 'sup' THEN 5
+					ELSE 99
+				END,
+				p.player_id,
+				games_played DESC,
+				last_used_at DESC
+			""", nativeQuery = true)
+	List<Object[]> findTeamPlayedChampions(
+			@Param("teamId") Long teamId,
+			@Param("leagueName") String leagueName,
+			@Param("year") Integer year,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side);
 }
