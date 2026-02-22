@@ -1,7 +1,17 @@
-# NAR.GG
-LOL 대회 데이터 기반 분석 서비스  
+# NAR.GG 
+  
+[LOL 대회 데이터 기반 분석 서비스](https://nar.kr)
 
 리그 오브 레전드 e스포츠 데이터를 기반으로 챔피언 조합 분석, 매치업 승률, 경기 일정/기록 등을 확인할 수 있는 서비스입니다.  
+
+## 기술 블로그
+- [OOM 원인 API, DB 최적화로 해결하기](https://changha-dev.tistory.com/194)
+- [8만 건 데이터 DB 마이그레이션 자동화 구축](https://changha-dev.tistory.com/195)
+- [DTO 프로젝션을 활용한 일정 서비스 성능 개선](https://changha-dev.tistory.com/196)
+- [반복되는 일정 서비스 API콜에 대한 캐시 적용 및 전략](https://changha-dev.tistory.com/197)
+- [MySQL에서 SQLite로 마이그레이션 한 이유](https://changha-dev.tistory.com/198)
+- [SQLite와 MySQL 동시쓰기 비교해보기](https://changha-dev.tistory.com/199)
+- [2026년 새해맞이 나르지지 방향성](https://changha-dev.tistory.com/200)
 
 ## 기술 스택
 
@@ -13,32 +23,22 @@ LOL 대회 데이터 기반 분석 서비스
 | CI/CD     | GitHub Actions |
 | Data      | 6시간 주기 데이터 자동 업데이트 |
 
-## ERD
-<img width="965" height="642" alt="스크린샷 2025-08-21 오후 2 37 41" src="https://github.com/user-attachments/assets/4c21b98c-debf-407e-86bb-1e4c91c2d915" />
+## 핵심 기능
 
-## 주요 기능
+### 챔피언 조합/1:1 매치업 분석
+- 목적: 밴픽 및 라인 구도 의사결정을 위해 조합 승률, 매치업 승률, 핵심 지표를 제공합니다.
 
-### 메인 페이지
-- 원하는 챔피언 조합을 선택할 수 있습니다.  
-<img width="1221" height="838" alt="메인 페이지" src="https://github.com/user-attachments/assets/cda063dd-1efb-4fac-ae3c-2e655271ae8b" />
+### 경기 일정/결과 조회
+- 목적: 날짜별/리그별 경기 일정과 결과를 빠르게 확인하고, 이전/오늘/다음 경기 흐름을 파악할 수 있게 합니다.
 
-### 조합 페이지
-- 선택한 조합의 결과 리스트를 제공합니다.  
-<img width="1224" height="842" alt="조합 페이지" src="https://github.com/user-attachments/assets/a818255d-19ed-43b0-9302-829cb93be377" />
+### 경기 상세 기록
+- 목적: 특정 경기의 세트별/팀별 주요 지표를 제공해 경기 내용과 승패 요인을 분석할 수 있게 합니다.
 
-### 1vs1 매치업 페이지
-- 라인전 승률 및 세부 지표를 확인할 수 있습니다.  
-<img width="1242" height="843" alt="1vs1 매치업 페이지" src="https://github.com/user-attachments/assets/265ff643-cb6e-4655-8f80-2e2face49fec" />
+### 팀/선수 통계 분석
+- 목적: 팀 순위, 팀 지표, 선수 카드/프로필 통계를 통해 시즌 퍼포먼스를 비교 분석할 수 있게 합니다.
 
-### 일정 페이지
-- LCK 경기 일정 및 결과를 확인할 수 있습니다.  
-<img width="1203" height="832" alt="일정 페이지" src="https://github.com/user-attachments/assets/18165e35-68d1-435d-8c95-afe9e41385e3" />
+### 메타/트렌드 집계
+- 목적: 패치와 시즌 기준으로 TOP 챔피언/선수 지표를 집계해 현재 메타를 빠르게 파악할 수 있게 합니다.
 
-### 경기기록 페이지
-- 특정 경기의 세부 기록을 제공합니다.  
-<img width="1222" height="840" alt="경기기록 페이지" src="https://github.com/user-attachments/assets/604541cd-9a07-4053-9ff1-c20687fc9d0b" />
-
-### 경기리스트 페이지
-- 6시간 주기로 업데이트되는 최신 경기를 확인할 수 있습니다.  
-<img width="1252" height="837" alt="경기리스트 페이지" src="https://github.com/user-attachments/assets/e0a22d00-f700-42f3-994e-6ac2defa6c03" />
-
+### 데이터 자동 업데이트
+- 목적: 주기적 수집/동기화를 통해 최신 경기/통계 데이터를 안정적으로 제공합니다.
