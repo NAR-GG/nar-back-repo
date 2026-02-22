@@ -4,7 +4,9 @@ import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,6 +39,23 @@ public class ChampionController {
 	public ResponseEntity<String> syncChampions() {
 		championDataService.fetchAndSaveChampions();
 		return ResponseEntity.ok("Champion data sync requested.");
+	}
+
+	@Operation(summary = "챔피언 로딩 이미지 URL 수동 업데이트", description = "카드 배경용 loading 이미지 URL을 챔피언에 저장합니다.")
+	@PostMapping("/{championId}/loading-image")
+	public ResponseEntity<String> updateChampionLoadingImage(
+			@PathVariable Long championId,
+			@RequestParam String imageUrl) {
+		championService.updateChampionLoadingImage(championId, imageUrl);
+		return ResponseEntity.ok("Champion loading image updated successfully.");
+	}
+
+	@Operation(summary = "전체 챔피언 로딩 이미지 URL 일괄 업데이트", description = "모든 챔피언의 loading 이미지 URL을 자동 생성해 저장합니다.")
+	@PostMapping("/loading-image/all")
+	public ResponseEntity<String> updateAllChampionLoadingImages(
+			@RequestParam(defaultValue = "false") boolean overwrite) {
+		int updatedCount = championService.updateAllChampionLoadingImages(overwrite);
+		return ResponseEntity.ok("Champion loading images updated: " + updatedCount);
 	}
 
 }

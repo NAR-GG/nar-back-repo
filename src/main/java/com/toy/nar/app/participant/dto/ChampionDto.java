@@ -4,5 +4,6 @@ public record ChampionDto(
 	Long id,
 	String championNameKr,
 	String championNameEn,
-	String imageUrl
+	String imageUrl,
+	String loadingImageUrl
 ) {}
