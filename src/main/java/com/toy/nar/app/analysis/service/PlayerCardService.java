@@ -133,6 +133,7 @@ public class PlayerCardService {
 				.playerImageUrl(toString(row[2]))
 				.teamCode(toString(row[7]))
 				.teamImageUrl(toString(row[8]))
+				.topChampionLoadingImageUrl(extractTopChampionLoadingImageUrl(mostChampions))
 				.mostChampions(mostChampions)
 				.profile(PlayerCardProfileDto.builder()
 						.name(realName != null && !realName.isBlank() ? realName : playerName)
@@ -146,6 +147,13 @@ public class PlayerCardService {
 						.dpm(round(toDouble(row[15]), 1))
 						.build())
 				.build();
+	}
+
+	private String extractTopChampionLoadingImageUrl(List<PlayerCardChampionDto> mostChampions) {
+		if (mostChampions == null || mostChampions.isEmpty()) {
+			return null;
+		}
+		return mostChampions.get(0).getChampionLoadingImageUrl();
 	}
 
 	private GameAccount extractMainGameAccount(String gameAccountsJson) {

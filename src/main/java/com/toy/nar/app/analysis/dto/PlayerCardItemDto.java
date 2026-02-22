@@ -13,6 +13,7 @@ public class PlayerCardItemDto {
 	private String playerImageUrl;
 	private String teamCode;
 	private String teamImageUrl;
+	private String topChampionLoadingImageUrl;
 	private List<PlayerCardChampionDto> mostChampions;
 	private PlayerCardProfileDto profile;
 }
