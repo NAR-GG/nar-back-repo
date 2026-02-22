@@ -1,5 +1,7 @@
 package com.toy.nar.api.v3;
 
+import com.toy.nar.app.analysis.dto.PlayerCardListResponse;
+import com.toy.nar.app.analysis.service.PlayerCardService;
 import com.toy.nar.app.participant.dto.PlayerImageSyncResult;
 import com.toy.nar.app.participant.service.PlayerService;
 import com.toy.nar.app.player.PlayerProfileCrawlerService;
@@ -20,6 +22,7 @@ public class PlayerController {
 
 	private final PlayerService playerService;
 	private final PlayerProfileCrawlerService playerProfileCrawlerService;
+	private final PlayerCardService playerCardService;
 
 	@Operation(summary = "선수 이미지 URL 수동 업데이트", description = "특정 선수의 이미지 URL을 수동으로 업데이트합니다.")
 	@PostMapping("/{playerId}/image")
@@ -57,5 +60,20 @@ public class PlayerController {
 	public ResponseEntity<PlayerProfileSyncResult> syncLckPlayerProfiles() {
 		PlayerProfileSyncResult result = playerService.syncLckPlayerProfiles();
 		return ResponseEntity.ok(result);
+	}
+
+	@Operation(summary = "선수 카드 목록 조회", description = "년도/스플릿/패치/진영 필터로 선수 카드 목록(모스트 챔피언 3개 + 선수 상세)을 조회합니다.")
+	@GetMapping("/cards")
+	public ResponseEntity<PlayerCardListResponse> getPlayerCards(
+			@Parameter(description = "리그명 (기본값: LCK)", example = "LCK") @RequestParam(defaultValue = "LCK") String league,
+			@Parameter(description = "연도 (기본값: 2026)", example = "2026") @RequestParam(defaultValue = "2026") Integer year,
+			@Parameter(description = "스플릿 (예: Round 3-5)") @RequestParam(required = false) String split,
+			@Parameter(description = "패치 (예: 14.1)") @RequestParam(required = false) String patch,
+			@Parameter(description = "진영 필터 (ALL, BLUE, RED)", example = "ALL") @RequestParam(defaultValue = "ALL") String side,
+			@Parameter(description = "페이지 번호(1-base)", example = "1") @RequestParam(defaultValue = "1") Integer page,
+			@Parameter(description = "페이지 크기", example = "20") @RequestParam(defaultValue = "20") Integer size) {
+
+		PlayerCardListResponse response = playerCardService.getPlayerCards(league, year, split, patch, side, page, size);
+		return ResponseEntity.ok(response);
 	}
 }

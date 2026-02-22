@@ -261,4 +261,174 @@ public interface GameParticipantRepository
 			@Param("split") String split,
 			@Param("patch") String patch,
 			@Param("side") String side);
+
+	/**
+	 * 선수 카드 목록용 선수 수 집계.
+	 */
+	@Query(value = """
+			SELECT COUNT(DISTINCT gp.player_id)
+			FROM game_participants gp
+			JOIN games g ON g.game_id = gp.game_id
+			JOIN leagues l ON l.league_id = g.league_id
+			WHERE l.league_name = :leagueName
+			  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+			  AND (:split IS NULL OR l.season_split = :split)
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (:side IS NULL OR UPPER(gp.side) = :side)
+			""", nativeQuery = true)
+	long countDistinctPlayersByFilter(
+			@Param("leagueName") String leagueName,
+			@Param("year") Integer year,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side);
+
+	/**
+	 * 선수 카드 목록용 선수 집계.
+	 * 필터 구간 내 출전 수가 가장 많은 팀/포지션을 선수 대표값으로 사용한다.
+	 */
+	@Query(value = """
+			WITH filtered_team_games AS (
+				SELECT
+					gts.team_id,
+					gts.result
+				FROM game_team_stat gts
+				JOIN games g ON g.game_id = gts.game_id
+				JOIN leagues l ON l.league_id = g.league_id
+				JOIN (
+					SELECT DISTINCT gp.game_id, gp.team_id, UPPER(gp.side) AS side
+					FROM game_participants gp
+				) gs ON gs.game_id = g.game_id AND gs.team_id = gts.team_id
+				WHERE l.league_name = :leagueName
+				  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+				  AND (:split IS NULL OR l.season_split = :split)
+				  AND (:patch IS NULL OR g.patch = :patch)
+				  AND (:side IS NULL OR gs.side = :side)
+			),
+			team_rank AS (
+				SELECT
+					ftg.team_id,
+					ROW_NUMBER() OVER (
+						ORDER BY
+							(SUM(CASE WHEN ftg.result = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)) DESC,
+							SUM(CASE WHEN ftg.result = 1 THEN 1 ELSE 0 END) DESC,
+							ftg.team_id ASC
+					) AS team_rank
+				FROM filtered_team_games ftg
+				GROUP BY ftg.team_id
+			),
+			player_team AS (
+				SELECT
+					p.player_id,
+					p.player_name,
+					p.image_url AS player_image_url,
+					p.real_name,
+					p.birth_date,
+					p.game_accounts,
+					gp.position,
+					t.team_id,
+					t.team_code,
+					t.team_image_url,
+					COALESCE(tr.team_rank, 9999) AS team_rank,
+					COUNT(*) AS games_played,
+					SUM(COALESCE(gps.kills, 0)) AS total_kills,
+					SUM(COALESCE(gps.deaths, 0)) AS total_deaths,
+					SUM(COALESCE(gps.assists, 0)) AS total_assists,
+					AVG(COALESCE(gps.earned_gpm, 0)) AS avg_gpm,
+					AVG(COALESCE(gps.dpm, 0)) AS avg_dpm
+				FROM game_participants gp
+				JOIN players p ON p.player_id = gp.player_id
+				JOIN teams t ON t.team_id = gp.team_id
+				JOIN games g ON g.game_id = gp.game_id
+				JOIN leagues l ON l.league_id = g.league_id
+				JOIN game_player_stat gps ON gps.game_participant_id = gp.participant_game_id
+				LEFT JOIN team_rank tr ON tr.team_id = t.team_id
+				WHERE l.league_name = :leagueName
+				  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+				  AND (:split IS NULL OR l.season_split = :split)
+				  AND (:patch IS NULL OR g.patch = :patch)
+				  AND (:side IS NULL OR UPPER(gp.side) = :side)
+				GROUP BY
+					p.player_id, p.player_name, p.image_url, p.real_name, p.birth_date, p.game_accounts,
+					gp.position, t.team_id, t.team_code, t.team_image_url, tr.team_rank
+			),
+			ranked AS (
+				SELECT
+					pt.*,
+					ROW_NUMBER() OVER (PARTITION BY pt.player_id ORDER BY pt.games_played DESC, pt.team_rank ASC, pt.team_id ASC) AS rn
+				FROM player_team pt
+			)
+			SELECT
+				player_id,
+				player_name,
+				player_image_url,
+				real_name,
+				birth_date,
+				game_accounts,
+				position,
+				team_code,
+				team_image_url,
+				team_rank,
+				games_played,
+				total_kills,
+				total_deaths,
+				total_assists,
+				avg_gpm,
+				avg_dpm
+			FROM ranked
+			WHERE rn = 1
+			ORDER BY
+				team_rank ASC,
+				CASE position
+					WHEN 'top' THEN 1
+					WHEN 'jng' THEN 2
+					WHEN 'mid' THEN 3
+					WHEN 'bot' THEN 4
+					WHEN 'sup' THEN 5
+					ELSE 99
+				END,
+				player_name
+			LIMIT :limit OFFSET :offset
+			""", nativeQuery = true)
+	List<Object[]> findPlayerCardSummariesByFilter(
+			@Param("leagueName") String leagueName,
+			@Param("year") Integer year,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side,
+			@Param("limit") int limit,
+			@Param("offset") int offset);
+
+	/**
+	 * 선수 카드 목록용 선수별 모스트 챔피언 집계.
+	 */
+	@Query(value = """
+			SELECT
+				gp.player_id,
+				c.champion_id,
+				c.champion_name_kr,
+				c.champion_name_en,
+				c.image_url,
+				COUNT(*) AS games_played,
+				SUM(CASE WHEN gp.is_win = 1 THEN 1 ELSE 0 END) AS wins
+			FROM game_participants gp
+			JOIN champions c ON c.champion_id = gp.champion_id
+			JOIN games g ON g.game_id = gp.game_id
+			JOIN leagues l ON l.league_id = g.league_id
+			WHERE gp.player_id IN (:playerIds)
+			  AND l.league_name = :leagueName
+			  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+			  AND (:split IS NULL OR l.season_split = :split)
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (:side IS NULL OR UPPER(gp.side) = :side)
+			GROUP BY gp.player_id, c.champion_id, c.champion_name_kr, c.champion_name_en, c.image_url
+			ORDER BY gp.player_id, games_played DESC, wins DESC, c.champion_name_en
+			""", nativeQuery = true)
+	List<Object[]> findPlayerMostChampionsByFilter(
+			@Param("playerIds") List<Long> playerIds,
+			@Param("leagueName") String leagueName,
+			@Param("year") Integer year,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side);
 }
