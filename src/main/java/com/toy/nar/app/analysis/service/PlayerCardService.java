@@ -27,6 +27,7 @@ public class PlayerCardService {
 
 	private static final int MOST_CHAMPION_LIMIT = 3;
 	private static final int MAX_PAGE_SIZE = 100;
+	private static final String DDRAGON_LOADING_URL_FORMAT = "https://ddragon.leagueoflegends.com/cdn/img/champion/loading/%s_0.jpg";
 
 	private final GameParticipantRepository gameParticipantRepository;
 	private final ObjectMapper objectMapper;
@@ -98,12 +99,14 @@ public class PlayerCardService {
 			int playCount = toInt(row[5]);
 			int wins = toInt(row[6]);
 			double winRatePct = playCount > 0 ? (wins * 100.0) / playCount : 0;
+			String championImageUrl = toString(row[4]);
 
 			champions.add(PlayerCardChampionDto.builder()
 					.championId(toLong(row[1]))
 					.championNameKr(toString(row[2]))
 					.championNameEn(toString(row[3]))
-					.championImageUrl(toString(row[4]))
+					.championImageUrl(championImageUrl)
+					.championLoadingImageUrl(buildChampionLoadingImageUrl(championImageUrl, toString(row[3])))
 					.playCount(playCount)
 					.winRatePct(round(winRatePct, 1))
 					.build());
@@ -216,6 +219,34 @@ public class PlayerCardService {
 	private double round(double value, int scale) {
 		double factor = Math.pow(10, scale);
 		return Math.round(value * factor) / factor;
+	}
+
+	private String buildChampionLoadingImageUrl(String championImageUrl, String championNameEn) {
+		String championKey = extractChampionKeyFromImageUrl(championImageUrl);
+		if (championKey == null || championKey.isBlank()) {
+			championKey = normalizeChampionKey(championNameEn);
+		}
+		if (championKey == null || championKey.isBlank()) {
+			return null;
+		}
+		return String.format(DDRAGON_LOADING_URL_FORMAT, championKey);
+	}
+
+	private String extractChampionKeyFromImageUrl(String championImageUrl) {
+		if (championImageUrl == null || championImageUrl.isBlank()) {
+			return null;
+		}
+		int slashIdx = championImageUrl.lastIndexOf('/');
+		String fileName = slashIdx >= 0 ? championImageUrl.substring(slashIdx + 1) : championImageUrl;
+		int dotIdx = fileName.lastIndexOf('.');
+		return dotIdx > 0 ? fileName.substring(0, dotIdx) : fileName;
+	}
+
+	private String normalizeChampionKey(String championNameEn) {
+		if (championNameEn == null || championNameEn.isBlank()) {
+			return null;
+		}
+		return championNameEn.replaceAll("[^A-Za-z0-9]", "");
 	}
 
 	private record GameAccount(String summonerName, String soloRankTier) {

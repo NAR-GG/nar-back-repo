@@ -10,6 +10,7 @@ public class PlayerCardChampionDto {
 	private String championNameKr;
 	private String championNameEn;
 	private String championImageUrl;
+	private String championLoadingImageUrl;
 	private Integer playCount;
 	private Double winRatePct;
 }

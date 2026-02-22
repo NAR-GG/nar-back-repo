@@ -26,11 +26,15 @@ public class Champion {
 	@Column(name = "image_url", nullable = false)
 	private String imageUrl;
 
+	@Column(name = "loading_image_url")
+	private String loadingImageUrl;
+
 	@Builder
-	public Champion(String championNameKr, String championNameEn, String imageUrl) {
+	public Champion(String championNameKr, String championNameEn, String imageUrl, String loadingImageUrl) {
 		this.championNameKr = Objects.requireNonNull(championNameKr);
 		this.championNameEn = Objects.requireNonNull(championNameEn);
 		this.imageUrl = Objects.requireNonNull(imageUrl);
+		this.loadingImageUrl = loadingImageUrl;
 	}
 
 	public void updateImageUrl(String imageUrl) {
@@ -38,5 +42,12 @@ public class Champion {
 			throw new IllegalArgumentException("Image URL must not be null or blank");
 		}
 		this.imageUrl = imageUrl;
+	}
+
+	public void updateLoadingImageUrl(String loadingImageUrl) {
+		if (loadingImageUrl == null || loadingImageUrl.isBlank()) {
+			throw new IllegalArgumentException("Loading image URL must not be null or blank");
+		}
+		this.loadingImageUrl = loadingImageUrl;
 	}
 }

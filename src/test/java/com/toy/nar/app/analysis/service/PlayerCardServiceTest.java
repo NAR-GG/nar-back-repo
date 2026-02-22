@@ -69,6 +69,8 @@ class PlayerCardServiceTest {
 		assertThat(response.getPlayers().get(0).getProfile().getSoloRankTier()).isEqualTo("Challenger 1200LP");
 		assertThat(response.getPlayers().get(0).getMostChampions()).hasSize(3);
 		assertThat(response.getPlayers().get(0).getMostChampions().get(0).getWinRatePct()).isEqualTo(70.0);
+		assertThat(response.getPlayers().get(0).getMostChampions().get(0).getChampionLoadingImageUrl())
+				.isEqualTo("https://ddragon.leagueoflegends.com/cdn/img/champion/loading/ahri_0.jpg");
 		assertThat(response.getPlayers().get(0).getProfile().getKda()).isEqualTo(8.25);
 		assertThat(response.getPlayers().get(0).getProfile().getGpm()).isEqualTo(441.7);
 		assertThat(response.getPlayers().get(0).getProfile().getDpm()).isEqualTo(958.2);
