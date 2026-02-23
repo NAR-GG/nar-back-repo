@@ -79,7 +79,7 @@ jobs:
             docker run -d --name nar-gg-container -p 8080:8080 \
               -m 768m \
               -e JAVA_OPTS="-Xmx512m" \
-              -e SLACK_WEBHOOK_URL="${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -e DISCORD_WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}" \
               -e DB_URL="${{ secrets.DB_URL }}" \
               -v /home/ubuntu/lol_esports_analysis_test.db:/home/ubuntu/lol_esports_analysis_test.db \
               ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
