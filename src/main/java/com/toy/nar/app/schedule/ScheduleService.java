@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -53,6 +54,7 @@ public class ScheduleService {
 	/**
 	 * 매치 상세 정보 조회 서비스
 	 */
+	@Transactional(readOnly = true)
 	public MatchDetailResponseDto getMatchDetail(String matchId) {
 		// 1. Try to decode matchId as gameIds (internal DB format)
 		Set<Long> gameIds = Collections.emptySet();
