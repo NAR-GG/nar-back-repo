@@ -4,11 +4,9 @@ import static com.toy.nar.app.data.ingestion.GameProcessor.*;
 
 import com.opencsv.bean.CsvToBean;
 import com.opencsv.bean.CsvToBeanBuilder;
-import com.opencsv.bean.CsvToBeanFilter;
 import com.toy.nar.app.data.ingestion.dto.GameDataCsvDto;
 import com.toy.nar.app.data.ingestion.dto.ChunkProcessingResult;
 import com.toy.nar.app.data.ingestion.dto.DataIngestionResult;
-import com.toy.nar.app.data.maintenance.DeltaCsvFilter;
 import com.toy.nar.domain.game.entity.Game;
 import com.toy.nar.domain.game.entity.League;
 import com.toy.nar.domain.game.repository.GameRepository;
@@ -49,6 +47,9 @@ public class DataIngestionFacade {
 
 	public DataIngestionResult ingestFromStream(InputStream csvStream, String lastProcessedGameId) throws Exception {
 		log.info("[Starting] Starting stream-based CSV data ingestion");
+		if (StringUtils.hasText(lastProcessedGameId)) {
+			log.info("Delta cursor detected ({}), but full-stream scan is used for consistency.", lastProcessedGameId);
+		}
 		long startTime = System.currentTimeMillis();
 		DataIngestionResult.Builder resultBuilder = DataIngestionResult.builder();
 
@@ -61,7 +62,6 @@ public class DataIngestionFacade {
 			CsvToBean<GameDataCsvDto> csvToBean = new CsvToBeanBuilder<GameDataCsvDto>(reader)
 				.withType(GameDataCsvDto.class)
 				.withIgnoreLeadingWhiteSpace(true)
-				.withFilter(new DeltaCsvFilter(lastProcessedGameId))
 				.build();
 
 			List<GameDataCsvDto> chunk = new ArrayList<>(CHUNK_SIZE);
@@ -69,11 +69,7 @@ public class DataIngestionFacade {
 				chunk.add(dto);
 				lastIdInStream = dto.getGameid();
 				resultBuilder.incrementProcessedRows();
-				if (chunk.size() >= CHUNK_SIZE) {
-					ChunkProcessingResult chunkResult = processChunk(chunk);
-					resultBuilder.merge(chunkResult);
-					chunk.clear();
-				}
+				flushSafeChunkIfNeeded(chunk, resultBuilder);
 			}
 			if (!chunk.isEmpty()) {
 				ChunkProcessingResult chunkResult = processChunk(chunk);
@@ -91,6 +87,33 @@ public class DataIngestionFacade {
 		DataIngestionResult result = resultBuilder.processingTimeMs(System.currentTimeMillis() - startTime).build();
 		log.info("[Completed] Stream ingestion completed. {}", result.getSummary());
 		return result;
+	}
+
+	private void flushSafeChunkIfNeeded(List<GameDataCsvDto> chunk, DataIngestionResult.Builder resultBuilder) {
+		if (chunk.size() < CHUNK_SIZE) {
+			return;
+		}
+
+		// 청크 경계에서 동일 gameId가 잘리지 않도록 마지막 gameId 묶음은 다음 청크로 이월한다.
+		String tailGameId = chunk.get(chunk.size() - 1).getGameid();
+		int splitIndex = chunk.size() - 1;
+		while (splitIndex >= 0 && Objects.equals(chunk.get(splitIndex).getGameid(), tailGameId)) {
+			splitIndex--;
+		}
+		splitIndex++;
+
+		if (splitIndex == 0) {
+			// 매우 드문 케이스(청크 전체가 동일 gameId)에서는 다음 라인을 더 읽어 경계를 확보한다.
+			return;
+		}
+
+		List<GameDataCsvDto> toProcess = new ArrayList<>(chunk.subList(0, splitIndex));
+		ChunkProcessingResult chunkResult = processChunk(toProcess);
+		resultBuilder.merge(chunkResult);
+
+		List<GameDataCsvDto> carryOver = new ArrayList<>(chunk.subList(splitIndex, chunk.size()));
+		chunk.clear();
+		chunk.addAll(carryOver);
 	}
 
 	@Transactional
