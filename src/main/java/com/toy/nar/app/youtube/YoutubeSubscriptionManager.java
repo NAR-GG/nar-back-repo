@@ -1,5 +1,6 @@
 package com.toy.nar.app.youtube;
 
+import com.toy.nar.app.monitor.SchedulerAlertService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -15,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 public class YoutubeSubscriptionManager {
 
 	private final YoutubeSyncService youtubeSyncService;
+	private final SchedulerAlertService schedulerAlertService;
 
 	@Value("${app.server.url}")
 	private String baseUrl;
@@ -26,7 +28,11 @@ public class YoutubeSubscriptionManager {
 	@EventListener(ApplicationReadyEvent.class)
 	public void initSubscription() {
 		log.info("### [System] 서버 시작: 유튜브 PubSub 전체 구독 요청 시작 ###");
-		subscribeTask();
+		try {
+			subscribeTask();
+		} catch (Exception e) {
+			log.error("초기 구독 요청 중 에러 발생", e);
+		}
 	}
 
 	/**
@@ -36,7 +42,19 @@ public class YoutubeSubscriptionManager {
 	@Scheduled(cron = "0 0 4 * * *")
 	public void refreshSubscription() {
 		log.info("### [Scheduler] 유튜브 PubSub 구독 정기 갱신 시작 ###");
-		subscribeTask();
+		long startTime = System.currentTimeMillis();
+		try {
+			subscribeTask();
+			long elapsed = System.currentTimeMillis() - startTime;
+			schedulerAlertService.recordSuccess("YOUTUBE_SUBSCRIPTION_REFRESH", "유튜브 PubSub 구독 갱신", elapsed);
+		} catch (Exception e) {
+			log.error("구독 요청 중 에러 발생", e);
+			schedulerAlertService.recordFailure(
+					"YOUTUBE_SUBSCRIPTION_REFRESH",
+					"유튜브 PubSub 구독 갱신",
+					e,
+					"baseUrl=" + baseUrl);
+		}
 	}
 
 	private void subscribeTask() {
@@ -48,14 +66,10 @@ public class YoutubeSubscriptionManager {
 			log.warn("!!! 주의 !!! 설정된 도메인이 localhost이거나 비어있습니다. PubSub 요청이 실패할 수 있습니다. URL: {}", targetDomain);
 		}
 
-		try {
-			// Service에게 도메인만 전달 (예: https://api.nar.kr)
-			youtubeSyncService.subscribeAllChannels(targetDomain);
+		// Service에게 도메인만 전달 (예: https://api.nar.kr)
+		youtubeSyncService.subscribeAllChannels(targetDomain);
 
-			// 로그에는 헷갈리지 않게 실제 호출될 예상 URL을 찍어줍니다.
-			log.info("구독 요청 전송 완료. Target Base URL: {}", targetDomain);
-		} catch (Exception e) {
-			log.error("구독 요청 중 에러 발생", e);
-		}
+		// 로그에는 헷갈리지 않게 실제 호출될 예상 URL을 찍어줍니다.
+		log.info("구독 요청 전송 완료. Target Base URL: {}", targetDomain);
 	}
 }

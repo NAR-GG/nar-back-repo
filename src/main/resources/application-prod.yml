@@ -26,8 +26,15 @@ spring:
 
 notification:
   enabled: true
-  slack:
-    webhook-url: ${SLACK_WEBHOOK_URL}
+  discord:
+    webhook-url: ${DISCORD_WEBHOOK_URL:}
+  scheduler:
+    summary-enabled: ${SCHEDULER_SUMMARY_ENABLED:true}
+    daily-summary-cron: ${SCHEDULER_DAILY_SUMMARY_CRON:0 0 9 * * *}
+    summary-zone: ${SCHEDULER_SUMMARY_ZONE:Asia/Seoul}
+    failure-cooldown-minutes: ${SCHEDULER_FAILURE_COOLDOWN_MINUTES:10}
+    warning-cooldown-minutes: ${SCHEDULER_WARNING_COOLDOWN_MINUTES:60}
+    zero-new-games-threshold: ${SCHEDULER_ZERO_NEW_GAMES_THRESHOLD:3}
 
 # 로깅 관련 공통 설정
 logging:
@@ -49,3 +56,10 @@ app:
 lolesports:
   riot-api:
     key: ${LOL_ESPORTS_KEY}
+  live:
+    enabled: true
+    discovery-interval-ms: 60000
+    poll-interval-ms: 10000
+    stale-threshold-ms: 180000
+    request-timeout-ms: 3000
+    max-consecutive-failures: 6

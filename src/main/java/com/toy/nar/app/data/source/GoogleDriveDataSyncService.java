@@ -12,6 +12,7 @@ import com.toy.nar.app.analysis.service.CombinationService;
 import com.toy.nar.app.data.ingestion.dto.DataIngestionResult;
 import com.toy.nar.app.data.source.dto.DataSyncResult;
 import com.toy.nar.app.data.ingestion.DataIngestionFacade;
+import com.toy.nar.app.monitor.SchedulerAlertService;
 import com.toy.nar.app.schedule.CacheEvictionService;
 import com.toy.nar.domain.sync.SyncStatusRepository;
 
@@ -25,7 +26,7 @@ public class GoogleDriveDataSyncService {
 
 	private final Drive drive;
 	private final DataIngestionFacade dataIngestionFacade;
-	private final NotificationService notificationService;
+	private final SchedulerAlertService schedulerAlertService;
 	private final CombinationService combinationService;
 	private final CacheEvictionService cacheEvictionService;
 	private final SyncStatusRepository syncStatusRepository;
@@ -34,9 +35,11 @@ public class GoogleDriveDataSyncService {
 
 	@Scheduled(cron = "0 30 4,10,16,22 * * ?", zone = "Asia/Seoul")
 	public void scheduledSyncFromGoogleDrive() {
+		long startTime = System.currentTimeMillis();
 		try {
 			log.info("[Starting] Starting scheduled Google Drive data sync at {}", LocalDateTime.now());
 			DataSyncResult result = syncFromGoogleDrive();
+			long elapsed = System.currentTimeMillis() - startTime;
 
 			log.info("[Completed] Scheduled sync completed: {} new games added", result.newGamesAdded());
 
@@ -44,13 +47,27 @@ public class GoogleDriveDataSyncService {
 				combinationService.updateInfo();
 				cacheEvictionService.evictTodayScheduleCache();
 				cacheEvictionService.evictTodayMatchDetailsCache();
-				notificationService.sendSuccessNotification(result);
+				schedulerAlertService.recordSuccess("GOOGLE_DRIVE_SYNC", "Google Drive 데이터 동기화", elapsed);
+				schedulerAlertService.trackZeroNewGames(
+						"GOOGLE_DRIVE_SYNC",
+						"Google Drive 데이터 동기화",
+						result.newGamesAdded(),
+						result.totalRowsProcessed());
+			} else {
+				schedulerAlertService.recordFailure(
+						"GOOGLE_DRIVE_SYNC",
+						"Google Drive 데이터 동기화",
+						result.errorMessage(),
+						"source=" + result.source() + ", status=" + result.status());
 			}
 
 		} catch (Exception e) {
 			log.error("[Failed] Scheduled sync failed", e);
-			// 실패 알림
-			notificationService.sendFailureNotification("[Failed] Scheduled sync failed: " + e.getMessage());
+			schedulerAlertService.recordFailure(
+					"GOOGLE_DRIVE_SYNC",
+					"Google Drive 데이터 동기화",
+					e,
+					"스케줄 실행 중 예외 발생");
 		}
 	}
 	/**
