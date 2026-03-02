@@ -1,9 +1,11 @@
 package com.toy.nar.app.participant.service;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.DigestUtils;
 
 import com.toy.nar.app.participant.dto.ChampionDto;
 import com.toy.nar.domain.participant.entity.Champion;
@@ -27,6 +29,21 @@ public class ChampionService {
 		return champions.stream()
 			.map(this::convertToDto)
 			.toList();
+	}
+
+	public String generateChampionsEtag(List<ChampionDto> champions) {
+		StringBuilder payload = new StringBuilder(champions.size() * 96);
+		for (ChampionDto champion : champions) {
+			payload.append(champion.id()).append('|')
+				.append(safe(champion.championNameKr())).append('|')
+				.append(safe(champion.championNameEn())).append('|')
+				.append(safe(champion.imageUrl())).append('|')
+				.append(safe(champion.loadingImageUrl()))
+				.append('\n');
+		}
+
+		String hash = DigestUtils.md5DigestAsHex(payload.toString().getBytes(StandardCharsets.UTF_8));
+		return "\"" + hash + "\"";
 	}
 
 	@Transactional
@@ -103,5 +120,9 @@ public class ChampionService {
 
 	private boolean hasText(String value) {
 		return value != null && !value.isBlank();
+	}
+
+	private String safe(String value) {
+		return value == null ? "" : value;
 	}
 }
