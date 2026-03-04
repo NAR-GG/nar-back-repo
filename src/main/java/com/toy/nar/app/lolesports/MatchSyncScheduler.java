@@ -3,8 +3,12 @@ package com.toy.nar.app.lolesports;
 import com.toy.nar.app.monitor.SchedulerAlertService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -13,17 +17,18 @@ public class MatchSyncScheduler {
 
 	private final LeagueMatchService leagueMatchService;
 	private final SchedulerAlertService schedulerAlertService;
+	@Value("${lolesports.sync.active-leagues:}")
+	private String configuredActiveLeagues;
 
-	// 1시간마다 실행 (cron = "0 0 * * * *")
-	// 테스트용으로 10분마다 실행 (cron = "0 0/10 * * * *")
-	// 현재: 30분 주기로 실행하여 6시간 이내의 변동사항을 반영
-	@Scheduled(cron = "0 0/30 * * * *")
+	// 기본 6시간 주기 (기존 30분 -> 비용 절감)
+	@Scheduled(cron = "${lolesports.sync.cron:0 0 */6 * * *}")
 	public void syncAllLeagues() {
-		log.info("Starting scheduled match sync...");
-		for (String league : LeagueConstants.TARGET_LEAGUES) {
+		List<String> targetLeagues = resolveTargetLeagues();
+		log.info("Starting scheduled match sync for leagues={}", targetLeagues);
+		for (String league : targetLeagues) {
 			long startTime = System.currentTimeMillis();
 			try {
-				leagueMatchService.syncMatches(league);
+				leagueMatchService.syncMatchesWithoutTeamMetadata(league);
 				long elapsed = System.currentTimeMillis() - startTime;
 				schedulerAlertService.recordSuccess("MATCH_SYNC", "리그 경기 동기화", elapsed);
 			} catch (Exception e) {
@@ -49,5 +54,38 @@ public class MatchSyncScheduler {
 			}
 		}
 		log.info("Scheduled match sync completed.");
+	}
+
+	// 팀 메타데이터 동기화는 1일 1회 배치로 분리
+	@Scheduled(cron = "${lolesports.sync.team-metadata-cron:0 15 4 * * *}")
+	public void syncTeamMetadataDaily() {
+		List<String> targetLeagues = resolveTargetLeagues();
+		long startTime = System.currentTimeMillis();
+		try {
+			int updated = leagueMatchService.syncTeamMetadataForLeagues(targetLeagues);
+			long elapsed = System.currentTimeMillis() - startTime;
+			log.info("Daily team metadata sync completed. updated={} leagues={}", updated, targetLeagues);
+			schedulerAlertService.recordSuccess("TEAM_METADATA_SYNC", "팀 메타데이터 동기화", elapsed);
+		} catch (Exception e) {
+			log.error("Daily team metadata sync failed. leagues={}", targetLeagues, e);
+			schedulerAlertService.recordFailure(
+					"TEAM_METADATA_SYNC",
+					"팀 메타데이터 동기화",
+					e,
+					"leagues=" + targetLeagues);
+		}
+	}
+
+	private List<String> resolveTargetLeagues() {
+		if (configuredActiveLeagues == null || configuredActiveLeagues.isBlank()) {
+			return LeagueConstants.TARGET_LEAGUES;
+		}
+		List<String> leagues = Arrays.stream(configuredActiveLeagues.split(","))
+				.map(String::trim)
+				.filter(value -> !value.isBlank())
+				.map(String::toUpperCase)
+				.distinct()
+				.toList();
+		return leagues.isEmpty() ? LeagueConstants.TARGET_LEAGUES : leagues;
 	}
 }

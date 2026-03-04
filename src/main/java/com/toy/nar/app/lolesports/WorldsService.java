@@ -36,8 +36,12 @@ public class WorldsService {
 	private String RIOT_API_KEY;
 
 	public MatchResponseWrapper getWorldsMatches(String pageToken, String leagueSlug) {
-		String leagueId = LEAGUE_IDS.getOrDefault(leagueSlug != null ? leagueSlug.toUpperCase() : "LCK",
-				LEAGUE_IDS.get("LCK"));
+		String normalizedLeague = normalizeLeagueSlug(leagueSlug);
+		String leagueId = LEAGUE_IDS.get(normalizedLeague);
+		if (leagueId == null) {
+			log.warn("Unsupported league slug for getWorldsMatches: {}", leagueSlug);
+			return MatchResponseWrapper.builder().matches(List.of()).nextPageToken(null).build();
+		}
 
 		// 1. [Schedule API] 전체 일정 조회 (이건 한 번만 하니까 block 해도 됨)
 		JsonNode scheduleRoot = callScheduleApi(pageToken, leagueId);
@@ -121,6 +125,8 @@ public class WorldsService {
 
 					List<MatchResultDto.SetVod> setVods = new ArrayList<>();
 					JsonNode games = match.path("games");
+					List<String> liveGameIds = extractInProgressGameIds(games);
+					List<String> gameIds = extractAllGameIds(games);
 					int setNum = 1;
 
 					if (games.isArray()) {
@@ -198,6 +204,8 @@ public class WorldsService {
 									.wins(winsB).build())
 							.sets(setVods)
 							.liveStreamUrl(liveStreamUrl)
+							.liveGameIds(liveGameIds)
+							.gameIds(gameIds)
 							.build();
 				})
 				.onErrorResume(e -> {
@@ -207,8 +215,12 @@ public class WorldsService {
 	}
 
 	public List<MatchResultDto> getRecent3Matches(String leagueSlug) {
-		String leagueId = LEAGUE_IDS.getOrDefault(leagueSlug != null ? leagueSlug.toUpperCase() : "LCK",
-				LEAGUE_IDS.get("LCK"));
+		String normalizedLeague = normalizeLeagueSlug(leagueSlug);
+		String leagueId = LEAGUE_IDS.get(normalizedLeague);
+		if (leagueId == null) {
+			log.warn("Unsupported league slug for getRecent3Matches: {}", leagueSlug);
+			return List.of();
+		}
 		// 1. [Schedule API] 전체 일정 조회
 		JsonNode scheduleRoot = callApi("/persisted/gw/getSchedule", "leagueId", leagueId);
 		if (scheduleRoot == null)
@@ -273,6 +285,8 @@ public class WorldsService {
 		// 세트별 VOD 파싱
 		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
 		JsonNode games = match.path("games");
+		List<String> liveGameIds = extractInProgressGameIds(games);
+		List<String> gameIds = extractAllGameIds(games);
 		int setNum = 1;
 
 		if (games.isArray()) {
@@ -350,6 +364,8 @@ public class WorldsService {
 						.build())
 				.sets(setVods)
 				.liveStreamUrl(liveStreamUrl)
+				.liveGameIds(liveGameIds)
+				.gameIds(gameIds)
 				.build();
 	}
 
@@ -372,6 +388,8 @@ public class WorldsService {
 
 		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
 		JsonNode games = match.path("games");
+		List<String> liveGameIds = extractInProgressGameIds(games);
+		List<String> gameIds = extractAllGameIds(games);
 		int setNum = 1;
 
 		if (games.isArray()) {
@@ -413,6 +431,7 @@ public class WorldsService {
 			liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
 		}
 		return MatchResultDto.builder()
+				.matchId(eventId)
 				.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 				.matchDate(matchDate)
 				.state(finalState)
@@ -423,7 +442,56 @@ public class WorldsService {
 						.name(teamB.path("name").asText()).wins(winsB).build())
 				.sets(setVods)
 				.liveStreamUrl(liveStreamUrl)
+				.liveGameIds(liveGameIds)
+				.gameIds(gameIds)
 				.build();
+	}
+
+	private String normalizeLeagueSlug(String leagueSlug) {
+		return leagueSlug == null ? "" : leagueSlug.trim().toUpperCase();
+	}
+
+	private List<String> extractInProgressGameIds(JsonNode games) {
+		List<String> ids = new ArrayList<>();
+		if (!games.isArray()) {
+			return ids;
+		}
+		for (JsonNode game : games) {
+			if (!"inProgress".equalsIgnoreCase(game.path("state").asText())) {
+				continue;
+			}
+			String gameId = game.path("id").asText();
+			if (gameId != null && !gameId.isBlank()) {
+				ids.add(gameId);
+			}
+		}
+		return ids;
+	}
+
+	private List<String> extractAllGameIds(JsonNode games) {
+		List<String> ids = new ArrayList<>();
+		if (!games.isArray()) {
+			return ids;
+		}
+		for (JsonNode game : games) {
+			String gameId = game.path("id").asText();
+			if (gameId != null && !gameId.isBlank()) {
+				ids.add(gameId);
+			}
+		}
+		return ids;
+	}
+
+	public List<String> getGameIdsByMatchId(String matchId) {
+		if (matchId == null || matchId.isBlank()) {
+			return List.of();
+		}
+		JsonNode root = callApi("/persisted/gw/getEventDetails", "id", matchId);
+		if (root == null) {
+			return List.of();
+		}
+		JsonNode games = root.path("data").path("event").path("match").path("games");
+		return extractAllGameIds(games);
 	}
 
 	private String findBestVodUrl(JsonNode vodsNode) {
