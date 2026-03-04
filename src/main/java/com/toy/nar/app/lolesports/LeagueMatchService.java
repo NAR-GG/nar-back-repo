@@ -59,8 +59,7 @@ public class LeagueMatchService {
 		for (MatchResultDto dto : matches) {
 			try {
 				LeagueMatch entity = convertToEntity(dto, leagueSlug);
-				LeagueMatch saved = leagueMatchRepository.save(entity);
-				syncLeagueMatchGames(saved.getId(), dto.getGameIds());
+				leagueMatchRepository.save(entity);
 			} catch (Exception e) {
 				log.error("Failed to save match: {}", dto.getMatchId(), e);
 			}
@@ -136,8 +135,7 @@ public class LeagueMatchService {
 				for (MatchResultDto dto : matches) {
 					try {
 						LeagueMatch entity = convertToEntity(dto, leagueSlug);
-						LeagueMatch saved = leagueMatchRepository.save(entity);
-						syncLeagueMatchGames(saved.getId(), dto.getGameIds());
+						leagueMatchRepository.save(entity);
 						totalSynced++;
 					} catch (Exception e) {
 						log.error("Failed to save match: {}", dto.getMatchId(), e);
@@ -217,10 +215,7 @@ public class LeagueMatchService {
 			}
 		}
 
-		Map<String, List<String>> gameIdsByMatchId = loadGameIdsByMatchIds(entities);
-		List<MatchResultDto> dtos = entities.stream()
-				.map(entity -> convertToDto(entity, gameIdsByMatchId.getOrDefault(entity.getId(), List.of())))
-				.collect(Collectors.toList());
+		List<MatchResultDto> dtos = entities.stream().map(this::convertToDto).collect(Collectors.toList());
 
 		return MatchResponseWrapper.builder().matches(dtos).nextPageToken(null).build();
 	}
@@ -233,10 +228,7 @@ public class LeagueMatchService {
 			syncMatches(leagueSlug);
 			entities = leagueMatchRepository.findTop3ByLeagueNameOrderByMatchDateDesc(leagueSlug);
 		}
-		Map<String, List<String>> gameIdsByMatchId = loadGameIdsByMatchIds(entities);
-		return entities.stream()
-				.map(entity -> convertToDto(entity, gameIdsByMatchId.getOrDefault(entity.getId(), List.of())))
-				.collect(Collectors.toList());
+		return entities.stream().map(this::convertToDto).collect(Collectors.toList());
 	}
 
 	private LeagueMatch convertToEntity(MatchResultDto dto, String leagueSlug) throws JsonProcessingException {
@@ -260,7 +252,7 @@ public class LeagueMatchService {
 				.matchDetailsJson(jsonDetails).lastUpdated(LocalDateTime.now()).build();
 	}
 
-	private MatchResultDto convertToDto(LeagueMatch entity, List<String> gameIds) {
+	private MatchResultDto convertToDto(LeagueMatch entity) {
 		List<MatchResultDto.SetVod> sets = new ArrayList<>();
 		try {
 			if (entity.getMatchDetailsJson() != null) {
@@ -287,7 +279,7 @@ public class LeagueMatchService {
 								.imageUrl(entity.getBlueTeamImageUrl()).wins(entity.getBlueScore()).build())
 				.redTeam(MatchResultDto.TeamInfo.builder().code(entity.getRedTeamCode()).name(entity.getRedTeamName())
 						.imageUrl(entity.getRedTeamImageUrl()).wins(entity.getRedScore()).build())
-				.sets(sets).liveStreamUrl(liveStreamUrl).gameIds(gameIds).build();
+				.sets(sets).liveStreamUrl(liveStreamUrl).build();
 	}
 
 	private Map<String, List<String>> loadGameIdsByMatchIds(List<LeagueMatch> matches) {

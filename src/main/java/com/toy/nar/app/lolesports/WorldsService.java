@@ -125,8 +125,6 @@ public class WorldsService {
 
 					List<MatchResultDto.SetVod> setVods = new ArrayList<>();
 					JsonNode games = match.path("games");
-					List<String> liveGameIds = extractInProgressGameIds(games);
-					List<String> gameIds = extractAllGameIds(games);
 					int setNum = 1;
 
 					if (games.isArray()) {
@@ -204,8 +202,6 @@ public class WorldsService {
 									.wins(winsB).build())
 							.sets(setVods)
 							.liveStreamUrl(liveStreamUrl)
-							.liveGameIds(liveGameIds)
-							.gameIds(gameIds)
 							.build();
 				})
 				.onErrorResume(e -> {
@@ -285,8 +281,6 @@ public class WorldsService {
 		// 세트별 VOD 파싱
 		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
 		JsonNode games = match.path("games");
-		List<String> liveGameIds = extractInProgressGameIds(games);
-		List<String> gameIds = extractAllGameIds(games);
 		int setNum = 1;
 
 		if (games.isArray()) {
@@ -356,17 +350,15 @@ public class WorldsService {
 						.imageUrl(imageA)
 						.wins(winsA)
 						.build())
-				.redTeam(MatchResultDto.TeamInfo.builder()
-						.code(teamB.path("code").asText())
-						.name(teamB.path("name").asText())
-						.imageUrl(imageB)
-						.wins(winsB)
-						.build())
-				.sets(setVods)
-				.liveStreamUrl(liveStreamUrl)
-				.liveGameIds(liveGameIds)
-				.gameIds(gameIds)
-				.build();
+					.redTeam(MatchResultDto.TeamInfo.builder()
+							.code(teamB.path("code").asText())
+							.name(teamB.path("name").asText())
+							.imageUrl(imageB)
+							.wins(winsB)
+							.build())
+					.sets(setVods)
+					.liveStreamUrl(liveStreamUrl)
+					.build();
 	}
 
 	private MatchResultDto fetchMatchDetails(String eventId, String matchDate, String stageName, String matchState) {
@@ -388,8 +380,6 @@ public class WorldsService {
 
 		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
 		JsonNode games = match.path("games");
-		List<String> liveGameIds = extractInProgressGameIds(games);
-		List<String> gameIds = extractAllGameIds(games);
 		int setNum = 1;
 
 		if (games.isArray()) {
@@ -438,13 +428,11 @@ public class WorldsService {
 				.score(winsA + " : " + winsB)
 				.blueTeam(MatchResultDto.TeamInfo.builder().code(teamA.path("code").asText())
 						.name(teamA.path("name").asText()).wins(winsA).build())
-				.redTeam(MatchResultDto.TeamInfo.builder().code(teamB.path("code").asText())
-						.name(teamB.path("name").asText()).wins(winsB).build())
-				.sets(setVods)
-				.liveStreamUrl(liveStreamUrl)
-				.liveGameIds(liveGameIds)
-				.gameIds(gameIds)
-				.build();
+					.redTeam(MatchResultDto.TeamInfo.builder().code(teamB.path("code").asText())
+							.name(teamB.path("name").asText()).wins(winsB).build())
+					.sets(setVods)
+					.liveStreamUrl(liveStreamUrl)
+					.build();
 	}
 
 	private String normalizeLeagueSlug(String leagueSlug) {
