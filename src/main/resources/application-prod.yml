@@ -56,6 +56,10 @@ app:
 lolesports:
   riot-api:
     key: ${LOL_ESPORTS_KEY}
+  sync:
+    cron: ${LOL_SYNC_CRON:0 0 */6 * * *}
+    team-metadata-cron: ${LOL_TEAM_METADATA_CRON:0 15 4 * * *}
+    active-leagues: ${LOL_ACTIVE_LEAGUES:LCK,LPL,LEC,LCS,LCP,CBLOL,MSI,WORLDS}
   live:
     enabled: true
     discovery-interval-ms: 60000

@@ -3,17 +3,23 @@ package com.toy.nar.app.lolesports;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toy.nar.app.lolesports.repository.LeagueMatchGame;
+import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -22,12 +28,23 @@ import java.util.stream.Collectors;
 public class LeagueMatchService {
 
 	private final LeagueMatchRepository leagueMatchRepository;
+	private final LeagueMatchGameRepository leagueMatchGameRepository;
 	private final com.toy.nar.domain.participant.repository.TeamRepository teamRepository;
 	private final WorldsService worldsService;
 	private final ObjectMapper objectMapper;
+	private final TransactionTemplate transactionTemplate;
 
 	// [Scheduler용] 특정 리그의 최신 경기를 가져와 DB에 저장 (1페이지)
 	public void syncMatches(String leagueSlug) {
+		syncMatches(leagueSlug, true);
+	}
+
+	// 스케줄러 경로에서는 팀 메타데이터 동기화를 제외해 DB 트래픽을 줄인다.
+	public void syncMatchesWithoutTeamMetadata(String leagueSlug) {
+		syncMatches(leagueSlug, false);
+	}
+
+	public void syncMatches(String leagueSlug, boolean includeTeamMetadataSync) {
 		log.info("Starting sync for league: {}", leagueSlug);
 		// 1. 외부 API에서 데이터 가져오기 (1페이지 분량, pageToken=null)
 		MatchResponseWrapper response = worldsService.getWorldsMatches(null, leagueSlug);
@@ -42,16 +59,41 @@ public class LeagueMatchService {
 		for (MatchResultDto dto : matches) {
 			try {
 				LeagueMatch entity = convertToEntity(dto, leagueSlug);
-				leagueMatchRepository.save(entity);
+				LeagueMatch saved = leagueMatchRepository.save(entity);
+				syncLeagueMatchGames(saved.getId(), dto.getGameIds());
 			} catch (Exception e) {
 				log.error("Failed to save match: {}", dto.getMatchId(), e);
 			}
 		}
 
-		// 3. Team Metadata Sync
-		updateTeamMetadataFromMatches(matches);
+		if (includeTeamMetadataSync) {
+			int updated = updateTeamMetadataFromMatches(matches);
+			log.info("Team metadata sync completed during syncMatches. updated={}", updated);
+		}
 
 		log.info("Synced {} matches for league: {}", matches.size(), leagueSlug);
+	}
+
+	// 팀 메타데이터 동기화는 일 배치 경로에서만 실행
+	public int syncTeamMetadataForLeagues(List<String> leagues) {
+		if (leagues == null || leagues.isEmpty()) {
+			return 0;
+		}
+
+		int totalUpdated = 0;
+		for (String league : leagues) {
+			try {
+				MatchResponseWrapper response = worldsService.getWorldsMatches(null, league);
+				List<MatchResultDto> matches = response.getMatches();
+				if (matches == null || matches.isEmpty()) {
+					continue;
+				}
+				totalUpdated += updateTeamMetadataFromMatches(matches);
+			} catch (Exception e) {
+				log.warn("Team metadata batch failed for league={}: {}", league, e.getMessage());
+			}
+		}
+		return totalUpdated;
 	}
 
 	// [Admin용] 모든 대상 리그의 전체 과거 데이터 동기화
@@ -94,7 +136,8 @@ public class LeagueMatchService {
 				for (MatchResultDto dto : matches) {
 					try {
 						LeagueMatch entity = convertToEntity(dto, leagueSlug);
-						leagueMatchRepository.save(entity);
+						LeagueMatch saved = leagueMatchRepository.save(entity);
+						syncLeagueMatchGames(saved.getId(), dto.getGameIds());
 						totalSynced++;
 					} catch (Exception e) {
 						log.error("Failed to save match: {}", dto.getMatchId(), e);
@@ -174,7 +217,10 @@ public class LeagueMatchService {
 			}
 		}
 
-		List<MatchResultDto> dtos = entities.stream().map(this::convertToDto).collect(Collectors.toList());
+		Map<String, List<String>> gameIdsByMatchId = loadGameIdsByMatchIds(entities);
+		List<MatchResultDto> dtos = entities.stream()
+				.map(entity -> convertToDto(entity, gameIdsByMatchId.getOrDefault(entity.getId(), List.of())))
+				.collect(Collectors.toList());
 
 		return MatchResponseWrapper.builder().matches(dtos).nextPageToken(null).build();
 	}
@@ -187,7 +233,10 @@ public class LeagueMatchService {
 			syncMatches(leagueSlug);
 			entities = leagueMatchRepository.findTop3ByLeagueNameOrderByMatchDateDesc(leagueSlug);
 		}
-		return entities.stream().map(this::convertToDto).collect(Collectors.toList());
+		Map<String, List<String>> gameIdsByMatchId = loadGameIdsByMatchIds(entities);
+		return entities.stream()
+				.map(entity -> convertToDto(entity, gameIdsByMatchId.getOrDefault(entity.getId(), List.of())))
+				.collect(Collectors.toList());
 	}
 
 	private LeagueMatch convertToEntity(MatchResultDto dto, String leagueSlug) throws JsonProcessingException {
@@ -211,7 +260,7 @@ public class LeagueMatchService {
 				.matchDetailsJson(jsonDetails).lastUpdated(LocalDateTime.now()).build();
 	}
 
-	private MatchResultDto convertToDto(LeagueMatch entity) {
+	private MatchResultDto convertToDto(LeagueMatch entity, List<String> gameIds) {
 		List<MatchResultDto.SetVod> sets = new ArrayList<>();
 		try {
 			if (entity.getMatchDetailsJson() != null) {
@@ -238,16 +287,113 @@ public class LeagueMatchService {
 								.imageUrl(entity.getBlueTeamImageUrl()).wins(entity.getBlueScore()).build())
 				.redTeam(MatchResultDto.TeamInfo.builder().code(entity.getRedTeamCode()).name(entity.getRedTeamName())
 						.imageUrl(entity.getRedTeamImageUrl()).wins(entity.getRedScore()).build())
-				.sets(sets).liveStreamUrl(liveStreamUrl).build();
+				.sets(sets).liveStreamUrl(liveStreamUrl).gameIds(gameIds).build();
+	}
+
+	private Map<String, List<String>> loadGameIdsByMatchIds(List<LeagueMatch> matches) {
+		if (matches == null || matches.isEmpty()) {
+			return Map.of();
+		}
+
+		List<String> matchIds = matches.stream()
+				.map(LeagueMatch::getId)
+				.filter(id -> id != null && !id.isBlank())
+				.toList();
+		if (matchIds.isEmpty()) {
+			return Map.of();
+		}
+
+		Map<String, List<String>> result = new HashMap<>();
+		List<LeagueMatchGame> rows = leagueMatchGameRepository.findAllByLeagueMatchIdsOrderByMatchAndGameOrder(matchIds);
+		for (LeagueMatchGame row : rows) {
+			String matchId = row.getLeagueMatch().getId();
+			result.computeIfAbsent(matchId, ignored -> new ArrayList<>()).add(row.getGameId());
+		}
+		return result;
+	}
+
+	protected void syncLeagueMatchGames(String matchId, List<String> gameIds) {
+		if (matchId == null || matchId.isBlank()) {
+			return;
+		}
+
+		transactionTemplate.executeWithoutResult(status -> {
+			leagueMatchGameRepository.deleteAllByMatchId(matchId);
+			if (gameIds == null || gameIds.isEmpty()) {
+				return;
+			}
+
+			LeagueMatch matchRef = leagueMatchRepository.getReferenceById(matchId);
+			List<LeagueMatchGame> rows = new ArrayList<>();
+			int order = 1;
+			for (String gameId : gameIds) {
+				if (gameId == null || gameId.isBlank()) {
+					continue;
+				}
+				rows.add(new LeagueMatchGame(matchRef, gameId, order++));
+			}
+			if (!rows.isEmpty()) {
+				leagueMatchGameRepository.saveAll(rows);
+			}
+		});
+	}
+
+	public GameIdBackfillResult backfillGameIdsForYear(int year, int limit) {
+		LocalDateTime start = java.time.LocalDate.of(year, 1, 1).atStartOfDay();
+		LocalDateTime end = java.time.LocalDate.of(year + 1, 1, 1).atStartOfDay().minusNanos(1);
+
+		List<LeagueMatch> candidates = leagueMatchRepository.findByDateRange(start, end);
+		if (limit > 0 && candidates.size() > limit) {
+			candidates = candidates.subList(0, limit);
+		}
+
+		int updated = 0;
+		int unchanged = 0;
+		int failed = 0;
+
+		for (LeagueMatch match : candidates) {
+			try {
+				List<String> gameIds = worldsService.getGameIdsByMatchId(match.getId()).stream()
+						.filter(gameId -> gameId != null && !gameId.isBlank())
+						.toList();
+				List<String> currentGameIds = leagueMatchGameRepository.findByLeagueMatch_IdOrderByGameOrderAsc(match.getId())
+						.stream()
+						.map(LeagueMatchGame::getGameId)
+						.toList();
+
+				if (currentGameIds.equals(gameIds)) {
+					unchanged++;
+				} else {
+					syncLeagueMatchGames(match.getId(), gameIds);
+					updated++;
+				}
+
+				// API 부하 완화
+				Thread.sleep(120);
+			} catch (Exception e) {
+				failed++;
+				log.warn("Failed to backfill gameIds for matchId={}: {}", match.getId(), e.getMessage());
+			}
+		}
+
+		return new GameIdBackfillResult(year, candidates.size(), updated, unchanged, failed);
+	}
+
+	public record GameIdBackfillResult(
+			int year,
+			int targetMatches,
+			int updatedMatches,
+			int unchangedMatches,
+			int failedMatches) {
 	}
 
 	private final com.toy.nar.domain.game.repository.GameRepository gameRepository;
 
 	// @Transactional // Removed to avoid holding all entities in memory for the
 	// whole duration
-	protected void updateTeamMetadataFromMatches(List<MatchResultDto> matches) {
+	protected int updateTeamMetadataFromMatches(List<MatchResultDto> matches) {
 		if (matches == null || matches.isEmpty())
-			return;
+			return 0;
 
 		log.info("Starting context-aware team metadata sync for {} matches...", matches.size());
 
@@ -264,6 +410,7 @@ public class LeagueMatchService {
 				}));
 
 		int totalUpdated = 0;
+		Map<Long, com.toy.nar.domain.participant.entity.Team> dirtyTeams = new LinkedHashMap<>();
 
 		for (java.util.Map.Entry<java.time.LocalDate, List<MatchResultDto>> entry : matchesByDate.entrySet()) {
 			java.time.LocalDate date = entry.getKey();
@@ -285,14 +432,23 @@ public class LeagueMatchService {
 			log.debug("Found {} candidate games in DB for date {}.", candidateGames.size(), date);
 
 			for (MatchResultDto match : dailyMatches) {
-				totalUpdated += processSingleMatchSync(match, candidateGames);
+				totalUpdated += processSingleMatchSync(match, candidateGames, dirtyTeams);
 			}
 		}
 
-		log.info("Team metadata sync completed. Updated {} team entities.", totalUpdated);
+		if (!dirtyTeams.isEmpty()) {
+			teamRepository.saveAll(dirtyTeams.values());
+		}
+
+		log.info("Team metadata sync completed. Updated {} records, {} unique teams (batch save).",
+				totalUpdated, dirtyTeams.size());
+		return totalUpdated;
 	}
 
-	private int processSingleMatchSync(MatchResultDto match, List<com.toy.nar.domain.game.entity.Game> candidateGames) {
+	private int processSingleMatchSync(
+			MatchResultDto match,
+			List<com.toy.nar.domain.game.entity.Game> candidateGames,
+			Map<Long, com.toy.nar.domain.participant.entity.Team> dirtyTeams) {
 		try {
 			LocalDateTime matchDate = LocalDateTime.parse(match.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
 			String normBlue = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(match.getBlueTeam().getName());
@@ -318,8 +474,8 @@ public class LeagueMatchService {
 
 			if (matchedGame != null) {
 				int count = 0;
-				count += updateTeamIfMatched(matchedGame, match.getBlueTeam());
-				count += updateTeamIfMatched(matchedGame, match.getRedTeam());
+				count += updateTeamIfMatched(matchedGame, match.getBlueTeam(), dirtyTeams);
+				count += updateTeamIfMatched(matchedGame, match.getRedTeam(), dirtyTeams);
 				return count;
 			}
 		} catch (Exception e) {
@@ -328,7 +484,10 @@ public class LeagueMatchService {
 		return 0;
 	}
 
-	private int updateTeamIfMatched(com.toy.nar.domain.game.entity.Game game, MatchResultDto.TeamInfo info) {
+	private int updateTeamIfMatched(
+			com.toy.nar.domain.game.entity.Game game,
+			MatchResultDto.TeamInfo info,
+			Map<Long, com.toy.nar.domain.participant.entity.Team> dirtyTeams) {
 		if (info == null || info.getName() == null)
 			return 0;
 		if ((info.getCode() == null || info.getCode().isEmpty())
@@ -362,7 +521,7 @@ public class LeagueMatchService {
 			if (updated) {
 				log.info("Syncing metadata for matched team '{}' (Game ID: {})", team.getName(), game.getId());
 				team.updateMetadata(newCode, newImage);
-				teamRepository.save(team);
+				dirtyTeams.put(team.getId(), team);
 				return 1;
 			}
 			return 0;
