@@ -1,11 +1,14 @@
 package com.toy.nar.app.category;
 
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.toy.nar.app.category.dto.CategoryPatchQueryDto;
 import com.toy.nar.app.category.dto.CategoryQueryDto;
 import com.toy.nar.app.category.dto.CategoryTree;
 import com.toy.nar.app.category.dto.LeagueCategory;
@@ -27,6 +30,7 @@ public class CategoryService {
 
 	public CategoryTree buildCategoryTree(int year) {
 		List<CategoryQueryDto> flatData = leagueRepository.findAllCategoryDataByYear(year);
+		Map<LeagueSplitKey, List<String>> patchesByLeagueSplit = buildPatchesByLeagueSplit(year);
 		List<LeagueCategory> leagueCategories = flatData.stream()
 				.collect(Collectors.groupingBy(CategoryQueryDto::leagueName))
 				.entrySet().stream()
@@ -47,7 +51,9 @@ public class CategoryService {
 										.toList();
 
 								Long leagueId = splitEntry.getValue().get(0).leagueId();
-								return new SplitCategory(splitName, leagueId, teams);
+								List<String> patches = patchesByLeagueSplit.getOrDefault(
+										new LeagueSplitKey(leagueName, splitName), List.of());
+								return new SplitCategory(splitName, leagueId, teams, patches);
 							}).toList();
 
 					return new LeagueCategory(leagueName, splitCategories);
@@ -83,7 +89,7 @@ public class CategoryService {
 
 		List<TeamSummary> teams = getTeamSummaries(leagueName, split);
 
-		return new SplitCategory(split, league.getId(), teams);
+		return new SplitCategory(split, league.getId(), teams, List.of());
 	}
 
 	public List<TeamSummary> getTeamSummaries(String leagueName, String split) {
@@ -91,5 +97,57 @@ public class CategoryService {
 				.stream()
 				.map(team -> new TeamSummary(team.getId(), team.getName()))
 				.toList();
+	}
+
+	private Map<LeagueSplitKey, List<String>> buildPatchesByLeagueSplit(int year) {
+		List<CategoryPatchQueryDto> patchRows = leagueRepository.findDistinctPatchesByYear(year);
+		Map<LeagueSplitKey, List<String>> patchesByLeagueSplit = new HashMap<>();
+
+		for (CategoryPatchQueryDto patchRow : patchRows) {
+			if (patchRow.patch() == null || patchRow.patch().isBlank()) {
+				continue;
+			}
+
+			LeagueSplitKey key = new LeagueSplitKey(patchRow.leagueName(), patchRow.splitName());
+			patchesByLeagueSplit.computeIfAbsent(key, ignored -> new java.util.ArrayList<>())
+					.add(patchRow.patch());
+		}
+
+		patchesByLeagueSplit.replaceAll((ignored, patches) -> patches.stream()
+				.distinct()
+				.sorted(this::comparePatchDescending)
+				.toList());
+		return patchesByLeagueSplit;
+	}
+
+	private int comparePatchDescending(String left, String right) {
+		String[] leftTokens = left.split("\\.");
+		String[] rightTokens = right.split("\\.");
+		int maxLength = Math.max(leftTokens.length, rightTokens.length);
+
+		for (int i = 0; i < maxLength; i++) {
+			int leftPart = parsePatchToken(leftTokens, i);
+			int rightPart = parsePatchToken(rightTokens, i);
+			if (leftPart != rightPart) {
+				return Integer.compare(rightPart, leftPart);
+			}
+		}
+
+		return right.compareTo(left);
+	}
+
+	private int parsePatchToken(String[] tokens, int index) {
+		if (index >= tokens.length) {
+			return 0;
+		}
+
+		try {
+			return Integer.parseInt(tokens[index]);
+		} catch (NumberFormatException e) {
+			return 0;
+		}
+	}
+
+	private record LeagueSplitKey(String leagueName, String splitName) {
 	}
 }
