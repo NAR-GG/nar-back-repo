@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.toy.nar.app.category.dto.CategoryPatchQueryDto;
 import com.toy.nar.app.category.dto.CategoryQueryDto;
 import com.toy.nar.domain.game.entity.League;
 import com.toy.nar.domain.participant.entity.GameTeamStat;
@@ -22,6 +23,13 @@ public interface LeagueRepository extends JpaRepository<League, Long> {
 			"JOIN gts.team t " +
 			"WHERE l.seasonYear = :year")
 	List<CategoryQueryDto> findAllCategoryDataByYear(@Param("year") int year);
+
+	@Query("SELECT DISTINCT new com.toy.nar.app.category.dto.CategoryPatchQueryDto(l.leagueName, l.seasonSplit, g.patch) "
+			+
+			"FROM Game g " +
+			"JOIN g.league l " +
+			"WHERE l.seasonYear = :year")
+	List<CategoryPatchQueryDto> findDistinctPatchesByYear(@Param("year") int year);
 
 	@Query("SELECT DISTINCT l.leagueName FROM League l WHERE l.seasonYear = 2025")
 	List<String> findDistinctLeagueNames();
