@@ -5,13 +5,14 @@
 리그 오브 레전드 e스포츠 데이터를 기반으로 챔피언 조합 분석, 매치업 승률, 경기 일정/기록 등을 확인할 수 있는 서비스입니다.  
 
 ## 기술 블로그
-- [OOM 원인 API, DB 최적화로 해결하기](https://changha-dev.tistory.com/194)
-- [8만 건 데이터 DB 마이그레이션 자동화 구축](https://changha-dev.tistory.com/195)
-- [DTO 프로젝션을 활용한 일정 서비스 성능 개선](https://changha-dev.tistory.com/196)
-- [반복되는 일정 서비스 API콜에 대한 캐시 적용 및 전략](https://changha-dev.tistory.com/197)
-- [MySQL에서 SQLite로 마이그레이션 한 이유](https://changha-dev.tistory.com/198)
-- [SQLite와 MySQL 동시쓰기 비교해보기](https://changha-dev.tistory.com/199)
+- [분산환경에서의 배치 스케줄링 아키텍처 설계 및 비교](https://changha-dev.github.io/posts/distribute-batch-architecture)
 - [2026년 새해맞이 나르지지 방향성](https://changha-dev.tistory.com/200)
+- [SQLite와 MySQL 동시쓰기 비교해보기](https://changha-dev.tistory.com/199)
+- [MySQL에서 SQLite로 마이그레이션 한 이유](https://changha-dev.tistory.com/198)
+- [반복되는 일정 서비스 API콜에 대한 캐시 적용 및 전략](https://changha-dev.tistory.com/197)
+- [DTO 프로젝션을 활용한 일정 서비스 성능 개선](https://changha-dev.tistory.com/196)
+- [8만 건 데이터 DB 마이그레이션 자동화 구축](https://changha-dev.tistory.com/195)
+- [OOM 원인 API, DB 최적화로 해결하기](https://changha-dev.tistory.com/194)
 
 ## 기술 스택
 
