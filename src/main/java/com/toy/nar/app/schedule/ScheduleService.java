@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 
 import java.util.*;
@@ -55,6 +56,25 @@ public class ScheduleService {
 			return scheduleCacheableService.getTodaySchedule(date);
 		}
 		return scheduleCacheableService.getPastSchedule(date);
+	}
+
+	public ScheduleCalendarResponseDto getMonthlyScheduleCalendar(YearMonth month) {
+		if (month == null) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		LocalDateTime start = month.atDay(1).atStartOfDay();
+		LocalDateTime end = month.plusMonths(1).atDay(1).atStartOfDay();
+
+		List<ScheduleCalendarResponseDto.ScheduleDateSummaryDto> dates = leagueMatchRepository
+				.findMonthlyMatchCounts(start, end, new ArrayList<>(com.toy.nar.app.lolesports.LeagueConstants.ALLOWED_LEAGUES))
+				.stream()
+				.map(row -> new ScheduleCalendarResponseDto.ScheduleDateSummaryDto(
+						row.getMatchDay().toString(),
+						row.getMatchCount()))
+				.toList();
+
+		return new ScheduleCalendarResponseDto(month.toString(), dates);
 	}
 
 	/**

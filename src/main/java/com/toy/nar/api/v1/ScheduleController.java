@@ -1,6 +1,7 @@
 package com.toy.nar.api.v1;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.toy.nar.app.lolesports.LeagueMatchService;
 import com.toy.nar.app.schedule.ScheduleService;
+import com.toy.nar.app.schedule.dto.ScheduleCalendarResponseDto;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto;
 import com.toy.nar.app.schedule.dto.ScheduleResponseDto;
 import com.toy.nar.common.error.ErrorCode;
@@ -37,6 +39,15 @@ public class ScheduleController {
 			@RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 		ScheduleResponseDto schedule = scheduleService.getDailySchedule(date);
 		return ResponseEntity.ok(schedule);
+	}
+
+	@Operation(summary = "월별 경기 존재 날짜 조회", description = "특정 월에 경기가 있는 날짜와 경기 수를 조회합니다. (달력 마킹용)")
+	@ApiErrorCode(ErrorCode.INVALID_INPUT_VALUE)
+	@GetMapping("/calendar")
+	public ResponseEntity<ScheduleCalendarResponseDto> getMonthlyScheduleCalendar(
+			@RequestParam("month") @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
+		ScheduleCalendarResponseDto calendar = scheduleService.getMonthlyScheduleCalendar(month);
+		return ResponseEntity.ok(calendar);
 	}
 
 	@Operation(summary = "매치 상세 정보 조회", description = "특정 매치(Match)의 세부 정보를 조회합니다.")
