@@ -61,6 +61,7 @@ class LeagueMatchServicePerformanceBaselineTest {
                 teamRepository,
                 teamExternalIdentityRepository,
                 null,
+                null,
                 new ObjectMapper(),
                 null,
                 gameRepository);

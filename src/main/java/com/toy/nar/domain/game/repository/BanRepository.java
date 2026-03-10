@@ -1,5 +1,6 @@
 package com.toy.nar.domain.game.repository;
 
+import com.toy.nar.app.schedule.dto.GameBanRow;
 import java.util.List;
 import java.util.Set;
 
@@ -16,6 +17,12 @@ public interface BanRepository extends JpaRepository<Ban, Long> {
 
 	@Modifying(flushAutomatically = true, clearAutomatically = true)
 	int deleteByGameIdIn(Set<Long> gameIds);
+
+	@Query("SELECT new com.toy.nar.app.schedule.dto.GameBanRow(" +
+			"   b.game.id, b.team.name, b.bannedChampion.championNameEn) " +
+			"FROM Ban b " +
+			"WHERE b.game.id IN :gameIds")
+	List<GameBanRow> findScheduleBanRowsByGameIds(@Param("gameIds") Set<Long> gameIds);
 
 	/**
 	 * 필터 기반 챔피언별 밴 횟수 조회
