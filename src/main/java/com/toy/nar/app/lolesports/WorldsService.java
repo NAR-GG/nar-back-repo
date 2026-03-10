@@ -20,17 +20,18 @@ public class WorldsService {
 
 	private final WebClient webClient;
 
-	private static final java.util.Map<String, String> LEAGUE_IDS = java.util.Map.of(
-			"LCK", "98767991310872058",
-			"LPL", "98767991314006698",
-			"LEC", "98767991302996019",
-			"CBLOL", "98767991332355509",
-			"LCP", "113476371197627891",
-			"LCS", "98767991299243165",
-			"PCS", "98767975604431411",
-			"VCS", "98767991349978712",
-			"WORLDS", "98767975604431411",
-			"MSI", "98767991325878492");
+	private static final java.util.Map<String, String> LEAGUE_IDS = java.util.Map.ofEntries(
+			java.util.Map.entry("LCK", "98767991310872058"),
+			java.util.Map.entry("LPL", "98767991314006698"),
+			java.util.Map.entry("LEC", "98767991302996019"),
+			java.util.Map.entry("FIRST_STAND", "113464388705111224"),
+			java.util.Map.entry("CBLOL", "98767991332355509"),
+			java.util.Map.entry("LCP", "113476371197627891"),
+			java.util.Map.entry("LCS", "98767991299243165"),
+			java.util.Map.entry("PCS", "98767975604431411"),
+			java.util.Map.entry("VCS", "98767991349978712"),
+			java.util.Map.entry("WORLDS", "98767975604431411"),
+			java.util.Map.entry("MSI", "98767991325878492"));
 
 	@Value("${lolesports.riot-api.key}")
 	private String RIOT_API_KEY;

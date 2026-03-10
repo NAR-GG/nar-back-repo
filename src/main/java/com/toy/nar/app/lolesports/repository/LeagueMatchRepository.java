@@ -5,10 +5,17 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
 public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String> {
+
+	interface MonthlyMatchCountRow {
+		LocalDate getMatchDay();
+
+		long getMatchCount();
+	}
 
 	@Query("SELECT m FROM LeagueMatch m WHERE m.leagueName = :leagueName ORDER BY m.matchDate DESC")
 	List<LeagueMatch> findByLeagueNameOrderByMatchDateDesc(@Param("leagueName") String leagueName, Pageable pageable);
@@ -25,6 +32,21 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 
 	@Query("SELECT m FROM LeagueMatch m WHERE m.matchDate >= :start AND m.matchDate <= :end ORDER BY m.matchDate DESC")
 	List<LeagueMatch> findByDateRange(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+	@Query(value = """
+			SELECT DATE(m.match_date) AS matchDay,
+			       COUNT(*) AS matchCount
+			FROM league_match m
+			WHERE m.match_date >= :start
+			  AND m.match_date < :end
+			  AND UPPER(m.league_name) IN :leagueNames
+			GROUP BY DATE(m.match_date)
+			ORDER BY DATE(m.match_date)
+			""", nativeQuery = true)
+	List<MonthlyMatchCountRow> findMonthlyMatchCounts(
+			@Param("start") LocalDateTime start,
+			@Param("end") LocalDateTime end,
+			@Param("leagueNames") List<String> leagueNames);
 
 	@Query("""
 			SELECT m

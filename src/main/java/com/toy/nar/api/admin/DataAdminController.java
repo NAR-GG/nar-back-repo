@@ -68,16 +68,18 @@ public class DataAdminController {
 
 	@PostMapping("/sync/matches/quick")
 	public ResponseEntity<Map<String, Object>> syncMatchesQuick(
-			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "LCK") String league) {
-		log.info("Quick sync requested for league: {}", league);
+			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "LCK") String league,
+			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean includeTeamMetadata) {
+		log.info("Quick sync requested for league: {}, includeTeamMetadata={}", league, includeTeamMetadata);
 
 		long start = System.currentTimeMillis();
-		leagueMatchService.syncMatches(league);
+		leagueMatchService.syncMatches(league, includeTeamMetadata);
 		long elapsed = System.currentTimeMillis() - start;
 
 		return ResponseEntity.ok(Map.of(
 				"success", true,
 				"league", league,
+				"includeTeamMetadata", includeTeamMetadata,
 				"elapsedMs", elapsed,
 				"message", league + " 최신 동기화가 완료되었습니다."));
 	}
