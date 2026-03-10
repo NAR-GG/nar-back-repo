@@ -21,6 +21,7 @@ public class MatchResultDto {
 	@Data
 	@Builder
 	public static class TeamInfo {
+		private String externalTeamId; // LoL Esports team ID
 		private String code; // T1
 		private String name; // T1
 		private String imageUrl; // 팀 로고 이미지 URL
