@@ -17,13 +17,13 @@ public final class LeagueConstants {
      * 동기화 및 API 대상 리그 목록
      */
     public static final List<String> TARGET_LEAGUES = List.of(
-            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS");
+            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND");
 
     /**
      * 일정 조회 시 허용되는 리그 목록 (TARGET_LEAGUES + 추가 리그)
      */
     public static final Set<String> ALLOWED_LEAGUES = Set.of(
-            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS");
+            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND");
 
     /**
      * 리그별 기본 라이브 스트림 URL
@@ -34,7 +34,8 @@ public final class LeagueConstants {
             "LEC", "https://www.twitch.tv/lec",
             "LCS", "https://www.twitch.tv/lcs",
             "WORLDS", "https://www.twitch.tv/riotgames",
-            "MSI", "https://www.twitch.tv/riotgames");
+            "MSI", "https://www.twitch.tv/riotgames",
+            "FIRST_STAND", "https://www.twitch.tv/riotgames");
 
     /**
      * 스트림 URL이 없는 리그의 기본 폴백 URL
