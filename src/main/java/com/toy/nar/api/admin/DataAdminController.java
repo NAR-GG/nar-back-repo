@@ -153,8 +153,30 @@ public class DataAdminController {
 				"updatedMappings", result.updatedMappings(),
 				"unresolvedMappings", result.unresolvedMappings(),
 				"conflicts", result.conflicts(),
+					"elapsedMs", elapsed,
+					"message", "game external identity backfill completed"));
+	}
+
+	@PostMapping("/sync/matches/game-ids")
+	public ResponseEntity<Map<String, Object>> backfillLeagueMatchGameIds(
+			@org.springframework.web.bind.annotation.RequestParam int year,
+			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "0") int limit) {
+		log.info("LeagueMatch game id backfill requested. year={}, limit={}", year, limit);
+
+		long start = System.currentTimeMillis();
+		com.toy.nar.app.lolesports.LeagueMatchService.GameIdBackfillResult result = leagueMatchService
+				.backfillGameIdsForYear(year, limit);
+		long elapsed = System.currentTimeMillis() - start;
+
+		return ResponseEntity.ok(Map.of(
+				"success", true,
+				"year", result.year(),
+				"targetMatches", result.targetMatches(),
+				"updatedMatches", result.updatedMatches(),
+				"unchangedMatches", result.unchangedMatches(),
+				"failedMatches", result.failedMatches(),
 				"elapsedMs", elapsed,
-				"message", "game external identity backfill completed"));
+				"message", "league match game id backfill completed"));
 	}
 
 	@PostMapping("/sync")
