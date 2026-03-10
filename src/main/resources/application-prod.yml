@@ -57,7 +57,7 @@ lolesports:
   riot-api:
     key: ${LOL_ESPORTS_KEY}
   sync:
-    cron: ${LOL_SYNC_CRON:0 0 */6 * * *}
+    cron: ${LOL_SYNC_CRON:0 0/30 * * * *}
     team-metadata-cron: ${LOL_TEAM_METADATA_CRON:0 15 4 * * *}
     active-leagues: ${LOL_ACTIVE_LEAGUES:LCK,LPL,LEC,LCS,LCP,CBLOL,MSI,WORLDS,FIRST_STAND}
   live:
