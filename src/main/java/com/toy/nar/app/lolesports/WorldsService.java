@@ -480,6 +480,24 @@ public class WorldsService {
 		return ids;
 	}
 
+	private List<String> extractTrackedGameIds(JsonNode games) {
+		List<String> ids = new ArrayList<>();
+		if (!games.isArray()) {
+			return ids;
+		}
+		for (JsonNode game : games) {
+			String state = game.path("state").asText();
+			if (!"completed".equalsIgnoreCase(state) && !"inProgress".equalsIgnoreCase(state)) {
+				continue;
+			}
+			String gameId = game.path("id").asText();
+			if (gameId != null && !gameId.isBlank()) {
+				ids.add(gameId);
+			}
+		}
+		return ids;
+	}
+
 	private String extractExternalTeamId(JsonNode team) {
 		String externalTeamId = team.path("id").asText("");
 		if (externalTeamId == null || externalTeamId.isBlank()) {
@@ -497,7 +515,7 @@ public class WorldsService {
 			return List.of();
 		}
 		JsonNode games = root.path("data").path("event").path("match").path("games");
-		return extractAllGameIds(games);
+		return extractTrackedGameIds(games);
 	}
 
 	private String findBestVodUrl(JsonNode vodsNode) {

@@ -9,6 +9,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import com.toy.nar.app.schedule.dto.GameBanRow;
+import com.toy.nar.app.schedule.dto.GameDetailParticipantRow;
 import com.toy.nar.app.schedule.dto.GameInfoForSummary;
 import com.toy.nar.app.schedule.dto.GameInfoForSummary.ParticipantInfo;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto;
@@ -134,6 +136,77 @@ public class MatchDetailFinder {
 		return gameDetails;
 	}
 
+	public List<MatchDetailResponseDto.GameDetailDto> createGameDetails(
+			List<GameDetailParticipantRow> participantRows,
+			List<GameBanRow> banRows,
+			Map<Integer, String> vodMap) {
+		List<Long> orderedGameIds = participantRows.stream()
+				.collect(Collectors.toMap(
+						GameDetailParticipantRow::gameId,
+						GameDetailParticipantRow::gameNumber,
+						(left, right) -> left))
+				.entrySet().stream()
+				.sorted(Map.Entry.comparingByValue())
+				.map(Map.Entry::getKey)
+				.toList();
+
+		Map<Long, List<GameDetailParticipantRow>> participantsByGameId = participantRows.stream()
+				.collect(Collectors.groupingBy(GameDetailParticipantRow::gameId));
+		Map<Long, Map<String, Set<String>>> bansByGameIdAndTeam = buildBanMap(banRows);
+		Map<String, Set<String>> teamAccumulatedPicks = new HashMap<>();
+
+		List<MatchDetailResponseDto.GameDetailDto> gameDetails = new ArrayList<>();
+		for (Long gameId : orderedGameIds) {
+			List<GameDetailParticipantRow> gameParticipants = participantsByGameId.getOrDefault(gameId, List.of());
+			if (gameParticipants.isEmpty()) {
+				continue;
+			}
+
+			Map<String, List<GameDetailParticipantRow>> participantsBySide = gameParticipants.stream()
+					.collect(Collectors.groupingBy(GameDetailParticipantRow::side));
+
+			List<GameDetailParticipantRow> blueSide = participantsBySide.getOrDefault("Blue", List.of());
+			List<GameDetailParticipantRow> redSide = participantsBySide.getOrDefault("Red", List.of());
+
+			String blueTeamName = blueSide.isEmpty() ? "" : blueSide.get(0).teamName();
+			String redTeamName = redSide.isEmpty() ? "" : redSide.get(0).teamName();
+
+			teamAccumulatedPicks.putIfAbsent(blueTeamName, new HashSet<>());
+			teamAccumulatedPicks.putIfAbsent(redTeamName, new HashSet<>());
+
+			Set<String> blueTeamBans = new HashSet<>(bansByGameIdAndTeam
+					.getOrDefault(gameId, Map.of())
+					.getOrDefault(blueTeamName, Set.of()));
+			Set<String> redTeamBans = new HashSet<>(bansByGameIdAndTeam
+					.getOrDefault(gameId, Map.of())
+					.getOrDefault(redTeamName, Set.of()));
+
+			blueTeamBans.addAll(teamAccumulatedPicks.getOrDefault(blueTeamName, Set.of()));
+			redTeamBans.addAll(teamAccumulatedPicks.getOrDefault(redTeamName, Set.of()));
+
+			MatchDetailResponseDto.GameDetailDto.TeamPicksDto blueTeamDto = createTeamPicksDtoFromRows(blueSide,
+					new ArrayList<>(blueTeamBans));
+			MatchDetailResponseDto.GameDetailDto.TeamPicksDto redTeamDto = createTeamPicksDtoFromRows(redSide,
+					new ArrayList<>(redTeamBans));
+
+			GameDetailParticipantRow first = gameParticipants.get(0);
+			String vodUrl = vodMap != null ? vodMap.get(first.gameNumber()) : null;
+
+			gameDetails.add(new MatchDetailResponseDto.GameDetailDto(
+					gameId,
+					first.gameNumber(),
+					first.gameLengthSeconds(),
+					vodUrl,
+					blueTeamDto,
+					redTeamDto));
+
+			blueSide.forEach(row -> teamAccumulatedPicks.get(blueTeamName).add(row.championNameEn()));
+			redSide.forEach(row -> teamAccumulatedPicks.get(redTeamName).add(row.championNameEn()));
+		}
+
+		return gameDetails;
+	}
+
 	private MatchSummaryDto createMatchSummary(List<GameInfoForSummary> matchGames) {
 		if (matchGames.isEmpty() || matchGames.get(0).participants().isEmpty()) {
 			return null;
@@ -217,6 +290,39 @@ public class MatchDetailFinder {
 				.toList();
 
 		return new MatchDetailResponseDto.GameDetailDto.TeamPicksDto(teamName, isWin, validBans, players);
+	}
+
+	private MatchDetailResponseDto.GameDetailDto.TeamPicksDto createTeamPicksDtoFromRows(
+			List<GameDetailParticipantRow> teamParticipants, List<String> bans) {
+		if (teamParticipants == null || teamParticipants.isEmpty()) {
+			return new MatchDetailResponseDto.GameDetailDto.TeamPicksDto("Unknown", false, Collections.emptyList(),
+					Collections.emptyList());
+		}
+
+		String teamName = teamParticipants.get(0).teamName();
+		boolean isWin = Boolean.TRUE.equals(teamParticipants.get(0).isWin());
+		List<String> validBans = bans != null ? bans : Collections.emptyList();
+
+		List<MatchDetailResponseDto.GameDetailDto.PlayerPickDto> players = teamParticipants.stream()
+				.map(row -> new MatchDetailResponseDto.GameDetailDto.PlayerPickDto(
+						row.position(),
+						row.playerName(),
+						row.championNameEn()))
+				.sorted(Comparator.comparing(p -> getPositionOrder(p.position())))
+				.toList();
+
+		return new MatchDetailResponseDto.GameDetailDto.TeamPicksDto(teamName, isWin, validBans, players);
+	}
+
+	private Map<Long, Map<String, Set<String>>> buildBanMap(List<GameBanRow> banRows) {
+		Map<Long, Map<String, Set<String>>> bansByGameAndTeam = new HashMap<>();
+		for (GameBanRow banRow : banRows) {
+			bansByGameAndTeam
+					.computeIfAbsent(banRow.gameId(), ignored -> new HashMap<>())
+					.computeIfAbsent(banRow.teamName(), ignored -> new LinkedHashSet<>())
+					.add(banRow.championNameEn());
+		}
+		return bansByGameAndTeam;
 	}
 
 	private String encodeMatchId(Set<Long> gameIds) {

@@ -1,11 +1,14 @@
 package com.toy.nar.app.schedule;
 
+import com.toy.nar.app.lolesports.repository.LeagueMatchGame;
+import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.schedule.dto.*;
 import com.toy.nar.app.schedule.dto.MatchDetailResponseDto.GameDetailDto;
 
 import com.toy.nar.common.error.ErrorCode;
 import com.toy.nar.common.error.exception.CustomException;
+import com.toy.nar.domain.game.repository.BanRepository;
 import com.toy.nar.domain.game.entity.Game;
 import com.toy.nar.domain.game.entity.GameParticipant;
 import com.toy.nar.domain.game.repository.GameParticipantRepository;
@@ -28,12 +31,15 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class ScheduleService {
+	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
 
 	private final ScheduleCacheableService scheduleCacheableService;
 	private final MatchDetailCacheableService matchDetailCacheableService;
 	private final GameRepository gameRepository;
+	private final BanRepository banRepository;
 	private final GameParticipantRepository gameParticipantRepository;
 	private final LeagueMatchRepository leagueMatchRepository;
+	private final LeagueMatchGameRepository leagueMatchGameRepository;
 	private final MatchDetailFinder matchDetailFinder;
 
 	/**
@@ -152,6 +158,17 @@ public class ScheduleService {
 			return createVodOnlyDetails(leagueMatch, vodBySetNumber);
 		}
 
+		MappedGameLookup mappedLookup = findMappedGameIds(leagueMatch);
+		if (mappedLookup.complete() && !mappedLookup.gameIds().isEmpty()) {
+			log.debug("Resolved {} mapped game IDs for match {} via game_external_identity",
+					mappedLookup.gameIds().size(), leagueMatch.getId());
+			return buildMergedGameDetails(mappedLookup.gameIds(), vodBySetNumber, "mapped");
+		}
+		if (mappedLookup.complete() && mappedLookup.gameIds().isEmpty()) {
+			log.debug("No tracked game rows for match {}, returning VOD-only details", leagueMatch.getId());
+			return createVodOnlyDetails(leagueMatch, vodBySetNumber);
+		}
+
 		// LeagueMatch.matchDate is stored as UTC, convert to KST date range for Game
 		// query
 		// Game.scheduledGameStartTime is in UTC, so we query with UTC range
@@ -181,11 +198,7 @@ public class ScheduleService {
 		}
 
 		// 3. Get full game details from GameParticipant
-		List<GameParticipant> participants = gameParticipantRepository.findGameDetailsByGameIds(matchingGameIds);
-		log.debug("Retrieved {} participants for merged details", participants.size());
-
-		// 4. Build GameDetailDto merging VOD with Game data
-		return buildMergedGameDetails(participants, vodBySetNumber, blueTeamNormalized, redTeamNormalized);
+		return buildMergedGameDetails(matchingGameIds, vodBySetNumber, "fallback");
 	}
 
 	private Map<Integer, String> parseVodMap(String matchDetailsJson) {
@@ -249,11 +262,54 @@ public class ScheduleService {
 	}
 
 	private List<GameDetailDto> buildMergedGameDetails(
-			List<GameParticipant> participants,
+			Set<Long> gameIds,
 			Map<Integer, String> vodBySetNumber,
-			String blueTeamName, String redTeamName) {
+			String source) {
+		List<GameDetailParticipantRow> participantRows = gameParticipantRepository.findScheduleDetailRowsByGameIds(gameIds);
+		log.debug("Retrieved {} participant rows for {} details", participantRows.size(), source);
+		List<GameBanRow> banRows = banRepository.findScheduleBanRowsByGameIds(gameIds);
+		log.debug("Retrieved {} ban rows for {} details", banRows.size(), source);
+		return matchDetailFinder.createGameDetails(participantRows, banRows, vodBySetNumber);
+	}
 
-		return matchDetailFinder.createGameDetails(participants, vodBySetNumber);
+	private MappedGameLookup findMappedGameIds(com.toy.nar.app.lolesports.repository.LeagueMatch leagueMatch) {
+		List<LeagueMatchGameRepository.MappedGameRow> mappedRows = leagueMatchGameRepository
+				.findMappedGameRowsByMatchId(leagueMatch.getId(), LOLESPORTS_SOURCE);
+		List<LeagueMatchGameRepository.MappedGameRow> trackedRows = mappedRows.stream()
+				.filter(row -> shouldTrackGameRow(leagueMatch, row.getGameOrder()))
+				.toList();
+		if (trackedRows.isEmpty()) {
+			return new MappedGameLookup(new LinkedHashSet<>(), true);
+		}
+
+		LinkedHashSet<Long> gameIds = new LinkedHashSet<>();
+		for (LeagueMatchGameRepository.MappedGameRow row : trackedRows) {
+			if (row.getInternalGameId() == null) {
+				return new MappedGameLookup(new LinkedHashSet<>(), false);
+			}
+			gameIds.add(row.getInternalGameId());
+		}
+		return new MappedGameLookup(gameIds, true);
+	}
+
+	private boolean shouldTrackGameRow(com.toy.nar.app.lolesports.repository.LeagueMatch leagueMatch, Integer gameOrder) {
+		if (gameOrder == null) {
+			return false;
+		}
+		if ("unstarted".equalsIgnoreCase(leagueMatch.getState())) {
+			return false;
+		}
+		if (!"completed".equalsIgnoreCase(leagueMatch.getState())) {
+			return true;
+		}
+		if (leagueMatch.getBlueScore() == null || leagueMatch.getRedScore() == null) {
+			return true;
+		}
+		int playedSets = leagueMatch.getBlueScore() + leagueMatch.getRedScore();
+		return playedSets <= 0 || gameOrder <= playedSets;
+	}
+
+	private record MappedGameLookup(LinkedHashSet<Long> gameIds, boolean complete) {
 	}
 
 	private Set<Long> decodeMatchId(String matchId) {

@@ -133,6 +133,30 @@ public class DataAdminController {
 				"message", "league match external team id backfill completed"));
 	}
 
+	@PostMapping("/sync/matches/game-identities")
+	public ResponseEntity<Map<String, Object>> backfillGameExternalIdentities(
+			@org.springframework.web.bind.annotation.RequestParam(required = false) String leagues) {
+		List<String> targetLeagues = parseLeagues(leagues);
+		log.info("Game external identity backfill requested. leagues={}", targetLeagues);
+
+		long start = System.currentTimeMillis();
+		com.toy.nar.app.lolesports.LeagueMatchService.GameExternalIdentityBackfillResult result = leagueMatchService
+				.backfillGameExternalIdentities(targetLeagues);
+		long elapsed = System.currentTimeMillis() - start;
+
+		return ResponseEntity.ok(Map.of(
+				"success", true,
+				"leagues", result.leagues(),
+				"targetMatches", result.targetMatches(),
+				"targetGameRows", result.targetGameRows(),
+				"createdMappings", result.createdMappings(),
+				"updatedMappings", result.updatedMappings(),
+				"unresolvedMappings", result.unresolvedMappings(),
+				"conflicts", result.conflicts(),
+				"elapsedMs", elapsed,
+				"message", "game external identity backfill completed"));
+	}
+
 	@PostMapping("/sync")
 	public ResponseEntity<Map<String, Object>> syncData() {
 		log.info("Google Drive sync requested via API");

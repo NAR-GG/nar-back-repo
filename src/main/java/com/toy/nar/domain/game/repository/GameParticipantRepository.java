@@ -1,5 +1,6 @@
 package com.toy.nar.domain.game.repository;
 
+import com.toy.nar.app.schedule.dto.GameDetailParticipantRow;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,6 +21,18 @@ public interface GameParticipantRepository
 			"WHERE g.id IN :gameIds " +
 			"ORDER BY g.actualGameStartTime DESC, gp.position ASC")
 	List<GameParticipant> findGameDetailsByGameIds(@Param("gameIds") Set<Long> gameIds);
+
+	@Query("SELECT new com.toy.nar.app.schedule.dto.GameDetailParticipantRow(" +
+			"   g.id, g.gameNumber, g.gameLengthSeconds, gp.side, gp.position, gp.isWin, " +
+			"   t.name, p.name, c.championNameEn) " +
+			"FROM GameParticipant gp " +
+			"JOIN gp.game g " +
+			"JOIN gp.champion c " +
+			"JOIN gp.team t " +
+			"JOIN gp.player p " +
+			"WHERE g.id IN :gameIds " +
+			"ORDER BY g.gameNumber ASC, gp.side ASC, gp.position ASC")
+	List<GameDetailParticipantRow> findScheduleDetailRowsByGameIds(@Param("gameIds") Set<Long> gameIds);
 
 	@Query("SELECT DISTINCT gp.game.league, gp.team FROM GameParticipant gp " +
 			"JOIN gp.game.league l " +
