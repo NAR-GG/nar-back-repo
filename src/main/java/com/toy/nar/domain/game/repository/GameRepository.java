@@ -20,7 +20,7 @@ public interface GameRepository extends JpaRepository<Game, Long>, GameRepositor
 
 	List<Game> findAllByActualGameStartTimeBetween(LocalDateTime start, LocalDateTime end);
 
-	@Query("SELECT DISTINCT g FROM Game g LEFT JOIN FETCH g.participants p LEFT JOIN FETCH p.team WHERE g.actualGameStartTime BETWEEN :start AND :end")
+	@Query("SELECT DISTINCT g FROM Game g JOIN FETCH g.league l LEFT JOIN FETCH g.participants p LEFT JOIN FETCH p.team WHERE g.actualGameStartTime BETWEEN :start AND :end")
 	List<Game> findAllWithParticipantsByActualGameStartTimeBetween(@Param("start") LocalDateTime start,
 			@Param("end") LocalDateTime end);
 
