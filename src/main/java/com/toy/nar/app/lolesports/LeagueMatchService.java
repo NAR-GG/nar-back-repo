@@ -346,7 +346,6 @@ public class LeagueMatchService {
 		return new LeagueMatchExternalTeamIdBackfillResult(targetLeagues, matches.size(), updated, unresolved);
 	}
 
-	@Transactional
 	public GameExternalIdentityBackfillResult backfillGameExternalIdentities(List<String> leagues, int year) {
 		List<String> targetLeagues = (leagues == null || leagues.isEmpty()) ? LeagueConstants.TARGET_LEAGUES : leagues;
 		LocalDateTime start = java.time.LocalDate.of(year, 1, 1).atStartOfDay();
@@ -395,98 +394,106 @@ public class LeagueMatchService {
 				.stream()
 				.collect(Collectors.toMap(GameExternalIdentity::getExternalGameId, identity -> identity));
 
-		Map<LocalDate, List<Game>> gamesByDateCache = new HashMap<>();
-		List<GameExternalIdentity> dirtyIdentities = new ArrayList<>();
+		Map<LocalDate, List<LeagueMatch>> matchesByDate = matches.stream()
+				.collect(Collectors.groupingBy(match -> match.getMatchDate().toLocalDate(), LinkedHashMap::new,
+						Collectors.toList()));
+
 		int targetGameRows = 0;
 		int created = 0;
 		int updated = 0;
 		int unresolved = 0;
 		int conflicts = 0;
-
 		int processed = 0;
-		for (LeagueMatch match : matches) {
-			processed++;
-			if (processed % 100 == 0) {
-				log.info("Game identity backfill progress: {}/{}", processed, matches.size());
-			}
-			Long blueTeamId = internalTeamIdByExternalId.get(match.getBlueExternalTeamId());
-			Long redTeamId = internalTeamIdByExternalId.get(match.getRedExternalTeamId());
-			List<LeagueMatchGame> gameRows = gameRowsByMatchId.getOrDefault(match.getId(), List.of());
 
-			if (gameRows.isEmpty()) {
-				continue;
-			}
+		for (Map.Entry<LocalDate, List<LeagueMatch>> entry : matchesByDate.entrySet()) {
+			List<Game> dailyGames = loadGamesByDate(entry.getKey());
+			List<GameExternalIdentity> dirtyIdentities = new ArrayList<>();
 
-			if (blueTeamId == null || redTeamId == null) {
-				unresolved += gameRows.size();
-				continue;
-			}
+			for (LeagueMatch match : entry.getValue()) {
+				processed++;
+				if (processed % 100 == 0) {
+					log.info("Game identity backfill progress: {}/{}", processed, matches.size());
+				}
 
-			for (LeagueMatchGame gameRow : gameRows) {
-				if (gameRow.getGameId() == null || gameRow.getGameId().isBlank()) {
+				Long blueTeamId = internalTeamIdByExternalId.get(match.getBlueExternalTeamId());
+				Long redTeamId = internalTeamIdByExternalId.get(match.getRedExternalTeamId());
+				List<LeagueMatchGame> gameRows = gameRowsByMatchId.getOrDefault(match.getId(), List.of());
+
+				if (gameRows.isEmpty()) {
 					continue;
 				}
-				if (!shouldTrackGameRow(match, gameRow.getGameOrder())) {
-					continue;
-				}
-				targetGameRows++;
-
-				GameResolution resolution = resolveInternalGame(match, gameRow, blueTeamId, redTeamId,
-						gamesByDateCache);
-				if (resolution.isConflict()) {
-					conflicts++;
-					continue;
-				}
-				if (resolution.game() == null) {
-					unresolved++;
+				if (blueTeamId == null || redTeamId == null) {
+					unresolved += gameRows.size();
 					continue;
 				}
 
-				GameExternalIdentity existingIdentity = existingByExternalGameId.get(gameRow.getGameId());
-				if (existingIdentity != null) {
-					if (!existingIdentity.getGame().getId().equals(resolution.game().getId())) {
+				for (LeagueMatchGame gameRow : gameRows) {
+					if (gameRow.getGameId() == null || gameRow.getGameId().isBlank()) {
+						continue;
+					}
+					if (!shouldTrackGameRow(match, gameRow.getGameOrder())) {
+						continue;
+					}
+					targetGameRows++;
+
+					GameResolution resolution = resolveInternalGame(match, gameRow, blueTeamId, redTeamId, dailyGames);
+					if (resolution.isConflict()) {
 						conflicts++;
-						log.warn(
-								"Game identity conflict: externalGameId={} existingGameId={} resolvedGameId={} matchId={} order={}",
-								gameRow.getGameId(),
-								existingIdentity.getGame().getId(),
-								resolution.game().getId(),
-								match.getId(),
-								gameRow.getGameOrder());
+						continue;
+					}
+					if (resolution.game() == null) {
+						unresolved++;
 						continue;
 					}
 
-					if (hasGameIdentityMetadataChange(existingIdentity, match, gameRow, resolution)) {
-						existingIdentity.updateMatchMetadata(
-								match.getId(),
-								match.getLeagueName(),
-								match.getMatchDate().toLocalDate(),
-								gameRow.getGameOrder(),
-								resolution.matchedBy(),
-								resolution.confidence());
-						dirtyIdentities.add(existingIdentity);
-						updated++;
+					GameExternalIdentity existingIdentity = existingByExternalGameId.get(gameRow.getGameId());
+					if (existingIdentity != null) {
+						if (!existingIdentity.getGame().getId().equals(resolution.game().getId())) {
+							conflicts++;
+							log.warn(
+									"Game identity conflict: externalGameId={} existingGameId={} resolvedGameId={} matchId={} order={}",
+									gameRow.getGameId(),
+									existingIdentity.getGame().getId(),
+									resolution.game().getId(),
+									match.getId(),
+									gameRow.getGameOrder());
+							continue;
+						}
+
+						if (hasGameIdentityMetadataChange(existingIdentity, match, gameRow, resolution)) {
+							existingIdentity.updateMatchMetadata(
+									match.getId(),
+									match.getLeagueName(),
+									match.getMatchDate().toLocalDate(),
+									gameRow.getGameOrder(),
+									resolution.matchedBy(),
+									resolution.confidence());
+							dirtyIdentities.add(existingIdentity);
+							updated++;
+						}
+						continue;
 					}
-					continue;
+
+					GameExternalIdentity newIdentity = GameExternalIdentity.builder()
+							.source(LOLESPORTS_SOURCE)
+							.externalGameId(gameRow.getGameId())
+							.game(resolution.game())
+							.externalMatchId(match.getId())
+							.externalLeagueName(match.getLeagueName())
+							.matchDate(match.getMatchDate().toLocalDate())
+							.gameOrder(gameRow.getGameOrder())
+							.matchedBy(resolution.matchedBy())
+							.confidence(resolution.confidence())
+							.build();
+					dirtyIdentities.add(newIdentity);
+					existingByExternalGameId.put(gameRow.getGameId(), newIdentity);
+					created++;
 				}
-
-				dirtyIdentities.add(GameExternalIdentity.builder()
-						.source(LOLESPORTS_SOURCE)
-						.externalGameId(gameRow.getGameId())
-						.game(resolution.game())
-						.externalMatchId(match.getId())
-						.externalLeagueName(match.getLeagueName())
-						.matchDate(match.getMatchDate().toLocalDate())
-						.gameOrder(gameRow.getGameOrder())
-						.matchedBy(resolution.matchedBy())
-						.confidence(resolution.confidence())
-						.build());
-				created++;
 			}
-		}
 
-		if (!dirtyIdentities.isEmpty()) {
-			gameExternalIdentityRepository.saveAll(dirtyIdentities);
+			if (!dirtyIdentities.isEmpty()) {
+				transactionTemplate.executeWithoutResult(status -> gameExternalIdentityRepository.saveAll(dirtyIdentities));
+			}
 		}
 
 		return new GameExternalIdentityBackfillResult(targetLeagues, matches.size(), targetGameRows, created, updated,
@@ -1167,13 +1174,11 @@ public class LeagueMatchService {
 			LeagueMatchGame gameRow,
 			Long blueTeamId,
 			Long redTeamId,
-			Map<LocalDate, List<Game>> gamesByDateCache) {
+			List<Game> dailyGames) {
 		if (match.getMatchDate() == null || gameRow.getGameOrder() == null) {
 			return GameResolution.unresolved();
 		}
 
-		LocalDate matchDate = match.getMatchDate().toLocalDate();
-		List<Game> dailyGames = gamesByDateCache.computeIfAbsent(matchDate, this::loadGamesByDate);
 		String teamPairKey = buildTeamPairKey(blueTeamId, redTeamId);
 
 		List<Game> candidates = dailyGames.stream()
