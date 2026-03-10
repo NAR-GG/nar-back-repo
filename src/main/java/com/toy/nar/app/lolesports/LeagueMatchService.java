@@ -136,7 +136,8 @@ public class LeagueMatchService {
 	}
 
 	@Transactional
-	public TeamIdentityBackfillResult backfillTeamExternalIdentities(List<String> leagues, boolean fullHistory, int maxPages) {
+	public TeamIdentityBackfillResult backfillTeamExternalIdentities(List<String> leagues, boolean fullHistory,
+			int maxPages) {
 		List<String> targetLeagues = (leagues == null || leagues.isEmpty()) ? LeagueConstants.TARGET_LEAGUES : leagues;
 		Map<String, ExternalTeamCandidate> candidatesByExternalId = new LinkedHashMap<>();
 		int fetchedPages = 0;
@@ -216,7 +217,8 @@ public class LeagueMatchService {
 			if (existingIdentity != null) {
 				if (resolvedTeam != null && !existingIdentity.getTeam().getId().equals(resolvedTeam.getId())) {
 					conflicts++;
-					log.warn("Team identity conflict: externalTeamId={} existingTeam={} resolvedTeam={} league={} name={}",
+					log.warn(
+							"Team identity conflict: externalTeamId={} existingTeam={} resolvedTeam={} league={} name={}",
 							candidate.externalTeamId(),
 							existingIdentity.getTeam().getName(),
 							resolvedTeam.getName(),
@@ -225,7 +227,8 @@ public class LeagueMatchService {
 					continue;
 				}
 
-				String matchedBy = resolvedTeam != null ? determineMatchedBy(candidate, resolvedTeam) : existingIdentity.getMatchedBy();
+				String matchedBy = resolvedTeam != null ? determineMatchedBy(candidate, resolvedTeam)
+						: existingIdentity.getMatchedBy();
 				if (hasIdentityMetadataChange(existingIdentity, candidate, matchedBy)) {
 					existingIdentity.updateMatchMetadata(candidate.externalName(), matchedBy, confidenceFor(matchedBy));
 					dirtyIdentities.add(existingIdentity);
@@ -237,7 +240,8 @@ public class LeagueMatchService {
 			if (resolvedTeam == null) {
 				unresolved++;
 				log.info("Team identity unresolved: externalTeamId={} league={} name={} code={}",
-						candidate.externalTeamId(), candidate.league(), candidate.externalName(), candidate.externalCode());
+						candidate.externalTeamId(), candidate.league(), candidate.externalName(),
+						candidate.externalCode());
 				continue;
 			}
 
@@ -271,7 +275,8 @@ public class LeagueMatchService {
 	public LeagueMatchExternalTeamIdBackfillResult backfillLeagueMatchExternalTeamIds(List<String> leagues) {
 		List<String> targetLeagues = (leagues == null || leagues.isEmpty()) ? LeagueConstants.TARGET_LEAGUES : leagues;
 		List<LeagueMatch> matches = leagueMatchRepository.findAll().stream()
-				.filter(match -> match.getLeagueName() != null && targetLeagues.contains(match.getLeagueName().toUpperCase()))
+				.filter(match -> match.getLeagueName() != null
+						&& targetLeagues.contains(match.getLeagueName().toUpperCase()))
 				.toList();
 
 		List<TeamExternalIdentity> identities = teamExternalIdentityRepository.findAll().stream()
@@ -318,7 +323,8 @@ public class LeagueMatchService {
 					externalIdByNormalizedInternalName,
 					externalIdByCode);
 
-			boolean unresolvedBlue = resolvedBlueExternalTeamId == null && !isPlaceholderTeamName(match.getBlueTeamName());
+			boolean unresolvedBlue = resolvedBlueExternalTeamId == null
+					&& !isPlaceholderTeamName(match.getBlueTeamName());
 			boolean unresolvedRed = resolvedRedExternalTeamId == null && !isPlaceholderTeamName(match.getRedTeamName());
 			if (unresolvedBlue || unresolvedRed) {
 				unresolved++;
@@ -341,15 +347,21 @@ public class LeagueMatchService {
 	}
 
 	@Transactional
-	public GameExternalIdentityBackfillResult backfillGameExternalIdentities(List<String> leagues) {
+	public GameExternalIdentityBackfillResult backfillGameExternalIdentities(List<String> leagues, int year) {
 		List<String> targetLeagues = (leagues == null || leagues.isEmpty()) ? LeagueConstants.TARGET_LEAGUES : leagues;
-		List<LeagueMatch> matches = leagueMatchRepository.findAll().stream()
-				.filter(match -> match.getLeagueName() != null && targetLeagues.contains(match.getLeagueName().toUpperCase()))
+		LocalDateTime start = java.time.LocalDate.of(year, 1, 1).atStartOfDay();
+		LocalDateTime end = java.time.LocalDate.of(year + 1, 1, 1).atStartOfDay().minusNanos(1);
+		List<LeagueMatch> matches = leagueMatchRepository.findByDateRange(start, end).stream()
+				.filter(match -> match.getLeagueName() != null
+						&& targetLeagues.contains(match.getLeagueName().toUpperCase()))
 				.filter(match -> match.getMatchDate() != null)
-				.filter(match -> !isPlaceholderTeamName(match.getBlueTeamName()) && !isPlaceholderTeamName(match.getRedTeamName()))
+				.filter(match -> !isPlaceholderTeamName(match.getBlueTeamName())
+						&& !isPlaceholderTeamName(match.getRedTeamName()))
 				.filter(match -> match.getBlueExternalTeamId() != null && !match.getBlueExternalTeamId().isBlank())
 				.filter(match -> match.getRedExternalTeamId() != null && !match.getRedExternalTeamId().isBlank())
 				.toList();
+		log.info("Game identity backfill started: year={}, leagues={}, targetMatches={}", year, targetLeagues,
+				matches.size());
 
 		if (matches.isEmpty()) {
 			return new GameExternalIdentityBackfillResult(targetLeagues, 0, 0, 0, 0, 0, 0);
@@ -358,16 +370,19 @@ public class LeagueMatchService {
 		Map<String, List<LeagueMatchGame>> gameRowsByMatchId = leagueMatchGameRepository
 				.findAllByLeagueMatchIdsOrderByMatchAndGameOrder(matches.stream().map(LeagueMatch::getId).toList())
 				.stream()
-				.collect(Collectors.groupingBy(row -> row.getLeagueMatch().getId(), LinkedHashMap::new, Collectors.toList()));
+				.collect(Collectors.groupingBy(row -> row.getLeagueMatch().getId(), LinkedHashMap::new,
+						Collectors.toList()));
 
 		Map<String, Long> internalTeamIdByExternalId = teamExternalIdentityRepository.findBySourceAndExternalTeamIdIn(
 				LOLESPORTS_SOURCE,
 				matches.stream()
-						.flatMap(match -> java.util.stream.Stream.of(match.getBlueExternalTeamId(), match.getRedExternalTeamId()))
+						.flatMap(match -> java.util.stream.Stream.of(match.getBlueExternalTeamId(),
+								match.getRedExternalTeamId()))
 						.filter(value -> value != null && !value.isBlank())
 						.collect(Collectors.toSet()))
 				.stream()
-				.collect(Collectors.toMap(TeamExternalIdentity::getExternalTeamId, identity -> identity.getTeam().getId()));
+				.collect(Collectors.toMap(TeamExternalIdentity::getExternalTeamId,
+						identity -> identity.getTeam().getId()));
 
 		Map<String, GameExternalIdentity> existingByExternalGameId = gameExternalIdentityRepository
 				.findBySourceAndExternalGameIdIn(
@@ -388,7 +403,12 @@ public class LeagueMatchService {
 		int unresolved = 0;
 		int conflicts = 0;
 
+		int processed = 0;
 		for (LeagueMatch match : matches) {
+			processed++;
+			if (processed % 100 == 0) {
+				log.info("Game identity backfill progress: {}/{}", processed, matches.size());
+			}
 			Long blueTeamId = internalTeamIdByExternalId.get(match.getBlueExternalTeamId());
 			Long redTeamId = internalTeamIdByExternalId.get(match.getRedExternalTeamId());
 			List<LeagueMatchGame> gameRows = gameRowsByMatchId.getOrDefault(match.getId(), List.of());
@@ -411,7 +431,8 @@ public class LeagueMatchService {
 				}
 				targetGameRows++;
 
-				GameResolution resolution = resolveInternalGame(match, gameRow, blueTeamId, redTeamId, gamesByDateCache);
+				GameResolution resolution = resolveInternalGame(match, gameRow, blueTeamId, redTeamId,
+						gamesByDateCache);
 				if (resolution.isConflict()) {
 					conflicts++;
 					continue;
@@ -679,7 +700,8 @@ public class LeagueMatchService {
 		}
 
 		Map<String, List<String>> result = new HashMap<>();
-		List<LeagueMatchGame> rows = leagueMatchGameRepository.findAllByLeagueMatchIdsOrderByMatchAndGameOrder(matchIds);
+		List<LeagueMatchGame> rows = leagueMatchGameRepository
+				.findAllByLeagueMatchIdsOrderByMatchAndGameOrder(matchIds);
 		for (LeagueMatchGame row : rows) {
 			String matchId = row.getLeagueMatch().getId();
 			result.computeIfAbsent(matchId, ignored -> new ArrayList<>()).add(row.getGameId());
@@ -731,7 +753,8 @@ public class LeagueMatchService {
 				List<String> gameIds = worldsService.getGameIdsByMatchId(match.getId()).stream()
 						.filter(gameId -> gameId != null && !gameId.isBlank())
 						.toList();
-				List<String> currentGameIds = leagueMatchGameRepository.findByLeagueMatch_IdOrderByGameOrderAsc(match.getId())
+				List<String> currentGameIds = leagueMatchGameRepository
+						.findByLeagueMatch_IdOrderByGameOrderAsc(match.getId())
 						.stream()
 						.map(LeagueMatchGame::getGameId)
 						.toList();
@@ -776,7 +799,8 @@ public class LeagueMatchService {
 		Map<Long, Team> dirtyTeams = new LinkedHashMap<>();
 
 		for (MatchResultDto match : matches) {
-			DirectTeamMetadataSyncResult directResult = updateTeamMetadataByExternalIdentity(match, teamsByExternalId, dirtyTeams);
+			DirectTeamMetadataSyncResult directResult = updateTeamMetadataByExternalIdentity(match, teamsByExternalId,
+					dirtyTeams);
 			totalUpdated += directResult.updatedCount();
 			if (directResult.requiresFallback()) {
 				fallbackMatches.add(match);
@@ -927,7 +951,8 @@ public class LeagueMatchService {
 			return Map.of();
 		}
 
-		return teamExternalIdentityRepository.findBySourceAndExternalTeamIdIn(LOLESPORTS_SOURCE, externalTeamIds).stream()
+		return teamExternalIdentityRepository.findBySourceAndExternalTeamIdIn(LOLESPORTS_SOURCE, externalTeamIds)
+				.stream()
 				.collect(Collectors.toMap(TeamExternalIdentity::getExternalTeamId, TeamExternalIdentity::getTeam));
 	}
 
@@ -1116,7 +1141,8 @@ public class LeagueMatchService {
 		return teamRepository.save(team);
 	}
 
-	private boolean hasIdentityMetadataChange(TeamExternalIdentity identity, ExternalTeamCandidate candidate, String matchedBy) {
+	private boolean hasIdentityMetadataChange(TeamExternalIdentity identity, ExternalTeamCandidate candidate,
+			String matchedBy) {
 		if (!java.util.Objects.equals(identity.getExternalNameRaw(), candidate.externalName())) {
 			return true;
 		}
