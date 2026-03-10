@@ -90,22 +90,68 @@ public class LeagueMatchService {
 			return;
 		}
 
-		// 2. DB에 저장 (Upsert) - 트랜잭션은 repository.save()에서 개별적으로 처리됨
+		Map<String, LeagueMatch> existingMatchesById = leagueMatchRepository
+				.findAllById(matches.stream().map(MatchResultDto::getMatchId).toList())
+				.stream()
+				.collect(Collectors.toMap(LeagueMatch::getId, match -> match));
+
+		List<LeagueMatch> dirtyMatches = new ArrayList<>();
+		int inserted = 0;
+		int updated = 0;
+		int skipped = 0;
+
+		// 2. DB에 저장 (changed-only upsert)
 		for (MatchResultDto dto : matches) {
 			try {
-				LeagueMatch entity = convertToEntity(dto, leagueSlug);
-				leagueMatchRepository.save(entity);
+				LeagueMatch incoming = convertToEntity(dto, leagueSlug);
+				LeagueMatch existing = existingMatchesById.get(dto.getMatchId());
+
+				if (existing == null) {
+					dirtyMatches.add(incoming);
+					inserted++;
+					continue;
+				}
+
+				if (!hasRealtimeRelevantChange(existing, incoming)) {
+					skipped++;
+					continue;
+				}
+
+				existing.update(
+						incoming.getMatchTitle(),
+						incoming.getMatchDate(),
+						incoming.getState(),
+						incoming.getBlueTeamCode(),
+						incoming.getBlueTeamName(),
+						incoming.getBlueExternalTeamId(),
+						incoming.getBlueTeamImageUrl(),
+						incoming.getBlueScore(),
+						incoming.getRedTeamCode(),
+						incoming.getRedTeamName(),
+						incoming.getRedExternalTeamId(),
+						incoming.getRedTeamImageUrl(),
+						incoming.getRedScore(),
+						incoming.isHasVod(),
+						incoming.getMatchDetailsJson(),
+						incoming.getLastUpdated());
+				dirtyMatches.add(existing);
+				updated++;
 			} catch (Exception e) {
 				log.error("Failed to save match: {}", dto.getMatchId(), e);
 			}
 		}
 
-		if (includeTeamMetadataSync) {
-			int updated = updateTeamMetadataFromMatches(matches);
-			log.info("Team metadata sync completed during syncMatches. updated={}", updated);
+		if (!dirtyMatches.isEmpty()) {
+			leagueMatchRepository.saveAll(dirtyMatches);
 		}
 
-		log.info("Synced {} matches for league: {}", matches.size(), leagueSlug);
+		if (includeTeamMetadataSync) {
+			int metadataUpdated = updateTeamMetadataFromMatches(matches);
+			log.info("Team metadata sync completed during syncMatches. updated={}", metadataUpdated);
+		}
+
+		log.info("Synced {} matches for league: {} (inserted={}, updated={}, skipped={})",
+				matches.size(), leagueSlug, inserted, updated, skipped);
 	}
 
 	// 팀 메타데이터 동기화는 일 배치 경로에서만 실행
@@ -691,6 +737,34 @@ public class LeagueMatchService {
 						.code(entity.getRedTeamCode()).name(entity.getRedTeamName())
 						.imageUrl(entity.getRedTeamImageUrl()).wins(entity.getRedScore()).build())
 				.sets(sets).liveStreamUrl(liveStreamUrl).build();
+	}
+
+	private boolean hasRealtimeRelevantChange(LeagueMatch existing, LeagueMatch incoming) {
+		if (!java.util.Objects.equals(existing.getMatchDate(), incoming.getMatchDate())) {
+			return true;
+		}
+		if (!java.util.Objects.equals(existing.getMatchTitle(), incoming.getMatchTitle())) {
+			return true;
+		}
+		if (!java.util.Objects.equals(existing.getState(), incoming.getState())) {
+			return true;
+		}
+		if (!java.util.Objects.equals(existing.getBlueScore(), incoming.getBlueScore())) {
+			return true;
+		}
+		if (!java.util.Objects.equals(existing.getRedScore(), incoming.getRedScore())) {
+			return true;
+		}
+		if (existing.isHasVod() != incoming.isHasVod()) {
+			return true;
+		}
+		if (!java.util.Objects.equals(existing.getMatchDetailsJson(), incoming.getMatchDetailsJson())) {
+			return true;
+		}
+		if (!java.util.Objects.equals(existing.getBlueExternalTeamId(), incoming.getBlueExternalTeamId())) {
+			return true;
+		}
+		return !java.util.Objects.equals(existing.getRedExternalTeamId(), incoming.getRedExternalTeamId());
 	}
 
 	private Map<String, List<String>> loadGameIdsByMatchIds(List<LeagueMatch> matches) {
