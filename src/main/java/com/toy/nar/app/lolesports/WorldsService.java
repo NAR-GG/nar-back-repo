@@ -115,6 +115,8 @@ public class WorldsService {
 					JsonNode teamB = teams.get(1);
 					int winsA = teamA.path("result").path("gameWins").asInt(0);
 					int winsB = teamB.path("result").path("gameWins").asInt(0);
+					String externalTeamIdA = extractExternalTeamId(teamA);
+					String externalTeamIdB = extractExternalTeamId(teamB);
 
 					String imageA = teamA.path("image").asText("");
 					String imageB = teamB.path("image").asText("");
@@ -191,11 +193,13 @@ public class WorldsService {
 							.state(finalState) // 상태 설정
 							.score(winsA + " : " + winsB)
 							.blueTeam(MatchResultDto.TeamInfo.builder()
+									.externalTeamId(externalTeamIdA)
 									.code(teamA.path("code").asText())
 									.name(teamA.path("name").asText())
 									.imageUrl(imageA)
 									.wins(winsA).build())
 							.redTeam(MatchResultDto.TeamInfo.builder()
+									.externalTeamId(externalTeamIdB)
 									.code(teamB.path("code").asText())
 									.name(teamB.path("name").asText())
 									.imageUrl(imageB)
@@ -270,6 +274,8 @@ public class WorldsService {
 		JsonNode teamB = teams.get(1);
 		int winsA = teamA.path("result").path("gameWins").asInt(0);
 		int winsB = teamB.path("result").path("gameWins").asInt(0);
+		String externalTeamIdA = extractExternalTeamId(teamA);
+		String externalTeamIdB = extractExternalTeamId(teamB);
 
 		String imageA = teamA.path("image").asText("");
 		String imageB = teamB.path("image").asText("");
@@ -345,12 +351,14 @@ public class WorldsService {
 				.state(finalState)
 				.score(winsA + " : " + winsB)
 				.blueTeam(MatchResultDto.TeamInfo.builder()
+						.externalTeamId(externalTeamIdA)
 						.code(teamA.path("code").asText())
 						.name(teamA.path("name").asText())
 						.imageUrl(imageA)
 						.wins(winsA)
 						.build())
 					.redTeam(MatchResultDto.TeamInfo.builder()
+							.externalTeamId(externalTeamIdB)
 							.code(teamB.path("code").asText())
 							.name(teamB.path("name").asText())
 							.imageUrl(imageB)
@@ -377,6 +385,8 @@ public class WorldsService {
 		JsonNode teamB = teams.get(1);
 		int winsA = teamA.path("result").path("gameWins").asInt(0);
 		int winsB = teamB.path("result").path("gameWins").asInt(0);
+		String externalTeamIdA = extractExternalTeamId(teamA);
+		String externalTeamIdB = extractExternalTeamId(teamB);
 
 		List<MatchResultDto.SetVod> setVods = new ArrayList<>();
 		JsonNode games = match.path("games");
@@ -426,9 +436,9 @@ public class WorldsService {
 				.matchDate(matchDate)
 				.state(finalState)
 				.score(winsA + " : " + winsB)
-				.blueTeam(MatchResultDto.TeamInfo.builder().code(teamA.path("code").asText())
+				.blueTeam(MatchResultDto.TeamInfo.builder().externalTeamId(externalTeamIdA).code(teamA.path("code").asText())
 						.name(teamA.path("name").asText()).wins(winsA).build())
-					.redTeam(MatchResultDto.TeamInfo.builder().code(teamB.path("code").asText())
+					.redTeam(MatchResultDto.TeamInfo.builder().externalTeamId(externalTeamIdB).code(teamB.path("code").asText())
 							.name(teamB.path("name").asText()).wins(winsB).build())
 					.sets(setVods)
 					.liveStreamUrl(liveStreamUrl)
@@ -468,6 +478,14 @@ public class WorldsService {
 			}
 		}
 		return ids;
+	}
+
+	private String extractExternalTeamId(JsonNode team) {
+		String externalTeamId = team.path("id").asText("");
+		if (externalTeamId == null || externalTeamId.isBlank()) {
+			return null;
+		}
+		return externalTeamId;
 	}
 
 	public List<String> getGameIdsByMatchId(String matchId) {

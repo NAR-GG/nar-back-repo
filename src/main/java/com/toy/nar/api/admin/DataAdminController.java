@@ -1,6 +1,8 @@
 package com.toy.nar.api.admin;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.context.annotation.Profile;
@@ -20,6 +22,7 @@ import com.toy.nar.app.data.maintenance.DataReconciliationService;
 import com.toy.nar.app.data.maintenance.DataVerificationService;
 import com.toy.nar.app.data.maintenance.GameCleanupService;
 import com.toy.nar.app.data.source.GoogleDriveDataSyncService;
+import com.toy.nar.app.lolesports.LeagueConstants;
 
 import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
@@ -77,6 +80,57 @@ public class DataAdminController {
 				"league", league,
 				"elapsedMs", elapsed,
 				"message", league + " 최신 동기화가 완료되었습니다."));
+	}
+
+	@PostMapping("/sync/matches/team-identities")
+	public ResponseEntity<Map<String, Object>> backfillTeamExternalIdentities(
+			@org.springframework.web.bind.annotation.RequestParam(required = false) String leagues,
+			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean fullHistory,
+			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "1") int maxPages) {
+		List<String> targetLeagues = parseLeagues(leagues);
+		log.info("Team external identity backfill requested. leagues={}, fullHistory={}, maxPages={}",
+				targetLeagues, fullHistory, maxPages);
+
+		long start = System.currentTimeMillis();
+		com.toy.nar.app.lolesports.LeagueMatchService.TeamIdentityBackfillResult result = leagueMatchService
+				.backfillTeamExternalIdentities(targetLeagues, fullHistory, maxPages);
+		long elapsed = System.currentTimeMillis() - start;
+
+		Map<String, Object> response = new LinkedHashMap<>();
+		response.put("success", true);
+		response.put("leagues", result.leagues());
+		response.put("fetchedPages", result.fetchedPages());
+		response.put("fullHistory", fullHistory);
+		response.put("maxPages", maxPages);
+		response.put("discoveredExternalTeams", result.discoveredExternalTeams());
+		response.put("createdMappings", result.createdMappings());
+		response.put("updatedMappings", result.updatedMappings());
+		response.put("unresolvedMappings", result.unresolvedMappings());
+		response.put("conflicts", result.conflicts());
+		response.put("elapsedMs", elapsed);
+		response.put("message", "team external identity backfill completed");
+		return ResponseEntity.ok(response);
+	}
+
+	@PostMapping("/sync/matches/league-match-team-ids")
+	public ResponseEntity<Map<String, Object>> backfillLeagueMatchExternalTeamIds(
+			@org.springframework.web.bind.annotation.RequestParam(required = false) String leagues) {
+		List<String> targetLeagues = parseLeagues(leagues);
+		log.info("LeagueMatch external team id backfill requested. leagues={}", targetLeagues);
+
+		long start = System.currentTimeMillis();
+		com.toy.nar.app.lolesports.LeagueMatchService.LeagueMatchExternalTeamIdBackfillResult result = leagueMatchService
+				.backfillLeagueMatchExternalTeamIds(targetLeagues);
+		long elapsed = System.currentTimeMillis() - start;
+
+		return ResponseEntity.ok(Map.of(
+				"success", true,
+				"leagues", result.leagues(),
+				"targetMatches", result.targetMatches(),
+				"updatedMatches", result.updatedMatches(),
+				"unresolvedMatches", result.unresolvedMatches(),
+				"elapsedMs", elapsed,
+				"message", "league match external team id backfill completed"));
 	}
 
 	@PostMapping("/sync")
@@ -215,5 +269,18 @@ public class DataAdminController {
 		log.info("Starting player image migration...");
 		Map<String, Object> result = playerImageMigrationService.migratePlayerImages();
 		return ResponseEntity.ok(result);
+	}
+
+	private List<String> parseLeagues(String leagues) {
+		if (leagues == null || leagues.isBlank()) {
+			return LeagueConstants.TARGET_LEAGUES;
+		}
+		List<String> parsed = java.util.Arrays.stream(leagues.split(","))
+				.map(String::trim)
+				.filter(value -> !value.isBlank())
+				.map(String::toUpperCase)
+				.distinct()
+				.toList();
+		return parsed.isEmpty() ? LeagueConstants.TARGET_LEAGUES : parsed;
 	}
 }

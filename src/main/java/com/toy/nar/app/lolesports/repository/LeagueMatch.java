@@ -32,11 +32,13 @@ public class LeagueMatch {
 
 	private String blueTeamCode;
 	private String blueTeamName;
+	private String blueExternalTeamId;
 	private String blueTeamImageUrl;
 	private Integer blueScore;
 
 	private String redTeamCode;
 	private String redTeamName;
+	private String redExternalTeamId;
 	private String redTeamImageUrl;
 	private Integer redScore;
 
@@ -48,22 +50,29 @@ public class LeagueMatch {
 	private LocalDateTime lastUpdated;
 
 	public void update(String matchTitle, LocalDateTime matchDate, String state,
-					   String blueTeamCode, String blueTeamName, String blueTeamImageUrl, Integer blueScore,
-					   String redTeamCode, String redTeamName, String redTeamImageUrl, Integer redScore,
+					   String blueTeamCode, String blueTeamName, String blueExternalTeamId, String blueTeamImageUrl, Integer blueScore,
+					   String redTeamCode, String redTeamName, String redExternalTeamId, String redTeamImageUrl, Integer redScore,
 					   boolean hasVod, String matchDetailsJson, LocalDateTime lastUpdated) {
 		this.matchTitle = matchTitle;
 		this.matchDate = matchDate;
 		this.state = state;
 		this.blueTeamCode = blueTeamCode;
 		this.blueTeamName = blueTeamName;
+		this.blueExternalTeamId = blueExternalTeamId;
 		this.blueTeamImageUrl = blueTeamImageUrl;
 		this.blueScore = blueScore;
 		this.redTeamCode = redTeamCode;
 		this.redTeamName = redTeamName;
+		this.redExternalTeamId = redExternalTeamId;
 		this.redTeamImageUrl = redTeamImageUrl;
 		this.redScore = redScore;
 		this.hasVod = hasVod;
 		this.matchDetailsJson = matchDetailsJson;
 		this.lastUpdated = lastUpdated;
+	}
+
+	public void updateExternalTeamIds(String blueExternalTeamId, String redExternalTeamId) {
+		this.blueExternalTeamId = blueExternalTeamId;
+		this.redExternalTeamId = redExternalTeamId;
 	}
 }
