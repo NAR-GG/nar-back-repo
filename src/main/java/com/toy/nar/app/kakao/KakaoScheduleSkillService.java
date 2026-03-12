@@ -2,8 +2,10 @@ package com.toy.nar.app.kakao;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.DayOfWeek;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -42,21 +44,68 @@ public class KakaoScheduleSkillService {
 
 	public KakaoSkillResponse handleSchedule(KakaoSkillRequest request) {
 		String utterance = request.utteranceOrEmpty();
-		LocalDate targetDate = resolveTargetDate(utterance);
 		String league = resolveLeague(utterance);
-		MatchResponseWrapper response = leagueMatchService.getMatchesFromDb(league, targetDate.toString());
+		QueryPeriod period = resolveQueryPeriod(utterance);
+		MatchResponseWrapper response = period.isSingleDay()
+				? leagueMatchService.getMatchesFromDb(league, period.startDate().toString())
+				: leagueMatchService.getMatchesFromDb(league, period.startDate(), period.endDate());
+		List<MatchResultDto> sortedMatches = sortMatchesByDate(response.getMatches());
 
 		return KakaoSkillResponse.textCard(
-				buildCardTitle(targetDate, league),
-				buildCardDescription(targetDate, league, response.getMatches()),
+				buildCardTitle(period, league),
+				buildCardDescription(period, league, sortedMatches),
 				List.of(
 						new KakaoSkillResponse.Button("webLink", "NAR 열기", homeUrl()),
-						new KakaoSkillResponse.Button("message", "내일 " + league + " 일정", null, "내일 " + league + " 일정")),
+						new KakaoSkillResponse.Button("message", nextPromptLabel(period, league), null, nextPromptLabel(period, league))),
 				buildQuickReplies(league));
 	}
 
-	LocalDate resolveTargetDate(String utterance) {
+	QueryPeriod resolveQueryPeriod(String utterance) {
 		LocalDate today = LocalDate.now(KST);
+		if (utterance == null || utterance.isBlank()) {
+			return QueryPeriod.singleDay(today, labelForSingleDay(today));
+		}
+
+		String normalized = utterance.toLowerCase(Locale.ROOT);
+		boolean nextWeek = normalized.contains("다음주");
+		boolean thisWeek = normalized.contains("이번주");
+		boolean weekend = normalized.contains("주말");
+
+		if (weekend) {
+			LocalDate baseWeek = nextWeek ? today.plusWeeks(1) : today;
+			LocalDate saturday = baseWeek.getDayOfWeek().getValue() >= DayOfWeek.SATURDAY.getValue()
+					? baseWeek.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY))
+					: baseWeek.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
+			if (thisWeek || nextWeek) {
+				LocalDate weekStart = baseWeek.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+				saturday = weekStart.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
+			}
+			LocalDate sunday = saturday.plusDays(1);
+			return QueryPeriod.range(saturday, sunday, formatWeekendLabel(saturday, sunday));
+		}
+
+		if (nextWeek) {
+			LocalDate base = today.plusWeeks(1);
+			LocalDate start = base.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+			LocalDate end = start.plusDays(6);
+			return QueryPeriod.range(start, end, formatWeekLabel("다음주", start, end));
+		}
+
+		if (thisWeek) {
+			LocalDate start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+			LocalDate end = start.plusDays(6);
+			return QueryPeriod.range(start, end, formatWeekLabel("이번주", start, end));
+		}
+
+		LocalDate targetDate = resolveTargetDate(normalized, today);
+		return QueryPeriod.singleDay(targetDate, labelForSingleDay(targetDate));
+	}
+
+	LocalDate resolveTargetDate(String utterance) {
+		return resolveTargetDate(utterance, LocalDate.now(KST));
+	}
+
+	private LocalDate resolveTargetDate(String utterance, LocalDate today) {
 		if (utterance == null || utterance.isBlank()) {
 			return today;
 		}
@@ -104,20 +153,20 @@ public class KakaoScheduleSkillService {
 		return DEFAULT_LEAGUE;
 	}
 
-	String buildCardTitle(LocalDate targetDate, String league) {
-		return targetDate.format(KAKAO_DATE_FORMAT) + " " + league + " 일정";
+	String buildCardTitle(QueryPeriod period, String league) {
+		return period.label() + " " + league + " 일정";
 	}
 
-	String buildCardDescription(LocalDate targetDate, String league, List<MatchResultDto> matches) {
+	String buildCardDescription(QueryPeriod period, String league, List<MatchResultDto> matches) {
 		if (matches == null || matches.isEmpty()) {
-			return "%s %s 경기가 없습니다.".formatted(targetDate.format(KAKAO_DATE_FORMAT), league);
+			return "%s %s 경기가 없습니다.".formatted(period.label(), league);
 		}
 
 		String body = matches.stream()
 				.limit(MAX_MATCHES_IN_CARD)
-				.map(this::formatMatchLine)
+				.map(match -> formatMatchLine(match, !period.isSingleDay()))
 				.reduce((left, right) -> left + "\n" + right)
-				.orElse("%s %s 경기가 없습니다.".formatted(targetDate.format(KAKAO_DATE_FORMAT), league));
+				.orElse("%s %s 경기가 없습니다.".formatted(period.label(), league));
 
 		if (matches.size() > MAX_MATCHES_IN_CARD) {
 			return body + "\n외 " + (matches.size() - MAX_MATCHES_IN_CARD) + "경기";
@@ -125,8 +174,8 @@ public class KakaoScheduleSkillService {
 		return body;
 	}
 
-	private String formatMatchLine(MatchResultDto match) {
-		String time = formatMatchTime(match.getMatchDate());
+	private String formatMatchLine(MatchResultDto match, boolean includeDate) {
+		String time = formatMatchTime(match.getMatchDate(), includeDate);
 		String leftTeam = teamLabel(match.getBlueTeam());
 		String rightTeam = teamLabel(match.getRedTeam());
 
@@ -141,20 +190,23 @@ public class KakaoScheduleSkillService {
 		return List.of(
 				new KakaoSkillResponse.QuickReply("message", "오늘 " + league, "오늘 " + league + " 일정"),
 				new KakaoSkillResponse.QuickReply("message", "내일 " + league, "내일 " + league + " 일정"),
-				new KakaoSkillResponse.QuickReply("message", "오늘 LCK", "오늘 LCK 일정"),
-				new KakaoSkillResponse.QuickReply("message", "오늘 LPL", "오늘 LPL 일정"));
+				new KakaoSkillResponse.QuickReply("message", "이번주 " + league, "이번주 " + league + " 일정"),
+				new KakaoSkillResponse.QuickReply("message", "주말 " + league, "주말 " + league + " 일정"));
 	}
 
-	private String formatMatchTime(String matchDate) {
+	private String formatMatchTime(String matchDate, boolean includeDate) {
 		if (matchDate == null || matchDate.isBlank()) {
 			return "--:--";
 		}
 
 		LocalDateTime utcTime = LocalDateTime.parse(matchDate);
-		return utcTime.atZone(ZoneId.of("UTC"))
+		LocalDateTime kstTime = utcTime.atZone(ZoneId.of("UTC"))
 				.withZoneSameInstant(KST)
-				.toLocalTime()
-				.format(KST_TIME_FORMAT);
+				.toLocalDateTime();
+		if (includeDate) {
+			return kstTime.toLocalDate().format(KAKAO_DATE_FORMAT) + " " + kstTime.toLocalTime().format(KST_TIME_FORMAT);
+		}
+		return kstTime.toLocalTime().format(KST_TIME_FORMAT);
 	}
 
 	private String teamLabel(MatchResultDto.TeamInfo team) {
@@ -186,6 +238,45 @@ public class KakaoScheduleSkillService {
 		return apiServerUrl;
 	}
 
+	private List<MatchResultDto> sortMatchesByDate(List<MatchResultDto> matches) {
+		if (matches == null) {
+			return List.of();
+		}
+
+		return matches.stream()
+				.sorted((left, right) -> parseMatchDate(left.getMatchDate()).compareTo(parseMatchDate(right.getMatchDate())))
+				.toList();
+	}
+
+	private LocalDateTime parseMatchDate(String matchDate) {
+		if (matchDate == null || matchDate.isBlank()) {
+			return LocalDateTime.MAX;
+		}
+		return LocalDateTime.parse(matchDate);
+	}
+
+	private String formatWeekLabel(String prefix, LocalDate start, LocalDate end) {
+		return "%s (%s-%s)".formatted(prefix, start.format(KAKAO_DATE_FORMAT), end.format(KAKAO_DATE_FORMAT));
+	}
+
+	private String formatWeekendLabel(LocalDate start, LocalDate end) {
+		return "주말 (%s-%s)".formatted(start.format(KAKAO_DATE_FORMAT), end.format(KAKAO_DATE_FORMAT));
+	}
+
+	private String labelForSingleDay(LocalDate date) {
+		return date.format(KAKAO_DATE_FORMAT);
+	}
+
+	private String nextPromptLabel(QueryPeriod period, String league) {
+		if (period.isWeekend()) {
+			return "다음주 " + league + " 일정";
+		}
+		if (period.isWeekRange()) {
+			return "주말 " + league + " 일정";
+		}
+		return "내일 " + league + " 일정";
+	}
+
 	private static Map<String, String> createLeagueAliases() {
 		Map<String, String> aliases = new LinkedHashMap<>();
 		aliases.put("fst", "FIRST_STAND");
@@ -208,5 +299,37 @@ public class KakaoScheduleSkillService {
 		aliases.put("lcp", "LCP");
 		aliases.put("cblol", "CBLOL");
 		return aliases;
+	}
+
+	record QueryPeriod(
+			LocalDate startDate,
+			LocalDate endDate,
+			String label,
+			Kind kind
+	) {
+		static QueryPeriod singleDay(LocalDate date, String label) {
+			return new QueryPeriod(date, date, label, Kind.SINGLE_DAY);
+		}
+
+		static QueryPeriod range(LocalDate startDate, LocalDate endDate, String label) {
+			return new QueryPeriod(startDate, endDate, label, Kind.RANGE);
+		}
+
+		boolean isSingleDay() {
+			return kind == Kind.SINGLE_DAY;
+		}
+
+		boolean isWeekend() {
+			return label.startsWith("주말");
+		}
+
+		boolean isWeekRange() {
+			return !isSingleDay() && !isWeekend();
+		}
+	}
+
+	enum Kind {
+		SINGLE_DAY,
+		RANGE
 	}
 }
