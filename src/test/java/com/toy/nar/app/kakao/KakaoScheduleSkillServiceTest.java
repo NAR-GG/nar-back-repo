@@ -23,7 +23,7 @@ class KakaoScheduleSkillServiceTest {
 	private final KakaoScheduleSkillService service = new KakaoScheduleSkillService(leagueMatchService);
 
 	@Test
-	void todayUtteranceReturnsBasicCardForDetectedLeague() {
+	void todayUtteranceReturnsTextCardForDetectedLeague() {
 		when(leagueMatchService.getMatchesFromDb(eq("LCK"), eq(LocalDate.now(ZoneId.of("Asia/Seoul")).toString())))
 				.thenReturn(MatchResponseWrapper.builder()
 						.matches(List.of(unstartedMatch()))
@@ -34,9 +34,9 @@ class KakaoScheduleSkillServiceTest {
 
 		assertThat(response.version()).isEqualTo("2.0");
 		assertThat(response.template().outputs()).hasSize(1);
-		assertThat(response.template().outputs().get(0).basicCard()).isNotNull();
-		assertThat(response.template().outputs().get(0).basicCard().title()).contains("LCK 일정");
-		assertThat(response.template().outputs().get(0).basicCard().description())
+		assertThat(response.template().outputs().get(0).textCard()).isNotNull();
+		assertThat(response.template().outputs().get(0).textCard().title()).contains("LCK 일정");
+		assertThat(response.template().outputs().get(0).textCard().description())
 				.contains("17:00 T1 vs GEN");
 	}
 

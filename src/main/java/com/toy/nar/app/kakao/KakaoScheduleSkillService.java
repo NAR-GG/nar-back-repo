@@ -46,7 +46,7 @@ public class KakaoScheduleSkillService {
 		String league = resolveLeague(utterance);
 		MatchResponseWrapper response = leagueMatchService.getMatchesFromDb(league, targetDate.toString());
 
-		return KakaoSkillResponse.basicCard(
+		return KakaoSkillResponse.textCard(
 				buildCardTitle(targetDate, league),
 				buildCardDescription(targetDate, league, response.getMatches()),
 				List.of(
