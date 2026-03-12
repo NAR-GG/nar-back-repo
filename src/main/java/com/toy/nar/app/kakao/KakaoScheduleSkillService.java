@@ -50,13 +50,22 @@ public class KakaoScheduleSkillService {
 				? leagueMatchService.getMatchesFromDb(league, period.startDate().toString())
 				: leagueMatchService.getMatchesFromDb(league, period.startDate(), period.endDate());
 		List<MatchResultDto> sortedMatches = sortMatchesByDate(response.getMatches());
+		List<KakaoSkillResponse.Button> buttons = List.of(
+				new KakaoSkillResponse.Button("webLink", "NAR 열기", homeUrl()),
+				new KakaoSkillResponse.Button("message", nextPromptLabel(period, league), null, nextPromptLabel(period, league)));
 
-		return KakaoSkillResponse.textCard(
+		if (sortedMatches == null || sortedMatches.isEmpty()) {
+			return KakaoSkillResponse.textCard(
+					buildCardTitle(period, league),
+					buildCardDescription(period, league, sortedMatches),
+					buttons,
+					buildQuickReplies(league));
+		}
+
+		return KakaoSkillResponse.listCard(
 				buildCardTitle(period, league),
-				buildCardDescription(period, league, sortedMatches),
-				List.of(
-						new KakaoSkillResponse.Button("webLink", "NAR 열기", homeUrl()),
-						new KakaoSkillResponse.Button("message", nextPromptLabel(period, league), null, nextPromptLabel(period, league))),
+				buildListItems(sortedMatches, !period.isSingleDay()),
+				buttons,
 				buildQuickReplies(league));
 	}
 
@@ -194,6 +203,27 @@ public class KakaoScheduleSkillService {
 				new KakaoSkillResponse.QuickReply("message", "주말 " + league, "주말 " + league + " 일정"));
 	}
 
+	private List<KakaoSkillResponse.ListItem> buildListItems(List<MatchResultDto> matches, boolean includeDate) {
+		return matches.stream()
+				.limit(MAX_MATCHES_IN_CARD)
+				.map(match -> new KakaoSkillResponse.ListItem(
+						teamLabel(match.getBlueTeam()) + " vs " + teamLabel(match.getRedTeam()),
+						buildItemDescription(match, includeDate),
+						representativeImageUrl(match),
+						new KakaoSkillResponse.Link(homeUrl())))
+				.toList();
+	}
+
+	private String buildItemDescription(MatchResultDto match, boolean includeDate) {
+		String schedule = formatMatchTime(match.getMatchDate(), includeDate);
+		String state = switch (normalizeState(match.getState())) {
+			case "completed" -> scoreText(match);
+			case "inProgress" -> "진행 중 " + scoreText(match);
+			default -> "예정";
+		};
+		return schedule + " · " + state;
+	}
+
 	private String formatMatchTime(String matchDate, boolean includeDate) {
 		if (matchDate == null || matchDate.isBlank()) {
 			return "--:--";
@@ -217,6 +247,18 @@ public class KakaoScheduleSkillService {
 			return team.getCode();
 		}
 		return team.getName();
+	}
+
+	private String representativeImageUrl(MatchResultDto match) {
+		if (match.getBlueTeam() != null && match.getBlueTeam().getImageUrl() != null
+				&& !match.getBlueTeam().getImageUrl().isBlank()) {
+			return match.getBlueTeam().getImageUrl();
+		}
+		if (match.getRedTeam() != null && match.getRedTeam().getImageUrl() != null
+				&& !match.getRedTeam().getImageUrl().isBlank()) {
+			return match.getRedTeam().getImageUrl();
+		}
+		return null;
 	}
 
 	private String scoreText(MatchResultDto match) {

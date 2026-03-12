@@ -14,7 +14,7 @@ public record KakaoSkillResponse(
 		return new KakaoSkillResponse(
 				"2.0",
 				new Template(
-						List.of(new Output(new SimpleText(text), null, null)),
+						List.of(new Output(new SimpleText(text), null, null, null)),
 						quickReplies));
 	}
 
@@ -23,7 +23,7 @@ public record KakaoSkillResponse(
 		return new KakaoSkillResponse(
 				"2.0",
 				new Template(
-						List.of(new Output(null, null, new BasicCard(title, description, null, buttons))),
+						List.of(new Output(null, null, new BasicCard(title, description, null, buttons), null)),
 						quickReplies));
 	}
 
@@ -32,7 +32,16 @@ public record KakaoSkillResponse(
 		return new KakaoSkillResponse(
 				"2.0",
 				new Template(
-						List.of(new Output(null, new TextCard(title, description, buttons, null), null)),
+						List.of(new Output(null, new TextCard(title, description, buttons, null), null, null)),
+						quickReplies));
+	}
+
+	public static KakaoSkillResponse listCard(String title, List<ListItem> items, List<Button> buttons,
+			List<QuickReply> quickReplies) {
+		return new KakaoSkillResponse(
+				"2.0",
+				new Template(
+						List.of(new Output(null, null, null, new ListCard(new ListItem(title, null, null, null), items, buttons, null))),
 						quickReplies));
 	}
 
@@ -47,7 +56,8 @@ public record KakaoSkillResponse(
 	public record Output(
 			SimpleText simpleText,
 			TextCard textCard,
-			BasicCard basicCard
+			BasicCard basicCard,
+			ListCard listCard
 	) {
 	}
 
@@ -73,6 +83,35 @@ public record KakaoSkillResponse(
 			List<Button> buttons,
 			String buttonLayout
 	) {
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public record ListCard(
+			ListItem header,
+			List<ListItem> items,
+			List<Button> buttons,
+			String buttonLayout
+	) {
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public record ListItem(
+			String title,
+			String description,
+			String imageUrl,
+			Link link
+	) {
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public record Link(
+			String web,
+			String mobile,
+			String pc
+	) {
+		public Link(String web) {
+			this(web, web, web);
+		}
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_NULL)
