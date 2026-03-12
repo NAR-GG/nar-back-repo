@@ -23,7 +23,7 @@ class KakaoScheduleSkillServiceTest {
 	private final KakaoScheduleSkillService service = new KakaoScheduleSkillService(leagueMatchService);
 
 	@Test
-	void todayUtteranceReturnsTextCardForDetectedLeague() {
+	void todayUtteranceReturnsListCardForDetectedLeague() {
 		when(leagueMatchService.getMatchesFromDb(eq("LCK"), eq(LocalDate.now(ZoneId.of("Asia/Seoul")).toString())))
 				.thenReturn(MatchResponseWrapper.builder()
 						.matches(List.of(unstartedMatch()))
@@ -34,10 +34,11 @@ class KakaoScheduleSkillServiceTest {
 
 		assertThat(response.version()).isEqualTo("2.0");
 		assertThat(response.template().outputs()).hasSize(1);
-		assertThat(response.template().outputs().get(0).textCard()).isNotNull();
-		assertThat(response.template().outputs().get(0).textCard().title()).contains("LCK 일정");
-		assertThat(response.template().outputs().get(0).textCard().description())
-				.contains("17:00 T1 vs GEN");
+		assertThat(response.template().outputs().get(0).listCard()).isNotNull();
+		assertThat(response.template().outputs().get(0).listCard().header().title()).contains("LCK 일정");
+		assertThat(response.template().outputs().get(0).listCard().items().get(0).title()).isEqualTo("T1 vs GEN");
+		assertThat(response.template().outputs().get(0).listCard().items().get(0).imageUrl())
+				.isEqualTo("https://img.example.com/t1.png");
 	}
 
 	@Test
@@ -54,8 +55,22 @@ class KakaoScheduleSkillServiceTest {
 		KakaoSkillResponse response = service.handleSchedule(
 				new KakaoSkillRequest(new KakaoSkillRequest.UserRequest("이번주 LCK 일정")));
 
-		assertThat(response.template().outputs().get(0).textCard().title()).contains("이번주");
-		assertThat(response.template().outputs().get(0).textCard().description()).contains("17:00 T1 vs GEN");
+		assertThat(response.template().outputs().get(0).listCard().header().title()).contains("이번주");
+		assertThat(response.template().outputs().get(0).listCard().items().get(0).description()).contains("3월 1일 17:00");
+	}
+
+	@Test
+	void noMatchesReturnsTextCard() {
+		when(leagueMatchService.getMatchesFromDb(eq("LCK"), eq(LocalDate.now(ZoneId.of("Asia/Seoul")).toString())))
+				.thenReturn(MatchResponseWrapper.builder()
+						.matches(List.of())
+						.build());
+
+		KakaoSkillResponse response = service.handleSchedule(
+				new KakaoSkillRequest(new KakaoSkillRequest.UserRequest("오늘 LCK 일정")));
+
+		assertThat(response.template().outputs().get(0).textCard()).isNotNull();
+		assertThat(response.template().outputs().get(0).listCard()).isNull();
 	}
 
 	@Test
@@ -104,8 +119,8 @@ class KakaoScheduleSkillServiceTest {
 				.matchDate("2026-03-01T08:00")
 				.state("unstarted")
 				.score("0 : 0")
-				.blueTeam(MatchResultDto.TeamInfo.builder().code("T1").name("T1").wins(0).build())
-				.redTeam(MatchResultDto.TeamInfo.builder().code("GEN").name("Gen.G Esports").wins(0).build())
+				.blueTeam(MatchResultDto.TeamInfo.builder().code("T1").name("T1").imageUrl("https://img.example.com/t1.png").wins(0).build())
+				.redTeam(MatchResultDto.TeamInfo.builder().code("GEN").name("Gen.G Esports").imageUrl("https://img.example.com/gen.png").wins(0).build())
 				.build();
 	}
 }
