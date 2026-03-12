@@ -38,6 +38,7 @@ public class KakaoScheduleSkillService {
 	private static final Map<String, String> LEAGUE_ALIASES = createLeagueAliases();
 
 	private final LeagueMatchService leagueMatchService;
+	private final KakaoMatchThumbnailService kakaoMatchThumbnailService;
 
 	@Value("${app.server.url:https://api.nar.kr}")
 	private String apiServerUrl = "https://api.nar.kr";
@@ -209,7 +210,7 @@ public class KakaoScheduleSkillService {
 				.map(match -> new KakaoSkillResponse.ListItem(
 						teamLabel(match.getBlueTeam()) + " vs " + teamLabel(match.getRedTeam()),
 						buildItemDescription(match, includeDate),
-						representativeImageUrl(match),
+						kakaoMatchThumbnailService.matchThumbnailUrl(match.getMatchId()),
 						new KakaoSkillResponse.Link(homeUrl())))
 				.toList();
 	}
@@ -247,18 +248,6 @@ public class KakaoScheduleSkillService {
 			return team.getCode();
 		}
 		return team.getName();
-	}
-
-	private String representativeImageUrl(MatchResultDto match) {
-		if (match.getBlueTeam() != null && match.getBlueTeam().getImageUrl() != null
-				&& !match.getBlueTeam().getImageUrl().isBlank()) {
-			return match.getBlueTeam().getImageUrl();
-		}
-		if (match.getRedTeam() != null && match.getRedTeam().getImageUrl() != null
-				&& !match.getRedTeam().getImageUrl().isBlank()) {
-			return match.getRedTeam().getImageUrl();
-		}
-		return null;
 	}
 
 	private String scoreText(MatchResultDto match) {

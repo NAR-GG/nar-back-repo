@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -688,6 +689,11 @@ public class LeagueMatchService {
 
 		List<MatchResultDto> dtos = entities.stream().map(this::convertToDto).collect(Collectors.toList());
 		return MatchResponseWrapper.builder().matches(dtos).nextPageToken(null).build();
+	}
+
+	@Transactional(readOnly = true)
+	public Optional<MatchResultDto> getMatchFromDbById(String matchId) {
+		return leagueMatchRepository.findById(matchId).map(this::convertToDto);
 	}
 
 	@Transactional(readOnly = true)

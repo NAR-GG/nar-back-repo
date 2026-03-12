@@ -20,7 +20,8 @@ import com.toy.nar.app.lolesports.MatchResultDto;
 class KakaoScheduleSkillServiceTest {
 
 	private final LeagueMatchService leagueMatchService = Mockito.mock(LeagueMatchService.class);
-	private final KakaoScheduleSkillService service = new KakaoScheduleSkillService(leagueMatchService);
+	private final KakaoMatchThumbnailService kakaoMatchThumbnailService = Mockito.mock(KakaoMatchThumbnailService.class);
+	private final KakaoScheduleSkillService service = new KakaoScheduleSkillService(leagueMatchService, kakaoMatchThumbnailService);
 
 	@Test
 	void todayUtteranceReturnsListCardForDetectedLeague() {
@@ -28,6 +29,8 @@ class KakaoScheduleSkillServiceTest {
 				.thenReturn(MatchResponseWrapper.builder()
 						.matches(List.of(unstartedMatch()))
 						.build());
+		when(kakaoMatchThumbnailService.matchThumbnailUrl("match-1"))
+				.thenReturn("https://api.nar.kr/api/kakao/skills/images/matches/match-1.svg");
 
 		KakaoSkillResponse response = service.handleSchedule(
 				new KakaoSkillRequest(new KakaoSkillRequest.UserRequest("오늘 LCK 일정 알려줘")));
@@ -38,7 +41,7 @@ class KakaoScheduleSkillServiceTest {
 		assertThat(response.template().outputs().get(0).listCard().header().title()).contains("LCK 일정");
 		assertThat(response.template().outputs().get(0).listCard().items().get(0).title()).isEqualTo("T1 vs GEN");
 		assertThat(response.template().outputs().get(0).listCard().items().get(0).imageUrl())
-				.isEqualTo("https://img.example.com/t1.png");
+				.isEqualTo("https://api.nar.kr/api/kakao/skills/images/matches/match-1.svg");
 	}
 
 	@Test
@@ -51,6 +54,8 @@ class KakaoScheduleSkillServiceTest {
 				.thenReturn(MatchResponseWrapper.builder()
 						.matches(List.of(unstartedMatch()))
 						.build());
+		when(kakaoMatchThumbnailService.matchThumbnailUrl("match-1"))
+				.thenReturn("https://api.nar.kr/api/kakao/skills/images/matches/match-1.svg");
 
 		KakaoSkillResponse response = service.handleSchedule(
 				new KakaoSkillRequest(new KakaoSkillRequest.UserRequest("이번주 LCK 일정")));
