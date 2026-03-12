@@ -14,7 +14,7 @@ public record KakaoSkillResponse(
 		return new KakaoSkillResponse(
 				"2.0",
 				new Template(
-						List.of(new Output(new SimpleText(text), null)),
+						List.of(new Output(new SimpleText(text), null, null)),
 						quickReplies));
 	}
 
@@ -23,7 +23,16 @@ public record KakaoSkillResponse(
 		return new KakaoSkillResponse(
 				"2.0",
 				new Template(
-						List.of(new Output(null, new BasicCard(title, description, null, buttons))),
+						List.of(new Output(null, null, new BasicCard(title, description, null, buttons))),
+						quickReplies));
+	}
+
+	public static KakaoSkillResponse textCard(String title, String description, List<Button> buttons,
+			List<QuickReply> quickReplies) {
+		return new KakaoSkillResponse(
+				"2.0",
+				new Template(
+						List.of(new Output(null, new TextCard(title, description, buttons, null), null)),
 						quickReplies));
 	}
 
@@ -37,6 +46,7 @@ public record KakaoSkillResponse(
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record Output(
 			SimpleText simpleText,
+			TextCard textCard,
 			BasicCard basicCard
 	) {
 	}
@@ -53,6 +63,15 @@ public record KakaoSkillResponse(
 			String description,
 			String thumbnail,
 			List<Button> buttons
+	) {
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public record TextCard(
+			String title,
+			String description,
+			List<Button> buttons,
+			String buttonLayout
 	) {
 	}
 
