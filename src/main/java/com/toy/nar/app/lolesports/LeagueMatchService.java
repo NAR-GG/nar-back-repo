@@ -671,6 +671,25 @@ public class LeagueMatchService {
 		return MatchResponseWrapper.builder().matches(dtos).nextPageToken(null).build();
 	}
 
+	public MatchResponseWrapper getMatchesFromDb(String leagueSlug, LocalDate startDate, LocalDate endDate) {
+		if (startDate == null || endDate == null || endDate.isBefore(startDate)) {
+			return MatchResponseWrapper.builder().matches(List.of()).build();
+		}
+
+		boolean isAllLeagues = leagueSlug == null || leagueSlug.isEmpty() || "ALL".equalsIgnoreCase(leagueSlug);
+		LocalDateTime start = startDate.atStartOfDay();
+		LocalDateTime end = endDate.atTime(23, 59, 59);
+
+		log.info("Searching matches for league: {} between {} and {}", isAllLeagues ? "ALL" : leagueSlug, start, end);
+
+		List<LeagueMatch> entities = isAllLeagues
+				? leagueMatchRepository.findByDateRange(start, end)
+				: leagueMatchRepository.findByLeagueNameAndDateRange(leagueSlug, start, end);
+
+		List<MatchResultDto> dtos = entities.stream().map(this::convertToDto).collect(Collectors.toList());
+		return MatchResponseWrapper.builder().matches(dtos).nextPageToken(null).build();
+	}
+
 	@Transactional(readOnly = true)
 	public List<MatchResultDto> getRecentMatchesFromDb(String leagueSlug) {
 		List<LeagueMatch> entities = leagueMatchRepository.findTop3ByLeagueNameOrderByMatchDateDesc(leagueSlug);

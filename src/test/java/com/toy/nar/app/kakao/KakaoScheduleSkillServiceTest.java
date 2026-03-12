@@ -41,6 +41,24 @@ class KakaoScheduleSkillServiceTest {
 	}
 
 	@Test
+	void thisWeekUtteranceUsesWeekRange() {
+		LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+		LocalDate weekStart = today.minusDays(today.getDayOfWeek().getValue() - 1L);
+		LocalDate weekEnd = weekStart.plusDays(6);
+
+		when(leagueMatchService.getMatchesFromDb(eq("LCK"), eq(weekStart), eq(weekEnd)))
+				.thenReturn(MatchResponseWrapper.builder()
+						.matches(List.of(unstartedMatch()))
+						.build());
+
+		KakaoSkillResponse response = service.handleSchedule(
+				new KakaoSkillRequest(new KakaoSkillRequest.UserRequest("이번주 LCK 일정")));
+
+		assertThat(response.template().outputs().get(0).textCard().title()).contains("이번주");
+		assertThat(response.template().outputs().get(0).textCard().description()).contains("17:00 T1 vs GEN");
+	}
+
+	@Test
 	void lplIsDetectedFromUtterance() {
 		String league = service.resolveLeague("내일 LPL 일정");
 
@@ -52,6 +70,24 @@ class KakaoScheduleSkillServiceTest {
 		String league = service.resolveLeague("오늘 FST 일정");
 
 		assertThat(league).isEqualTo("FIRST_STAND");
+	}
+
+	@Test
+	void weekendRangeIsResolvedFromUtterance() {
+		KakaoScheduleSkillService.QueryPeriod period = service.resolveQueryPeriod("주말 LCK 일정");
+
+		assertThat(period.startDate().getDayOfWeek().getValue()).isEqualTo(6);
+		assertThat(period.endDate()).isEqualTo(period.startDate().plusDays(1));
+		assertThat(period.label()).contains("주말");
+	}
+
+	@Test
+	void nextWeekRangeIsResolvedFromUtterance() {
+		KakaoScheduleSkillService.QueryPeriod period = service.resolveQueryPeriod("다음주 LCK 일정");
+
+		assertThat(period.startDate().getDayOfWeek().getValue()).isEqualTo(1);
+		assertThat(period.endDate()).isEqualTo(period.startDate().plusDays(6));
+		assertThat(period.label()).contains("다음주");
 	}
 
 	@Test
