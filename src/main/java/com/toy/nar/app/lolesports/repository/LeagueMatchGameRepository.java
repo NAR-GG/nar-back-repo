@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface LeagueMatchGameRepository extends JpaRepository<LeagueMatchGame, Long> {
 
 	interface MappedGameRow {
+		String getMatchId();
+
 		Integer getGameOrder();
 
 		Long getInternalGameId();
@@ -42,7 +44,8 @@ public interface LeagueMatchGameRepository extends JpaRepository<LeagueMatchGame
 	List<LeagueMatchGame> findAllByLeagueMatchIdsOrderByMatchAndGameOrder(@Param("matchIds") List<String> matchIds);
 
 	@Query(value = """
-			SELECT lmg.game_order AS gameOrder,
+			SELECT lmg.match_id AS matchId,
+			       lmg.game_order AS gameOrder,
 			       gei.game_id AS internalGameId
 			FROM league_match_game lmg
 			LEFT JOIN game_external_identity gei
@@ -52,4 +55,17 @@ public interface LeagueMatchGameRepository extends JpaRepository<LeagueMatchGame
 			ORDER BY lmg.game_order ASC
 			""", nativeQuery = true)
 	List<MappedGameRow> findMappedGameRowsByMatchId(@Param("matchId") String matchId, @Param("source") String source);
+
+	@Query(value = """
+			SELECT lmg.match_id AS matchId,
+			       lmg.game_order AS gameOrder,
+			       gei.game_id AS internalGameId
+			FROM league_match_game lmg
+			LEFT JOIN game_external_identity gei
+			  ON gei.source = :source
+			 AND gei.external_game_id = lmg.game_id
+			WHERE lmg.match_id IN :matchIds
+			ORDER BY lmg.match_id ASC, lmg.game_order ASC
+			""", nativeQuery = true)
+	List<MappedGameRow> findMappedGameRowsByMatchIds(@Param("matchIds") List<String> matchIds, @Param("source") String source);
 }
