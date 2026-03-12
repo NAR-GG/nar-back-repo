@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toy.nar.app.lolesports.LeagueConstants;
 import com.toy.nar.app.lolesports.MatchResultDto;
+import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.schedule.dto.ScheduleItemDto;
 import com.toy.nar.app.schedule.dto.ScheduleResponseDto;
 import com.toy.nar.app.schedule.dto.MatchSummaryDto;
@@ -27,9 +28,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ScheduleFinder {
+	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
 
 	private final GameRepository gameRepository;
 	private final com.toy.nar.app.lolesports.repository.LeagueMatchRepository leagueMatchRepository;
+	private final LeagueMatchGameRepository leagueMatchGameRepository;
 	private final ObjectMapper objectMapper;
 
 	// ScheduleService에 있던 내부 record들을 데이터와 가장 가까운 이곳으로 이동
@@ -62,10 +65,11 @@ public class ScheduleFinder {
 		LocalDateTime searchEnd = endOfDayKst.plusHours(12);
 		List<com.toy.nar.domain.game.entity.Game> dailyGames = gameRepository
 				.findAllByActualGameStartTimeBetween(searchStart, searchEnd);
+		Map<String, MatchSyncStatus> syncStatusByMatchId = loadMatchSyncStatusByMatchId(leagueMatches);
 
 		// 3. Map matches
 		List<MatchSummaryDto> allMatches = leagueMatches.stream()
-				.map(match -> createMatchSummaryFromLeagueMatch(match, dailyGames))
+				.map(match -> createMatchSummaryFromLeagueMatch(match, dailyGames, syncStatusByMatchId.get(match.getId())))
 				.sorted(Comparator.comparing(MatchSummaryDto::scheduledTime))
 				.toList();
 
@@ -74,7 +78,8 @@ public class ScheduleFinder {
 
 	private MatchSummaryDto createMatchSummaryFromLeagueMatch(
 			com.toy.nar.app.lolesports.repository.LeagueMatch leagueMatch,
-			List<com.toy.nar.domain.game.entity.Game> dailyGames) {
+			List<com.toy.nar.domain.game.entity.Game> dailyGames,
+			MatchSyncStatus mappedStatus) {
 		String normalizedBlueTeamName = com.toy.nar.common.util.NameNormalizer
 				.normalizeTeamName(leagueMatch.getBlueTeamName());
 		String normalizedRedTeamName = com.toy.nar.common.util.NameNormalizer
@@ -101,7 +106,9 @@ public class ScheduleFinder {
 		// Matching logic: Same date (approx) + Same Teams (normalized)
 		// Since we don't have exact ID link, we use heuristic similar to
 		// ScheduleService
-		boolean isSynced = dailyGames.stream().anyMatch(game -> {
+		boolean isSynced = mappedStatus != null && mappedStatus.hasTrackedRows()
+				? mappedStatus.isSynced()
+				: dailyGames.stream().anyMatch(game -> {
 			// Check Team Names first (fastest)
 			// Need to normalize game team names too? Or assume they are correct in DB?
 			// Game team names in DB are usually already normalized or standard.
@@ -183,8 +190,66 @@ public class ScheduleFinder {
 				.orElse("");
 	}
 
+	private Map<String, MatchSyncStatus> loadMatchSyncStatusByMatchId(
+			List<com.toy.nar.app.lolesports.repository.LeagueMatch> leagueMatches) {
+		List<String> matchIds = leagueMatches.stream()
+				.map(com.toy.nar.app.lolesports.repository.LeagueMatch::getId)
+				.filter(Objects::nonNull)
+				.toList();
+		if (matchIds.isEmpty()) {
+			return Map.of();
+		}
+
+		Map<String, List<LeagueMatchGameRepository.MappedGameRow>> rowsByMatchId = leagueMatchGameRepository
+				.findMappedGameRowsByMatchIds(matchIds, LOLESPORTS_SOURCE).stream()
+				.collect(Collectors.groupingBy(
+						LeagueMatchGameRepository.MappedGameRow::getMatchId,
+						LinkedHashMap::new,
+						Collectors.toList()));
+
+		Map<String, MatchSyncStatus> statusByMatchId = new HashMap<>();
+		for (com.toy.nar.app.lolesports.repository.LeagueMatch match : leagueMatches) {
+			List<LeagueMatchGameRepository.MappedGameRow> trackedRows = rowsByMatchId
+					.getOrDefault(match.getId(), List.of()).stream()
+					.filter(row -> shouldTrackGameRow(match, row.getGameOrder()))
+					.toList();
+
+			if (trackedRows.isEmpty()) {
+				statusByMatchId.put(match.getId(), new MatchSyncStatus(false, false));
+				continue;
+			}
+
+			boolean anyMapped = trackedRows.stream().anyMatch(row -> row.getInternalGameId() != null);
+			boolean allMapped = trackedRows.stream().allMatch(row -> row.getInternalGameId() != null);
+			statusByMatchId.put(match.getId(), new MatchSyncStatus(true, anyMapped && allMapped));
+		}
+		return statusByMatchId;
+	}
+
+	private boolean shouldTrackGameRow(
+			com.toy.nar.app.lolesports.repository.LeagueMatch leagueMatch,
+			Integer gameOrder) {
+		if (gameOrder == null) {
+			return false;
+		}
+		if ("unstarted".equalsIgnoreCase(leagueMatch.getState())) {
+			return false;
+		}
+		if (!"completed".equalsIgnoreCase(leagueMatch.getState())) {
+			return true;
+		}
+		if (leagueMatch.getBlueScore() == null || leagueMatch.getRedScore() == null) {
+			return true;
+		}
+		int playedSets = leagueMatch.getBlueScore() + leagueMatch.getRedScore();
+		return playedSets <= 0 || gameOrder <= playedSets;
+	}
+
 	private String encodeMatchId(Set<Long> gameIds) {
 		String idString = gameIds.stream().sorted().map(String::valueOf).collect(Collectors.joining(","));
 		return Base64.getEncoder().encodeToString(idString.getBytes());
+	}
+
+	private record MatchSyncStatus(boolean hasTrackedRows, boolean isSynced) {
 	}
 }

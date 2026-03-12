@@ -1,6 +1,7 @@
 package com.toy.nar.app.lolesports;
 
 import com.toy.nar.app.monitor.SchedulerAlertService;
+import com.toy.nar.app.schedule.CacheEvictionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +18,7 @@ public class MatchSyncScheduler {
 
 	private final LeagueMatchService leagueMatchService;
 	private final SchedulerAlertService schedulerAlertService;
+	private final CacheEvictionService cacheEvictionService;
 	@Value("${lolesports.sync.active-leagues:}")
 	private String configuredActiveLeagues;
 
@@ -53,6 +55,7 @@ public class MatchSyncScheduler {
 				break;
 			}
 		}
+		cacheEvictionService.evictScheduleCaches();
 		log.info("Scheduled match sync completed.");
 	}
 

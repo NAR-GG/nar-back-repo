@@ -49,8 +49,7 @@ public class DebugController {
 	@GetMapping("/api/debug/caches/eviction")
 	public ResponseEntity<String> getEvictionDetails() {
 
-		cacheEvictionService.evictTodayScheduleCache();
-		cacheEvictionService.evictTodayMatchDetailsCache();
+		cacheEvictionService.evictScheduleCaches();
 
 		return ResponseEntity.ok("캐시가 성공적으로 제거되었습니다.");
 	}

@@ -45,8 +45,7 @@ public class GoogleDriveDataSyncService {
 
 			if (result.isSuccess()) {
 				combinationService.updateInfo();
-				cacheEvictionService.evictTodayScheduleCache();
-				cacheEvictionService.evictTodayMatchDetailsCache();
+				cacheEvictionService.evictScheduleCaches();
 				schedulerAlertService.recordSuccess("GOOGLE_DRIVE_SYNC", "Google Drive 데이터 동기화", elapsed);
 				schedulerAlertService.trackZeroNewGames(
 						"GOOGLE_DRIVE_SYNC",

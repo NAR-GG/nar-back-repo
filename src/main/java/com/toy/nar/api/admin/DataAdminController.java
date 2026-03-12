@@ -23,6 +23,7 @@ import com.toy.nar.app.data.maintenance.DataVerificationService;
 import com.toy.nar.app.data.maintenance.GameCleanupService;
 import com.toy.nar.app.data.source.GoogleDriveDataSyncService;
 import com.toy.nar.app.lolesports.LeagueConstants;
+import com.toy.nar.app.schedule.CacheEvictionService;
 
 import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +53,7 @@ public class DataAdminController {
 
 	// LoL Esports 서비스
 	private final com.toy.nar.app.lolesports.LeagueMatchService leagueMatchService;
+	private final CacheEvictionService cacheEvictionService;
 
 	// == 데이터 동기화 (Sync) ==
 	@PostMapping("/sync/matches/history")
@@ -59,6 +61,7 @@ public class DataAdminController {
 		log.info("Requesting full match history sync for ALL target leagues");
 
 		int syncedCount = leagueMatchService.syncAllLeaguesFullHistory();
+		cacheEvictionService.evictScheduleCaches();
 
 		return ResponseEntity.ok(Map.of(
 				"success", true,
@@ -75,6 +78,7 @@ public class DataAdminController {
 		long start = System.currentTimeMillis();
 		leagueMatchService.syncMatches(league, includeTeamMetadata);
 		long elapsed = System.currentTimeMillis() - start;
+		cacheEvictionService.evictScheduleCaches();
 
 		return ResponseEntity.ok(Map.of(
 				"success", true,
@@ -82,6 +86,18 @@ public class DataAdminController {
 				"includeTeamMetadata", includeTeamMetadata,
 				"elapsedMs", elapsed,
 				"message", league + " 최신 동기화가 완료되었습니다."));
+	}
+
+	@PostMapping("/cache/evict-schedule")
+	public ResponseEntity<Map<String, Object>> evictScheduleCaches() {
+		long start = System.currentTimeMillis();
+		cacheEvictionService.evictScheduleCaches();
+		long elapsed = System.currentTimeMillis() - start;
+
+		return ResponseEntity.ok(Map.of(
+				"success", true,
+				"elapsedMs", elapsed,
+				"message", "일정/매치 상세 캐시 무효화가 완료되었습니다."));
 	}
 
 	@PostMapping("/sync/matches/team-identities")
@@ -124,6 +140,7 @@ public class DataAdminController {
 		com.toy.nar.app.lolesports.LeagueMatchService.LeagueMatchExternalTeamIdBackfillResult result = leagueMatchService
 				.backfillLeagueMatchExternalTeamIds(targetLeagues);
 		long elapsed = System.currentTimeMillis() - start;
+		cacheEvictionService.evictScheduleCaches();
 
 		return ResponseEntity.ok(Map.of(
 				"success", true,
@@ -146,6 +163,7 @@ public class DataAdminController {
 		com.toy.nar.app.lolesports.LeagueMatchService.GameExternalIdentityBackfillResult result = leagueMatchService
 				.backfillGameExternalIdentities(targetLeagues, year);
 		long elapsed = System.currentTimeMillis() - start;
+		cacheEvictionService.evictScheduleCaches();
 
 		return ResponseEntity.ok(Map.of(
 				"success", true,
@@ -170,6 +188,7 @@ public class DataAdminController {
 		com.toy.nar.app.lolesports.LeagueMatchService.GameIdBackfillResult result = leagueMatchService
 				.backfillGameIdsForYear(year, limit);
 		long elapsed = System.currentTimeMillis() - start;
+		cacheEvictionService.evictScheduleCaches();
 
 		return ResponseEntity.ok(Map.of(
 				"success", true,
