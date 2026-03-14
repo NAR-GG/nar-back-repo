@@ -94,6 +94,7 @@ jobs:
               -e DISCORD_PLAYER_WEBHOOK_URL="${{ secrets.DISCORD_PLAYER_WEBHOOK_URL }}" \
               -e RIOT_API_KEY="${{ secrets.RIOT_API_KEY }}" \
               -e RIOT_API_ENABLED="true" \
+              -e RIOT_MONITOR_ENABLED="true" \
               ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
 
             # 2. Dozzle 배포
