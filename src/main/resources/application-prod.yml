@@ -28,6 +28,7 @@ notification:
   enabled: true
   discord:
     webhook-url: ${DISCORD_WEBHOOK_URL:}
+    player-webhook-url: ${DISCORD_PLAYER_WEBHOOK_URL:}
   scheduler:
     summary-enabled: ${SCHEDULER_SUMMARY_ENABLED:true}
     daily-summary-cron: ${SCHEDULER_DAILY_SUMMARY_CRON:0 0 9 * * *}
@@ -52,6 +53,20 @@ google:
 app:
   server:
     url: "https://api.nar.kr"
+
+riot:
+  api:
+    enabled: ${RIOT_API_ENABLED:false}
+    key: ${RIOT_API_KEY:}
+    regional-base-url: ${RIOT_API_REGIONAL_BASE_URL:https://asia.api.riotgames.com}
+    kr-base-url: ${RIOT_API_KR_BASE_URL:https://kr.api.riotgames.com}
+    request-timeout-ms: ${RIOT_API_REQUEST_TIMEOUT_MS:3000}
+  monitor:
+    enabled: ${RIOT_MONITOR_ENABLED:false}
+    poll-interval-ms: ${RIOT_MONITOR_POLL_INTERVAL_MS:60000}
+    initial-delay-ms: ${RIOT_MONITOR_INITIAL_DELAY_MS:15000}
+    target-league: ${RIOT_MONITOR_TARGET_LEAGUE:LCK}
+    platform: ${RIOT_MONITOR_PLATFORM:KR}
 
 lolesports:
   riot-api:

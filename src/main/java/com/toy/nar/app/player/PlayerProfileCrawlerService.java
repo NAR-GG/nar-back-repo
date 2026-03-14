@@ -24,6 +24,12 @@ public class PlayerProfileCrawlerService {
 
     private static final String BASE_URL = "https://www.trackingthepros.com/player/";
     private static final int TIMEOUT_MS = 10000;
+    private static final Pattern ACCOUNT_TIER_PATTERN = Pattern.compile(
+            "(Challenger|Ch|Grandmaster|GM|Master|Diamond|Emerald|Platinum|Gold|Silver|Bronze|Iron)"
+                    + "(\\s+(I|II|III|IV|V))?"
+                    + "(\\s+\\d{1,3}(,\\d{3})*\\s*LP)?"
+                    + ".*",
+            Pattern.CASE_INSENSITIVE);
 
     /**
      * TrackingThePros에서 선수 프로필 정보 크롤링
@@ -208,9 +214,7 @@ public class PlayerProfileCrawlerService {
             String tier = null;
 
             // 티어 키워드를 기준으로 분리 (띄어쓰기 있는 태그 지원: #N S 등)
-            Pattern tierPattern = Pattern.compile(
-                    "(Challenger|Ch|Grandmaster|GM|Master|Diamond|Emerald|Platinum|Gold|Silver|Bronze|Iron)\\s*\\d*,?\\d*\\s*LP.*");
-            Matcher tierMatcher = tierPattern.matcher(accountInfo);
+            Matcher tierMatcher = ACCOUNT_TIER_PATTERN.matcher(accountInfo);
 
             if (tierMatcher.find()) {
                 // 티어 키워드 위치를 기준으로 분리
@@ -224,6 +228,7 @@ public class PlayerProfileCrawlerService {
 
             if (riotId != null && !riotId.isEmpty()) {
                 accounts.add(PlayerProfileDto.GameAccountDto.builder()
+                        .region(matcher.group(1))
                         .riotId(riotId)
                         .tier(tier)
                         .build());

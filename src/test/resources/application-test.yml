@@ -3,3 +3,9 @@ logging:
     com.toy.nar: DEBUG
     org.springframework.test: INFO
     org.hibernate.SQL: DEBUG
+
+riot:
+  api:
+    enabled: false
+  monitor:
+    enabled: false
