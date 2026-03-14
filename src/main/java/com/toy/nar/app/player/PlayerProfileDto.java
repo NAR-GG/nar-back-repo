@@ -17,6 +17,7 @@ public class PlayerProfileDto {
     @Data
     @Builder
     public static class GameAccountDto {
+        private String region; // 서버 지역 (예: "KR")
         private String riotId; // Riot ID (예: "Peyz #KR11")
         private String tier; // 티어 (예: "Challenger 1,200LP")
     }

@@ -94,6 +94,20 @@ public class SchedulerAlertService {
 				String.format("신규 게임 0건이 %d회 연속 발생했습니다. (이번 처리 행 수: %d행)", streak, totalRowsProcessed));
 	}
 
+	public void recordWarning(String jobKey, String jobName, String detail) {
+		JobDailyStats stats = getStats(jobKey, jobName);
+		stats.recordWarning(detail);
+
+		String cooldownKey = jobKey + "|" + sanitize(detail);
+		if (!shouldSend(lastWarningAlertAt, cooldownKey, warningCooldownMinutes)) {
+			return;
+		}
+
+		notificationService.sendSchedulerWarningNotification(
+				jobName,
+				safeText(detail, "상세 정보 없음"));
+	}
+
 	@Scheduled(cron = "${notification.scheduler.daily-summary-cron:0 0 9 * * *}", zone = "${notification.scheduler.summary-zone:Asia/Seoul}")
 	public void sendDailySummary() {
 		if (!summaryEnabled) {

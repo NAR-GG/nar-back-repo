@@ -7,6 +7,10 @@ import com.toy.nar.app.participant.service.PlayerService;
 import com.toy.nar.app.player.PlayerProfileCrawlerService;
 import com.toy.nar.app.player.PlayerProfileDto;
 import com.toy.nar.app.player.PlayerProfileSyncResult;
+import com.toy.nar.app.riot.PlayerRiotAccountSyncService;
+import com.toy.nar.app.riot.PlayerSoloRankMonitorService;
+import com.toy.nar.app.riot.dto.PlayerRiotAccountSyncResult;
+import com.toy.nar.app.riot.dto.PlayerSoloRankMonitorResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +27,8 @@ public class PlayerController {
 	private final PlayerService playerService;
 	private final PlayerProfileCrawlerService playerProfileCrawlerService;
 	private final PlayerCardService playerCardService;
+	private final PlayerRiotAccountSyncService playerRiotAccountSyncService;
+	private final PlayerSoloRankMonitorService playerSoloRankMonitorService;
 
 	@Operation(summary = "선수 이미지 URL 수동 업데이트", description = "특정 선수의 이미지 URL을 수동으로 업데이트합니다.")
 	@PostMapping("/{playerId}/image")
@@ -59,6 +65,20 @@ public class PlayerController {
 	@PostMapping("/sync-profiles")
 	public ResponseEntity<PlayerProfileSyncResult> syncLckPlayerProfiles() {
 		PlayerProfileSyncResult result = playerService.syncLckPlayerProfiles();
+		return ResponseEntity.ok(result);
+	}
+
+	@Operation(summary = "LCK 선수 주 계정 Riot 식별자 동기화", description = "KR 주 계정의 riotId를 기준으로 puuid를 조회해 추적 테이블에 저장합니다.")
+	@PostMapping("/riot/sync-primary-accounts")
+	public ResponseEntity<PlayerRiotAccountSyncResult> syncPrimaryRiotAccounts() {
+		PlayerRiotAccountSyncResult result = playerRiotAccountSyncService.syncPrimaryAccounts();
+		return ResponseEntity.ok(result);
+	}
+
+	@Operation(summary = "선수 솔랭 감시 수동 실행", description = "KR 주 계정 추적 대상에 대해 최근 match-v5 기록을 확인하고 최근 솔랭 경기 알림을 전송합니다.")
+	@PostMapping("/riot/poll")
+	public ResponseEntity<PlayerSoloRankMonitorResult> pollTrackedPlayers() {
+		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
 		return ResponseEntity.ok(result);
 	}
 

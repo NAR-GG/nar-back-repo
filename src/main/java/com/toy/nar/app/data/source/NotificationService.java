@@ -12,6 +12,8 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @Service
@@ -24,6 +26,9 @@ public class NotificationService {
 
 	@Value("${notification.discord.webhook-url:}")
 	private String discordWebhookUrl;
+
+	@Value("${notification.discord.player-webhook-url:}")
+	private String playerDiscordWebhookUrl;
 
 	@Value("${notification.enabled:false}")
 	private boolean notificationEnabled;
@@ -134,22 +139,51 @@ public class NotificationService {
 		sendNotification("[일일 스케줄 요약]", message, "info");
 	}
 
+	public void sendPlayerRankedSoloNotification(
+			String playerName,
+			String riotId,
+			String gameName,
+			String tagLine,
+			String matchId) {
+		if (!notificationEnabled) return;
+
+		String opggPath = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
+		String message = String.format("상태: 최근 솔로 랭크 경기 감지\n감지 시각: `%s`\n\n" +
+				"```text\n" +
+				"선수명    : %s\n" +
+				"계정      : %s\n" +
+				"큐 타입   : Ranked Solo 5v5\n" +
+				"매치 ID   : %s\n" +
+				"```" +
+				"\n[OP.GG 바로가기](https://www.op.gg/summoners/kr/%s)",
+			LocalDateTime.now().format(ALERT_TIME_FORMATTER),
+			playerName,
+			riotId,
+			matchId == null ? "-" : matchId,
+			opggPath
+		);
+
+		sendNotification(playerDiscordWebhookUrl, "[선수 최근 솔랭 감지]", message, "info");
+	}
+
 	/**
 	 * 실제 알림 전송
 	 */
 	private void sendNotification(String title, String message, String color) {
-		try {
-			// Discord 알림
-			if (discordWebhookUrl != null && !discordWebhookUrl.isEmpty()) {
-				sendDiscordNotification(title, message, color);
-			}
+		sendNotification(discordWebhookUrl, title, message, color);
+	}
 
+	private void sendNotification(String webhookUrl, String title, String message, String color) {
+		try {
+			if (webhookUrl != null && !webhookUrl.isEmpty()) {
+				sendDiscordNotification(webhookUrl, title, message, color);
+			}
 		} catch (Exception e) {
 			log.error("Failed to send notification", e);
 		}
 	}
 
-	private void sendDiscordNotification(String title, String message, String color) {
+	private void sendDiscordNotification(String webhookUrl, String title, String message, String color) {
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.APPLICATION_JSON);
 
@@ -165,7 +199,7 @@ public class NotificationService {
 		);
 
 		HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
-		restTemplate.postForEntity(discordWebhookUrl, request, String.class);
+		restTemplate.postForEntity(webhookUrl, request, String.class);
 		log.info("Discord notification sent successfully");
 	}
 
