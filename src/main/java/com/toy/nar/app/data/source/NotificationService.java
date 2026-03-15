@@ -139,36 +139,40 @@ public class NotificationService {
 		sendNotification("[일일 스케줄 요약]", message, "info");
 	}
 
-	public void sendPlayerRankedSoloNotification(
+	public void sendPlayerGameNotification(
 			String playerName,
 			String riotId,
 			String gameName,
 			String tagLine,
 			String gameId,
+			String queueDisplayName,
 			String championName,
 			String championIconUrl) {
 		if (!notificationEnabled) return;
 
 		String opggLink = buildOpggLink(gameName, tagLine);
-		String message = String.format("상태: 솔로 랭크 게임 시작 감지\n감지 시각: `%s`\n\n" +
+		String normalizedQueueDisplayName = queueDisplayName == null || queueDisplayName.isBlank() ? "기타 게임" : queueDisplayName;
+		String message = String.format("상태: %s 시작 감지\n감지 시각: `%s`\n\n" +
 				"```text\n" +
 				"선수명    : %s\n" +
 				"계정      : %s\n" +
 				"챔피언    : %s\n" +
-				"큐 타입   : Ranked Solo 5v5\n" +
+				"큐 타입   : %s\n" +
 				"게임 ID   : %s\n" +
 				"```",
+			normalizedQueueDisplayName,
 			LocalDateTime.now().format(ALERT_TIME_FORMATTER),
 			playerName,
 			riotId,
 			championName == null || championName.isBlank() ? "-" : championName,
+			normalizedQueueDisplayName,
 			gameId == null ? "-" : gameId
 		);
 		if (!opggLink.isBlank()) {
 			message += "\n" + opggLink;
 		}
 
-		sendPlayerDiscordNotification("[선수 솔랭 시작 감지]", message, "info", championIconUrl);
+		sendPlayerDiscordNotification("[선수 게임 시작 감지]", message, "info", championIconUrl);
 	}
 
 	/**
