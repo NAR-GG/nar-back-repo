@@ -9,11 +9,14 @@ import com.toy.nar.app.player.PlayerProfileDto;
 import com.toy.nar.app.player.PlayerProfileSyncResult;
 import com.toy.nar.app.riot.PlayerRiotAccountSyncService;
 import com.toy.nar.app.riot.PlayerSoloRankMonitorService;
+import com.toy.nar.app.riot.dto.PlayerRiotAlertCheckRequest;
+import com.toy.nar.app.riot.dto.PlayerRiotAlertCheckResult;
 import com.toy.nar.app.riot.dto.PlayerRiotAccountSyncResult;
 import com.toy.nar.app.riot.dto.PlayerSoloRankMonitorResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -79,6 +82,14 @@ public class PlayerController {
 	@PostMapping("/riot/poll")
 	public ResponseEntity<PlayerSoloRankMonitorResult> pollTrackedPlayers() {
 		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
+		return ResponseEntity.ok(result);
+	}
+
+	@Operation(summary = "선수 솔랭 알림 수동 체크", description = "관리자용 API입니다. puuid로 spectator-v5 현재 게임을 조회하고, 솔랭이면 실제 디스코드 알림을 즉시 전송합니다.")
+	@PostMapping("/riot/manual-alert-check")
+	public ResponseEntity<PlayerRiotAlertCheckResult> checkAndSendRiotAlert(
+			@Valid @RequestBody PlayerRiotAlertCheckRequest request) {
+		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid(request.puuid());
 		return ResponseEntity.ok(result);
 	}
 

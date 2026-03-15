@@ -1,7 +1,9 @@
 package com.toy.nar.app.data.source;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -29,6 +31,8 @@ public class ChampionDataService {
 	private static final String VERSION_URL = "https://ddragon.leagueoflegends.com/api/versions.json";
 	private static final String BASE_URL = "https://ddragon.leagueoflegends.com/cdn/";
 
+	private volatile Map<Integer, String> championNameByRiotKey = Collections.emptyMap();
+
 	private String getLatestVersion() {
 		try {
 			String[] versions = webClient.get()
@@ -50,6 +54,19 @@ public class ChampionDataService {
 		String fallbackVersion = "15.13.1";
 		log.warn("⚠️ Using fallback version: {}", fallbackVersion);
 		return fallbackVersion;
+	}
+
+	@Transactional(readOnly = true)
+	public java.util.Optional<Champion> findChampionByRiotKey(Integer riotChampionId) {
+		if (riotChampionId == null) {
+			return java.util.Optional.empty();
+		}
+
+		String championNameEn = getChampionNameByRiotKey(riotChampionId);
+		if (championNameEn == null || championNameEn.isBlank()) {
+			return java.util.Optional.empty();
+		}
+		return championRepository.findByChampionNameEn(championNameEn);
 	}
 
 	@Transactional
@@ -133,5 +150,38 @@ public class ChampionDataService {
 		}
 
 		log.info("🎉 Champion data sync completed with version: {}", version);
+	}
+
+	private String getChampionNameByRiotKey(Integer riotChampionId) {
+		Map<Integer, String> cache = championNameByRiotKey;
+		if (cache.isEmpty()) {
+			cache = loadChampionNameByRiotKey();
+			championNameByRiotKey = cache;
+		}
+		return cache.get(riotChampionId);
+	}
+
+	private Map<Integer, String> loadChampionNameByRiotKey() {
+		try {
+			String version = getLatestVersion();
+			ChampionApiResponse response = webClient.get()
+					.uri(BASE_URL + version + "/data/en_US/champion.json")
+					.retrieve()
+					.bodyToMono(ChampionApiResponse.class)
+					.block();
+
+			if (response == null || response.data() == null || response.data().isEmpty()) {
+				return Collections.emptyMap();
+			}
+
+			return response.data().values().stream()
+					.filter(champion -> champion.key() != null && !champion.key().isBlank())
+					.collect(Collectors.toUnmodifiableMap(
+							champion -> Integer.parseInt(champion.key()),
+							champion -> NameNormalizer.normalizeChampionName(champion.id())));
+		} catch (Exception e) {
+			log.warn("Failed to build Riot champion key cache: {}", e.getMessage());
+			return Collections.emptyMap();
+		}
 	}
 }

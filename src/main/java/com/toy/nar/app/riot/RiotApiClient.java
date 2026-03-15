@@ -141,6 +141,10 @@ public class RiotApiClient {
 	}
 
 	private String encodePathSegment(String value) {
-		return org.springframework.web.util.UriUtils.encodePathSegment(value, java.nio.charset.StandardCharsets.UTF_8);
+		String normalized = value == null ? null : value.trim();
+		if (normalized == null || normalized.isBlank()) {
+			throw new RiotApiException("Riot API path parameter must not be blank", 400);
+		}
+		return org.springframework.web.util.UriUtils.encodePathSegment(normalized, java.nio.charset.StandardCharsets.UTF_8);
 	}
 }
