@@ -4,7 +4,9 @@ import com.toy.nar.app.data.source.NotificationService;
 import com.toy.nar.app.monitor.SchedulerAlertService;
 import com.toy.nar.app.riot.dto.PlayerSoloRankMonitorResult;
 import com.toy.nar.app.riot.dto.RiotCurrentGameResponse;
+import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
+import com.toy.nar.domain.participant.repository.ChampionRepository;
 import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +27,7 @@ public class PlayerSoloRankMonitorService {
 	private static final String JOB_NAME = "선수 솔랭 감시";
 
 	private final PlayerRiotAccountRepository playerRiotAccountRepository;
+	private final ChampionRepository championRepository;
 	private final RiotApiClient riotApiClient;
 	private final RiotMonitorProperties riotMonitorProperties;
 	private final NotificationService notificationService;
@@ -82,12 +85,15 @@ public class PlayerSoloRankMonitorService {
 				}
 
 				if (isRankedSolo(currentGame) && account.shouldSendAlertFor(currentGameId)) {
+					Champion champion = resolveTrackedChampion(currentGame, account.getPuuid());
 					notificationService.sendPlayerRankedSoloNotification(
 							account.getPlayer().getName(),
 							account.getRiotId(),
 							account.getGameName(),
 							account.getTagLine(),
-							currentGameId);
+							currentGameId,
+							champion == null ? null : champion.getChampionNameKr(),
+							champion == null ? null : champion.getImageUrl());
 					account.markAlertSent(currentGameId);
 					alertsSentCount++;
 				}
@@ -124,5 +130,18 @@ public class PlayerSoloRankMonitorService {
 
 	private boolean isRankedSolo(RiotCurrentGameResponse currentGame) {
 		return currentGame.gameQueueConfigId() != null && currentGame.gameQueueConfigId() == RANKED_SOLO_QUEUE_ID;
+	}
+
+	private Champion resolveTrackedChampion(RiotCurrentGameResponse currentGame, String trackedPuuid) {
+		if (trackedPuuid == null || trackedPuuid.isBlank() || currentGame.participants() == null) {
+			return null;
+		}
+		return currentGame.participants().stream()
+				.filter(participant -> trackedPuuid.equals(participant.puuid()))
+				.map(RiotCurrentGameResponse.RiotCurrentGameParticipantResponse::championId)
+				.filter(championId -> championId != null)
+				.findFirst()
+				.flatMap(championId -> championRepository.findById(championId.longValue()))
+				.orElse(null);
 	}
 }

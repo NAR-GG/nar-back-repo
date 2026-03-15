@@ -69,7 +69,7 @@ public class RiotApiClient {
 	public Optional<RiotCurrentGameResponse> getActiveGameByPuuid(String puuid) {
 		ensureConfigured();
 		URI uri = URI.create(riotApiProperties.getKrBaseUrl()
-				+ "/lol/spectator/v5/active-games/by-puuid/"
+				+ "/lol/spectator/v5/active-games/by-summoner/"
 				+ encodePathSegment(puuid));
 		return getOptional(uri, RiotCurrentGameResponse.class, "Failed to fetch current game by puuid");
 	}

@@ -4,9 +4,11 @@ import com.toy.nar.app.data.source.NotificationService;
 import com.toy.nar.app.monitor.SchedulerAlertService;
 import com.toy.nar.app.riot.dto.PlayerSoloRankMonitorResult;
 import com.toy.nar.app.riot.dto.RiotCurrentGameResponse;
+import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
+import com.toy.nar.domain.participant.repository.ChampionRepository;
 import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,9 @@ class PlayerSoloRankMonitorServiceTest {
 	private RiotApiClient riotApiClient;
 
 	@Mock
+	private ChampionRepository championRepository;
+
+	@Mock
 	private NotificationService notificationService;
 
 	@Mock
@@ -48,6 +53,7 @@ class PlayerSoloRankMonitorServiceTest {
 		riotMonitorProperties.setRecentMatchFetchCount(5);
 		playerSoloRankMonitorService = new PlayerSoloRankMonitorService(
 				playerRiotAccountRepository,
+				championRepository,
 				riotApiClient,
 				riotMonitorProperties,
 				notificationService,
@@ -74,8 +80,17 @@ class PlayerSoloRankMonitorServiceTest {
 				.build();
 
 		when(playerRiotAccountRepository.findTrackedAccountsByPlatform("KR")).thenReturn(List.of(account));
+		when(championRepository.findById(157L))
+				.thenReturn(Optional.of(Champion.builder()
+						.championNameKr("야스오")
+						.championNameEn("Yasuo")
+						.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png")
+						.build()));
 		when(riotApiClient.getActiveGameByPuuid("puuid"))
-				.thenReturn(Optional.of(new RiotCurrentGameResponse(222L, 420)));
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(
+						222L,
+						420,
+						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("puuid", 157, "Hide on bush#KR1")))));
 
 		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
 
@@ -88,7 +103,9 @@ class PlayerSoloRankMonitorServiceTest {
 				"Hide on bush#KR1",
 				"Hide on bush",
 				"KR1",
-				"222");
+				"222",
+				"야스오",
+				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png");
 	}
 
 	@Test
@@ -113,13 +130,18 @@ class PlayerSoloRankMonitorServiceTest {
 
 		when(playerRiotAccountRepository.findTrackedAccountsByPlatform("KR")).thenReturn(List.of(account));
 		when(riotApiClient.getActiveGameByPuuid("puuid"))
-				.thenReturn(Optional.of(new RiotCurrentGameResponse(222L, 420)));
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(
+						222L,
+						420,
+						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("puuid", 157, "Hide on bush#KR1")))));
 
 		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
 
 		assertThat(result.alertsSentCount()).isZero();
 		assertThat(result.unchangedCount()).isEqualTo(1);
 		verify(notificationService, never()).sendPlayerRankedSoloNotification(
+				anyString(),
+				anyString(),
 				anyString(),
 				anyString(),
 				anyString(),
@@ -147,7 +169,10 @@ class PlayerSoloRankMonitorServiceTest {
 
 		when(playerRiotAccountRepository.findTrackedAccountsByPlatform("KR")).thenReturn(List.of(account));
 		when(riotApiClient.getActiveGameByPuuid("puuid"))
-				.thenReturn(Optional.of(new RiotCurrentGameResponse(333L, 420)));
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(
+						333L,
+						420,
+						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("puuid", 238, "Hide on bush#KR1")))));
 
 		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
 
@@ -155,6 +180,8 @@ class PlayerSoloRankMonitorServiceTest {
 		assertThat(result.rankedSoloCount()).isEqualTo(1);
 		assertThat(account.getLastCheckedMatchId()).isEqualTo("333");
 		verify(notificationService, never()).sendPlayerRankedSoloNotification(
+				anyString(),
+				anyString(),
 				anyString(),
 				anyString(),
 				anyString(),
