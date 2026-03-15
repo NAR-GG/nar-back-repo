@@ -19,8 +19,11 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,6 +72,20 @@ class PlayerRiotAccountSyncServiceTest {
 		assertThat(result.syncedCount()).isEqualTo(1);
 		assertThat(captor.getValue().getSummonerId()).isEmpty();
 		assertThat(captor.getValue().getRiotId()).isEqualTo("Peyz#KR11");
+	}
+
+	@Test
+	void failsFastWhenRiotApiIsNotConfigured() {
+		doThrow(new RiotApiException(
+				"Riot API is not configured. Set RIOT_API_ENABLED=true and provide RIOT_API_KEY.",
+				500))
+				.when(riotApiClient).assertConfigured();
+
+		assertThatThrownBy(() -> syncService.syncPrimaryAccounts())
+				.isInstanceOf(RiotApiException.class)
+				.hasMessageContaining("RIOT_API_ENABLED=true")
+				.hasMessageContaining("RIOT_API_KEY");
+		verify(playerRepository, never()).findPlayersByLeagueName(any());
 	}
 
 	private static final class NoOpTransactionManager implements PlatformTransactionManager {

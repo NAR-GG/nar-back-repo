@@ -75,7 +75,7 @@ public class PlayerController {
 		return ResponseEntity.ok(result);
 	}
 
-	@Operation(summary = "선수 솔랭 감시 수동 실행", description = "KR 주 계정 추적 대상에 대해 최근 match-v5 기록을 확인하고 최근 솔랭 경기 알림을 전송합니다.")
+	@Operation(summary = "선수 솔랭 감시 수동 실행", description = "KR 주 계정 추적 대상에 대해 spectator-v5 현재 게임 상태를 확인하고 솔랭 시작 알림을 전송합니다.")
 	@PostMapping("/riot/poll")
 	public ResponseEntity<PlayerSoloRankMonitorResult> pollTrackedPlayers() {
 		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
