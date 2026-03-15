@@ -144,26 +144,26 @@ public class NotificationService {
 			String riotId,
 			String gameName,
 			String tagLine,
-			String matchId) {
+			String gameId) {
 		if (!notificationEnabled) return;
 
 		String opggPath = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
-		String message = String.format("상태: 최근 솔로 랭크 경기 감지\n감지 시각: `%s`\n\n" +
+		String message = String.format("상태: 솔로 랭크 게임 시작 감지\n감지 시각: `%s`\n\n" +
 				"```text\n" +
 				"선수명    : %s\n" +
 				"계정      : %s\n" +
 				"큐 타입   : Ranked Solo 5v5\n" +
-				"매치 ID   : %s\n" +
+				"게임 ID   : %s\n" +
 				"```" +
 				"\n[OP.GG 바로가기](https://www.op.gg/summoners/kr/%s)",
 			LocalDateTime.now().format(ALERT_TIME_FORMATTER),
 			playerName,
 			riotId,
-			matchId == null ? "-" : matchId,
+			gameId == null ? "-" : gameId,
 			opggPath
 		);
 
-		sendNotification(playerDiscordWebhookUrl, "[선수 최근 솔랭 감지]", message, "info");
+		sendNotification(playerDiscordWebhookUrl, "[선수 솔랭 시작 감지]", message, "info");
 	}
 
 	/**

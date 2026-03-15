@@ -21,6 +21,6 @@ public class PlayerSoloRankMonitorScheduler {
 			return;
 		}
 		playerSoloRankMonitorService.pollTrackedAccounts();
-		log.debug("Completed scheduled recent ranked solo monitor poll");
+		log.debug("Completed scheduled live ranked solo monitor poll");
 	}
 }

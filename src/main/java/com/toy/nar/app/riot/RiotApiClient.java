@@ -25,6 +25,10 @@ public class RiotApiClient {
 	private final WebClient webClient;
 	private final RiotApiProperties riotApiProperties;
 
+	public void assertConfigured() {
+		ensureConfigured();
+	}
+
 	public RiotAccountResolveResponse resolveAccountByRiotId(String gameName, String tagLine) {
 		ensureConfigured();
 		URI uri = URI.create(riotApiProperties.getRegionalBaseUrl()
@@ -62,35 +66,20 @@ public class RiotApiClient {
 		return getRequired(uri, RiotMatchResponse.class, "Riot match fetch failed");
 	}
 
+	public Optional<RiotCurrentGameResponse> getActiveGameByPuuid(String puuid) {
+		ensureConfigured();
+		URI uri = URI.create(riotApiProperties.getKrBaseUrl()
+				+ "/lol/spectator/v5/active-games/by-puuid/"
+				+ encodePathSegment(puuid));
+		return getOptional(uri, RiotCurrentGameResponse.class, "Failed to fetch current game by puuid");
+	}
+
 	public Optional<RiotCurrentGameResponse> getActiveGameBySummonerId(String summonerId) {
 		ensureConfigured();
 		URI uri = URI.create(riotApiProperties.getKrBaseUrl()
 				+ "/lol/spectator/v4/active-games/by-summoner/"
 				+ encodePathSegment(summonerId));
-
-		try {
-			Optional<RiotCurrentGameResponse> response = webClient.get()
-					.uri(uri)
-					.header(HttpHeaders.ACCEPT, "application/json")
-					.header("X-Riot-Token", riotApiProperties.getKey())
-					.exchangeToMono(clientResponse -> {
-						HttpStatusCode statusCode = clientResponse.statusCode();
-						if (statusCode.is2xxSuccessful()) {
-							return clientResponse.bodyToMono(RiotCurrentGameResponse.class)
-									.map(Optional::<RiotCurrentGameResponse>of);
-						}
-						if (statusCode.value() == 404) {
-							return Mono.just(Optional.<RiotCurrentGameResponse>empty());
-						}
-						return clientResponse.createException().flatMap(Mono::error);
-					})
-					.block(Duration.ofMillis(riotApiProperties.getRequestTimeoutMs()));
-			return response == null ? Optional.empty() : response;
-		} catch (WebClientResponseException e) {
-			throw new RiotApiException("Failed to fetch current game: " + e.getResponseBodyAsString(), e.getStatusCode().value(), e);
-		} catch (Exception e) {
-			throw new RiotApiException("Failed to fetch current game", 500, e);
-		}
+		return getOptional(uri, RiotCurrentGameResponse.class, "Failed to fetch current game by summonerId");
 	}
 
 	private <T> T getRequired(URI uri, Class<T> responseType, String errorMessage) {
@@ -115,9 +104,39 @@ public class RiotApiClient {
 		}
 	}
 
+	private <T> Optional<T> getOptional(URI uri, Class<T> responseType, String errorMessage) {
+		try {
+			Optional<T> response = webClient.get()
+					.uri(uri)
+					.header(HttpHeaders.ACCEPT, "application/json")
+					.header("X-Riot-Token", riotApiProperties.getKey())
+					.exchangeToMono(clientResponse -> {
+						HttpStatusCode statusCode = clientResponse.statusCode();
+						if (statusCode.is2xxSuccessful()) {
+							return clientResponse.bodyToMono(responseType)
+									.map(Optional::<T>of);
+						}
+						if (statusCode.value() == 404) {
+							return Mono.just(Optional.<T>empty());
+						}
+						return clientResponse.createException().flatMap(Mono::error);
+					})
+					.block(Duration.ofMillis(riotApiProperties.getRequestTimeoutMs()));
+			return response == null ? Optional.empty() : response;
+		} catch (WebClientResponseException e) {
+			throw new RiotApiException(errorMessage + ": " + e.getResponseBodyAsString(), e.getStatusCode().value(), e);
+		} catch (RiotApiException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new RiotApiException(errorMessage, 500, e);
+		}
+	}
+
 	private void ensureConfigured() {
 		if (!riotApiProperties.isEnabled() || riotApiProperties.getKey() == null || riotApiProperties.getKey().isBlank()) {
-			throw new RiotApiException("Riot API is not configured", 500);
+			throw new RiotApiException(
+					"Riot API is not configured. Set RIOT_API_ENABLED=true and provide RIOT_API_KEY.",
+					500);
 		}
 	}
 

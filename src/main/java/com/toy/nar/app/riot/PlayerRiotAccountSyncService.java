@@ -37,6 +37,8 @@ public class PlayerRiotAccountSyncService {
 	private final PlatformTransactionManager transactionManager;
 
 	public PlayerRiotAccountSyncResult syncPrimaryAccounts() {
+		riotApiClient.assertConfigured();
+
 		List<Player> players = playerRepository.findPlayersByLeagueName(riotMonitorProperties.getTargetLeague());
 		List<String> skippedPlayers = new ArrayList<>();
 		List<String> failedPlayers = new ArrayList<>();
