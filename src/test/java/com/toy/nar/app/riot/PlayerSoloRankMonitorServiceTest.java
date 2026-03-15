@@ -99,12 +99,13 @@ class PlayerSoloRankMonitorServiceTest {
 		assertThat(result.rankedSoloCount()).isEqualTo(1);
 		assertThat(account.getLastAlertedMatchId()).isEqualTo("222");
 		assertThat(account.getLastCheckedMatchId()).isEqualTo("222");
-		verify(notificationService).sendPlayerRankedSoloNotification(
+		verify(notificationService).sendPlayerGameNotification(
 				"Faker",
 				"Hide on bush#KR1",
 				"Hide on bush",
 				"KR1",
 				"222",
+				"솔로 랭크",
 				"야스오",
 				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png");
 	}
@@ -140,7 +141,8 @@ class PlayerSoloRankMonitorServiceTest {
 
 		assertThat(result.alertsSentCount()).isZero();
 		assertThat(result.unchangedCount()).isEqualTo(1);
-		verify(notificationService, never()).sendPlayerRankedSoloNotification(
+		verify(notificationService, never()).sendPlayerGameNotification(
+				anyString(),
 				anyString(),
 				anyString(),
 				anyString(),
@@ -180,7 +182,8 @@ class PlayerSoloRankMonitorServiceTest {
 		assertThat(result.alertsSentCount()).isZero();
 		assertThat(result.rankedSoloCount()).isEqualTo(1);
 		assertThat(account.getLastCheckedMatchId()).isEqualTo("333");
-		verify(notificationService, never()).sendPlayerRankedSoloNotification(
+		verify(notificationService, never()).sendPlayerGameNotification(
+				anyString(),
 				anyString(),
 				anyString(),
 				anyString(),
@@ -211,13 +214,94 @@ class PlayerSoloRankMonitorServiceTest {
 		assertThat(result.notificationSent()).isTrue();
 		assertThat(result.riotId()).isEqualTo("ManualUser#KR1");
 		assertThat(result.championName()).isEqualTo("요네");
-		verify(notificationService).sendPlayerRankedSoloNotification(
+		assertThat(result.queueName()).isEqualTo("RANKED_SOLO");
+		verify(notificationService).sendPlayerGameNotification(
 				"ManualUser",
 				"ManualUser#KR1",
 				"ManualUser",
 				"KR1",
 				"999",
+				"솔로 랭크",
 				"요네",
 				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yone.png");
+	}
+
+	@Test
+	void manualAlertCheckSendsDiscordNotificationForArenaGame() {
+		when(championDataService.findChampionByRiotKey(202))
+				.thenReturn(Optional.of(Champion.builder()
+					.championNameKr("진")
+					.championNameEn("Jhin")
+					.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Jhin.png")
+					.build()));
+		when(riotApiClient.getActiveGameByPuuid("arena-puuid"))
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(
+						1234L,
+						1700,
+						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("arena-puuid", 202, "ArenaUser#KR1")))));
+
+		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid("arena-puuid");
+
+		assertThat(result.currentGameFound()).isTrue();
+		assertThat(result.rankedSolo()).isFalse();
+		assertThat(result.notificationSent()).isTrue();
+		assertThat(result.queueName()).isEqualTo("ARENA");
+		assertThat(result.status()).isEqualTo("ALERT_SENT");
+		verify(notificationService).sendPlayerGameNotification(
+				"ArenaUser",
+				"ArenaUser#KR1",
+				"ArenaUser",
+				"KR1",
+				"1234",
+				"아레나",
+				"진",
+				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Jhin.png");
+	}
+
+	@Test
+	void sendsAlertForNewOtherQueueGame() {
+		Player player = Player.builder()
+				.name("Faker")
+				.imageUrl(null)
+				.build();
+		PlayerRiotAccount account = PlayerRiotAccount.builder()
+				.player(player)
+				.riotId("Hide on bush#KR1")
+				.gameName("Hide on bush")
+				.tagLine("KR1")
+				.platform("KR")
+				.puuid("puuid")
+				.primaryAccount(true)
+				.enabled(true)
+				.liveStatus(PlayerRiotAccountLiveStatus.OFFLINE)
+				.lastCheckedMatchId("KR_111")
+				.build();
+
+		when(playerRiotAccountRepository.findTrackedAccountsByPlatform("KR")).thenReturn(List.of(account));
+		when(championDataService.findChampionByRiotKey(202))
+				.thenReturn(Optional.of(Champion.builder()
+					.championNameKr("진")
+					.championNameEn("Jhin")
+					.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Jhin.png")
+					.build()));
+		when(riotApiClient.getActiveGameByPuuid("puuid"))
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(
+						444L,
+						1700,
+						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("puuid", 202, "Hide on bush#KR1")))));
+
+		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
+
+		assertThat(result.alertsSentCount()).isEqualTo(1);
+		assertThat(result.otherQueueCount()).isEqualTo(1);
+		verify(notificationService).sendPlayerGameNotification(
+				"Faker",
+				"Hide on bush#KR1",
+				"Hide on bush",
+				"KR1",
+				"444",
+				"아레나",
+				"진",
+				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Jhin.png");
 	}
 }

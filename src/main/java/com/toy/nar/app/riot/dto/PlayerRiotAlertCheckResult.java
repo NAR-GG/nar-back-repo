@@ -7,6 +7,7 @@ public record PlayerRiotAlertCheckResult(
 		boolean notificationSent,
 		String gameId,
 		Integer queueId,
+		String queueName,
 		String riotId,
 		String championName,
 		String championIconUrl,

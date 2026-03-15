@@ -24,6 +24,13 @@ import java.util.Optional;
 public class PlayerSoloRankMonitorService {
 
 	private static final int RANKED_SOLO_QUEUE_ID = 420;
+	private static final int RANKED_FLEX_QUEUE_ID = 440;
+	private static final int ARAM_QUEUE_ID = 450;
+	private static final int NORMAL_DRAFT_QUEUE_ID = 400;
+	private static final int NORMAL_BLIND_QUEUE_ID = 430;
+	private static final int QUICKPLAY_QUEUE_ID = 490;
+	private static final int ARENA_QUEUE_ID = 1700;
+	private static final int ARENA_RANKED_QUEUE_ID = 1710;
 	private static final String JOB_KEY = "PLAYER_RANKED_SOLO_MONITOR";
 	private static final String JOB_NAME = "선수 솔랭 감시";
 
@@ -85,14 +92,16 @@ public class PlayerSoloRankMonitorService {
 					continue;
 				}
 
-				if (isRankedSolo(currentGame) && account.shouldSendAlertFor(currentGameId)) {
+				if (account.shouldSendAlertFor(currentGameId)) {
 					Champion champion = resolveTrackedChampion(currentGame, account.getPuuid());
-					notificationService.sendPlayerRankedSoloNotification(
+					String queueDisplayName = resolveQueueDisplayName(currentGame.gameQueueConfigId());
+					notificationService.sendPlayerGameNotification(
 							account.getPlayer().getName(),
 							account.getRiotId(),
 							account.getGameName(),
 							account.getTagLine(),
 							currentGameId,
+							queueDisplayName,
 							champion == null ? null : champion.getChampionNameKr(),
 							champion == null ? null : champion.getImageUrl());
 					account.markAlertSent(currentGameId);
@@ -142,6 +151,7 @@ public class PlayerSoloRankMonitorService {
 					false,
 					null,
 					null,
+					"OFFLINE",
 					null,
 					null,
 					null,
@@ -158,38 +168,28 @@ public class PlayerSoloRankMonitorService {
 		String championName = champion == null ? null : champion.getChampionNameKr();
 		String championIconUrl = champion == null ? null : champion.getImageUrl();
 		String gameId = currentGame.gameId() == null ? null : String.valueOf(currentGame.gameId());
-
-		if (!isRankedSolo(currentGame)) {
-			return new PlayerRiotAlertCheckResult(
-					puuid,
-					true,
-					false,
-					false,
-					gameId,
-					currentGame.gameQueueConfigId(),
-					riotId,
-					championName,
-					championIconUrl,
-					"CURRENT_GAME_IS_NOT_RANKED_SOLO");
-		}
+		String queueName = resolveQueueName(currentGame.gameQueueConfigId());
+		String queueDisplayName = resolveQueueDisplayName(currentGame.gameQueueConfigId());
 
 		RiotIdentity riotIdentity = parseRiotIdentity(riotId, puuid);
-		notificationService.sendPlayerRankedSoloNotification(
+		notificationService.sendPlayerGameNotification(
 				riotIdentity.displayName(),
 				riotId,
 				riotIdentity.gameName(),
 				riotIdentity.tagLine(),
 				gameId,
+				queueDisplayName,
 				championName,
 				championIconUrl);
 
 		return new PlayerRiotAlertCheckResult(
 				puuid,
 				true,
-				true,
+				isRankedSolo(currentGame),
 				true,
 				gameId,
 				currentGame.gameQueueConfigId(),
+				queueName,
 				riotId,
 				championName,
 				championIconUrl,
@@ -198,6 +198,38 @@ public class PlayerSoloRankMonitorService {
 
 	private boolean isRankedSolo(RiotCurrentGameResponse currentGame) {
 		return currentGame.gameQueueConfigId() != null && currentGame.gameQueueConfigId() == RANKED_SOLO_QUEUE_ID;
+	}
+
+	private String resolveQueueName(Integer queueId) {
+		if (queueId == null) {
+			return "UNKNOWN_QUEUE";
+		}
+		return switch (queueId) {
+			case RANKED_SOLO_QUEUE_ID -> "RANKED_SOLO";
+			case RANKED_FLEX_QUEUE_ID -> "RANKED_FLEX";
+			case ARAM_QUEUE_ID -> "ARAM";
+			case NORMAL_DRAFT_QUEUE_ID -> "NORMAL_DRAFT";
+			case NORMAL_BLIND_QUEUE_ID -> "NORMAL_BLIND";
+			case QUICKPLAY_QUEUE_ID -> "QUICKPLAY";
+			case ARENA_QUEUE_ID, ARENA_RANKED_QUEUE_ID -> "ARENA";
+			default -> "OTHER_GAME";
+		};
+	}
+
+	private String resolveQueueDisplayName(Integer queueId) {
+		if (queueId == null) {
+			return "기타 게임";
+		}
+		return switch (queueId) {
+			case RANKED_SOLO_QUEUE_ID -> "솔로 랭크";
+			case RANKED_FLEX_QUEUE_ID -> "자유 랭크";
+			case ARAM_QUEUE_ID -> "칼바람 나락";
+			case NORMAL_DRAFT_QUEUE_ID -> "일반 Draft";
+			case NORMAL_BLIND_QUEUE_ID -> "일반 Blind";
+			case QUICKPLAY_QUEUE_ID -> "빠른 대전";
+			case ARENA_QUEUE_ID, ARENA_RANKED_QUEUE_ID -> "아레나";
+			default -> "기타 게임";
+		};
 	}
 
 	private Champion resolveTrackedChampion(RiotCurrentGameResponse currentGame, String trackedPuuid) {
