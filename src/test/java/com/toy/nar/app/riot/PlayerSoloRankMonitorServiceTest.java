@@ -1,14 +1,15 @@
 package com.toy.nar.app.riot;
 
+import com.toy.nar.app.data.source.ChampionDataService;
 import com.toy.nar.app.data.source.NotificationService;
 import com.toy.nar.app.monitor.SchedulerAlertService;
+import com.toy.nar.app.riot.dto.PlayerRiotAlertCheckResult;
 import com.toy.nar.app.riot.dto.PlayerSoloRankMonitorResult;
 import com.toy.nar.app.riot.dto.RiotCurrentGameResponse;
 import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
-import com.toy.nar.domain.participant.repository.ChampionRepository;
 import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,7 @@ class PlayerSoloRankMonitorServiceTest {
 	private RiotApiClient riotApiClient;
 
 	@Mock
-	private ChampionRepository championRepository;
+	private ChampionDataService championDataService;
 
 	@Mock
 	private NotificationService notificationService;
@@ -53,7 +54,7 @@ class PlayerSoloRankMonitorServiceTest {
 		riotMonitorProperties.setRecentMatchFetchCount(5);
 		playerSoloRankMonitorService = new PlayerSoloRankMonitorService(
 				playerRiotAccountRepository,
-				championRepository,
+				championDataService,
 				riotApiClient,
 				riotMonitorProperties,
 				notificationService,
@@ -80,12 +81,12 @@ class PlayerSoloRankMonitorServiceTest {
 				.build();
 
 		when(playerRiotAccountRepository.findTrackedAccountsByPlatform("KR")).thenReturn(List.of(account));
-		when(championRepository.findById(157L))
+		when(championDataService.findChampionByRiotKey(157))
 				.thenReturn(Optional.of(Champion.builder()
-						.championNameKr("야스오")
-						.championNameEn("Yasuo")
-						.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png")
-						.build()));
+					.championNameKr("야스오")
+					.championNameEn("Yasuo")
+					.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png")
+					.build()));
 		when(riotApiClient.getActiveGameByPuuid("puuid"))
 				.thenReturn(Optional.of(new RiotCurrentGameResponse(
 						222L,
@@ -187,5 +188,36 @@ class PlayerSoloRankMonitorServiceTest {
 				anyString(),
 				anyString(),
 				anyString());
+	}
+
+	@Test
+	void manualAlertCheckSendsDiscordNotificationForRankedSoloGame() {
+		when(championDataService.findChampionByRiotKey(777))
+				.thenReturn(Optional.of(Champion.builder()
+					.championNameKr("요네")
+					.championNameEn("Yone")
+					.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yone.png")
+					.build()));
+		when(riotApiClient.getActiveGameByPuuid("manual-puuid"))
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(
+						999L,
+						420,
+						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("manual-puuid", 777, "ManualUser#KR1")))));
+
+		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid("manual-puuid");
+
+		assertThat(result.currentGameFound()).isTrue();
+		assertThat(result.rankedSolo()).isTrue();
+		assertThat(result.notificationSent()).isTrue();
+		assertThat(result.riotId()).isEqualTo("ManualUser#KR1");
+		assertThat(result.championName()).isEqualTo("요네");
+		verify(notificationService).sendPlayerRankedSoloNotification(
+				"ManualUser",
+				"ManualUser#KR1",
+				"ManualUser",
+				"KR1",
+				"999",
+				"요네",
+				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yone.png");
 	}
 }

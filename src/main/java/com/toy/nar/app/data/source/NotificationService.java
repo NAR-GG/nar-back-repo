@@ -149,7 +149,7 @@ public class NotificationService {
 			String championIconUrl) {
 		if (!notificationEnabled) return;
 
-		String opggPath = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
+		String opggLink = buildOpggLink(gameName, tagLine);
 		String message = String.format("상태: 솔로 랭크 게임 시작 감지\n감지 시각: `%s`\n\n" +
 				"```text\n" +
 				"선수명    : %s\n" +
@@ -157,15 +157,16 @@ public class NotificationService {
 				"챔피언    : %s\n" +
 				"큐 타입   : Ranked Solo 5v5\n" +
 				"게임 ID   : %s\n" +
-				"```" +
-				"\n[OP.GG 바로가기](https://www.op.gg/summoners/kr/%s)",
+				"```",
 			LocalDateTime.now().format(ALERT_TIME_FORMATTER),
 			playerName,
 			riotId,
 			championName == null || championName.isBlank() ? "-" : championName,
-			gameId == null ? "-" : gameId,
-			opggPath
+			gameId == null ? "-" : gameId
 		);
+		if (!opggLink.isBlank()) {
+			message += "\n" + opggLink;
+		}
 
 		sendPlayerDiscordNotification("[선수 솔랭 시작 감지]", message, "info", championIconUrl);
 	}
@@ -231,6 +232,14 @@ public class NotificationService {
 			case "info" -> 0x3498DB;
 			default -> 0x3498DB;
 		};
+	}
+
+	private String buildOpggLink(String gameName, String tagLine) {
+		if (gameName == null || gameName.isBlank() || tagLine == null || tagLine.isBlank()) {
+			return "";
+		}
+		String opggPath = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
+		return String.format("[OP.GG 바로가기](https://www.op.gg/summoners/kr/%s)", opggPath);
 	}
 
 }
