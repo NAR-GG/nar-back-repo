@@ -211,6 +211,7 @@ class PlayerSoloRankMonitorServiceTest {
 		assertThat(result.notificationSent()).isTrue();
 		assertThat(result.riotId()).isEqualTo("ManualUser#KR1");
 		assertThat(result.championName()).isEqualTo("요네");
+		assertThat(result.queueName()).isEqualTo("RANKED_SOLO");
 		verify(notificationService).sendPlayerRankedSoloNotification(
 				"ManualUser",
 				"ManualUser#KR1",
@@ -219,5 +220,36 @@ class PlayerSoloRankMonitorServiceTest {
 				"999",
 				"요네",
 				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yone.png");
+	}
+
+	@Test
+	void manualAlertCheckIdentifiesArenaWithoutSendingNotification() {
+		when(championDataService.findChampionByRiotKey(202))
+				.thenReturn(Optional.of(Champion.builder()
+					.championNameKr("진")
+					.championNameEn("Jhin")
+					.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Jhin.png")
+					.build()));
+		when(riotApiClient.getActiveGameByPuuid("arena-puuid"))
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(
+						1234L,
+						1700,
+						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("arena-puuid", 202, "ArenaUser#KR1")))));
+
+		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid("arena-puuid");
+
+		assertThat(result.currentGameFound()).isTrue();
+		assertThat(result.rankedSolo()).isFalse();
+		assertThat(result.notificationSent()).isFalse();
+		assertThat(result.queueName()).isEqualTo("ARENA");
+		assertThat(result.status()).isEqualTo("CURRENT_GAME_IS_ARENA");
+		verify(notificationService, never()).sendPlayerRankedSoloNotification(
+				anyString(),
+				anyString(),
+				anyString(),
+				anyString(),
+				anyString(),
+				anyString(),
+				anyString());
 	}
 }

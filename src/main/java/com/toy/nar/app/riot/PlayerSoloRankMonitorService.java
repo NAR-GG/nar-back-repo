@@ -24,6 +24,13 @@ import java.util.Optional;
 public class PlayerSoloRankMonitorService {
 
 	private static final int RANKED_SOLO_QUEUE_ID = 420;
+	private static final int RANKED_FLEX_QUEUE_ID = 440;
+	private static final int ARAM_QUEUE_ID = 450;
+	private static final int NORMAL_DRAFT_QUEUE_ID = 400;
+	private static final int NORMAL_BLIND_QUEUE_ID = 430;
+	private static final int QUICKPLAY_QUEUE_ID = 490;
+	private static final int ARENA_QUEUE_ID = 1700;
+	private static final int ARENA_RANKED_QUEUE_ID = 1710;
 	private static final String JOB_KEY = "PLAYER_RANKED_SOLO_MONITOR";
 	private static final String JOB_NAME = "선수 솔랭 감시";
 
@@ -142,6 +149,7 @@ public class PlayerSoloRankMonitorService {
 					false,
 					null,
 					null,
+					"OFFLINE",
 					null,
 					null,
 					null,
@@ -158,6 +166,7 @@ public class PlayerSoloRankMonitorService {
 		String championName = champion == null ? null : champion.getChampionNameKr();
 		String championIconUrl = champion == null ? null : champion.getImageUrl();
 		String gameId = currentGame.gameId() == null ? null : String.valueOf(currentGame.gameId());
+		String queueName = resolveQueueName(currentGame.gameQueueConfigId());
 
 		if (!isRankedSolo(currentGame)) {
 			return new PlayerRiotAlertCheckResult(
@@ -167,10 +176,11 @@ public class PlayerSoloRankMonitorService {
 					false,
 					gameId,
 					currentGame.gameQueueConfigId(),
+					queueName,
 					riotId,
 					championName,
 					championIconUrl,
-					"CURRENT_GAME_IS_NOT_RANKED_SOLO");
+					"CURRENT_GAME_IS_" + queueName);
 		}
 
 		RiotIdentity riotIdentity = parseRiotIdentity(riotId, puuid);
@@ -190,6 +200,7 @@ public class PlayerSoloRankMonitorService {
 				true,
 				gameId,
 				currentGame.gameQueueConfigId(),
+				queueName,
 				riotId,
 				championName,
 				championIconUrl,
@@ -198,6 +209,22 @@ public class PlayerSoloRankMonitorService {
 
 	private boolean isRankedSolo(RiotCurrentGameResponse currentGame) {
 		return currentGame.gameQueueConfigId() != null && currentGame.gameQueueConfigId() == RANKED_SOLO_QUEUE_ID;
+	}
+
+	private String resolveQueueName(Integer queueId) {
+		if (queueId == null) {
+			return "UNKNOWN_QUEUE";
+		}
+		return switch (queueId) {
+			case RANKED_SOLO_QUEUE_ID -> "RANKED_SOLO";
+			case RANKED_FLEX_QUEUE_ID -> "RANKED_FLEX";
+			case ARAM_QUEUE_ID -> "ARAM";
+			case NORMAL_DRAFT_QUEUE_ID -> "NORMAL_DRAFT";
+			case NORMAL_BLIND_QUEUE_ID -> "NORMAL_BLIND";
+			case QUICKPLAY_QUEUE_ID -> "QUICKPLAY";
+			case ARENA_QUEUE_ID, ARENA_RANKED_QUEUE_ID -> "ARENA";
+			default -> "OTHER_GAME";
+		};
 	}
 
 	private Champion resolveTrackedChampion(RiotCurrentGameResponse currentGame, String trackedPuuid) {
