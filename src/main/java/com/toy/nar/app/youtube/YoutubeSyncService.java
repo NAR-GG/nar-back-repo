@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -334,7 +335,7 @@ public class YoutubeSyncService {
 	@Transactional
 	public void syncRecentComments() {
 		LocalDateTime oneDayAgo = LocalDateTime.now(ZONE_KST).minusDays(1);
-		List<Video> recentVideos = videoRepository.findByPublishedAtAfter(oneDayAgo);
+		List<Video> recentVideos = videoRepository.findByPublishedAtAfterOrderByPublishedAtAscIdAsc(oneDayAgo);
 
 		log.info("### 최근 24시간 영상 댓글 동기화 시작. 대상: {}개 ###", recentVideos.size());
 
@@ -463,7 +464,7 @@ public class YoutubeSyncService {
 	 */
 	@Transactional
 	public void syncVideoStatisticsByPublishedAfter(LocalDateTime publishedAfter) {
-		List<Video> targetVideos = videoRepository.findByPublishedAtAfter(publishedAfter);
+		List<Video> targetVideos = videoRepository.findByPublishedAtAfterOrderByPublishedAtAscIdAsc(publishedAfter);
 
 		if (targetVideos.isEmpty()) {
 			return;
