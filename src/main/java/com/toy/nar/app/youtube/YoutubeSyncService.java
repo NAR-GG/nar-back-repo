@@ -243,34 +243,56 @@ public class YoutubeSyncService {
 			return 0;
 		}
 
+		Map<String, YoutubeVideoResponse.VideoItem> itemByVideoId = videoDetailsResponse.items().stream()
+				.collect(Collectors.toMap(
+						YoutubeVideoResponse.VideoItem::id,
+						item -> item,
+						(existing, ignored) -> existing,
+						LinkedHashMap::new));
+		List<String> requestedVideoIds = videoDetailsResponse.items().stream()
+				.map(YoutubeVideoResponse.VideoItem::id)
+				.distinct()
+				.toList();
+
+		List<Video> existingVideos = videoRepository.findByYoutubeVideoIdInOrderByPublishedAtAscIdAsc(requestedVideoIds);
+		Set<String> existingVideoIds = existingVideos.stream()
+				.map(Video::getYoutubeVideoId)
+				.collect(Collectors.toSet());
+
 		List<Video> videosToSave = new ArrayList<>();
 
-		for (YoutubeVideoResponse.VideoItem item : videoDetailsResponse.items()) {
-			Video video = videoRepository.findByYoutubeVideoId(item.id())
-					.orElse(null);
-
-			if (video == null) {
-				// 신규 생성
-				video = buildVideoEntity(
-						item.id(),
-						item.snippet().title(),
-						item.snippet().thumbnails(),
-						item.snippet().publishedAt(),
-						item.statistics(),
-						channel);
-			} else {
-				// 기존 정보 업데이트
-				String bestThumbnail = youtubeService.extractBestThumbnailUrl(item.snippet().thumbnails());
-				video.updateInfo(item.snippet().title(), bestThumbnail);
-
-				if (item.statistics() != null) {
-					video.updateStatistics(
-							parseCount(item.statistics().viewCount()),
-							parseCount(item.statistics().likeCount()),
-							parseCount(item.statistics().commentCount()));
-				}
+		for (Video video : existingVideos) {
+			YoutubeVideoResponse.VideoItem item = itemByVideoId.get(video.getYoutubeVideoId());
+			if (item == null) {
+				continue;
 			}
+
+			String bestThumbnail = youtubeService.extractBestThumbnailUrl(item.snippet().thumbnails());
+			video.updateInfo(item.snippet().title(), bestThumbnail);
+
+			if (item.statistics() != null) {
+				video.updateStatistics(
+						parseCount(item.statistics().viewCount()),
+						parseCount(item.statistics().likeCount()),
+						parseCount(item.statistics().commentCount()));
+			}
+
 			videosToSave.add(video);
+		}
+
+		for (YoutubeVideoResponse.VideoItem item : videoDetailsResponse.items()) {
+			if (existingVideoIds.contains(item.id())) {
+				continue;
+			}
+
+			Video newVideo = buildVideoEntity(
+					item.id(),
+					item.snippet().title(),
+					item.snippet().thumbnails(),
+					item.snippet().publishedAt(),
+					item.statistics(),
+					channel);
+			videosToSave.add(newVideo);
 		}
 
 		if (!videosToSave.isEmpty()) {
