@@ -42,7 +42,9 @@ public interface VideoRepository extends JpaRepository<Video, Long>, JpaSpecific
 	@Query("SELECT MAX(v.publishedAt) FROM Video v WHERE v.channel = :channel")
 	LocalDateTime findLatestPublishedAtByChannel(@Param("channel") Channel channel);
 
-	List<Video> findByPublishedAtAfter(LocalDateTime publishedAt);
+	List<Video> findByPublishedAtAfterOrderByPublishedAtAscIdAsc(LocalDateTime publishedAt);
+
+	List<Video> findByYoutubeVideoIdInOrderByPublishedAtAscIdAsc(List<String> youtubeVideoIds);
 
 	// 기간 내 조회수 상위 20개
 	List<Video> findTop20ByPublishedAtAfterOrderByViewCountDesc(LocalDateTime publishedAt);
