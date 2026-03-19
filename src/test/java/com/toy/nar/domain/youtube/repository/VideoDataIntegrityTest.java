@@ -46,7 +46,7 @@ class VideoDataIntegrityTest {
 
 		// 3. 해당 기간의 영상 조회
 		// (VideoRepository에 기간 조회 메서드가 없으므로 findAll 후 필터링하거나 쿼리 메서드 사용)
-		List<Video> videos = videoRepository.findByPublishedAtAfter(oneMonthAgo).stream()
+		List<Video> videos = videoRepository.findByPublishedAtAfterOrderByPublishedAtAscIdAsc(oneMonthAgo).stream()
 			.filter(v -> v.getChannel().equals(channel))
 			.filter(v -> v.getPublishedAt().isBefore(oneMonthAgoPlus7Days))
 			.toList();
