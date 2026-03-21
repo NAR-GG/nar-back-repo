@@ -42,6 +42,7 @@ public class YoutubeSyncService {
 	private final ChannelRepository channelRepository;
 	private final VideoRepository videoRepository;
 	private final CommentRepository commentRepository;
+	private final YoutubeChannelSyncTxService youtubeChannelSyncTxService;
 	private final YoutubeProperties youtubeProperties;
 	private final PlatformTransactionManager transactionManager;
 
@@ -119,7 +120,6 @@ public class YoutubeSyncService {
 	 * [관리자용 2단계] 최근 1주일 영상 데이터 적재
 	 * DB에 있는 채널들의 영상을 조회하여 저장합니다.
 	 */
-	@Transactional
 	public void syncLastWeekVideos() {
 		syncVideosByPeriod(7);
 	}
@@ -128,7 +128,6 @@ public class YoutubeSyncService {
 	 * [관리자용 옵션] 최근 1달 영상 데이터 적재
 	 * 초기 세팅 시 사용 권장
 	 */
-	@Transactional
 	public void syncLastMonthVideos() {
 		syncVideosByPeriod(30);
 	}
@@ -147,7 +146,8 @@ public class YoutubeSyncService {
 		int totalSaved = 0;
 		for (Channel channel : channels) {
 			try {
-				totalSaved += syncSingleChannelVideos(channel, searchAfter);
+				ChannelVideoSyncPayload payload = collectChannelVideos(channel, searchAfter);
+				totalSaved += youtubeChannelSyncTxService.applyChannelVideos(payload);
 			} catch (Exception e) {
 				log.error("채널 비디오 동기화 실패: {} ({})", channel.getChannelName(), channel.getYoutubeChannelId(), e);
 			}
@@ -157,9 +157,10 @@ public class YoutubeSyncService {
 	}
 
 	/**
-	 * [리팩토링] PlaylistItems API를 사용하여 영상 목록을 수집합니다. (비용 1 unit)
+	 * PlaylistItems API를 사용하여 채널 단위 영상 데이터를 수집합니다. (비용 1 unit)
+	 * 외부 API 호출은 트랜잭션 밖에서 수행하고, DB 반영만 별도 채널 트랜잭션으로 처리합니다.
 	 */
-	private int syncSingleChannelVideos(Channel channel, LocalDateTime searchAfter) {
+	private ChannelVideoSyncPayload collectChannelVideos(Channel channel, LocalDateTime searchAfter) {
 		String uploadPlaylistId = channel.getUploadPlaylistId();
 
 		// 1. Upload Playlist ID가 없으면 긴급 조회
@@ -174,17 +175,17 @@ public class YoutubeSyncService {
 				}
 			} catch (Exception e) {
 				log.error("채널 정보 조회 실패(Upload Playlist ID 확보 중): {}", channel.getChannelName(), e);
-				return 0;
+				return ChannelVideoSyncPayload.empty(channel.getYoutubeChannelId());
 			}
 		}
 
 		if (uploadPlaylistId == null) {
 			log.warn("Upload Playlist ID를 찾을 수 없어 동기화 스킵: {}", channel.getChannelName());
-			return 0;
+			return ChannelVideoSyncPayload.empty(channel.getYoutubeChannelId());
 		}
 
 		String nextPageToken = null;
-		int totalProcessed = 0;
+		Map<String, YoutubeVideoResponse.VideoItem> itemByVideoId = new LinkedHashMap<>();
 
 		// 2. PlaylistItems 반복 조회
 		do {
@@ -219,8 +220,7 @@ public class YoutubeSyncService {
 				continue;
 			}
 
-			// 3. 상세 정보 조회 및 저장
-			totalProcessed += fetchDetailsAndSave(videoIdsToProcess, channel);
+			mergeVideoDetails(itemByVideoId, videoIdsToProcess);
 
 			if (stopFetching) {
 				break;
@@ -230,78 +230,20 @@ public class YoutubeSyncService {
 
 		} while (nextPageToken != null && !nextPageToken.isBlank());
 
-		if (totalProcessed > 0) {
-			log.info("[{}] 영상 {}개 동기화(추가/갱신) 완료 (PlaylistItems API)", channel.getChannelName(), totalProcessed);
+		if (!itemByVideoId.isEmpty()) {
+			log.info("[{}] 영상 {}개 수집 완료 (PlaylistItems API)", channel.getChannelName(), itemByVideoId.size());
 		}
 
-		return totalProcessed;
+		return new ChannelVideoSyncPayload(channel.getYoutubeChannelId(), new ArrayList<>(itemByVideoId.values()));
 	}
 
-	private int fetchDetailsAndSave(List<String> videoIds, Channel channel) {
+	private void mergeVideoDetails(Map<String, YoutubeVideoResponse.VideoItem> itemByVideoId, List<String> videoIds) {
 		YoutubeVideoResponse videoDetailsResponse = youtubeService.getVideoDetails(videoIds);
 
 		if (videoDetailsResponse == null || videoDetailsResponse.items() == null) {
-			return 0;
+			return;
 		}
-
-		Map<String, YoutubeVideoResponse.VideoItem> itemByVideoId = videoDetailsResponse.items().stream()
-				.collect(Collectors.toMap(
-						YoutubeVideoResponse.VideoItem::id,
-						item -> item,
-						(existing, ignored) -> existing,
-						LinkedHashMap::new));
-		List<String> requestedVideoIds = videoDetailsResponse.items().stream()
-				.map(YoutubeVideoResponse.VideoItem::id)
-				.distinct()
-				.toList();
-
-		List<Video> existingVideos = videoRepository.findByYoutubeVideoIdInOrderByPublishedAtAscIdAsc(requestedVideoIds);
-		Set<String> existingVideoIds = existingVideos.stream()
-				.map(Video::getYoutubeVideoId)
-				.collect(Collectors.toSet());
-
-		List<Video> videosToSave = new ArrayList<>();
-
-		for (Video video : existingVideos) {
-			YoutubeVideoResponse.VideoItem item = itemByVideoId.get(video.getYoutubeVideoId());
-			if (item == null) {
-				continue;
-			}
-
-			String bestThumbnail = youtubeService.extractBestThumbnailUrl(item.snippet().thumbnails());
-			video.updateInfo(item.snippet().title(), bestThumbnail);
-
-			if (item.statistics() != null) {
-				video.updateStatistics(
-						parseCount(item.statistics().viewCount()),
-						parseCount(item.statistics().likeCount()),
-						parseCount(item.statistics().commentCount()));
-			}
-
-			videosToSave.add(video);
-		}
-
-		for (YoutubeVideoResponse.VideoItem item : videoDetailsResponse.items()) {
-			if (existingVideoIds.contains(item.id())) {
-				continue;
-			}
-
-			Video newVideo = buildVideoEntity(
-					item.id(),
-					item.snippet().title(),
-					item.snippet().thumbnails(),
-					item.snippet().publishedAt(),
-					item.statistics(),
-					channel);
-			videosToSave.add(newVideo);
-		}
-
-		if (!videosToSave.isEmpty()) {
-			videoRepository.saveAll(videosToSave);
-			return videosToSave.size();
-		}
-
-		return 0;
+		videoDetailsResponse.items().forEach(item -> itemByVideoId.putIfAbsent(item.id(), item));
 	}
 
 	@Transactional
