@@ -91,68 +91,76 @@ public class LeagueMatchService {
 			return;
 		}
 
-		Map<String, LeagueMatch> existingMatchesById = leagueMatchRepository
-				.findAllById(matches.stream().map(MatchResultDto::getMatchId).toList())
-				.stream()
-				.collect(Collectors.toMap(LeagueMatch::getId, match -> match));
-
-		List<LeagueMatch> dirtyMatches = new ArrayList<>();
-		int inserted = 0;
-		int updated = 0;
-		int skipped = 0;
-
-		// 2. DB에 저장 (changed-only upsert)
-		for (MatchResultDto dto : matches) {
-			try {
-				LeagueMatch incoming = convertToEntity(dto, leagueSlug);
-				LeagueMatch existing = existingMatchesById.get(dto.getMatchId());
-
-				if (existing == null) {
-					dirtyMatches.add(incoming);
-					inserted++;
-					continue;
-				}
-
-				if (!hasRealtimeRelevantChange(existing, incoming)) {
-					skipped++;
-					continue;
-				}
-
-				existing.update(
-						incoming.getMatchTitle(),
-						incoming.getMatchDate(),
-						incoming.getState(),
-						incoming.getBlueTeamCode(),
-						incoming.getBlueTeamName(),
-						incoming.getBlueExternalTeamId(),
-						incoming.getBlueTeamImageUrl(),
-						incoming.getBlueScore(),
-						incoming.getRedTeamCode(),
-						incoming.getRedTeamName(),
-						incoming.getRedExternalTeamId(),
-						incoming.getRedTeamImageUrl(),
-						incoming.getRedScore(),
-						incoming.isHasVod(),
-						incoming.getMatchDetailsJson(),
-						incoming.getLastUpdated());
-				dirtyMatches.add(existing);
-				updated++;
-			} catch (Exception e) {
-				log.error("Failed to save match: {}", dto.getMatchId(), e);
-			}
-		}
-
-		if (!dirtyMatches.isEmpty()) {
-			leagueMatchRepository.saveAll(dirtyMatches);
-		}
+		MatchSyncUpsertResult upsertResult = upsertLeagueMatches(leagueSlug, matches);
 
 		if (includeTeamMetadataSync) {
 			int metadataUpdated = updateTeamMetadataFromMatches(matches);
 			log.info("Team metadata sync completed during syncMatches. updated={}", metadataUpdated);
 		}
 
+		autoBackfillRecentMatches(leagueSlug, matches, upsertResult.dirtyMatchIds());
+
 		log.info("Synced {} matches for league: {} (inserted={}, updated={}, skipped={})",
-				matches.size(), leagueSlug, inserted, updated, skipped);
+				matches.size(), leagueSlug, upsertResult.insertedMatches(), upsertResult.updatedMatches(),
+				upsertResult.skippedMatches());
+	}
+
+	public RecentMatchBackfillResult backfillRecentMatches(String leagueSlug, boolean includeTeamMetadataSync) {
+		String normalizedLeague = leagueSlug == null ? "" : leagueSlug.trim().toUpperCase();
+		log.info("Manual recent match backfill requested for league={}, includeTeamMetadata={}",
+				normalizedLeague, includeTeamMetadataSync);
+
+		MatchResponseWrapper response = worldsService.getWorldsMatches(null, normalizedLeague);
+		List<MatchResultDto> matches = response.getMatches();
+		if (matches == null || matches.isEmpty()) {
+			return new RecentMatchBackfillResult(
+					normalizedLeague,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					includeTeamMetadataSync);
+		}
+
+		MatchSyncUpsertResult upsertResult = upsertLeagueMatches(normalizedLeague, matches);
+		int metadataUpdated = 0;
+		if (includeTeamMetadataSync) {
+			metadataUpdated = updateTeamMetadataFromMatches(matches);
+		}
+		AutoBackfillRecentMatchesResult autoResult = autoBackfillRecentMatches(
+				normalizedLeague,
+				matches,
+				upsertResult.dirtyMatchIds());
+
+		return new RecentMatchBackfillResult(
+				normalizedLeague,
+				matches.size(),
+				upsertResult.insertedMatches(),
+				upsertResult.updatedMatches(),
+				upsertResult.skippedMatches(),
+				metadataUpdated,
+				autoResult.pageMatchCount(),
+				autoResult.teamIdentityResult().createdMappings(),
+				autoResult.teamIdentityResult().updatedMappings(),
+				autoResult.teamIdentityResult().unresolvedMappings(),
+				autoResult.gameIdSyncResult().updatedMatches(),
+				autoResult.gameIdSyncResult().unchangedMatches(),
+				autoResult.gameIdSyncResult().failedMatches(),
+				autoResult.gameIdentityResult().createdMappings(),
+				autoResult.gameIdentityResult().updatedMappings(),
+				autoResult.gameIdentityResult().unresolvedMappings(),
+				includeTeamMetadataSync);
 	}
 
 	// 팀 메타데이터 동기화는 일 배치 경로에서만 실행
@@ -228,6 +236,27 @@ public class LeagueMatchService {
 			}
 		}
 
+		return upsertTeamExternalIdentities(targetLeagues, fetchedPages, candidatesByExternalId);
+	}
+
+	private TeamIdentityBackfillResult syncTeamExternalIdentitiesFromMatches(String league, List<MatchResultDto> matches) {
+		if (matches == null || matches.isEmpty()) {
+			return new TeamIdentityBackfillResult(List.of(league), 0, 0, 0, 0, 0, 0);
+		}
+
+		Map<String, ExternalTeamCandidate> candidatesByExternalId = new LinkedHashMap<>();
+		for (MatchResultDto match : matches) {
+			collectExternalTeamCandidate(candidatesByExternalId, league, match.getBlueTeam());
+			collectExternalTeamCandidate(candidatesByExternalId, league, match.getRedTeam());
+		}
+
+		return upsertTeamExternalIdentities(List.of(league), 0, candidatesByExternalId);
+	}
+
+	private TeamIdentityBackfillResult upsertTeamExternalIdentities(
+			List<String> targetLeagues,
+			int fetchedPages,
+			Map<String, ExternalTeamCandidate> candidatesByExternalId) {
 		if (candidatesByExternalId.isEmpty()) {
 			return new TeamIdentityBackfillResult(targetLeagues, fetchedPages, 0, 0, 0, 0, 0);
 		}
@@ -406,7 +435,23 @@ public class LeagueMatchService {
 				.filter(match -> match.getBlueExternalTeamId() != null && !match.getBlueExternalTeamId().isBlank())
 				.filter(match -> match.getRedExternalTeamId() != null && !match.getRedExternalTeamId().isBlank())
 				.toList();
-		log.info("Game identity backfill started: year={}, leagues={}, targetMatches={}", year, targetLeagues,
+
+		return backfillGameExternalIdentitiesForMatches(targetLeagues, matches);
+	}
+
+	private GameExternalIdentityBackfillResult backfillGameExternalIdentitiesForMatches(
+			List<String> targetLeagues,
+			List<LeagueMatch> inputMatches) {
+		List<LeagueMatch> matches = inputMatches.stream()
+				.filter(match -> match.getLeagueName() != null
+						&& targetLeagues.contains(match.getLeagueName().toUpperCase()))
+				.filter(match -> match.getMatchDate() != null)
+				.filter(match -> !isPlaceholderTeamName(match.getBlueTeamName())
+						&& !isPlaceholderTeamName(match.getRedTeamName()))
+				.filter(match -> match.getBlueExternalTeamId() != null && !match.getBlueExternalTeamId().isBlank())
+				.filter(match -> match.getRedExternalTeamId() != null && !match.getRedExternalTeamId().isBlank())
+				.toList();
+		log.info("Game identity backfill started: leagues={}, targetMatches={}", targetLeagues,
 				matches.size());
 
 		if (matches.isEmpty()) {
@@ -545,6 +590,211 @@ public class LeagueMatchService {
 
 		return new GameExternalIdentityBackfillResult(targetLeagues, matches.size(), targetGameRows, created, updated,
 				unresolved, conflicts);
+	}
+
+	private AutoBackfillRecentMatchesResult autoBackfillRecentMatches(
+			String leagueSlug,
+			List<MatchResultDto> matches,
+			Set<String> dirtyMatchIds) {
+		if (matches == null || matches.isEmpty()) {
+			return new AutoBackfillRecentMatchesResult(
+					0,
+					new TeamIdentityBackfillResult(List.of(), 0, 0, 0, 0, 0, 0),
+					new MatchGameIdSyncResult(0, 0, 0, 0),
+					new GameExternalIdentityBackfillResult(List.of(), 0, 0, 0, 0, 0, 0));
+		}
+
+		String normalizedLeague = leagueSlug == null ? "" : leagueSlug.trim().toUpperCase();
+		TeamIdentityBackfillResult teamIdentityResult = syncTeamExternalIdentitiesFromMatches(normalizedLeague, matches);
+
+		List<String> pageMatchIds = matches.stream()
+				.map(MatchResultDto::getMatchId)
+				.filter(id -> id != null && !id.isBlank())
+				.toList();
+		if (pageMatchIds.isEmpty()) {
+			return new AutoBackfillRecentMatchesResult(
+					0,
+					teamIdentityResult,
+					new MatchGameIdSyncResult(0, 0, 0, 0),
+					new GameExternalIdentityBackfillResult(List.of(normalizedLeague), 0, 0, 0, 0, 0, 0));
+		}
+
+		List<LeagueMatch> pageMatches = leagueMatchRepository.findAllById(pageMatchIds).stream()
+				.filter(match -> match.getMatchDate() != null)
+				.filter(match -> !"unstarted".equalsIgnoreCase(match.getState()))
+				.toList();
+		if (pageMatches.isEmpty()) {
+			return new AutoBackfillRecentMatchesResult(
+					0,
+					teamIdentityResult,
+					new MatchGameIdSyncResult(0, 0, 0, 0),
+					new GameExternalIdentityBackfillResult(List.of(normalizedLeague), 0, 0, 0, 0, 0, 0));
+		}
+
+		Map<String, List<LeagueMatchGame>> gameRowsByMatchId = leagueMatchGameRepository
+				.findAllByLeagueMatchIdsOrderByMatchAndGameOrder(pageMatches.stream().map(LeagueMatch::getId).toList())
+				.stream()
+				.collect(Collectors.groupingBy(row -> row.getLeagueMatch().getId(), LinkedHashMap::new,
+						Collectors.toList()));
+
+		List<LeagueMatch> gameIdCandidates = pageMatches.stream()
+				.filter(match -> dirtyMatchIds.contains(match.getId())
+						|| gameRowsByMatchId.getOrDefault(match.getId(), List.of()).isEmpty())
+				.toList();
+		MatchGameIdSyncResult gameIdSyncResult = syncLeagueMatchGameIdsForMatches(gameIdCandidates);
+
+		List<LeagueMatchGameRepository.MappedGameRow> mappedRows = leagueMatchGameRepository
+				.findMappedGameRowsByMatchIds(pageMatches.stream().map(LeagueMatch::getId).toList(), LOLESPORTS_SOURCE);
+		Map<String, List<LeagueMatchGameRepository.MappedGameRow>> mappedRowsByMatchId = mappedRows.stream()
+				.collect(Collectors.groupingBy(LeagueMatchGameRepository.MappedGameRow::getMatchId, LinkedHashMap::new,
+						Collectors.toList()));
+
+		List<LeagueMatch> identityCandidates = pageMatches.stream()
+				.filter(match -> dirtyMatchIds.contains(match.getId()) || hasUnmappedTrackedRows(match,
+						mappedRowsByMatchId.getOrDefault(match.getId(), List.of())))
+				.toList();
+		GameExternalIdentityBackfillResult gameIdentityResult = backfillGameExternalIdentitiesForMatches(
+				List.of(normalizedLeague),
+				identityCandidates);
+
+		log.info(
+				"Auto backfill completed for league={}: teamIdentities(created={}, updated={}, unresolved={}), gameIds(target={}, updated={}, unchanged={}, failed={}), gameIdentities(targetMatches={}, targetGameRows={}, created={}, updated={}, unresolved={}, conflicts={})",
+				normalizedLeague,
+				teamIdentityResult.createdMappings(),
+				teamIdentityResult.updatedMappings(),
+				teamIdentityResult.unresolvedMappings(),
+				gameIdSyncResult.targetMatches(),
+				gameIdSyncResult.updatedMatches(),
+				gameIdSyncResult.unchangedMatches(),
+				gameIdSyncResult.failedMatches(),
+				gameIdentityResult.targetMatches(),
+				gameIdentityResult.targetGameRows(),
+				gameIdentityResult.createdMappings(),
+				gameIdentityResult.updatedMappings(),
+				gameIdentityResult.unresolvedMappings(),
+				gameIdentityResult.conflicts());
+		return new AutoBackfillRecentMatchesResult(
+				pageMatches.size(),
+				teamIdentityResult,
+				gameIdSyncResult,
+				gameIdentityResult);
+	}
+
+	private MatchSyncUpsertResult upsertLeagueMatches(String leagueSlug, List<MatchResultDto> matches) {
+		Map<String, LeagueMatch> existingMatchesById = leagueMatchRepository
+				.findAllById(matches.stream().map(MatchResultDto::getMatchId).toList())
+				.stream()
+				.collect(Collectors.toMap(LeagueMatch::getId, match -> match));
+
+		List<LeagueMatch> dirtyMatches = new ArrayList<>();
+		Set<String> dirtyMatchIds = new java.util.LinkedHashSet<>();
+		int inserted = 0;
+		int updated = 0;
+		int skipped = 0;
+
+		for (MatchResultDto dto : matches) {
+			try {
+				LeagueMatch incoming = convertToEntity(dto, leagueSlug);
+				LeagueMatch existing = existingMatchesById.get(dto.getMatchId());
+
+				if (existing == null) {
+					dirtyMatches.add(incoming);
+					dirtyMatchIds.add(incoming.getId());
+					inserted++;
+					continue;
+				}
+
+				if (!hasRealtimeRelevantChange(existing, incoming)) {
+					skipped++;
+					continue;
+				}
+
+				existing.update(
+						incoming.getMatchTitle(),
+						incoming.getMatchDate(),
+						incoming.getState(),
+						incoming.getBlueTeamCode(),
+						incoming.getBlueTeamName(),
+						incoming.getBlueExternalTeamId(),
+						incoming.getBlueTeamImageUrl(),
+						incoming.getBlueScore(),
+						incoming.getRedTeamCode(),
+						incoming.getRedTeamName(),
+						incoming.getRedExternalTeamId(),
+						incoming.getRedTeamImageUrl(),
+						incoming.getRedScore(),
+						incoming.isHasVod(),
+						incoming.getMatchDetailsJson(),
+						incoming.getLastUpdated());
+				dirtyMatches.add(existing);
+				dirtyMatchIds.add(existing.getId());
+				updated++;
+			} catch (Exception e) {
+				log.error("Failed to save match: {}", dto.getMatchId(), e);
+			}
+		}
+
+		if (!dirtyMatches.isEmpty()) {
+			leagueMatchRepository.saveAll(dirtyMatches);
+		}
+
+		return new MatchSyncUpsertResult(dirtyMatchIds, inserted, updated, skipped);
+	}
+
+	private MatchGameIdSyncResult syncLeagueMatchGameIdsForMatches(List<LeagueMatch> matches) {
+		if (matches == null || matches.isEmpty()) {
+			return new MatchGameIdSyncResult(0, 0, 0, 0);
+		}
+
+		int updated = 0;
+		int unchanged = 0;
+		int failed = 0;
+
+		for (LeagueMatch match : matches) {
+			try {
+				List<String> gameIds = worldsService.getGameIdsByMatchId(match.getId()).stream()
+						.filter(gameId -> gameId != null && !gameId.isBlank())
+						.toList();
+				List<String> currentGameIds = leagueMatchGameRepository
+						.findByLeagueMatch_IdOrderByGameOrderAsc(match.getId())
+						.stream()
+						.map(LeagueMatchGame::getGameId)
+						.toList();
+
+				if (currentGameIds.equals(gameIds)) {
+					unchanged++;
+					continue;
+				}
+
+				// 자동 경로에서는 일시적인 외부 API 공백으로 기존 매핑을 지우지 않도록 보호한다.
+				if (gameIds.isEmpty() && !currentGameIds.isEmpty()) {
+					log.warn("Skipping empty auto game-id sync for matchId={} state={}", match.getId(), match.getState());
+					failed++;
+					continue;
+				}
+
+				syncLeagueMatchGames(match.getId(), gameIds);
+				updated++;
+				Thread.sleep(120);
+			} catch (Exception e) {
+				failed++;
+				log.warn("Failed to auto sync gameIds for matchId={}: {}", match.getId(), e.getMessage());
+			}
+		}
+
+		return new MatchGameIdSyncResult(matches.size(), updated, unchanged, failed);
+	}
+
+	private boolean hasUnmappedTrackedRows(
+			LeagueMatch match,
+			List<LeagueMatchGameRepository.MappedGameRow> mappedRows) {
+		List<LeagueMatchGameRepository.MappedGameRow> trackedRows = mappedRows.stream()
+				.filter(row -> shouldTrackGameRow(match, row.getGameOrder()))
+				.toList();
+		if (trackedRows.isEmpty()) {
+			return false;
+		}
+		return trackedRows.stream().anyMatch(row -> row.getInternalGameId() == null);
 	}
 
 	// [Admin용] 모든 대상 리그의 전체 과거 데이터 동기화
@@ -1420,6 +1670,47 @@ public class LeagueMatchService {
 			int updatedMappings,
 			int unresolvedMappings,
 			int conflicts) {
+	}
+
+	private record MatchGameIdSyncResult(
+			int targetMatches,
+			int updatedMatches,
+			int unchangedMatches,
+			int failedMatches) {
+	}
+
+	private record MatchSyncUpsertResult(
+			Set<String> dirtyMatchIds,
+			int insertedMatches,
+			int updatedMatches,
+			int skippedMatches) {
+	}
+
+	private record AutoBackfillRecentMatchesResult(
+			int pageMatchCount,
+			TeamIdentityBackfillResult teamIdentityResult,
+			MatchGameIdSyncResult gameIdSyncResult,
+			GameExternalIdentityBackfillResult gameIdentityResult) {
+	}
+
+	public record RecentMatchBackfillResult(
+			String league,
+			int fetchedMatches,
+			int insertedMatches,
+			int updatedMatches,
+			int skippedMatches,
+			int metadataUpdated,
+			int pageMatchCount,
+			int teamIdentityCreated,
+			int teamIdentityUpdated,
+			int teamIdentityUnresolved,
+			int gameIdUpdated,
+			int gameIdUnchanged,
+			int gameIdFailed,
+			int gameIdentityCreated,
+			int gameIdentityUpdated,
+			int gameIdentityUnresolved,
+			boolean includeTeamMetadata) {
 	}
 
 	private record ExternalTeamCandidate(
