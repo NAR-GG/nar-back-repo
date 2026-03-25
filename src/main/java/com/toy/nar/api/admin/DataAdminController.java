@@ -88,6 +88,42 @@ public class DataAdminController {
 				"message", league + " 최신 동기화가 완료되었습니다."));
 	}
 
+	@PostMapping("/sync/matches/recent-backfill")
+	public ResponseEntity<Map<String, Object>> backfillRecentMatches(
+			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "LCK") String league,
+			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean includeTeamMetadata) {
+		log.info("Recent match backfill requested for league: {}, includeTeamMetadata={}", league, includeTeamMetadata);
+
+		long start = System.currentTimeMillis();
+		com.toy.nar.app.lolesports.LeagueMatchService.RecentMatchBackfillResult result = leagueMatchService
+				.backfillRecentMatches(league, includeTeamMetadata);
+		long elapsed = System.currentTimeMillis() - start;
+		cacheEvictionService.evictScheduleCaches();
+
+		Map<String, Object> response = new LinkedHashMap<>();
+		response.put("success", true);
+		response.put("league", result.league());
+		response.put("includeTeamMetadata", result.includeTeamMetadata());
+		response.put("fetchedMatches", result.fetchedMatches());
+		response.put("insertedMatches", result.insertedMatches());
+		response.put("updatedMatches", result.updatedMatches());
+		response.put("skippedMatches", result.skippedMatches());
+		response.put("metadataUpdated", result.metadataUpdated());
+		response.put("pageMatchCount", result.pageMatchCount());
+		response.put("teamIdentityCreated", result.teamIdentityCreated());
+		response.put("teamIdentityUpdated", result.teamIdentityUpdated());
+		response.put("teamIdentityUnresolved", result.teamIdentityUnresolved());
+		response.put("gameIdUpdated", result.gameIdUpdated());
+		response.put("gameIdUnchanged", result.gameIdUnchanged());
+		response.put("gameIdFailed", result.gameIdFailed());
+		response.put("gameIdentityCreated", result.gameIdentityCreated());
+		response.put("gameIdentityUpdated", result.gameIdentityUpdated());
+		response.put("gameIdentityUnresolved", result.gameIdentityUnresolved());
+		response.put("elapsedMs", elapsed);
+		response.put("message", league + " recent match backfill completed");
+		return ResponseEntity.ok(response);
+	}
+
 	@PostMapping("/cache/evict-schedule")
 	public ResponseEntity<Map<String, Object>> evictScheduleCaches() {
 		long start = System.currentTimeMillis();
