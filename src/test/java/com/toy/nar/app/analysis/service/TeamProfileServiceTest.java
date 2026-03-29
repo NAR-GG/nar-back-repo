@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 
 import com.toy.nar.app.analysis.dto.TeamProfileHeaderResponse;
+import com.toy.nar.app.analysis.dto.TeamSocialLinks;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.domain.participant.entity.Team;
@@ -33,6 +34,9 @@ class TeamProfileServiceTest {
 
 	@Mock
 	private LeagueMatchRepository leagueMatchRepository;
+
+	@Mock
+	private TeamSocialLinksProvider socialLinksProvider;
 
 	@InjectMocks
 	private TeamProfileService teamProfileService;
@@ -61,6 +65,9 @@ class TeamProfileServiceTest {
 		when(leagueMatchRepository.findTeamMatchesInDateRange(
 				eq("LCK"), eq("Gen.G"), eq("GEN"), any(), any(), eq(PageRequest.of(0, 40))))
 				.thenReturn(matches);
+		when(socialLinksProvider.getSocialLinks("GEN")).thenReturn(
+				new TeamSocialLinks("https://geng.gg/", "https://www.instagram.com/gengesports/",
+						"https://www.youtube.com/@gengesports", "https://x.com/GenG_KR"));
 
 		TeamProfileHeaderResponse response = teamProfileService.getProfileHeader(10L, "LCK");
 
@@ -71,6 +78,8 @@ class TeamProfileServiceTest {
 			assertThat(response.getRecentMatches().get(1).getState()).isEqualTo("inProgress");
 			assertThat(response.getRecentMatches().get(1).getBlueTeamCode()).isEqualTo("GEN");
 			assertThat(response.getRecentMatches().get(1).getRedTeamCode()).isEqualTo("T1");
+			assertThat(response.getSocialLinks()).isNotNull();
+			assertThat(response.getSocialLinks().homepage()).isEqualTo("https://geng.gg/");
 		}
 
 	@Test
