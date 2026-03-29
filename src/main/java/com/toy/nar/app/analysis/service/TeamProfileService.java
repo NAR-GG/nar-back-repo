@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.toy.nar.app.analysis.dto.TeamProfileHeaderResponse;
 import com.toy.nar.app.analysis.dto.TeamRecentMatchDto;
+import com.toy.nar.app.analysis.dto.TeamSocialLinks;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.domain.participant.entity.Team;
@@ -34,6 +35,7 @@ public class TeamProfileService {
 
 	private final TeamRepository teamRepository;
 	private final LeagueMatchRepository leagueMatchRepository;
+	private final TeamSocialLinksProvider socialLinksProvider;
 
 	public TeamProfileHeaderResponse getProfileHeader(Long teamId, String league) {
 		Team team = teamRepository.findById(teamId)
@@ -53,12 +55,14 @@ public class TeamProfileService {
 				PageRequest.of(0, 40));
 
 		List<TeamRecentMatchDto> recent = buildPreviousTodayNext(candidates, nowUtc);
+		TeamSocialLinks socialLinks = socialLinksProvider.getSocialLinks(team.getCode());
 
 		return TeamProfileHeaderResponse.builder()
 				.teamId(team.getId())
 				.teamName(team.getName())
 				.teamCode(team.getCode())
 				.teamImageUrl(team.getImageUrl())
+				.socialLinks(socialLinks)
 				.recentMatches(recent)
 				.build();
 	}

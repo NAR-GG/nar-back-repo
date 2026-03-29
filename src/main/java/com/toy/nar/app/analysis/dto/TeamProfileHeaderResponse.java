@@ -12,5 +12,6 @@ public class TeamProfileHeaderResponse {
 	private String teamName;
 	private String teamCode;
 	private String teamImageUrl;
+	private TeamSocialLinks socialLinks;
 	private List<TeamRecentMatchDto> recentMatches;
 }
