@@ -71,8 +71,9 @@ jobs:
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ secrets.EC2_SSH_KEY }}          
           script: |
+            # 1. 메인 Spring Boot 앱 배포
             docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
             docker stop nar-gg-container || true
             docker rm nar-gg-container || true
@@ -81,9 +82,22 @@ jobs:
               -e JAVA_OPTS="-Xmx512m" \
               -e DISCORD_WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}" \
               -e DB_URL="${{ secrets.DB_URL }}" \
-              -v /home/ubuntu/lol_esports_analysis_test.db:/home/ubuntu/lol_esports_analysis_test.db \
+              -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
+              -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+              -e ELASTICSEARCH_URI="${{ secrets.ELASTICSEARCH_URI }}" \
+              -e GOOGLE_DRIVE_CSV_ID="${{ secrets.GOOGLE_DRIVE_CSV_FILE_ID }}" \
+              -e YOUTUBE_API_KEY="${{ secrets.YOUTUBE_API_KEY }}" \
+              -e LOL_ESPORTS_KEY="${{ secrets.LOL_ESPORTS_KEY }}" \
+              -e LOL_SYNC_CRON="0 0/30 * * * *" \
+              -e LOL_ACTIVE_LEAGUES="${{ secrets.LOL_ACTIVE_LEAGUES }}" \
+              -e LOL_TEAM_METADATA_CRON="0 15 4 * * *" \
+              -e DISCORD_PLAYER_WEBHOOK_URL="${{ secrets.DISCORD_PLAYER_WEBHOOK_URL }}" \
+              -e RIOT_API_KEY="${{ secrets.RIOT_API_KEY }}" \
+              -e RIOT_API_ENABLED="true" \
+              -e RIOT_MONITOR_ENABLED="true" \
               ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
-            
+
+            # 2. Dozzle 배포
             echo "Deploying Dozzle..."
             docker pull amir20/dozzle:latest
             docker stop dozzle || true
