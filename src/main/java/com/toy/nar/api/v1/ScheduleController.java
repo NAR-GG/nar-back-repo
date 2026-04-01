@@ -20,6 +20,7 @@ import com.toy.nar.common.error.ErrorCode;
 import com.toy.nar.config.swagger.ApiErrorCode;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
@@ -36,6 +37,7 @@ public class ScheduleController {
 	@ApiErrorCode(ErrorCode.INVALID_INPUT_VALUE)
 	@GetMapping("")
 	public ResponseEntity<ScheduleResponseDto> getDailySchedule(
+			@Parameter(description = "조회 일자 (예: 2026-04-01)", example = "2026-04-01")
 			@RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 		ScheduleResponseDto schedule = scheduleService.getDailySchedule(date);
 		return ResponseEntity.ok(schedule);
@@ -45,6 +47,7 @@ public class ScheduleController {
 	@ApiErrorCode(ErrorCode.INVALID_INPUT_VALUE)
 	@GetMapping("/calendar")
 	public ResponseEntity<ScheduleCalendarResponseDto> getMonthlyScheduleCalendar(
+			@Parameter(description = "조회 월 (예: 2026-04)", example = "2026-04")
 			@RequestParam("month") @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
 		ScheduleCalendarResponseDto calendar = scheduleService.getMonthlyScheduleCalendar(month);
 		return ResponseEntity.ok(calendar);

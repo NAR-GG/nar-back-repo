@@ -17,6 +17,14 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 		long getMatchCount();
 	}
 
+	interface MonthlyMatchLeagueRow {
+		LocalDate getMatchDay();
+
+		String getLeagueName();
+
+		long getMatchCount();
+	}
+
 	@Query("SELECT m FROM LeagueMatch m WHERE m.leagueName = :leagueName ORDER BY m.matchDate DESC")
 	List<LeagueMatch> findByLeagueNameOrderByMatchDateDesc(@Param("leagueName") String leagueName, Pageable pageable);
 
@@ -44,6 +52,22 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 			ORDER BY DATE(m.match_date)
 			""", nativeQuery = true)
 	List<MonthlyMatchCountRow> findMonthlyMatchCounts(
+			@Param("start") LocalDateTime start,
+			@Param("end") LocalDateTime end,
+			@Param("leagueNames") List<String> leagueNames);
+
+	@Query(value = """
+			SELECT DATE(m.match_date) AS matchDay,
+			       UPPER(m.league_name) AS leagueName,
+			       COUNT(*) AS matchCount
+			FROM league_match m
+			WHERE m.match_date >= :start
+			  AND m.match_date < :end
+			  AND UPPER(m.league_name) IN :leagueNames
+			GROUP BY DATE(m.match_date), UPPER(m.league_name)
+			ORDER BY DATE(m.match_date)
+			""", nativeQuery = true)
+	List<MonthlyMatchLeagueRow> findMonthlyMatchCountsWithLeagues(
 			@Param("start") LocalDateTime start,
 			@Param("end") LocalDateTime end,
 			@Param("leagueNames") List<String> leagueNames);

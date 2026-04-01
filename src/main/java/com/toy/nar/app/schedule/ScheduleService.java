@@ -66,15 +66,28 @@ public class ScheduleService {
 		LocalDateTime start = month.atDay(1).atStartOfDay();
 		LocalDateTime end = month.plusMonths(1).atDay(1).atStartOfDay();
 
-		List<ScheduleCalendarResponseDto.ScheduleDateSummaryDto> dates = leagueMatchRepository
-				.findMonthlyMatchCounts(start, end, new ArrayList<>(com.toy.nar.app.lolesports.LeagueConstants.ALLOWED_LEAGUES))
-				.stream()
-				.map(row -> new ScheduleCalendarResponseDto.ScheduleDateSummaryDto(
-						row.getMatchDay().toString(),
-						row.getMatchCount()))
-				.toList();
+		List<LeagueMatchRepository.MonthlyMatchLeagueRow> rows = leagueMatchRepository
+				.findMonthlyMatchCountsWithLeagues(start, end,
+						new ArrayList<>(com.toy.nar.app.lolesports.LeagueConstants.ALLOWED_LEAGUES));
 
-		return new ScheduleCalendarResponseDto(month.toString(), dates);
+		// 날짜별로 그룹핑: matchCount 합산 + leagues 수집
+		Map<String, ScheduleCalendarResponseDto.ScheduleDateSummaryDto> dateMap = new LinkedHashMap<>();
+		for (var row : rows) {
+			String dateKey = row.getMatchDay().toString();
+			ScheduleCalendarResponseDto.ScheduleDateSummaryDto existing = dateMap.get(dateKey);
+			if (existing == null) {
+				List<String> leagues = new ArrayList<>();
+				leagues.add(row.getLeagueName());
+				dateMap.put(dateKey, new ScheduleCalendarResponseDto.ScheduleDateSummaryDto(
+						dateKey, row.getMatchCount(), leagues));
+			} else {
+				existing.leagues().add(row.getLeagueName());
+				dateMap.put(dateKey, new ScheduleCalendarResponseDto.ScheduleDateSummaryDto(
+						dateKey, existing.matchCount() + row.getMatchCount(), existing.leagues()));
+			}
+		}
+
+		return new ScheduleCalendarResponseDto(month.toString(), new ArrayList<>(dateMap.values()));
 	}
 
 	/**
