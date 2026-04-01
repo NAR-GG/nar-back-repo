@@ -57,7 +57,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
+            ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
           no-cache: true
 
   deploy:
@@ -73,7 +75,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}          
           script: |
             # 1. 메인 Spring Boot 앱 배포
-            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
+            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
             docker stop nar-gg-container || true
             docker rm nar-gg-container || true
             docker run -d --name nar-gg-container -p 8080:8080 \
@@ -94,7 +96,23 @@ jobs:
               -e RIOT_API_KEY="${{ secrets.RIOT_API_KEY }}" \
               -e RIOT_API_ENABLED="true" \
               -e RIOT_MONITOR_ENABLED="true" \
-              ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
+              ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
+
+            echo "Verifying deployed application..."
+            for i in $(seq 1 30); do
+              if curl -fsS http://localhost:8080/v3/api-docs | grep -q '"leagues"'; then
+                echo "Deployment verification succeeded."
+                break
+              fi
+
+              if [ "$i" -eq 30 ]; then
+                echo "Deployment verification failed: 'leagues' field not found in OpenAPI spec."
+                docker logs --tail 200 nar-gg-container || true
+                exit 1
+              fi
+
+              sleep 2
+            done
 
             # 2. Dozzle 배포
             echo "Deploying Dozzle..."
