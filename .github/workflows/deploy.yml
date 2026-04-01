@@ -74,8 +74,28 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}          
           script: |
+            set -eu
+
+            APP_IMAGE="${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}"
+
+            echo "Checking disk usage before cleanup..."
+            df -h
+            docker system df || true
+
+            echo "Cleaning up unused Docker resources..."
+            docker container prune -f || true
+            docker image prune -af || true
+            docker builder prune -af || true
+
+            echo "Checking disk usage after cleanup..."
+            df -h
+            docker system df || true
+
             # 1. 메인 Spring Boot 앱 배포
-            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
+            echo "Pulling app image: ${APP_IMAGE}"
+            docker pull "${APP_IMAGE}"
+
+            echo "Restarting app container..."
             docker stop nar-gg-container || true
             docker rm nar-gg-container || true
             docker run -d --name nar-gg-container -p 8080:8080 \
@@ -96,7 +116,7 @@ jobs:
               -e RIOT_API_KEY="${{ secrets.RIOT_API_KEY }}" \
               -e RIOT_API_ENABLED="true" \
               -e RIOT_MONITOR_ENABLED="true" \
-              ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
+              "${APP_IMAGE}"
 
             echo "Verifying deployed application..."
             for i in $(seq 1 30); do
