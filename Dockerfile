@@ -4,6 +4,7 @@ ENV TZ=Asia/Seoul
 
 WORKDIR /app
 
+ARG CACHEBUST=1
 COPY build/libs/*.jar app.jar
 
 EXPOSE 8080
