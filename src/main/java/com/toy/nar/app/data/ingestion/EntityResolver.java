@@ -192,12 +192,12 @@ public class EntityResolver {
 		log.debug("Found {} existing entities from DB.", existingEntities.size());
 
 		existingEntities.forEach(entity -> {
-			String normalizedName = getNameFromEntity(entity);
+			String normalizedName = storageNormalizer.apply(getNameFromEntity(entity));
 			cache.put(normalizedName, entity);
 		});
 
 		Set<String> namesOfExistingEntities = existingEntities.stream()
-				.map(this::getNameFromEntity)
+				.map(entity -> storageNormalizer.apply(getNameFromEntity(entity)))
 				.collect(Collectors.toSet());
 
 		List<T> entitiesToCreate = newNormalizedNames.stream()
