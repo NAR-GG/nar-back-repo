@@ -55,7 +55,7 @@ class TeamDashboardServiceTest {
 
 		when(gameTeamStatRepository.findTeamDashboardSummary(1L, "LCK", 2026, "Round 1-2", "14.1", null))
 				.thenReturn(Collections.singletonList(
-						new Object[] { 20L, 14L, 6L, 15.8, 64200.0, 0.9, 2.3, 6.1, 11L, 9L, 8L, 7L, 6L }));
+						new Object[] { 20L, 14L, 6L, 15.8, 64200.0, 2134.0, 0.9, 2.3, 6.1, 11L, 9L, 8L, 7L, 6L }));
 		when(gameTeamStatRepository.findTeamDashboardSeriesSummary(1L, "LCK", 2026, "Round 1-2", "14.1", null))
 				.thenReturn(Collections.singletonList(new Object[] { 8L, 6L, 2L }));
 
@@ -97,6 +97,7 @@ class TeamDashboardServiceTest {
 
 		assertThat(response.getTeamId()).isEqualTo(1L);
 		assertThat(response.getGameSummary().getMatchesPlayed()).isEqualTo(8);
+		assertThat(response.getGameSummary().getAvgGameLengthSeconds()).isEqualTo(2134.0);
 		assertThat(response.getPlayerRecords()).hasSize(2);
 		assertThat(response.getPlayerRecords().get(0).getFirstKillCount()).isEqualTo(3);
 		assertThat(response.getPlayerRecords().get(0).getAvgKillParticipationPct()).isEqualTo(71.2);
@@ -125,7 +126,7 @@ class TeamDashboardServiceTest {
 
 		when(gameTeamStatRepository.findTeamDashboardSummary(1L, "LCK", 2026, null, null, null))
 				.thenReturn(Collections.singletonList(
-						new Object[] { 20L, 14L, 6L, 15.8, 64200.0, 0.9, 2.3, 6.1, 11L, 9L, 8L, 7L, 6L }));
+						new Object[] { 20L, 14L, 6L, 15.8, 64200.0, 2134.0, 0.9, 2.3, 6.1, 11L, 9L, 8L, 7L, 6L }));
 		when(gameTeamStatRepository.findTeamDashboardSeriesSummary(1L, "LCK", 2026, null, null, null))
 				.thenReturn(Collections.singletonList(new Object[] { 8L, 6L, 2L }));
 
