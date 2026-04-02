@@ -1258,7 +1258,8 @@ public class LeagueMatchService {
 			Map<Long, Team> dirtyTeams) {
 		if (info == null || info.getName() == null)
 			return 0;
-		if ((info.getCode() == null || info.getCode().isEmpty())
+		if ((info.getName() == null || info.getName().isBlank())
+				&& (info.getCode() == null || info.getCode().isEmpty())
 				&& (info.getImageUrl() == null || info.getImageUrl().isEmpty())) {
 			return 0;
 		}
@@ -1270,25 +1271,10 @@ public class LeagueMatchService {
 			String normTeamName = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(team.getName());
 			return normTeamName.equalsIgnoreCase(normInfoName);
 		}).findFirst().map(team -> {
-			boolean updated = false;
-			String newCode = info.getCode();
-			String newImage = info.getImageUrl();
-
-			if (newCode != null && !newCode.isEmpty() && !newCode.equals(team.getCode())) {
-				updated = true;
-			} else {
-				newCode = team.getCode();
-			}
-
-			if (newImage != null && !newImage.isEmpty() && !newImage.equals(team.getImageUrl())) {
-				updated = true;
-			} else {
-				newImage = team.getImageUrl();
-			}
-
-			if (updated) {
+			TeamMetadataUpdate update = prepareTeamMetadataUpdate(team, info);
+			if (update.updated()) {
 				log.info("Syncing metadata for matched team '{}' (Game ID: {})", team.getName(), game.getId());
-				team.updateMetadata(newCode, newImage);
+				team.updateMetadata(update.name(), update.code(), update.imageUrl());
 				dirtyTeams.put(team.getId(), team);
 				return 1;
 			}
@@ -1343,28 +1329,13 @@ public class LeagueMatchService {
 	}
 
 	private int updateTeamMetadata(Team team, MatchResultDto.TeamInfo info, Map<Long, Team> dirtyTeams) {
-		String newCode = info.getCode();
-		String newImage = info.getImageUrl();
-		boolean updated = false;
-
-		if (newCode != null && !newCode.isEmpty() && !newCode.equals(team.getCode())) {
-			updated = true;
-		} else {
-			newCode = team.getCode();
-		}
-
-		if (newImage != null && !newImage.isEmpty() && !newImage.equals(team.getImageUrl())) {
-			updated = true;
-		} else {
-			newImage = team.getImageUrl();
-		}
-
-		if (!updated) {
+		TeamMetadataUpdate update = prepareTeamMetadataUpdate(team, info);
+		if (!update.updated()) {
 			return 0;
 		}
 
 		log.info("Syncing metadata for team '{}' via external team mapping", team.getName());
-		team.updateMetadata(newCode, newImage);
+		team.updateMetadata(update.name(), update.code(), update.imageUrl());
 		dirtyTeams.put(team.getId(), team);
 		return 1;
 	}
@@ -1373,8 +1344,58 @@ public class LeagueMatchService {
 		if (info == null) {
 			return false;
 		}
+		if (info.getName() != null && !info.getName().isEmpty()) {
+			return true;
+		}
 		return (info.getCode() != null && !info.getCode().isEmpty())
 				|| (info.getImageUrl() != null && !info.getImageUrl().isEmpty());
+	}
+
+	private TeamMetadataUpdate prepareTeamMetadataUpdate(Team team, MatchResultDto.TeamInfo info) {
+		String normalizedName = normalizeIncomingTeamName(info.getName());
+		String newName = team.getName();
+		String newCode = team.getCode();
+		String newImage = team.getImageUrl();
+		boolean updated = false;
+
+		if (normalizedName != null
+				&& !normalizedName.equals(team.getName())
+				&& isTeamNameAvailable(team.getId(), normalizedName)) {
+			newName = normalizedName;
+			updated = true;
+		}
+
+		if (info.getCode() != null && !info.getCode().isEmpty() && !info.getCode().equals(team.getCode())) {
+			newCode = info.getCode();
+			updated = true;
+		}
+
+		if (info.getImageUrl() != null && !info.getImageUrl().isEmpty() && !info.getImageUrl().equals(team.getImageUrl())) {
+			newImage = info.getImageUrl();
+			updated = true;
+		}
+
+		return new TeamMetadataUpdate(newName, newCode, newImage, updated);
+	}
+
+	private String normalizeIncomingTeamName(String teamName) {
+		if (teamName == null || teamName.isBlank()) {
+			return null;
+		}
+		return NameNormalizer.normalizeTeamName(teamName);
+	}
+
+	private boolean isTeamNameAvailable(Long teamId, String targetName) {
+		return teamRepository.findByNameIgnoreCase(targetName)
+				.map(existing -> {
+					boolean available = existing.getId().equals(teamId);
+					if (!available) {
+						log.warn("Skipping team name sync for teamId={} because '{}' is already used by teamId={}",
+								teamId, targetName, existing.getId());
+					}
+					return available;
+				})
+				.orElse(true);
 	}
 
 	private String getTeamNameFromGame(Game game, String side) {
@@ -1490,11 +1511,14 @@ public class LeagueMatchService {
 
 	private Team createMissingTeam(ExternalTeamCandidate candidate) {
 		Team team = Team.builder()
-				.name(candidate.externalName())
+				.name(NameNormalizer.normalizeTeamName(candidate.externalName()))
 				.code(candidate.externalCode())
 				.imageUrl(candidate.externalImageUrl())
 				.build();
 		return teamRepository.save(team);
+	}
+
+	private record TeamMetadataUpdate(String name, String code, String imageUrl, boolean updated) {
 	}
 
 	private boolean hasIdentityMetadataChange(TeamExternalIdentity identity, ExternalTeamCandidate candidate,

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import com.toy.nar.domain.participant.entity.Team;
@@ -28,4 +29,7 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
 	@Query("SELECT t FROM Team t WHERE LOWER(t.code) = LOWER(:code) AND t.code IS NOT NULL")
 	List<Team> findByCodeIgnoreCase(@Param("code") String code);
+
+	@Query("SELECT t FROM Team t WHERE LOWER(t.name) = LOWER(:name)")
+	Optional<Team> findByNameIgnoreCase(@Param("name") String name);
 }
