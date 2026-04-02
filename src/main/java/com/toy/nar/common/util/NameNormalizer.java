@@ -40,6 +40,10 @@ public class NameNormalizer {
 	static {
 		// LCK
 		TEAM_NAME_MAPPINGS.put("brion", "Hanjin Brion");
+		TEAM_NAME_MAPPINGS.put("drx", "Kiwoom Drx");
+		TEAM_NAME_MAPPINGS.put("kiwoom drx", "Kiwoom Drx");
+		TEAM_NAME_MAPPINGS.put("drx challengers", "Kiwoom Drx Challengers");
+		TEAM_NAME_MAPPINGS.put("kiwoom drx challengers", "Kiwoom Drx Challengers");
 		TEAM_NAME_MAPPINGS.put("gen.g esports", "Gen.g");
 		TEAM_NAME_MAPPINGS.put("gen", "Gen.g");
 		TEAM_NAME_MAPPINGS.put("nongshim red force", "Nongshim Redforce");

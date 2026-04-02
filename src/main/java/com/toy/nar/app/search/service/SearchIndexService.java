@@ -32,17 +32,17 @@ public class SearchIndexService {
     private final PlayerRepository playerRepository;
 
     // LCK 팀 한글 이름 매핑 (하드코딩 - 키는 소문자로 저장)
-    private static final Map<String, String> KOREAN_TEAM_NAMES = Map.of(
-            "t1", "티원",
-            "gen.g", "젠지",
-            "hanwha life esports", "한화생명",
-            "dplus kia", "디플러스 기아 담원",
-            "kt rolster", "케이티 롤스터",
-            "dn soopers", "디엔 수퍼스",
-            "bnk fearx", "비엔케이 피어엑스",
-            "nongshim redforce", "농심 레드포스",
-            "hanjin brion", "한진 브리온",
-            "drx", "디알엑스");
+    private static final Map<String, TeamSearchMetadata> TEAM_SEARCH_METADATA = Map.ofEntries(
+            Map.entry("t1", new TeamSearchMetadata("티원", "SKT T1")),
+            Map.entry("gen.g", new TeamSearchMetadata("젠지", "GenG, GEN")),
+            Map.entry("hanwha life esports", new TeamSearchMetadata("한화생명", "HLE")),
+            Map.entry("dplus kia", new TeamSearchMetadata("디플러스 기아 담원", "DK, 담원")),
+            Map.entry("kt rolster", new TeamSearchMetadata("케이티 롤스터", "KT")),
+            Map.entry("dn soopers", new TeamSearchMetadata("디엔 수퍼스", "DNS, SOOP")),
+            Map.entry("bnk fearx", new TeamSearchMetadata("비엔케이 피어엑스", "BFX, FEARX")),
+            Map.entry("nongshim redforce", new TeamSearchMetadata("농심 레드포스", "NS")),
+            Map.entry("hanjin brion", new TeamSearchMetadata("한진 브리온", "BRO, BRION")),
+            Map.entry("kiwoom drx", new TeamSearchMetadata("키움 디알엑스", "DRX, KRX, 디알엑스")));
 
     /**
      * 키워드로 통합 검색 (Team + Player)
@@ -92,7 +92,9 @@ public class SearchIndexService {
             }
 
             String name = team.getName();
-            String nameKorean = KOREAN_TEAM_NAMES.getOrDefault(name.toLowerCase(), null);
+            TeamSearchMetadata metadata = TEAM_SEARCH_METADATA.get(name.toLowerCase());
+            String nameKorean = metadata != null ? metadata.koreanName() : null;
+            String aliases = metadata != null ? metadata.aliases() : null;
 
             // 초성 생성 (한글 이름이 있으면 한글 이름으로, 없으면 영문이라도 시도)
             String chosung = "";
@@ -109,7 +111,8 @@ public class SearchIndexService {
                     .nameKorean(nameKorean)
                     .nameNormalized(name.toLowerCase().replaceAll("[^a-z0-9가-힣]", ""))
                     .autocomplete(
-                            name + " " + (nameKorean != null ? nameKorean : "") + " " + chosung + " " + team.getCode())
+                            buildAutocomplete(name, nameKorean, chosung, team.getCode(), aliases))
+                    .aliases(aliases)
                     .teamCode(team.getCode())
                     .teamImageUrl(team.getImageUrl())
                     .build();
@@ -163,7 +166,9 @@ public class SearchIndexService {
         }
 
         String name = team.getName();
-        String nameKorean = KOREAN_TEAM_NAMES.getOrDefault(name.toLowerCase(), null);
+        TeamSearchMetadata metadata = TEAM_SEARCH_METADATA.get(name.toLowerCase());
+        String nameKorean = metadata != null ? metadata.koreanName() : null;
+        String aliases = metadata != null ? metadata.aliases() : null;
         String chosung = (nameKorean != null) ? HangulUtil.extractChosung(nameKorean) : "";
 
         SearchDocument doc = SearchDocument.builder()
@@ -174,7 +179,8 @@ public class SearchIndexService {
                 .nameKorean(nameKorean)
                 .nameNormalized(name.toLowerCase().replaceAll("[^a-z0-9가-힣]", ""))
                 .autocomplete(
-                        name + " " + (nameKorean != null ? nameKorean : "") + " " + chosung + " " + team.getCode())
+                        buildAutocomplete(name, nameKorean, chosung, team.getCode(), aliases))
+                .aliases(aliases)
                 .teamCode(team.getCode())
                 .teamImageUrl(team.getImageUrl())
                 .build();
@@ -196,5 +202,14 @@ public class SearchIndexService {
     public void deleteIndex(String entityType, Long entityId) {
         String id = entityType + "_" + entityId;
         searchDocumentRepository.deleteById(id);
+    }
+
+    private String buildAutocomplete(String name, String nameKorean, String chosung, String teamCode, String aliases) {
+        return String.join(" ",
+                name != null ? name : "",
+                nameKorean != null ? nameKorean : "",
+                chosung != null ? chosung : "",
+                teamCode != null ? teamCode : "",
+                aliases != null ? aliases : "").trim();
     }
 }

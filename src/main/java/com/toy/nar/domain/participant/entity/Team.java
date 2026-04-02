@@ -62,6 +62,11 @@ public class Team {
 	}
 
 	public void updateMetadata(String code, String imageUrl) {
+		this.updateMetadata(this.name, code, imageUrl);
+	}
+
+	public void updateMetadata(String name, String code, String imageUrl) {
+		this.name = Objects.requireNonNull(name, "Team name must not be null");
 		this.code = code;
 		this.imageUrl = imageUrl;
 	}
