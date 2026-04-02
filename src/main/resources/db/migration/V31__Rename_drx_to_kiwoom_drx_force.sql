@@ -21,7 +21,7 @@ SET t.team_name = 'Kiwoom Drx',
     t.team_image_url = 'https://static.lolesports.com/teams/1774247803537_horizontal_EN_Wh.png'
 WHERE NOT EXISTS (
     SELECT 1
-    FROM teams other
+    FROM (SELECT team_id, team_name FROM teams) other
     WHERE other.team_id <> t.team_id
       AND LOWER(other.team_name) = LOWER('Kiwoom Drx')
 );
