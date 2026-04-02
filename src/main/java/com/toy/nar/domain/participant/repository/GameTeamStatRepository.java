@@ -250,6 +250,7 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 				SUM(CASE WHEN gts.result = 0 THEN 1 ELSE 0 END) AS set_losses,
 				AVG(COALESCE(gts.team_kills, 0)) AS avg_kills,
 				AVG(COALESCE(tg.total_gold, 0)) AS avg_gold,
+				AVG(COALESCE(g.game_length_seconds, 0)) AS avg_game_length_seconds,
 				AVG(COALESCE(gts.barons, 0)) AS avg_barons,
 				AVG(COALESCE(gts.dragons, 0)) AS avg_dragons,
 				AVG(COALESCE(gts.towers, 0)) AS avg_towers,

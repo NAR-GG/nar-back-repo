@@ -15,6 +15,7 @@ public class TeamGameSummaryDto {
 	private Double winRatePct;
 	private Double avgKills;
 	private Double avgGold;
+	private Double avgGameLengthSeconds;
 	private Double avgBarons;
 	private Double avgDragons;
 	private Double avgTowers;
