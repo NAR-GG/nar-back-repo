@@ -10,7 +10,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,9 +49,13 @@ public class TeamDashboardService {
 	private final GameTeamStatRepository gameTeamStatRepository;
 	private final GameParticipantRepository gameParticipantRepository;
 	private final BanRepository banRepository;
+	
+	// Spring Boot의 기본 비동기 TaskExecutor를 주입받아 사용 (가용 스레드 확보용)
+	private final Executor applicationTaskExecutor;
 
 	public TeamDashboardResponse getTeamDashboard(Long teamId, String league, Integer year, String split, String patch,
 			String side) {
+		// 메인 스레드에서 즉시 조회
 		Team team = teamRepository.findById(teamId)
 				.orElseThrow(() -> new IllegalArgumentException("Team not found: " + teamId));
 
@@ -58,38 +65,54 @@ public class TeamDashboardService {
 		String normalizedSplit = normalizeBlank(split);
 		String normalizedPatch = normalizeBlank(patch);
 
-		TeamGameSummaryDto summary = buildSummary(
-				teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch, null);
+		// 각 독립적인 통계 집계를 비동기로 실행 (Scatter)
+		CompletableFuture<TeamGameSummaryDto> summaryFuture = CompletableFuture.supplyAsync(() -> 
+				buildSummary(teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch, null), 
+				applicationTaskExecutor);
 
-		List<TeamPlayerRecordDto> playerRecords = buildPlayerRecords(
-				teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch, normalizedSide);
+		CompletableFuture<List<TeamPlayerRecordDto>> playerRecordsFuture = CompletableFuture.supplyAsync(() -> 
+				buildPlayerRecords(teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch, normalizedSide), 
+				applicationTaskExecutor);
 
-		TeamBanSideStatsDto bannedByTeam = buildBanSideStats(
-				teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch, summary.getSetsPlayed(), true);
-		TeamBanSideStatsDto bannedAgainst = buildBanSideStats(
-				teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch, summary.getSetsPlayed(), false);
+		CompletableFuture<TeamPlayedChampionSideStatsDto> playedChampionsFuture = CompletableFuture.supplyAsync(() -> 
+				buildPlayedChampionSideStats(teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch), 
+				applicationTaskExecutor);
 
-		TeamPlayedChampionSideStatsDto playedChampions = buildPlayedChampionSideStats(
-				teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch);
+		// 밴 통계는 요약 통계(setsPlayed)에 의존하므로 summaryFuture 완료 이후 후속 작업으로 실행
+		CompletableFuture<TeamBanSideStatsDto> bannedByTeamFuture = summaryFuture.thenApplyAsync(summary -> 
+				buildBanSideStats(teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch, summary.getSetsPlayed(), true), 
+				applicationTaskExecutor);
 
-		return TeamDashboardResponse.builder()
-				.teamId(team.getId())
-				.teamName(team.getName())
-				.teamCode(team.getCode())
-				.teamImageUrl(team.getImageUrl())
-				.leagueName(leagueName)
-				.appliedFilter(TeamDashboardFilterDto.builder()
-						.year(normalizedYear)
-						.split(normalizedSplit)
-						.patch(normalizedPatch)
-						.side(normalizedSide != null ? normalizedSide : "ALL")
-						.build())
-				.gameSummary(summary)
-				.playerRecords(playerRecords)
-				.bannedAgainst(bannedAgainst)
-				.bannedByTeam(bannedByTeam)
-				.playedChampions(playedChampions)
-				.build();
+		CompletableFuture<TeamBanSideStatsDto> bannedAgainstFuture = summaryFuture.thenApplyAsync(summary -> 
+				buildBanSideStats(teamId, leagueName, normalizedYear, normalizedSplit, normalizedPatch, summary.getSetsPlayed(), false), 
+				applicationTaskExecutor);
+
+		// 모든 비동기 작업이 완료될 때까지 대기 (Gather)
+		CompletableFuture.allOf(summaryFuture, playerRecordsFuture, playedChampionsFuture, bannedByTeamFuture, bannedAgainstFuture).join();
+
+		try {
+			// 완성된 데이터 조립 후 리턴
+			return TeamDashboardResponse.builder()
+					.teamId(team.getId())
+					.teamName(team.getName())
+					.teamCode(team.getCode())
+					.teamImageUrl(team.getImageUrl())
+					.leagueName(leagueName)
+					.appliedFilter(TeamDashboardFilterDto.builder()
+							.year(normalizedYear)
+							.split(normalizedSplit)
+							.patch(normalizedPatch)
+							.side(normalizedSide != null ? normalizedSide : "ALL")
+							.build())
+					.gameSummary(summaryFuture.get())
+					.playerRecords(playerRecordsFuture.get())
+					.bannedAgainst(bannedAgainstFuture.get())
+					.bannedByTeam(bannedByTeamFuture.get())
+					.playedChampions(playedChampionsFuture.get())
+					.build();
+		} catch (Exception e) {
+			throw new RuntimeException("비동기 데이터 조합 중 오류가 발생했습니다.", e);
+		}
 	}
 
 	private TeamGameSummaryDto buildSummary(Long teamId, String leagueName, Integer year, String split, String patch,
@@ -184,7 +207,7 @@ public class TeamDashboardService {
 			if (result.size() >= TOP_BAN_LIMIT) {
 				break;
 			}
-			int banCount = toInt(row[4]);
+			int banCount = toInt(row[5]); // 4 -> 5 로 변경 (side 필드 추가됨)
 			double rate = denominator > 0 ? (banCount * 100.0) / denominator : 0;
 			result.add(TeamBanStatDto.builder()
 					.championId(toLong(row[0]))
@@ -200,26 +223,96 @@ public class TeamDashboardService {
 
 	private TeamBanSideStatsDto buildBanSideStats(Long teamId, String leagueName, Integer year, String split, String patch,
 			Integer setsPlayed, boolean bannedByTeam) {
+		
+		List<Object[]> rows = bannedByTeam 
+				? banRepository.findBansByTeamGroupedBySide(teamId, leagueName, year, split, patch)
+				: banRepository.findBansAgainstTeamGroupedBySide(teamId, leagueName, year, split, patch);
+				
+		List<Object[]> blueRows = new ArrayList<>();
+		List<Object[]> redRows = new ArrayList<>();
+		Map<Long, Object[]> allStatsMap = new LinkedHashMap<>();
+
+		for (Object[] row : rows) {
+			String side = toString(row[4]);
+			int count = toInt(row[5]);
+			
+			if (SIDE_BLUE.equalsIgnoreCase(side)) {
+				blueRows.add(row);
+			} else if (SIDE_RED.equalsIgnoreCase(side)) {
+				redRows.add(row);
+			}
+			
+			// 전체(ALL) 집계
+			Long champId = toLong(row[0]);
+			Object[] existing = allStatsMap.get(champId);
+			if (existing == null) {
+				allStatsMap.put(champId, new Object[] { row[0], row[1], row[2], row[3], "ALL", count });
+			} else {
+				existing[5] = toInt(existing[5]) + count;
+			}
+		}
+
+		List<Object[]> allRows = new ArrayList<>(allStatsMap.values());
+		allRows.sort((a, b) -> {
+			int countCompare = Integer.compare(toInt(b[5]), toInt(a[5]));
+			return countCompare != 0 ? countCompare : toString(a[2]).compareTo(toString(b[2]));
+		});
+		blueRows.sort((a, b) -> {
+			int countCompare = Integer.compare(toInt(b[5]), toInt(a[5]));
+			return countCompare != 0 ? countCompare : toString(a[2]).compareTo(toString(b[2]));
+		});
+		redRows.sort((a, b) -> {
+			int countCompare = Integer.compare(toInt(b[5]), toInt(a[5]));
+			return countCompare != 0 ? countCompare : toString(a[2]).compareTo(toString(b[2]));
+		});
+
 		return TeamBanSideStatsDto.builder()
-				.all(buildBanStats(fetchBanRows(teamId, leagueName, year, split, patch, null, bannedByTeam), setsPlayed))
-				.blue(buildBanStats(fetchBanRows(teamId, leagueName, year, split, patch, SIDE_BLUE, bannedByTeam), setsPlayed))
-				.red(buildBanStats(fetchBanRows(teamId, leagueName, year, split, patch, SIDE_RED, bannedByTeam), setsPlayed))
+				.all(buildBanStats(allRows, setsPlayed))
+				.blue(buildBanStats(blueRows, setsPlayed))
+				.red(buildBanStats(redRows, setsPlayed))
 				.build();
 	}
 
-	private List<Object[]> fetchBanRows(Long teamId, String leagueName, Integer year, String split, String patch,
-			String side, boolean bannedByTeam) {
-		if (bannedByTeam) {
-			return banRepository.findBansByTeamWithFilters(teamId, leagueName, year, split, patch, side);
+	private TeamPlayedChampionSideStatsDto buildPlayedChampionSideStats(Long teamId, String leagueName, Integer year, String split, String patch) {
+		List<Object[]> rows = gameParticipantRepository.findTeamPlayedChampionsGroupedBySide(teamId, leagueName, year, split, patch);
+		
+		List<Object[]> blueRows = new ArrayList<>();
+		List<Object[]> redRows = new ArrayList<>();
+		Map<String, Object[]> allRowsMap = new LinkedHashMap<>();
+
+		for (Object[] row : rows) {
+			String side = toString(row[14]);
+			if (SIDE_BLUE.equalsIgnoreCase(side)) blueRows.add(row);
+			if (SIDE_RED.equalsIgnoreCase(side)) redRows.add(row);
+			
+			String key = toLong(row[0]) + ":" + toString(row[3]) + ":" + toLong(row[4]); // playerId:position:championId
+			Object[] existing = allRowsMap.get(key);
+			if (existing == null) {
+				Object[] newRow = new Object[15];
+				System.arraycopy(row, 0, newRow, 0, row.length);
+				allRowsMap.put(key, newRow);
+			} else {
+				existing[8] = toInt(existing[8]) + toInt(row[8]);
+				existing[9] = toInt(existing[9]) + toInt(row[9]);
+				existing[10] = toDouble(existing[10]) + toDouble(row[10]);
+				existing[11] = toDouble(existing[11]) + toDouble(row[11]);
+				existing[12] = toDouble(existing[12]) + toDouble(row[12]);
+				Timestamp t1 = (Timestamp) existing[13];
+				Timestamp t2 = (Timestamp) row[13];
+				if (t2 != null && (t1 == null || t2.after(t1))) {
+					existing[13] = t2;
+				}
+			}
 		}
-		return banRepository.findBansAgainstTeamWithFilters(teamId, leagueName, year, split, patch, side);
+
+		return TeamPlayedChampionSideStatsDto.builder()
+				.all(buildPlayedChampionsFromRows(new ArrayList<>(allRowsMap.values())))
+				.blue(buildPlayedChampionsFromRows(blueRows))
+				.red(buildPlayedChampionsFromRows(redRows))
+				.build();
 	}
 
-	private List<TeamPlayedChampionPlayerDto> buildPlayedChampions(Long teamId, String leagueName, Integer year,
-			String split, String patch, String side) {
-		List<Object[]> rows = gameParticipantRepository.findTeamPlayedChampions(teamId, leagueName, year, split, patch,
-				side);
-
+	private List<TeamPlayedChampionPlayerDto> buildPlayedChampionsFromRows(List<Object[]> rows) {
 		Map<String, TeamPlayedChampionPlayerDto.TeamPlayedChampionPlayerDtoBuilder> playerBuilderByKey = new LinkedHashMap<>();
 		Map<String, List<TeamPlayedChampionStatDto>> championListByPlayerKey = new LinkedHashMap<>();
 
@@ -259,21 +352,36 @@ public class TeamDashboardService {
 		List<TeamPlayedChampionPlayerDto> result = new ArrayList<>();
 		for (Map.Entry<String, TeamPlayedChampionPlayerDto.TeamPlayedChampionPlayerDtoBuilder> entry : playerBuilderByKey
 				.entrySet()) {
-			List<TeamPlayedChampionStatDto> champions = championListByPlayerKey.getOrDefault(entry.getKey(), List.of());
-			result.add(entry.getValue()
-					.champions(champions)
-					.build());
+			List<TeamPlayedChampionStatDto> champions = championListByPlayerKey.getOrDefault(entry.getKey(),
+					new ArrayList<>());
+					
+			champions.sort((a, b) -> {
+				int cmp = Integer.compare(b.getGamesPlayed(), a.getGamesPlayed());
+				if (cmp != 0) return cmp;
+				return a.getChampionNameEn().compareTo(b.getChampionNameEn());
+			});
+			
+			result.add(entry.getValue().champions(champions).build());
 		}
+
+		result.sort((a, b) -> {
+			return Integer.compare(getPositionOrder(a.getPosition()), getPositionOrder(b.getPosition()));
+		});
+
 		return result;
 	}
-
-	private TeamPlayedChampionSideStatsDto buildPlayedChampionSideStats(Long teamId, String leagueName, Integer year,
-			String split, String patch) {
-		return TeamPlayedChampionSideStatsDto.builder()
-				.all(buildPlayedChampions(teamId, leagueName, year, split, patch, null))
-				.blue(buildPlayedChampions(teamId, leagueName, year, split, patch, SIDE_BLUE))
-				.red(buildPlayedChampions(teamId, leagueName, year, split, patch, SIDE_RED))
-				.build();
+	
+	private int getPositionOrder(String position) {
+		switch (position != null ? position.toLowerCase() : "") {
+			case "top": return 1;
+			case "jng": return 2;
+			case "jungle": return 2;
+			case "mid": return 3;
+			case "bot": return 4;
+			case "sup": return 5;
+			case "support": return 5;
+			default: return 99;
+		}
 	}
 
 	private String normalizeLeague(String league) {

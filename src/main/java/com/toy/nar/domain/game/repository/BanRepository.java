@@ -54,6 +54,7 @@ public interface BanRepository extends JpaRepository<Ban, Long> {
 				c.champion_name_kr,
 				c.champion_name_en,
 				c.image_url,
+				gs.side,
 				COUNT(*) AS ban_count
 			FROM bans b
 			JOIN champions c ON c.champion_id = b.banned_champion_id
@@ -62,30 +63,29 @@ public interface BanRepository extends JpaRepository<Ban, Long> {
 			JOIN (
 				SELECT DISTINCT gp.game_id, gp.team_id, UPPER(gp.side) AS side
 				FROM game_participants gp
+				WHERE gp.team_id = :teamId
 			) gs ON gs.game_id = b.game_id AND gs.team_id = b.team_id
 			WHERE b.team_id = :teamId
 			  AND l.league_name = :leagueName
 			  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
 			  AND (:split IS NULL OR l.season_split = :split)
 			  AND (:patch IS NULL OR g.patch = :patch)
-			  AND (:side IS NULL OR gs.side = :side)
-			GROUP BY c.champion_id, c.champion_name_kr, c.champion_name_en, c.image_url
+			GROUP BY c.champion_id, c.champion_name_kr, c.champion_name_en, c.image_url, gs.side
 			ORDER BY ban_count DESC, c.champion_name_en
 			""", nativeQuery = true)
-	List<Object[]> findBansByTeamWithFilters(
+	List<Object[]> findBansByTeamGroupedBySide(
 			@Param("teamId") Long teamId,
 			@Param("leagueName") String leagueName,
 			@Param("year") Integer year,
 			@Param("split") String split,
-			@Param("patch") String patch,
-			@Param("side") String side);
+			@Param("patch") String patch);
 
 	/**
 	 * 팀이 상대에게 밴당한 챔피언 집계.
 	 */
 	@Query(value = """
 			WITH my_games AS (
-				SELECT DISTINCT gp.game_id
+				SELECT DISTINCT gp.game_id, UPPER(gp.side) AS side
 				FROM game_participants gp
 				JOIN games g ON g.game_id = gp.game_id
 				JOIN leagues l ON l.league_id = g.league_id
@@ -94,25 +94,24 @@ public interface BanRepository extends JpaRepository<Ban, Long> {
 				  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
 				  AND (:split IS NULL OR l.season_split = :split)
 				  AND (:patch IS NULL OR g.patch = :patch)
-				  AND (:side IS NULL OR UPPER(gp.side) = :side)
 			)
 			SELECT
 				c.champion_id,
 				c.champion_name_kr,
 				c.champion_name_en,
 				c.image_url,
+				mg.side,
 				COUNT(*) AS ban_count
 			FROM my_games mg
 			JOIN bans b ON b.game_id = mg.game_id AND b.team_id <> :teamId
 			JOIN champions c ON c.champion_id = b.banned_champion_id
-			GROUP BY c.champion_id, c.champion_name_kr, c.champion_name_en, c.image_url
+			GROUP BY c.champion_id, c.champion_name_kr, c.champion_name_en, c.image_url, mg.side
 			ORDER BY ban_count DESC, c.champion_name_en
 			""", nativeQuery = true)
-	List<Object[]> findBansAgainstTeamWithFilters(
+	List<Object[]> findBansAgainstTeamGroupedBySide(
 			@Param("teamId") Long teamId,
 			@Param("leagueName") String leagueName,
 			@Param("year") Integer year,
 			@Param("split") String split,
-			@Param("patch") String patch,
-			@Param("side") String side);
+			@Param("patch") String patch);
 }
