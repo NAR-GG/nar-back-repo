@@ -60,6 +60,32 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 			""")
 	List<GameTeamStat> findByYearAndLeagueName(@Param("year") int year, @Param("leagueName") String leagueName);
 
+	@Query("""
+				SELECT gts FROM GameTeamStat gts
+				JOIN FETCH gts.game g
+				JOIN FETCH gts.team t
+				JOIN g.league l
+				WHERE l.leagueName = :leagueName
+				AND (:year IS NULL OR YEAR(g.actualGameStartTime) = :year)
+				AND (:split IS NULL OR l.seasonSplit = :split)
+				AND (:patch IS NULL OR g.patch = :patch)
+				AND (
+					:side IS NULL OR EXISTS (
+						SELECT 1 FROM GameParticipant gp
+						WHERE gp.game = g
+						AND gp.team = gts.team
+						AND UPPER(gp.side) = :side
+					)
+				)
+				ORDER BY g.actualGameStartTime
+			""")
+	List<GameTeamStat> findByFilter(
+			@Param("leagueName") String leagueName,
+			@Param("year") Integer year,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side);
+
 	/**
 	 * 필터 기반 팀별 승률 통계 조회 (팀 랭킹용)
 	 */
@@ -149,13 +175,27 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 				JOIN game_player_stat gps ON gps.game_participant_id = gp.participant_game_id
 				GROUP BY gp.game_id, gp.team_id
 			) tg ON tg.game_id = g.game_id AND tg.team_id = t.team_id
-			WHERE YEAR(g.actual_game_start_time) = :year
+			WHERE (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
 			  AND l.league_name = :leagueName
+			  AND (:split IS NULL OR l.season_split = :split)
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (
+				:side IS NULL OR EXISTS (
+					SELECT 1
+					FROM game_participants gp_side
+					WHERE gp_side.game_id = g.game_id
+					  AND gp_side.team_id = t.team_id
+					  AND UPPER(gp_side.side) = :side
+				)
+			  )
 			GROUP BY t.team_id, t.team_name, t.team_code, t.team_image_url
 			""", nativeQuery = true)
-	List<Object[]> findTeamScatterStatsByLeagueAndYear(
-			@Param("year") int year,
-			@Param("leagueName") String leagueName);
+	List<Object[]> findTeamScatterStatsByFilter(
+			@Param("year") Integer year,
+			@Param("leagueName") String leagueName,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side);
 
 	/**
 	 * 팀별 상세 지표 집계 (세트 기준).
@@ -189,13 +229,27 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 				JOIN game_player_stat gps ON gps.game_participant_id = gp.participant_game_id
 				GROUP BY gp.game_id, gp.team_id
 			) tg ON tg.game_id = g.game_id AND tg.team_id = t.team_id
-			WHERE YEAR(g.actual_game_start_time) = :year
+			WHERE (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
 			  AND l.league_name = :leagueName
+			  AND (:split IS NULL OR l.season_split = :split)
+			  AND (:patch IS NULL OR g.patch = :patch)
+			  AND (
+				:side IS NULL OR EXISTS (
+					SELECT 1
+					FROM game_participants gp_side
+					WHERE gp_side.game_id = g.game_id
+					  AND gp_side.team_id = t.team_id
+					  AND UPPER(gp_side.side) = :side
+				)
+			  )
 			GROUP BY t.team_id, t.team_name, t.team_code, t.team_image_url
 			""", nativeQuery = true)
-	List<Object[]> findTeamDetailStatsByLeagueAndYear(
-			@Param("year") int year,
-			@Param("leagueName") String leagueName);
+	List<Object[]> findTeamDetailStatsByFilter(
+			@Param("year") Integer year,
+			@Param("leagueName") String leagueName,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side);
 
 	/**
 	 * 팀별 매치(시리즈) 전적 집계.
@@ -215,8 +269,19 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 					AND opp.team_id <> gts.team_id
 				JOIN games g ON g.game_id = gts.game_id
 				JOIN leagues l ON l.league_id = g.league_id
-				WHERE YEAR(g.actual_game_start_time) = :year
+				WHERE (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
 				  AND l.league_name = :leagueName
+				  AND (:split IS NULL OR l.season_split = :split)
+				  AND (:patch IS NULL OR g.patch = :patch)
+				  AND (
+					:side IS NULL OR EXISTS (
+						SELECT 1
+						FROM game_participants gp_side
+						WHERE gp_side.game_id = g.game_id
+						  AND gp_side.team_id = gts.team_id
+						  AND UPPER(gp_side.side) = :side
+					)
+				  )
 			),
 			series AS (
 				SELECT
@@ -236,9 +301,12 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 			FROM series
 			GROUP BY team_id
 			""", nativeQuery = true)
-	List<Object[]> findTeamSeriesStatsByLeagueAndYear(
-			@Param("year") int year,
-			@Param("leagueName") String leagueName);
+	List<Object[]> findTeamSeriesStatsByFilter(
+			@Param("year") Integer year,
+			@Param("leagueName") String leagueName,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side);
 
 	/**
 	 * 팀 페이지 대시보드 - 게임 요약(세트 기준) 집계.

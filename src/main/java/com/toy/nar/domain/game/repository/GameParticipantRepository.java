@@ -100,6 +100,26 @@ public interface GameParticipantRepository
 			""")
 	List<GameParticipant> findByTeamIdAndYearWithStats(@Param("teamId") Long teamId, @Param("year") int year);
 
+	@Query("""
+				SELECT gp FROM GameParticipant gp
+				LEFT JOIN FETCH gp.stat s
+				JOIN FETCH gp.game g
+				JOIN FETCH gp.team t
+				JOIN g.league l
+				WHERE l.leagueName = :leagueName
+				AND (:year IS NULL OR YEAR(g.actualGameStartTime) = :year)
+				AND (:split IS NULL OR l.seasonSplit = :split)
+				AND (:patch IS NULL OR g.patch = :patch)
+				AND (:side IS NULL OR UPPER(gp.side) = :side)
+				ORDER BY g.actualGameStartTime
+			""")
+	List<GameParticipant> findByFilterWithStats(
+			@Param("leagueName") String leagueName,
+			@Param("year") Integer year,
+			@Param("split") String split,
+			@Param("patch") String patch,
+			@Param("side") String side);
+
 	/**
 	 * 팀-포지션별 모스트 픽 조회 (팀 랭킹용)
 	 */

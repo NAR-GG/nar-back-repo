@@ -20,14 +20,25 @@ public class TeamScatterService {
 
 	private final GameTeamStatRepository gameTeamStatRepository;
 
-	public TeamScatterResponse getTeamScatterStats(String leagueName, int year, String metric) {
-		String normalizedLeague = normalizeLeagueName(leagueName);
+	public TeamScatterResponse getTeamScatterStats(
+			String leagueName,
+			Integer year,
+			String split,
+			String patch,
+			String side,
+			String metric) {
+		TeamAnalysisFilter filter = TeamAnalysisFilter.from(leagueName, year, split, patch, side);
 		TeamScatterMetric scatterMetric = TeamScatterMetric.from(metric);
 
-		List<Object[]> rows = gameTeamStatRepository.findTeamScatterStatsByLeagueAndYear(year, normalizedLeague);
+		List<Object[]> rows = gameTeamStatRepository.findTeamScatterStatsByFilter(
+				filter.year(),
+				filter.leagueName(),
+				filter.split(),
+				filter.patch(),
+				filter.side());
 		if (rows.isEmpty()) {
 			throw new IllegalArgumentException(
-					"No team stats found for league " + normalizedLeague + " in year " + year);
+					"No team stats found for league " + filter.leagueName() + " in year " + filter.year());
 		}
 
 		List<TeamScatterPointDto> points = rows.stream()
@@ -53,8 +64,8 @@ public class TeamScatterService {
 		double xLeagueAverage = totalGames > 0 ? weightedX / totalGames : 0;
 
 		return TeamScatterResponse.builder()
-				.leagueName(normalizedLeague)
-				.year(year)
+				.leagueName(filter.leagueName())
+				.year(filter.year())
 				.metric(scatterMetric)
 				.xAxisLabel(scatterMetric.getAxisLabel())
 				.yAxisLabel("Win Rate (%)")
@@ -97,13 +108,6 @@ public class TeamScatterService {
 				.avgGold(round(avgGold, 2))
 				.avgObjectives(round(avgObjectives, 2))
 				.build();
-	}
-
-	private String normalizeLeagueName(String leagueName) {
-		if (leagueName == null || leagueName.isBlank()) {
-			return "LCK";
-		}
-		return leagueName.trim().toUpperCase();
 	}
 
 	private double round(double value, int scale) {

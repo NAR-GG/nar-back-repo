@@ -2,7 +2,6 @@ package com.toy.nar.app.analysis.service;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -22,16 +21,32 @@ public class TeamDetailStatsService {
 
 	private final GameTeamStatRepository gameTeamStatRepository;
 
-	public TeamDetailStatsResponse getTeamDetailStats(String league, int year) {
-		String leagueName = normalizeLeague(league);
+	public TeamDetailStatsResponse getTeamDetailStats(
+			String league,
+			Integer year,
+			String split,
+			String patch,
+			String side) {
+		TeamAnalysisFilter filter = TeamAnalysisFilter.from(league, year, split, patch, side);
 
-		List<Object[]> detailRows = gameTeamStatRepository.findTeamDetailStatsByLeagueAndYear(year, leagueName);
+		List<Object[]> detailRows = gameTeamStatRepository.findTeamDetailStatsByFilter(
+				filter.year(),
+				filter.leagueName(),
+				filter.split(),
+				filter.patch(),
+				filter.side());
 		if (detailRows.isEmpty()) {
-			throw new IllegalArgumentException("No team detail stats found for league " + leagueName + " in year " + year);
+			throw new IllegalArgumentException(
+					"No team detail stats found for league " + filter.leagueName() + " in year " + filter.year());
 		}
 
 		Map<Long, SeriesRecord> seriesByTeam = new HashMap<>();
-		for (Object[] row : gameTeamStatRepository.findTeamSeriesStatsByLeagueAndYear(year, leagueName)) {
+		for (Object[] row : gameTeamStatRepository.findTeamSeriesStatsByFilter(
+				filter.year(),
+				filter.leagueName(),
+				filter.split(),
+				filter.patch(),
+				filter.side())) {
 			Long teamId = toLong(row[0]);
 			seriesByTeam.put(teamId, new SeriesRecord(
 					toInt(row[1]),
@@ -93,8 +108,8 @@ public class TeamDetailStatsService {
 				.toList();
 
 		return TeamDetailStatsResponse.builder()
-				.leagueName(leagueName)
-				.year(year)
+				.leagueName(filter.leagueName())
+				.year(filter.year())
 				.totalTeams(ranked.size())
 				.items(ranked)
 				.build();
@@ -147,13 +162,6 @@ public class TeamDetailStatsService {
 				.firstHeraldRatePct(setsPlayed > 0 ? round(firstHeraldCount * 100.0 / setsPlayed, 1) : 0)
 				.firstBaronRatePct(setsPlayed > 0 ? round(firstBaronCount * 100.0 / setsPlayed, 1) : 0)
 				.build();
-	}
-
-	private String normalizeLeague(String league) {
-		if (league == null || league.isBlank()) {
-			return "LCK";
-		}
-		return league.trim().toUpperCase(Locale.ROOT);
 	}
 
 	private double round(double value, int scale) {
