@@ -4,7 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * 팀 레이더 차트 지표 DTO (21개 지표)
+ * 팀 레이더 차트 지표 DTO
  * 
  * 2026 시즌 기준: 아타칸 미적용
  */
@@ -25,12 +25,20 @@ public class TeamRadarStatsDto {
     // === 시간대별 골드차 (팀 합산 평균) ===
     /** 10@GD - 10분 골드차 평균 */
     private Double goldDiffAt10;
+    /** 10@GD score - 레이더 렌더링용 0~100 정규화 점수 */
+    private Double goldDiffAt10Score;
     /** 15@GD - 15분 골드차 평균 */
     private Double goldDiffAt15;
+    /** 15@GD score - 레이더 렌더링용 0~100 정규화 점수 */
+    private Double goldDiffAt15Score;
     /** 20@GD - 20분 골드차 평균 */
     private Double goldDiffAt20;
+    /** 20@GD score - 레이더 렌더링용 0~100 정규화 점수 */
+    private Double goldDiffAt20Score;
     /** 25@GD - 25분 골드차 평균 */
     private Double goldDiffAt25;
+    /** 25@GD score - 레이더 렌더링용 0~100 정규화 점수 */
+    private Double goldDiffAt25Score;
     /** GSPD - Gold Slope Percent Difference (시간당 골드 기울기 차이) */
     private Double gspd;
 
