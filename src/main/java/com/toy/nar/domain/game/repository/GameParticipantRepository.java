@@ -275,6 +275,45 @@ public interface GameParticipantRepository
 			@Param("patch") String patch,
 			@Param("side") String side);
 
+	@Query(value = """
+				SELECT
+					p.player_id,
+					p.player_name,
+					p.image_url,
+					gp.position,
+					c.champion_id,
+					c.champion_name_kr,
+					c.champion_name_en,
+					c.image_url AS champion_image_url,
+					COUNT(*) AS games_played,
+					SUM(CASE WHEN gp.is_win = 1 THEN 1 ELSE 0 END) AS wins,
+					SUM(COALESCE(gps.kills, 0)) AS total_kills,
+					SUM(COALESCE(gps.deaths, 0)) AS total_deaths,
+					SUM(COALESCE(gps.assists, 0)) AS total_assists,
+					MAX(g.actual_game_start_time) AS last_used_at,
+					UPPER(gp.side) AS side
+				FROM game_participants gp
+				JOIN players p ON p.player_id = gp.player_id
+				JOIN champions c ON c.champion_id = gp.champion_id
+				JOIN games g ON g.game_id = gp.game_id
+				JOIN leagues l ON l.league_id = g.league_id
+				JOIN game_player_stat gps ON gps.game_participant_id = gp.participant_game_id
+				WHERE gp.team_id = :teamId
+				  AND l.league_name = :leagueName
+				  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
+				  AND (:split IS NULL OR l.season_split = :split)
+				  AND (:patch IS NULL OR g.patch = :patch)
+				GROUP BY p.player_id, p.player_name, p.image_url, gp.position,
+				         c.champion_id, c.champion_name_kr, c.champion_name_en, c.image_url, UPPER(gp.side)
+				ORDER BY games_played DESC, c.champion_name_en
+				""", nativeQuery = true)
+	List<Object[]> findTeamPlayedChampionsGroupedBySide(
+			@Param("teamId") Long teamId,
+			@Param("leagueName") String leagueName,
+			@Param("year") Integer year,
+			@Param("split") String split,
+			@Param("patch") String patch);
+
 	/**
 	 * 선수 카드 목록용 선수 수 집계.
 	 */

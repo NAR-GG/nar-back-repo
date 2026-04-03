@@ -262,14 +262,11 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 			FROM game_team_stat gts
 			JOIN games g ON g.game_id = gts.game_id
 			JOIN leagues l ON l.league_id = g.league_id
-			JOIN (
-				SELECT DISTINCT gp.game_id, gp.team_id, UPPER(gp.side) AS side
-				FROM game_participants gp
-			) gs ON gs.game_id = g.game_id AND gs.team_id = gts.team_id
 			LEFT JOIN (
 				SELECT gp.game_id, gp.team_id, SUM(COALESCE(gps.earned_gold, 0)) AS total_gold
 				FROM game_participants gp
 				JOIN game_player_stat gps ON gps.game_participant_id = gp.participant_game_id
+				WHERE gp.team_id = :teamId
 				GROUP BY gp.game_id, gp.team_id
 			) tg ON tg.game_id = g.game_id AND tg.team_id = gts.team_id
 			WHERE gts.team_id = :teamId
@@ -277,7 +274,6 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 			  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
 			  AND (:split IS NULL OR l.season_split = :split)
 			  AND (:patch IS NULL OR g.patch = :patch)
-			  AND (:side IS NULL OR gs.side = :side)
 			""", nativeQuery = true)
 	List<Object[]> findTeamDashboardSummary(
 			@Param("teamId") Long teamId,
@@ -304,16 +300,11 @@ public interface GameTeamStatRepository extends JpaRepository<GameTeamStat, Long
 					AND opp.team_id <> gts.team_id
 				JOIN games g ON g.game_id = gts.game_id
 				JOIN leagues l ON l.league_id = g.league_id
-				JOIN (
-					SELECT DISTINCT gp.game_id, gp.team_id, UPPER(gp.side) AS side
-					FROM game_participants gp
-				) gs ON gs.game_id = g.game_id AND gs.team_id = gts.team_id
 				WHERE gts.team_id = :teamId
 				  AND l.league_name = :leagueName
 				  AND (:year IS NULL OR YEAR(g.actual_game_start_time) = :year)
 				  AND (:split IS NULL OR l.season_split = :split)
 				  AND (:patch IS NULL OR g.patch = :patch)
-				  AND (:side IS NULL OR gs.side = :side)
 			),
 			series AS (
 				SELECT

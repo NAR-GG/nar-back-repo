@@ -1,6 +1,8 @@
 package com.toy.nar.app.analysis.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -10,7 +12,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,8 +44,20 @@ class TeamDashboardServiceTest {
 	@Mock
 	private BanRepository banRepository;
 
+	@Mock
+	private Executor applicationTaskExecutor;
+
 	@InjectMocks
 	private TeamDashboardService teamDashboardService;
+
+	@BeforeEach
+	void setUp() {
+		doAnswer(invocation -> {
+			Runnable runnable = invocation.getArgument(0);
+			runnable.run();
+			return null;
+		}).when(applicationTaskExecutor).execute(any(Runnable.class));
+	}
 
 	@Test
 	@DisplayName("4개 섹션 통합 대시보드를 반환한다")
@@ -64,33 +80,27 @@ class TeamDashboardServiceTest {
 						new Object[] { 101L, "Kiin", "p1", "top", 20L, 14L, 60L, 30L, 90L, 3L, 2L, 1L, 71.2, 23.5, 21.0, 28.7, 1.05 },
 						new Object[] { 102L, "Canyon", "p2", "jng", 20L, 14L, 55L, 40L, 120L, 4L, 3L, 0L, 68.4, 20.2, 19.8, 36.2, 1.29 }));
 
-		when(banRepository.findBansByTeamWithFilters(1L, "LCK", 2026, "Round 1-2", "14.1", null))
-				.thenReturn(List.<Object[]>of(new Object[] { 11L, "렐", "Rell", "c1", 7L }));
-		when(banRepository.findBansByTeamWithFilters(1L, "LCK", 2026, "Round 1-2", "14.1", "BLUE"))
-				.thenReturn(List.<Object[]>of(new Object[] { 11L, "렐", "Rell", "c1", 4L }));
-		when(banRepository.findBansByTeamWithFilters(1L, "LCK", 2026, "Round 1-2", "14.1", "RED"))
-				.thenReturn(List.<Object[]>of(new Object[] { 11L, "렐", "Rell", "c1", 3L }));
-		when(banRepository.findBansAgainstTeamWithFilters(1L, "LCK", 2026, "Round 1-2", "14.1", null))
-				.thenReturn(List.<Object[]>of(new Object[] { 12L, "신짜오", "Xin Zhao", "c2", 9L }));
-		when(banRepository.findBansAgainstTeamWithFilters(1L, "LCK", 2026, "Round 1-2", "14.1", "BLUE"))
-				.thenReturn(List.<Object[]>of(new Object[] { 12L, "신짜오", "Xin Zhao", "c2", 5L }));
-		when(banRepository.findBansAgainstTeamWithFilters(1L, "LCK", 2026, "Round 1-2", "14.1", "RED"))
-				.thenReturn(List.<Object[]>of(new Object[] { 12L, "신짜오", "Xin Zhao", "c2", 4L }));
+		when(banRepository.findBansByTeamGroupedBySide(1L, "LCK", 2026, "Round 1-2", "14.1"))
+				.thenReturn(List.<Object[]>of(
+						new Object[] { 11L, "렐", "Rell", "c1", "BLUE", 4L },
+						new Object[] { 11L, "렐", "Rell", "c1", "RED", 3L }
+				));
+		when(banRepository.findBansAgainstTeamGroupedBySide(1L, "LCK", 2026, "Round 1-2", "14.1"))
+				.thenReturn(List.<Object[]>of(
+						new Object[] { 12L, "신짜오", "Xin Zhao", "c2", "BLUE", 5L },
+						new Object[] { 12L, "신짜오", "Xin Zhao", "c2", "RED", 4L }
+				));
 
-		when(gameParticipantRepository.findTeamPlayedChampions(1L, "LCK", 2026, "Round 1-2", "14.1", null))
+		when(gameParticipantRepository.findTeamPlayedChampionsGroupedBySide(1L, "LCK", 2026, "Round 1-2", "14.1"))
 				.thenReturn(List.of(
-						new Object[] { 101L, "Kiin", "p1", "top", 201L, "그웬", "Gwen", "img-gwen", 6L, 4L, 20L, 12L, 18L,
-								Timestamp.valueOf(LocalDateTime.of(2026, 2, 1, 3, 0, 0)) },
-						new Object[] { 101L, "Kiin", "p1", "top", 202L, "레넥톤", "Renekton", "img-renek", 4L, 3L, 14L, 10L, 22L,
-								Timestamp.valueOf(LocalDateTime.of(2026, 1, 20, 3, 0, 0)) }));
-		when(gameParticipantRepository.findTeamPlayedChampions(1L, "LCK", 2026, "Round 1-2", "14.1", "BLUE"))
-				.thenReturn(Collections.singletonList(
 						new Object[] { 101L, "Kiin", "p1", "top", 201L, "그웬", "Gwen", "img-gwen", 3L, 2L, 10L, 5L, 8L,
-								Timestamp.valueOf(LocalDateTime.of(2026, 2, 1, 3, 0, 0)) }));
-		when(gameParticipantRepository.findTeamPlayedChampions(1L, "LCK", 2026, "Round 1-2", "14.1", "RED"))
-				.thenReturn(Collections.singletonList(
+								Timestamp.valueOf(LocalDateTime.of(2026, 2, 1, 3, 0, 0)), "BLUE" },
+						new Object[] { 101L, "Kiin", "p1", "top", 201L, "그웬", "Gwen", "img-gwen", 3L, 2L, 10L, 7L, 10L,
+								Timestamp.valueOf(LocalDateTime.of(2026, 2, 1, 3, 0, 0)), "RED" },
 						new Object[] { 101L, "Kiin", "p1", "top", 202L, "레넥톤", "Renekton", "img-renek", 2L, 1L, 7L, 5L, 10L,
-								Timestamp.valueOf(LocalDateTime.of(2026, 1, 20, 3, 0, 0)) }));
+								Timestamp.valueOf(LocalDateTime.of(2026, 1, 20, 3, 0, 0)), "RED" },
+						new Object[] { 101L, "Kiin", "p1", "top", 202L, "레넥톤", "Renekton", "img-renek", 2L, 2L, 7L, 5L, 12L,
+								Timestamp.valueOf(LocalDateTime.of(2026, 1, 20, 3, 0, 0)), "BLUE" }));
 
 		TeamDashboardResponse response = teamDashboardService.getTeamDashboard(
 				1L, "LCK", 2026, "Round 1-2", "14.1", "ALL");
@@ -132,29 +142,18 @@ class TeamDashboardServiceTest {
 
 		when(gameParticipantRepository.findTeamPlayerRecords(1L, "LCK", 2026, null, null, null))
 				.thenReturn(List.of());
-		when(gameParticipantRepository.findTeamPlayedChampions(1L, "LCK", 2026, null, null, null))
-				.thenReturn(List.of());
-		when(gameParticipantRepository.findTeamPlayedChampions(1L, "LCK", 2026, null, null, "BLUE"))
-				.thenReturn(List.of());
-		when(gameParticipantRepository.findTeamPlayedChampions(1L, "LCK", 2026, null, null, "RED"))
+		when(gameParticipantRepository.findTeamPlayedChampionsGroupedBySide(1L, "LCK", 2026, null, null))
 				.thenReturn(List.of());
 
 		List<Object[]> banRows = new ArrayList<>();
 		for (int i = 0; i < 6; i++) {
-			banRows.add(new Object[] { 100L + i, "챔프" + i, "Champ" + i, "img" + i, 10L - i });
+			banRows.add(new Object[] { 100L + i, "챔프" + i, "Champ" + i, "img" + i, "BLUE", 10L - i });
+			banRows.add(new Object[] { 100L + i, "챔프" + i, "Champ" + i, "img" + i, "RED", 10L - i });
 		}
 
-		when(banRepository.findBansByTeamWithFilters(1L, "LCK", 2026, null, null, null))
+		when(banRepository.findBansByTeamGroupedBySide(1L, "LCK", 2026, null, null))
 				.thenReturn(banRows);
-		when(banRepository.findBansByTeamWithFilters(1L, "LCK", 2026, null, null, "BLUE"))
-				.thenReturn(banRows);
-		when(banRepository.findBansByTeamWithFilters(1L, "LCK", 2026, null, null, "RED"))
-				.thenReturn(banRows);
-		when(banRepository.findBansAgainstTeamWithFilters(1L, "LCK", 2026, null, null, null))
-				.thenReturn(banRows);
-		when(banRepository.findBansAgainstTeamWithFilters(1L, "LCK", 2026, null, null, "BLUE"))
-				.thenReturn(banRows);
-		when(banRepository.findBansAgainstTeamWithFilters(1L, "LCK", 2026, null, null, "RED"))
+		when(banRepository.findBansAgainstTeamGroupedBySide(1L, "LCK", 2026, null, null))
 				.thenReturn(banRows);
 
 		TeamDashboardResponse response = teamDashboardService.getTeamDashboard(
