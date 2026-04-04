@@ -1,6 +1,8 @@
 package com.toy.nar.common.util;
 
+import java.text.Normalizer;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 import org.springframework.util.StringUtils;
@@ -100,6 +102,10 @@ public class NameNormalizer {
 		return toTitleCase(trimmed);
 	}
 
+	public static String normalizeTeamLookupKey(String teamName) {
+		return normalizeLookupKey(normalizeTeamName(teamName));
+	}
+
 	/**
 	 * [수정] 플레이어 이름을 표준 형식(Title Case, 양끝 공백 없음)으로 변환합니다.
 	 * 예: " hide on bush " -> "Hide On Bush"
@@ -109,6 +115,10 @@ public class NameNormalizer {
 			return "";
 		}
 		return toTitleCase(playerName.trim());
+	}
+
+	public static String normalizePlayerLookupKey(String playerName) {
+		return normalizeLookupKey(normalizePlayerName(playerName));
 	}
 
 	/**
@@ -129,6 +139,19 @@ public class NameNormalizer {
 					return Character.toUpperCase(lowerWord.charAt(0)) + lowerWord.substring(1);
 				})
 				.collect(Collectors.joining(" "));
+	}
+
+	private static String normalizeLookupKey(String input) {
+		if (!StringUtils.hasText(input)) {
+			return "";
+		}
+
+		String decomposed = Normalizer.normalize(input.trim(), Normalizer.Form.NFD);
+		String withoutDiacritics = decomposed.replaceAll("\\p{M}+", "");
+
+		return withoutDiacritics
+				.toLowerCase(Locale.ROOT)
+				.replaceAll("[\\p{Punct}\\s]+", "");
 	}
 
 }

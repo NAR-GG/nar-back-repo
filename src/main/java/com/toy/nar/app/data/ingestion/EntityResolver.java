@@ -21,6 +21,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,6 +50,16 @@ public class EntityResolver {
 
 	@Transactional(readOnly = true)
 	public void initializeCaches() {
+		if (teamCache.isEmpty()) {
+			Map<String, Team> cachedTeams = teamRepository.findAllWithLeagueTeams().stream()
+					.collect(Collectors.toMap(
+							team -> NameNormalizer.normalizeTeamLookupKey(team.getName()),
+							team -> team,
+							(existing, ignored) -> existing,
+							LinkedHashMap::new));
+			teamCache.putAll(cachedTeams);
+			log.info("Initialized Team cache with {} entries.", teamCache.size());
+		}
 		if (championCache.isEmpty()) {
 			championCache.putAll(championRepository.findAll().stream()
 					.collect(Collectors.toMap(
@@ -80,6 +91,7 @@ public class EntityResolver {
 	private void resolveTeams(Set<String> originalNames) {
 		resolveEntitiesByName(
 				originalNames,
+				NameNormalizer::normalizeTeamLookupKey,
 				NameNormalizer::normalizeTeamName,
 				teamCache,
 				teamRepository::findAllByNameInWithLeagueTeams,
@@ -90,6 +102,7 @@ public class EntityResolver {
 	private void resolvePlayers(Set<String> originalNames) {
 		resolveEntitiesByName(
 				originalNames,
+				NameNormalizer::normalizePlayerLookupKey,
 				NameNormalizer::normalizePlayerName,
 				playerCache,
 				playerRepository::findAllByNameInIgnoreCase,
@@ -100,13 +113,13 @@ public class EntityResolver {
 	public Team resolveTeam(String teamName) {
 		if (!StringUtils.hasText(teamName))
 			return null;
-		return teamCache.get(NameNormalizer.normalizeTeamName(teamName.trim()));
+		return teamCache.get(NameNormalizer.normalizeTeamLookupKey(teamName.trim()));
 	}
 
 	public Player resolvePlayer(String playerName) {
 		if (!StringUtils.hasText(playerName))
 			return null;
-		return playerCache.get(NameNormalizer.normalizePlayerName(playerName.trim()));
+		return playerCache.get(NameNormalizer.normalizePlayerLookupKey(playerName.trim()));
 	}
 
 	public Champion resolveChampion(String championName) {
@@ -153,7 +166,7 @@ public class EntityResolver {
 							.build();
 
 					requiredTeamNames.forEach(teamName -> {
-						String teamLookupKey = NameNormalizer.normalizeTeamName(teamName);
+						String teamLookupKey = NameNormalizer.normalizeTeamLookupKey(teamName);
 						Team team = teamCache.get(teamLookupKey);
 						if (team != null) {
 							newLeague.addLeagueTeam(team);
@@ -173,35 +186,47 @@ public class EntityResolver {
 
 	private <T, ID> void resolveEntitiesByName(
 			Set<String> originalNames,
-			Function<String, String> storageNormalizer,
+			Function<String, String> lookupKeyNormalizer,
+			Function<String, String> canonicalNameNormalizer,
 			Map<String, T> cache,
 			Function<Set<String>, List<T>> findInDb,
 			Function<String, T> entityCreator,
 			JpaRepository<T, ID> repository) {
-		Set<String> newNormalizedNames = originalNames.stream()
+		Map<String, String> canonicalNamesByKey = originalNames.stream()
 				.filter(StringUtils::hasText)
-				.map(name -> storageNormalizer.apply(name.trim()))
-				.filter(normalizedName -> !cache.containsKey(normalizedName))
+				.map(String::trim)
+				.map(canonicalNameNormalizer)
+				.collect(Collectors.toMap(
+						lookupKeyNormalizer,
+						Function.identity(),
+						(existing, ignored) -> existing,
+						LinkedHashMap::new));
+
+		Set<String> missingKeys = canonicalNamesByKey.keySet().stream()
+				.filter(lookupKey -> !cache.containsKey(lookupKey))
 				.collect(Collectors.toSet());
 
-		if (newNormalizedNames.isEmpty())
+		if (missingKeys.isEmpty())
 			return;
 
-		log.debug("Querying DB for {} with keys: {}", repository.getClass().getSimpleName(), newNormalizedNames);
-		List<T> existingEntities = findInDb.apply(newNormalizedNames);
+		Set<String> canonicalNamesToFind = canonicalNamesByKey.entrySet().stream()
+				.filter(entry -> missingKeys.contains(entry.getKey()))
+				.map(Map.Entry::getValue)
+				.collect(Collectors.toSet());
+
+		log.debug("Querying DB for {} with names: {}", repository.getClass().getSimpleName(), canonicalNamesToFind);
+		List<T> existingEntities = findInDb.apply(canonicalNamesToFind);
 		log.debug("Found {} existing entities from DB.", existingEntities.size());
 
 		existingEntities.forEach(entity -> {
-			String normalizedName = storageNormalizer.apply(getNameFromEntity(entity));
-			cache.put(normalizedName, entity);
+			String lookupKey = lookupKeyNormalizer.apply(getNameFromEntity(entity));
+			cache.put(lookupKey, entity);
 		});
 
-		Set<String> namesOfExistingEntities = existingEntities.stream()
-				.map(entity -> storageNormalizer.apply(getNameFromEntity(entity)))
-				.collect(Collectors.toSet());
-
-		List<T> entitiesToCreate = newNormalizedNames.stream()
-				.filter(normalizedName -> !namesOfExistingEntities.contains(normalizedName))
+		List<T> entitiesToCreate = canonicalNamesByKey.entrySet().stream()
+				.filter(entry -> !cache.containsKey(entry.getKey()))
+				.map(Map.Entry::getValue)
+				.distinct()
 				.map(entityCreator)
 				.collect(Collectors.toList());
 
@@ -212,8 +237,8 @@ public class EntityResolver {
 			log.info("Successfully created {} new entities.", savedEntities.size());
 
 			savedEntities.forEach(entity -> {
-				String normalizedName = getNameFromEntity(entity);
-				cache.put(normalizedName, entity);
+				String lookupKey = lookupKeyNormalizer.apply(getNameFromEntity(entity));
+				cache.put(lookupKey, entity);
 			});
 		}
 	}
