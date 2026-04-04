@@ -15,6 +15,9 @@ import com.toy.nar.domain.participant.entity.Team;
 
 public interface TeamRepository extends JpaRepository<Team, Long> {
 
+	@Query("SELECT DISTINCT t FROM Team t LEFT JOIN FETCH t.leagueTeams")
+	List<Team> findAllWithLeagueTeams();
+
 	@Query("SELECT t FROM Team t WHERE t.name IN :names")
 	List<Team> findAllByNameInIgnoreCase(@Param("names") Set<String> names);
 
