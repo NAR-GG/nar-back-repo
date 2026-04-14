@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Spring Boot App",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": ["bootRun"],
+      "port": 8080
+    },
+    {
+      "name": "MySQL (Docker Compose)",
+      "runtimeExecutable": "docker-compose",
+      "runtimeArgs": ["up", "-d"],
+      "port": 3308
+    }
+  ]
+}
