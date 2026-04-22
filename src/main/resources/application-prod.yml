@@ -1,3 +1,6 @@
+server:
+  forward-headers-strategy: framework
+
 spring:
   datasource:
     url: ${DB_URL}
@@ -88,7 +91,7 @@ google:
 app:
   server:
     url: "https://api.nar.kr"
-  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  frontend-url: ${FRONTEND_URL:https://nar.kr}
 
 jwt:
   secret: ${JWT_SECRET}
