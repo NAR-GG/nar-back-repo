@@ -36,10 +36,11 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/v1/**", "/api/v3/**",
-                                "/api/admin/**", "/api/kakao/**",
+                                "/api/auth/me", "/api/auth/logout", "/api/auth/onboarding"
+                        ).authenticated()
+                        .requestMatchers(
+                                "/api/**",
                                 "/oauth2/**", "/login/oauth2/**",
-                                "/api/auth/**",
                                 "/swagger-ui/**", "/v3/api-docs/**",
                                 "/actuator/**"
                         ).permitAll()
