@@ -2,8 +2,10 @@ package com.toy.nar.api.auth;
 
 import com.toy.nar.api.auth.dto.MemberResponse;
 import com.toy.nar.api.auth.dto.OnboardingRequest;
+import com.toy.nar.api.auth.dto.OnboardingTeamOptionResponse;
 import com.toy.nar.api.auth.dto.TokenResponse;
 import com.toy.nar.app.auth.JwtTokenProvider;
+import com.toy.nar.domain.game.repository.LeagueTeamRepository;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.RefreshToken;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -26,6 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+
 import static org.springframework.http.HttpStatus.*;
 
 @RestController
@@ -38,6 +42,20 @@ public class AuthController {
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final TeamRepository teamRepository;
+    private final LeagueTeamRepository leagueTeamRepository;
+
+    @Operation(
+            summary = "온보딩용 LCK 팀 목록 조회",
+            description = "온보딩 화면에서 선택할 최신 시즌 LCK 팀 목록을 조회합니다."
+    )
+    @ApiResponse(responseCode = "200", description = "LCK 팀 목록 조회 성공")
+    @GetMapping("/onboarding/teams")
+    public ResponseEntity<List<OnboardingTeamOptionResponse>> getOnboardingTeams() {
+        List<OnboardingTeamOptionResponse> teams = leagueTeamRepository.findLatestTeamsByLeagueName("LCK").stream()
+                .map(OnboardingTeamOptionResponse::from)
+                .toList();
+        return ResponseEntity.ok(teams);
+    }
 
     @Operation(
             summary = "토큰 재발급",

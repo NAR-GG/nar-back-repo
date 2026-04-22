@@ -22,6 +22,19 @@ public interface LeagueTeamRepository extends JpaRepository<LeagueTeam, Long> {
 			@Param("seasonYear") Integer seasonYear,
 			@Param("seasonSplit") String seasonSplit);
 
+	@Query("""
+			SELECT DISTINCT lt.team
+			FROM LeagueTeam lt
+			WHERE lt.league.leagueName = :leagueName
+			  AND lt.league.seasonYear = (
+			  	SELECT MAX(l.seasonYear)
+			  	FROM League l
+			  	WHERE l.leagueName = :leagueName
+			  )
+			ORDER BY lt.team.name
+			""")
+	List<Team> findLatestTeamsByLeagueName(@Param("leagueName") String leagueName);
+
 	@Modifying
 	int deleteByLeague_LeagueName(String leagueName);
 
