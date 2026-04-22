@@ -1,5 +1,6 @@
 package com.toy.nar.config;
 
+import com.toy.nar.app.auth.CookieOAuth2AuthorizationRequestRepository;
 import com.toy.nar.app.auth.CustomOAuth2UserService;
 import com.toy.nar.app.auth.JwtAuthenticationFilter;
 import com.toy.nar.app.auth.JwtTokenProvider;
@@ -24,12 +25,13 @@ public class SecurityConfig {
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2AuthenticationSuccessHandler successHandler;
     private final OAuth2AuthenticationFailureHandler failureHandler;
+    private final CookieOAuth2AuthorizationRequestRepository authorizationRequestRepository;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/v1/**", "/api/v3/**",
@@ -42,6 +44,8 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2
+                        .authorizationEndpoint(a -> a
+                                .authorizationRequestRepository(authorizationRequestRepository))
                         .userInfoEndpoint(u -> u.userService(customOAuth2UserService))
                         .successHandler(successHandler)
                         .failureHandler(failureHandler)
