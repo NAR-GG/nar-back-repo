@@ -6,6 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 문서, 계획, 주석 등 모든 서술형 산출물은 **한국어**로 작성한다.
 
+## 브랜치 & 작업 규칙
+
+- **`main` 브랜치는 절대 직접 수정하지 않는다.** PR을 통해서만 업데이트된다.
+- **모든 개발 작업은 `v3-dev` 브랜치 기준으로 한다.** 새 기능/수정은 `v3-dev`에서 브랜치를 따거나 `v3-dev`를 타깃으로 PR을 올린다.
+- **메인 레포 디렉토리(`/Users/changha/Documents/25-3-quarter/nar`)는 직접 수정하지 않는다.** 작업은 워크트리에서 진행한다.
+- Claude가 작업할 때는 항상 워크트리를 사용하고, 완료 후 `v3-dev`로 PR을 올린다.
+
 ## Project Overview
 
 **NAR.GG** — A League of Legends esports analytics service (Spring Boot 3.5.3, Java 17, MySQL, Elasticsearch). Tracks champion combinations, matchup stats, match schedules, and team performance metrics.
@@ -20,6 +27,9 @@ docker-compose up -d              # MySQL on port 3308 (nar_id / nar_pw)
 ./gradlew clean build -x test     # Build without tests
 ./gradlew bootRun                 # Run app (uses application-prod.yml)
 ./gradlew test                    # Run all tests
+
+# dev 프로파일로 실행
+./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
 
 ### Run a single test
@@ -103,6 +113,7 @@ RIOT_API_KEY
 DISCORD_WEBHOOK_URL, DISCORD_PLAYER_WEBHOOK_URL
 GOOGLE_DRIVE_CSV_ID
 RIOT_MONITOR_ENABLED, RIOT_API_ENABLED   # feature flags for scheduling
+JWT_SECRET
 ```
 
 ## CI/CD
