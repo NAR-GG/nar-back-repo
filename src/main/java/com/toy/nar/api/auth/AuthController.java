@@ -10,6 +10,14 @@ import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.member.repository.RefreshTokenRepository;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.TeamRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +31,7 @@ import static org.springframework.http.HttpStatus.*;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "8. 인증 / 로그인", description = "소셜 로그인과 JWT 기반 사용자 인증 API")
 public class AuthController {
 
     private final JwtTokenProvider jwtTokenProvider;
@@ -30,9 +39,20 @@ public class AuthController {
     private final RefreshTokenRepository refreshTokenRepository;
     private final TeamRepository teamRepository;
 
+    @Operation(
+            summary = "토큰 재발급",
+            description = "Refresh Token으로 새로운 Access Token과 Refresh Token을 발급합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "토큰 재발급 성공"),
+            @ApiResponse(responseCode = "401", description = "유효하지 않거나 만료된 리프레시 토큰")
+    })
     @PostMapping("/refresh")
     @Transactional
-    public ResponseEntity<TokenResponse> refresh(@RequestParam String refreshToken) {
+    public ResponseEntity<TokenResponse> refresh(
+            @Parameter(description = "로그인 성공 후 발급된 Refresh Token", required = true,
+                    example = "eyJhbGciOiJIUzI1NiJ9.refresh-token")
+            @RequestParam String refreshToken) {
         RefreshToken stored = refreshTokenRepository.findByToken(refreshToken)
                 .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "유효하지 않은 리프레시 토큰"));
 
@@ -55,6 +75,12 @@ public class AuthController {
         return ResponseEntity.ok(new TokenResponse(newAccessToken, newRefreshToken, member.isOnboarded()));
     }
 
+    @Operation(
+            summary = "로그아웃",
+            description = "현재 로그인 사용자의 Refresh Token을 폐기합니다."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "204", description = "로그아웃 성공")
     @PostMapping("/logout")
     @Transactional
     public ResponseEntity<Void> logout(@AuthenticationPrincipal Long memberId) {
@@ -64,6 +90,15 @@ public class AuthController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(
+            summary = "온보딩 완료",
+            description = "로그인한 사용자의 선호 팀을 저장하고 온보딩을 완료합니다."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "온보딩 완료"),
+            @ApiResponse(responseCode = "404", description = "회원 또는 팀을 찾을 수 없음")
+    })
     @PostMapping("/onboarding")
     @Transactional
     public ResponseEntity<MemberResponse> onboarding(@AuthenticationPrincipal Long memberId,
@@ -77,6 +112,15 @@ public class AuthController {
         return ResponseEntity.ok(MemberResponse.from(member));
     }
 
+    @Operation(
+            summary = "내 정보 조회",
+            description = "현재 로그인한 사용자의 기본 정보를 조회합니다."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "내 정보 조회 성공"),
+            @ApiResponse(responseCode = "404", description = "회원을 찾을 수 없음")
+    })
     @GetMapping("/me")
     public ResponseEntity<MemberResponse> me(@AuthenticationPrincipal Long memberId) {
         Member member = memberRepository.findById(memberId)
