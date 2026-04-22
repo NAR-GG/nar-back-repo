@@ -5,13 +5,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.examples.Example;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
+import io.swagger.v3.oas.models.media.StringSchema;
+import io.swagger.v3.oas.models.parameters.Parameter;
+import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 
 import org.springdoc.core.customizers.OperationCustomizer;
@@ -33,7 +39,40 @@ public class SwaggerConfig {
 			.info(new Info()
 				.title("NAR API Document")
 				.description("LoL Esports 데이터 분석 서비스 API 명세서")
-				.version("v3.0.0"));
+				.version("v3.0.0"))
+			.components(new Components()
+				.addSecuritySchemes("bearerAuth", new SecurityScheme()
+					.type(SecurityScheme.Type.HTTP)
+					.scheme("bearer")
+					.bearerFormat("JWT")
+					.description("소셜 로그인 성공 후 발급된 Access Token을 입력합니다.")))
+			.path("/oauth2/authorization/{registrationId}", new PathItem()
+				.get(new Operation()
+					.addTagsItem("8. 인증 / 로그인")
+					.summary("소셜 로그인 시작")
+					.description("소셜 로그인 인증을 시작합니다. 호출 시 OAuth 제공자 로그인 페이지로 302 리다이렉트됩니다.")
+					.addParametersItem(new Parameter()
+						.in("path")
+						.required(true)
+						.name("registrationId")
+						.description("소셜 로그인 제공자")
+						.schema(new StringSchema()._enum(List.of("google", "kakao", "naver"))))
+					.responses(new ApiResponses()
+						.addApiResponse("302", new ApiResponse().description("소셜 로그인 제공자 인증 페이지로 리다이렉트")))))
+			.path("/login/oauth2/code/{registrationId}", new PathItem()
+				.get(new Operation()
+					.addTagsItem("8. 인증 / 로그인")
+					.summary("소셜 로그인 콜백")
+					.description("OAuth 제공자 인증 완료 후 호출되는 콜백 엔드포인트입니다. 일반적으로 사용자가 직접 호출하지 않습니다.")
+					.addParametersItem(new Parameter()
+						.in("path")
+						.required(true)
+						.name("registrationId")
+						.description("소셜 로그인 제공자")
+						.schema(new StringSchema()._enum(List.of("google", "kakao", "naver"))))
+					.responses(new ApiResponses()
+						.addApiResponse("302", new ApiResponse().description("프론트엔드 콜백 페이지로 리다이렉트"))
+						.addApiResponse("400", new ApiResponse().description("OAuth state/code 검증 실패")))));
 	}
 
 	@Bean
