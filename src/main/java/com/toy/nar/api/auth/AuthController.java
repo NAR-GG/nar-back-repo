@@ -5,7 +5,6 @@ import com.toy.nar.api.auth.dto.OnboardingRequest;
 import com.toy.nar.api.auth.dto.OnboardingTeamOptionResponse;
 import com.toy.nar.api.auth.dto.TokenResponse;
 import com.toy.nar.app.auth.JwtTokenProvider;
-import com.toy.nar.domain.game.repository.LeagueTeamRepository;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.RefreshToken;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -29,6 +28,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.springframework.http.HttpStatus.*;
 
@@ -38,11 +40,15 @@ import static org.springframework.http.HttpStatus.*;
 @Tag(name = "8. 인증 / 로그인", description = "소셜 로그인과 JWT 기반 사용자 인증 API")
 public class AuthController {
 
+    private static final List<String> LCK_ONBOARDING_TEAM_CODES = List.of(
+            "T1", "HLE", "GEN", "DK", "KT",
+            "DNS", "BFX", "NS", "BRO", "KRX"
+    );
+
     private final JwtTokenProvider jwtTokenProvider;
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final TeamRepository teamRepository;
-    private final LeagueTeamRepository leagueTeamRepository;
 
     @Operation(
             summary = "온보딩용 LCK 팀 목록 조회",
@@ -51,7 +57,12 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "LCK 팀 목록 조회 성공")
     @GetMapping("/onboarding/teams")
     public ResponseEntity<List<OnboardingTeamOptionResponse>> getOnboardingTeams() {
-        List<OnboardingTeamOptionResponse> teams = leagueTeamRepository.findLatestTeamsByLeagueName("LCK").stream()
+        Map<String, Team> teamsByCode = teamRepository.findAllByCodeIn(LCK_ONBOARDING_TEAM_CODES).stream()
+                .collect(Collectors.toMap(Team::getCode, Function.identity()));
+
+        List<OnboardingTeamOptionResponse> teams = LCK_ONBOARDING_TEAM_CODES.stream()
+                .map(teamsByCode::get)
+                .filter(team -> team != null)
                 .map(OnboardingTeamOptionResponse::from)
                 .toList();
         return ResponseEntity.ok(teams);
