@@ -33,6 +33,9 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 	@Query("SELECT t FROM Team t WHERE LOWER(t.code) = LOWER(:code) AND t.code IS NOT NULL")
 	List<Team> findByCodeIgnoreCase(@Param("code") String code);
 
+	@Query("SELECT t FROM Team t WHERE t.code IN :codes")
+	List<Team> findAllByCodeIn(@Param("codes") Collection<String> codes);
+
 	@Query("SELECT t FROM Team t WHERE LOWER(t.name) = LOWER(:name)")
 	Optional<Team> findByNameIgnoreCase(@Param("name") String name);
 }
