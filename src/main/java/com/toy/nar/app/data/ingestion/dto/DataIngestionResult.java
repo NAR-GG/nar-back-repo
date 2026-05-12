@@ -16,8 +16,8 @@ public record DataIngestionResult(
 
 	public String getSummary() {
 		return String.format(
-			"Processed: %d rows, %d games | Success: %d | Failed: %d | Skipped: %d | Time: %dms",
-			processedRows, processedGames, successfulGames, failedGames, skippedGames, processingTimeMs
+			"Processed: %d rows, %d games | Success: %d | Failed: %d | Skipped: %d | Invalid: %d | Time: %dms",
+			processedRows, processedGames, successfulGames, failedGames, skippedGames, incompleteGames, processingTimeMs
 		);
 	}
 

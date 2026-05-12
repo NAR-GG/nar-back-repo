@@ -15,6 +15,8 @@ import com.toy.nar.domain.participant.repository.GameTeamStatRepository;
 import com.toy.nar.domain.sync.SyncStatus;
 import com.toy.nar.domain.sync.SyncStatusRepository;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,6 +32,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 @Service("dataIngestionFacade") // 이름을 Facade로 명확히 함
@@ -42,10 +46,25 @@ public class DataIngestionFacade {
 	private final GameProcessor gameProcessor;
 	private final SyncStatusRepository syncStatusRepository;
 	private final GameTeamStatRepository gameTeamStatRepository;
+	private final MeterRegistry meterRegistry;
 
 	private static final int CHUNK_SIZE = 500;
+	private static final String WRITER_STRATEGY = "jpa_cascade";
+	private final ReentrantLock ingestionLock = new ReentrantLock();
 
 	public DataIngestionResult ingestFromStream(InputStream csvStream, String lastProcessedGameId) throws Exception {
+		if (!ingestionLock.tryLock()) {
+			throw new IllegalStateException("Data ingestion is already running.");
+		}
+
+		try {
+			return doIngestFromStream(csvStream, lastProcessedGameId);
+		} finally {
+			ingestionLock.unlock();
+		}
+	}
+
+	private DataIngestionResult doIngestFromStream(InputStream csvStream, String lastProcessedGameId) throws Exception {
 		log.info("[Starting] Starting stream-based CSV data ingestion");
 		if (StringUtils.hasText(lastProcessedGameId)) {
 			log.info("Delta cursor detected ({}), but full-stream scan is used for consistency.", lastProcessedGameId);
@@ -84,7 +103,9 @@ public class DataIngestionFacade {
 			log.info("Updated last processed gameId to: {}", lastIdInStream);
 		}
 
-		DataIngestionResult result = resultBuilder.processingTimeMs(System.currentTimeMillis() - startTime).build();
+		long processingTimeMs = System.currentTimeMillis() - startTime;
+		DataIngestionResult result = resultBuilder.processingTimeMs(processingTimeMs).build();
+		recordIngestionResult(result, processingTimeMs);
 		log.info("[Completed] Stream ingestion completed. {}", result.getSummary());
 		return result;
 	}
@@ -121,8 +142,11 @@ public class DataIngestionFacade {
 		int invalidGames = 0;
 		int failedGames = 0;
 
+		long resolveStart = System.nanoTime();
 		entityResolver.resolveEntitiesFromChunk(chunk);
+		long resolveDurationNanos = System.nanoTime() - resolveStart;
 
+		long processStart = System.nanoTime();
 		Map<String, List<GameDataCsvDto>> gamesGroupedById = chunk.stream()
 			.collect(Collectors.groupingBy(GameDataCsvDto::getGameid));
 
@@ -181,6 +205,15 @@ public class DataIngestionFacade {
 					continue;
 				}
 
+				java.util.Set<Long> distinctPlayerIds = processedGame.getParticipants().stream()
+					.map(p -> p.getPlayer().getId())
+					.collect(java.util.stream.Collectors.toSet());
+				if (distinctPlayerIds.size() != processedGame.getParticipants().size()) {
+					log.warn("[Skip] gameId={} 동일 player_id 중복 (NameNormalizer 정규화 충돌). 스킵.", gameId);
+					invalidGames++;
+					continue;
+				}
+
 				for (GameDataCsvDto teamDto : teamDtos) {
 					gameProcessor.processTeamStats(teamDto, processedGame)
 						.ifPresent(teamStatsToSave::add);
@@ -193,15 +226,82 @@ public class DataIngestionFacade {
 				failedGames++;
 			}
 		}
+		long processDurationNanos = System.nanoTime() - processStart;
 
+		long writeStart = System.nanoTime();
 		if (!gamesToSave.isEmpty()) {
 			gameRepository.saveAll(gamesToSave);
 		}
 		if (!teamStatsToSave.isEmpty()) {
 			gameTeamStatRepository.saveAll(teamStatsToSave);
 		}
+		long writeDurationNanos = System.nanoTime() - writeStart;
+
+		recordChunkMetrics(
+			chunk.size(),
+			gamesToSave.size(),
+			teamStatsToSave.size(),
+			invalidGames,
+			skippedGames,
+			failedGames,
+			resolveDurationNanos,
+			processDurationNanos,
+			writeDurationNanos
+		);
 
 		return new ChunkProcessingResult(gamesToSave.size(), invalidGames, skippedGames, failedGames);
+	}
+
+	private void recordIngestionResult(DataIngestionResult result, long processingTimeMs) {
+		Timer.builder("nar.data.ingestion.duration")
+			.description("Total CSV ingestion duration")
+			.tag("writer", WRITER_STRATEGY)
+			.register(meterRegistry)
+			.record(processingTimeMs, TimeUnit.MILLISECONDS);
+
+		meterRegistry.counter("nar.data.ingestion.rows.total", "writer", WRITER_STRATEGY)
+			.increment(result.processedRows());
+	}
+
+	private void recordChunkMetrics(
+		int chunkRows,
+		int writtenGames,
+		int writtenTeamStats,
+		int invalidGames,
+		int skippedGames,
+		int failedGames,
+		long resolveDurationNanos,
+		long processDurationNanos,
+		long writeDurationNanos
+	) {
+		recordChunkPhase("resolve", resolveDurationNanos);
+		recordChunkPhase("process", processDurationNanos);
+		recordChunkPhase("write", writeDurationNanos);
+
+		meterRegistry.summary("nar.data.ingestion.chunk.rows", "writer", WRITER_STRATEGY)
+			.record(chunkRows);
+		meterRegistry.summary("nar.data.ingestion.write.rows", "writer", WRITER_STRATEGY, "table", "game")
+			.record(writtenGames);
+		meterRegistry.summary("nar.data.ingestion.write.rows", "writer", WRITER_STRATEGY, "table", "game_team_stat")
+			.record(writtenTeamStats);
+
+		meterRegistry.counter("nar.data.ingestion.games.total", "writer", WRITER_STRATEGY, "result", "success")
+			.increment(writtenGames);
+		meterRegistry.counter("nar.data.ingestion.games.total", "writer", WRITER_STRATEGY, "result", "invalid")
+			.increment(invalidGames);
+		meterRegistry.counter("nar.data.ingestion.games.total", "writer", WRITER_STRATEGY, "result", "skipped")
+			.increment(skippedGames);
+		meterRegistry.counter("nar.data.ingestion.games.total", "writer", WRITER_STRATEGY, "result", "failed")
+			.increment(failedGames);
+	}
+
+	private void recordChunkPhase(String phase, long durationNanos) {
+		Timer.builder("nar.data.ingestion.chunk.phase.duration")
+			.description("CSV ingestion chunk phase duration")
+			.tag("writer", WRITER_STRATEGY)
+			.tag("phase", phase)
+			.register(meterRegistry)
+			.record(durationNanos, TimeUnit.NANOSECONDS);
 	}
 
 	private Map<String, LocalDateTime> calculateScheduledTimesForChunk(List<GameDataCsvDto> chunk) {

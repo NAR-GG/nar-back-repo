@@ -49,7 +49,19 @@ public class GameProcessor {
 
 		// 2. 유효성 검증
 		if (team == null || player == null || champion == null || league == null) {
-			log.warn("Skipping player row due to missing entity for gameId: {}", dto.getGameid());
+			log.warn(
+					"Skipping player row due to missing entity. gameId={}, teamName={}, playerName={}, champion={}, league={}, year={}, split={}, missingTeam={}, missingPlayer={}, missingChampion={}, missingLeague={}",
+					dto.getGameid(),
+					dto.getTeamname(),
+					dto.getPlayername(),
+					dto.getChampion(),
+					dto.getLeague(),
+					dto.getYear(),
+					dto.getSplit(),
+					team == null,
+					player == null,
+					champion == null,
+					league == null);
 			return Optional.empty();
 		}
 
