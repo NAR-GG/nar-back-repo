@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<configuration xmlns="http://www.jooq.org/xsd/jooq-codegen-3.19.0.xsd">
+    <jdbc>
+        <driver>com.mysql.cj.jdbc.Driver</driver>
+        <url>jdbc:mysql://localhost:3308/lol_esports_benchmark?serverTimezone=Asia/Seoul&amp;characterEncoding=UTF-8</url>
+        <user>nar_id</user>
+        <password>nar_pw</password>
+    </jdbc>
+
+    <generator>
+        <database>
+            <name>org.jooq.meta.mysql.MySQLDatabase</name>
+            <inputSchema>lol_esports_benchmark</inputSchema>
+            <outputSchemaToDefault>true</outputSchemaToDefault>
+            <includes>game_player_stat|game_team_stat</includes>
+        </database>
+        <generate>
+            <records>true</records>
+            <pojos>false</pojos>
+            <daos>false</daos>
+            <relations>false</relations>
+        </generate>
+        <target>
+            <packageName>com.toy.nar.jooq</packageName>
+            <directory>src/main/generated</directory>
+        </target>
+    </generator>
+</configuration>

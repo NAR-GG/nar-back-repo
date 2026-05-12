@@ -19,13 +19,14 @@ import java.util.UUID;
 public class LoggingFilter extends OncePerRequestFilter {
 
 	@Override
-	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-
+	protected boolean shouldNotFilter(HttpServletRequest request) {
 		String requestURI = request.getRequestURI();
-		if (requestURI.equals("/firebase-messaging-sw.js")) {
-			filterChain.doFilter(request, response);
-			return;
-		}
+		return requestURI.startsWith("/actuator")
+				|| requestURI.equals("/firebase-messaging-sw.js");
+	}
+
+	@Override
+	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
 		ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(request);
 		ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
 
