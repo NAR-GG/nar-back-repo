@@ -1,10 +1,12 @@
 package com.toy.nar.config;
 
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.SchedulingConfigurer;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.scheduling.concurrent.SimpleAsyncTaskScheduler;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 
 @Configuration
@@ -12,13 +14,19 @@ import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 @EnableScheduling
 public class SchedulerConfig implements SchedulingConfigurer {
 
+	private static final int SCHEDULED_TASK_CONCURRENCY_LIMIT = 5;
+
+	@Bean
+	public TaskScheduler taskScheduler() {
+		SimpleAsyncTaskScheduler taskScheduler = new SimpleAsyncTaskScheduler();
+		taskScheduler.setVirtualThreads(true);
+		taskScheduler.setConcurrencyLimit(SCHEDULED_TASK_CONCURRENCY_LIMIT);
+		taskScheduler.setThreadNamePrefix("Scheduled-VT-");
+		return taskScheduler;
+	}
+
 	@Override
 	public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
-		ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
-		// 스케줄러 스레드 풀 크기 설정 (LoL 매치 동기화 + 커뮤니티 동기화 + 데이터 삭제 등 동시 실행 고려)
-		taskScheduler.setPoolSize(5); 
-		taskScheduler.setThreadNamePrefix("Scheduled-Task-");
-		taskScheduler.initialize();
-		taskRegistrar.setTaskScheduler(taskScheduler);
+		taskRegistrar.setTaskScheduler(taskScheduler());
 	}
 }

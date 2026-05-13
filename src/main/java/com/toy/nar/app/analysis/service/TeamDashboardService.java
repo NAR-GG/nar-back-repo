@@ -50,7 +50,8 @@ public class TeamDashboardService {
 	private final GameParticipantRepository gameParticipantRepository;
 	private final BanRepository banRepository;
 	
-	// Spring Boot의 기본 비동기 TaskExecutor를 주입받아 사용 (가용 스레드 확보용)
+	// DB 집계 I/O가 서로 독립적이라 가상 스레드 기반 applicationTaskExecutor로 병렬화한다.
+	@Qualifier("applicationTaskExecutor")
 	private final Executor applicationTaskExecutor;
 
 	public TeamDashboardResponse getTeamDashboard(Long teamId, String league, Integer year, String split, String patch,
@@ -90,29 +91,24 @@ public class TeamDashboardService {
 		// 모든 비동기 작업이 완료될 때까지 대기 (Gather)
 		CompletableFuture.allOf(summaryFuture, playerRecordsFuture, playedChampionsFuture, bannedByTeamFuture, bannedAgainstFuture).join();
 
-		try {
-			// 완성된 데이터 조립 후 리턴
-			return TeamDashboardResponse.builder()
-					.teamId(team.getId())
-					.teamName(team.getName())
-					.teamCode(team.getCode())
-					.teamImageUrl(team.getImageUrl())
-					.leagueName(leagueName)
-					.appliedFilter(TeamDashboardFilterDto.builder()
-							.year(normalizedYear)
-							.split(normalizedSplit)
-							.patch(normalizedPatch)
-							.side(normalizedSide != null ? normalizedSide : "ALL")
-							.build())
-					.gameSummary(summaryFuture.get())
-					.playerRecords(playerRecordsFuture.get())
-					.bannedAgainst(bannedAgainstFuture.get())
-					.bannedByTeam(bannedByTeamFuture.get())
-					.playedChampions(playedChampionsFuture.get())
-					.build();
-		} catch (Exception e) {
-			throw new RuntimeException("비동기 데이터 조합 중 오류가 발생했습니다.", e);
-		}
+		return TeamDashboardResponse.builder()
+				.teamId(team.getId())
+				.teamName(team.getName())
+				.teamCode(team.getCode())
+				.teamImageUrl(team.getImageUrl())
+				.leagueName(leagueName)
+				.appliedFilter(TeamDashboardFilterDto.builder()
+						.year(normalizedYear)
+						.split(normalizedSplit)
+						.patch(normalizedPatch)
+						.side(normalizedSide != null ? normalizedSide : "ALL")
+						.build())
+				.gameSummary(summaryFuture.join())
+				.playerRecords(playerRecordsFuture.join())
+				.bannedAgainst(bannedAgainstFuture.join())
+				.bannedByTeam(bannedByTeamFuture.join())
+				.playedChampions(playedChampionsFuture.join())
+				.build();
 	}
 
 	private TeamGameSummaryDto buildSummary(Long teamId, String leagueName, Integer year, String split, String patch,

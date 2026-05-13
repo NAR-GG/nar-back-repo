@@ -3,6 +3,7 @@ package com.toy.nar.app.lolesports;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -10,6 +11,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Semaphore;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -18,7 +22,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 @RequiredArgsConstructor
 public class WorldsService {
 
+	private static final int EVENT_DETAIL_CONCURRENCY_LIMIT = 5;
+
 	private final WebClient webClient;
+	@Qualifier("applicationTaskExecutor")
+	private final Executor applicationTaskExecutor;
 
 	private static final java.util.Map<String, String> LEAGUE_IDS = java.util.Map.of(
 			"LCK", "98767991310872058",
@@ -56,21 +64,25 @@ public class WorldsService {
 			}
 		}
 
-		// 2. [병렬 처리 핵심] Flux를 사용하여 동시에 API 쏘기 (동시성 제한 추가)
-		List<MatchResultDto> matchResults = reactor.core.publisher.Flux.fromIterable(targetEvents)
-				.flatMap(event -> {
+		Semaphore eventDetailPermits = new Semaphore(EVENT_DETAIL_CONCURRENCY_LIMIT);
+		List<CompletableFuture<MatchResultDto>> detailFutures = targetEvents.stream()
+				.map(event -> {
 					String matchId = event.path("match").path("id").asText();
 					String startTime = event.path("startTime").asText();
 					String blockName = event.path("blockName").asText();
 					String state = event.path("state").asText("unstarted"); // 상태 추출
 
-					// 비동기로 상세 정보 가져오기
-					return fetchMatchDetailsAsync(matchId, startTime, blockName, state);
-				}, 5) // 동시 실행 수 5개로 제한 (시스템 부하 방지)
-				// 날짜 내림차순 정렬
-				.sort((a, b) -> b.getMatchDate().compareTo(a.getMatchDate()))
-				.collectList()
-				.block(); // 모든 작업이 끝날 때까지 대기
+					return CompletableFuture.supplyAsync(
+							() -> fetchMatchDetailsWithPermit(eventDetailPermits, matchId, startTime, blockName, state),
+							applicationTaskExecutor);
+				})
+				.toList();
+
+		List<MatchResultDto> matchResults = detailFutures.stream()
+				.map(CompletableFuture::join)
+				.filter(match -> match != null)
+				.sorted((a, b) -> b.getMatchDate().compareTo(a.getMatchDate()))
+				.toList();
 
 		return MatchResponseWrapper.builder()
 				.matches(matchResults)
@@ -78,130 +90,136 @@ public class WorldsService {
 				.build();
 	}
 
-	private reactor.core.publisher.Mono<MatchResultDto> fetchMatchDetailsAsync(String eventId, String matchDate,
+	private MatchResultDto fetchMatchDetailsWithPermit(Semaphore permits, String eventId, String matchDate,
 			String stageName, String matchState) {
-		return webClient.get()
-				.uri(uri -> uri
-						.scheme("https")
-						.host("esports-api.lolesports.com")
-						.path("/persisted/gw/getEventDetails")
-						.queryParam("hl", "ko-KR")
-						.queryParam("id", eventId)
-						.build())
-				.header("x-api-key", "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z")
-				.header("Referer", "https://lolesports.com/")
-				.retrieve()
-				.bodyToMono(JsonNode.class)
-				.map(root -> {
-					// 기존 fetchMatchDetails 내부 로직과 동일하게 파싱
-					JsonNode event = root.path("data").path("event");
-					JsonNode match = event.path("match");
-					JsonNode teams = match.path("teams");
+		boolean acquired = false;
+		try {
+			permits.acquire();
+			acquired = true;
+			return fetchMatchDetailsForSchedule(eventId, matchDate, stageName, matchState);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			log.error("상세 조회 대기 중 인터럽트 발생 (ID: {})", eventId, e);
+			return null;
+		} finally {
+			if (acquired) {
+				permits.release();
+			}
+		}
+	}
 
-					// [수정] 스케줄 목록에서 가져온 state 우선 사용
-					String apiState = event.path("state").asText("unstarted");
-					String finalState = (matchState != null && !matchState.isEmpty()) ? matchState : apiState;
+	private MatchResultDto fetchMatchDetailsForSchedule(String eventId, String matchDate,
+			String stageName, String matchState) {
+		try {
+			JsonNode root = callEventDetailsApi(eventId);
+			if (root == null) {
+				return null;
+			}
 
-					if (teams.size() < 2)
-						return null; // 유효하지 않은 데이터
+			JsonNode event = root.path("data").path("event");
+			JsonNode match = event.path("match");
+			JsonNode teams = match.path("teams");
 
-					JsonNode teamA = teams.get(0);
-					JsonNode teamB = teams.get(1);
-					int winsA = teamA.path("result").path("gameWins").asInt(0);
-					int winsB = teamB.path("result").path("gameWins").asInt(0);
+			// [수정] 스케줄 목록에서 가져온 state 우선 사용
+			String apiState = event.path("state").asText("unstarted");
+			String finalState = (matchState != null && !matchState.isEmpty()) ? matchState : apiState;
 
-					String imageA = teamA.path("image").asText("");
-					String imageB = teamB.path("image").asText("");
-					if (imageA.startsWith("http:"))
-						imageA = imageA.replace("http:", "https:");
-					if (imageB.startsWith("http:"))
-						imageB = imageB.replace("http:", "https:");
+			if (teams.size() < 2)
+				return null; // 유효하지 않은 데이터
 
-					List<MatchResultDto.SetVod> setVods = new ArrayList<>();
-					JsonNode games = match.path("games");
-					int setNum = 1;
+			JsonNode teamA = teams.get(0);
+			JsonNode teamB = teams.get(1);
+			int winsA = teamA.path("result").path("gameWins").asInt(0);
+			int winsB = teamB.path("result").path("gameWins").asInt(0);
 
-					if (games.isArray()) {
-						for (JsonNode game : games) {
-							if (!"completed".equalsIgnoreCase(game.path("state").asText()))
-								continue;
-							String vodUrl = findBestVodUrl(game.path("vods"));
+			String imageA = teamA.path("image").asText("");
+			String imageB = teamB.path("image").asText("");
+			if (imageA.startsWith("http:"))
+				imageA = imageA.replace("http:", "https:");
+			if (imageB.startsWith("http:"))
+				imageB = imageB.replace("http:", "https:");
 
-							setVods.add(MatchResultDto.SetVod.builder()
-									.setNumber(setNum++)
-									.vodUrl(vodUrl)
-									.build());
-						}
+			List<MatchResultDto.SetVod> setVods = new ArrayList<>();
+			JsonNode games = match.path("games");
+			int setNum = 1;
+
+			if (games.isArray()) {
+				for (JsonNode game : games) {
+					if (!"completed".equalsIgnoreCase(game.path("state").asText()))
+						continue;
+					String vodUrl = findBestVodUrl(game.path("vods"));
+
+					setVods.add(MatchResultDto.SetVod.builder()
+							.setNumber(setNum++)
+							.vodUrl(vodUrl)
+							.build());
+				}
+			}
+
+			// [보정 1] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경 (VOD 우선)
+			if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
+				finalState = "completed";
+			}
+
+			// [보정 2] 상태가 completed인데, 실제 게임들이 모두 unstarted이고 VOD도 없다면 unstarted로 정정 (LPL 가짜
+			// 완료 방지)
+			boolean allGamesUnstarted = true;
+			if (games.isArray() && games.size() > 0) {
+				for (JsonNode game : games) {
+					if (!"unstarted".equalsIgnoreCase(game.path("state").asText())) {
+						allGamesUnstarted = false;
+						break;
 					}
+				}
+				// 게임 정보는 있는데 모두 unstarted이고 VOD도 없으면 -> 아직 시작 안 한 것
+				if (allGamesUnstarted && setVods.isEmpty() && "completed".equalsIgnoreCase(finalState)) {
+					finalState = "unstarted";
+				}
+			}
 
-					// [보정 1] 상태가 unstarted인데 VOD가 있다면 completed로 강제 변경 (VOD 우선)
-					if ("unstarted".equalsIgnoreCase(finalState) && !setVods.isEmpty()) {
-						finalState = "completed";
+			// [보정 3] 상태가 completed인데, 진행 중인 게임(inProgress)이 있다면 inProgress로 정정
+			boolean hasInProgressGame = false;
+			if (games.isArray()) {
+				for (JsonNode game : games) {
+					if ("inProgress".equalsIgnoreCase(game.path("state").asText())) {
+						hasInProgressGame = true;
+						break;
 					}
+				}
+			}
+			if (hasInProgressGame) {
+				finalState = "inProgress";
+			}
 
-					// [보정 2] 상태가 completed인데, 실제 게임들이 모두 unstarted이고 VOD도 없다면 unstarted로 정정 (LPL 가짜
-					// 완료 방지)
-					boolean allGamesUnstarted = true;
-					if (games.isArray() && games.size() > 0) {
-						for (JsonNode game : games) {
-							if (!"unstarted".equalsIgnoreCase(game.path("state").asText())) {
-								allGamesUnstarted = false;
-								break;
-							}
-						}
-						// 게임 정보는 있는데 모두 unstarted이고 VOD도 없으면 -> 아직 시작 안 한 것
-						if (allGamesUnstarted && setVods.isEmpty() && "completed".equalsIgnoreCase(finalState)) {
-							finalState = "unstarted";
-						}
-					}
-
-					// [보정 3] 상태가 completed인데, 진행 중인 게임(inProgress)이 있다면 inProgress로 정정
-					boolean hasInProgressGame = false;
-					if (games.isArray()) {
-						for (JsonNode game : games) {
-							if ("inProgress".equalsIgnoreCase(game.path("state").asText())) {
-								hasInProgressGame = true;
-								break;
-							}
-						}
-					}
-					if (hasInProgressGame) {
-						finalState = "inProgress";
-					}
-
-					// DTO 생성 후 반환
-					String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
-					// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
-					if ((liveStreamUrl == null || liveStreamUrl.isEmpty())
-							&& "inProgress".equalsIgnoreCase(finalState)) {
-						String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
-						liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
-					}
-					return MatchResultDto.builder()
-							.matchId(eventId)
-							.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs "
-									+ teamB.path("code").asText())
-							.matchDate(matchDate)
-							.state(finalState) // 상태 설정
-							.score(winsA + " : " + winsB)
-							.blueTeam(MatchResultDto.TeamInfo.builder()
-									.code(teamA.path("code").asText())
-									.name(teamA.path("name").asText())
-									.imageUrl(imageA)
-									.wins(winsA).build())
-							.redTeam(MatchResultDto.TeamInfo.builder()
-									.code(teamB.path("code").asText())
-									.name(teamB.path("name").asText())
-									.imageUrl(imageB)
-									.wins(winsB).build())
-							.sets(setVods)
-							.liveStreamUrl(liveStreamUrl)
-							.build();
-				})
-				.onErrorResume(e -> {
-					log.error("상세 조회 실패 (ID: {}): {}", eventId, e.getMessage());
-					return reactor.core.publisher.Mono.empty(); // 에러 난 건 리스트에서 제외
-				});
+			String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
+			if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
+				String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
+				liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
+			}
+			return MatchResultDto.builder()
+					.matchId(eventId)
+					.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs "
+							+ teamB.path("code").asText())
+					.matchDate(matchDate)
+					.state(finalState)
+					.score(winsA + " : " + winsB)
+					.blueTeam(MatchResultDto.TeamInfo.builder()
+							.code(teamA.path("code").asText())
+							.name(teamA.path("name").asText())
+							.imageUrl(imageA)
+							.wins(winsA).build())
+					.redTeam(MatchResultDto.TeamInfo.builder()
+							.code(teamB.path("code").asText())
+							.name(teamB.path("name").asText())
+							.imageUrl(imageB)
+							.wins(winsB).build())
+					.sets(setVods)
+					.liveStreamUrl(liveStreamUrl)
+					.build();
+		} catch (Exception e) {
+			log.error("상세 조회 실패 (ID: {}): {}", eventId, e.getMessage());
+			return null;
+		}
 	}
 
 	public List<MatchResultDto> getRecent3Matches(String leagueSlug) {
@@ -555,6 +573,22 @@ public class WorldsService {
 
 					return uriBuilder.build();
 				})
+				.header("x-api-key", RIOT_API_KEY)
+				.header("Referer", "https://lolesports.com/")
+				.retrieve()
+				.bodyToMono(JsonNode.class)
+				.block();
+	}
+
+	private JsonNode callEventDetailsApi(String eventId) {
+		return webClient.get()
+				.uri(uri -> uri
+						.scheme("https")
+						.host("esports-api.lolesports.com")
+						.path("/persisted/gw/getEventDetails")
+						.queryParam("hl", "ko-KR")
+						.queryParam("id", eventId)
+						.build())
 				.header("x-api-key", RIOT_API_KEY)
 				.header("Referer", "https://lolesports.com/")
 				.retrieve()
