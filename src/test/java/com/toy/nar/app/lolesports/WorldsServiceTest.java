@@ -44,12 +44,12 @@ class WorldsServiceTest {
 
     @BeforeEach
     void setUp() {
-        worldsService = new WorldsService(webClient);
+        worldsService = new WorldsService(webClient, Runnable::run);
     }
 
     @Test
     @DisplayName("inProgress 상태이고 스트림 정보가 없을 때 기본 URL(LCK) 반환")
-    void fetchMatchDetailsAsync_inProgress_noStreams() throws Exception {
+    void fetchMatchDetailsForSchedule_inProgress_noStreams() throws Exception {
         // given
         String eventId = "123";
         String matchDate = "2026-01-21T17:00:00Z";
@@ -62,13 +62,11 @@ class WorldsServiceTest {
 
         // when
         // private method 호출을 위해 Reflection 사용
-        Mono<MatchResultDto> resultMono = (Mono<MatchResultDto>) ReflectionTestUtils.invokeMethod(
+        MatchResultDto result = (MatchResultDto) ReflectionTestUtils.invokeMethod(
                 worldsService,
-                "fetchMatchDetailsAsync",
+                "fetchMatchDetailsForSchedule",
                 eventId, matchDate, stageName, matchState
         );
-
-        MatchResultDto result = resultMono.block();
 
         // then
         assertThat(result).isNotNull();
@@ -79,7 +77,7 @@ class WorldsServiceTest {
 
     @Test
     @DisplayName("inProgress 상태이고 스트림 정보가 없을 때 기본 URL(LPL) 반환")
-    void fetchMatchDetailsAsync_inProgress_noStreams_LPL() throws Exception {
+    void fetchMatchDetailsForSchedule_inProgress_noStreams_LPL() throws Exception {
         // given
         String eventId = "123";
         String matchDate = "2026-01-21T17:00:00Z";
@@ -91,24 +89,22 @@ class WorldsServiceTest {
         setupWebClientMock(mockResponse);
 
         // when
-        Mono<MatchResultDto> resultMono = (Mono<MatchResultDto>) ReflectionTestUtils.invokeMethod(
+        MatchResultDto result = (MatchResultDto) ReflectionTestUtils.invokeMethod(
                 worldsService,
-                "fetchMatchDetailsAsync",
+                "fetchMatchDetailsForSchedule",
                 eventId, matchDate, stageName, matchState
         );
-
-        MatchResultDto result = resultMono.block();
 
         // then
         assertThat(result).isNotNull();
         assertThat(result.getState()).isEqualTo("inProgress");
         // LPL 기본 URL 확인
-        assertThat(result.getLiveStreamUrl()).isEqualTo("https://www.twitch.tv/lpl");
+        assertThat(result.getLiveStreamUrl()).isEqualTo(LeagueConstants.getLiveStreamUrl("LPL"));
     }
 
     @Test
     @DisplayName("inProgress 상태이고 한국어 유튜브 스트림이 있을 때 해당 URL 반환 (우선순위 1)")
-    void fetchMatchDetailsAsync_inProgress_koYoutube() throws Exception {
+    void fetchMatchDetailsForSchedule_inProgress_koYoutube() throws Exception {
         // given
         String eventId = "124";
         String matchDate = "2026-01-21T17:00:00Z";
@@ -119,13 +115,11 @@ class WorldsServiceTest {
         setupWebClientMock(createMockDetailResponse("LCK", "inProgress", streams));
 
         // when
-        Mono<MatchResultDto> resultMono = (Mono<MatchResultDto>) ReflectionTestUtils.invokeMethod(
+        MatchResultDto result = (MatchResultDto) ReflectionTestUtils.invokeMethod(
                 worldsService,
-                "fetchMatchDetailsAsync",
+                "fetchMatchDetailsForSchedule",
                 eventId, matchDate, stageName, matchState
         );
-
-        MatchResultDto result = resultMono.block();
 
         // then
         assertThat(result).isNotNull();
@@ -134,7 +128,7 @@ class WorldsServiceTest {
 
     @Test
     @DisplayName("inProgress 상태이고 영어 트위치 스트림만 있을 때 해당 URL 반환 (우선순위 2)")
-    void fetchMatchDetailsAsync_inProgress_enTwitch() throws Exception {
+    void fetchMatchDetailsForSchedule_inProgress_enTwitch() throws Exception {
         // given
         String eventId = "125";
         String matchDate = "2026-01-21T17:00:00Z";
@@ -145,13 +139,11 @@ class WorldsServiceTest {
         setupWebClientMock(createMockDetailResponse("LCK", "inProgress", streams));
 
         // when
-        Mono<MatchResultDto> resultMono = (Mono<MatchResultDto>) ReflectionTestUtils.invokeMethod(
+        MatchResultDto result = (MatchResultDto) ReflectionTestUtils.invokeMethod(
                 worldsService,
-                "fetchMatchDetailsAsync",
+                "fetchMatchDetailsForSchedule",
                 eventId, matchDate, stageName, matchState
         );
-
-        MatchResultDto result = resultMono.block();
 
         // then
         assertThat(result).isNotNull();
