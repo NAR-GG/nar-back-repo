@@ -25,11 +25,11 @@ docker-compose up -d              # MySQL on port 3308 (nar_id / nar_pw)
 
 # Build & run
 ./gradlew clean build -x test     # Build without tests
-./gradlew bootRun                 # Run app (uses application-prod.yml)
+./gradlew bootRun                 # Run app locally (defaults to application-dev.yml)
 ./gradlew test                    # Run all tests
 
-# dev 프로파일로 실행
-./gradlew bootRun --args='--spring.profiles.active=dev'
+# prod 프로파일로 실행해야 할 때만 명시
+SPRING_PROFILES_ACTIVE=prod ./gradlew bootRun
 ```
 
 ### Run a single test

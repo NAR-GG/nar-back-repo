@@ -1,9 +1,6 @@
 package com.toy.nar.app.auth;
 
 import com.toy.nar.domain.member.entity.Member;
-import com.toy.nar.domain.member.entity.MemberSocial;
-import com.toy.nar.domain.member.repository.MemberRepository;
-import com.toy.nar.domain.member.repository.MemberSocialRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
@@ -20,9 +17,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
-    private final MemberRepository memberRepository;
-    private final MemberSocialRepository memberSocialRepository;
-    private final NicknameGenerator nicknameGenerator;
+    private final SocialLoginService socialLoginService;
 
     @Override
     @Transactional
@@ -31,32 +26,14 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         String registrationId = userRequest.getClientRegistration().getRegistrationId();
         OAuthAttributes attrs = OAuthAttributes.of(registrationId, oAuth2User.getAttributes());
 
-        Member member = memberSocialRepository
-                .findByProviderAndProviderId(attrs.getProvider(), attrs.getProviderId())
-                .map(MemberSocial::getMember)
-                .orElseGet(() -> createMember(attrs));
+        Member member = socialLoginService.findOrCreateMember(
+                new SocialAccountInfo(attrs.getProvider(), attrs.getProviderId(), attrs.getEmail())
+        );
 
         Map<String, Object> principalAttrs = Map.of(
                 "memberId", member.getId(),
                 "isOnboarded", member.isOnboarded()
         );
         return new DefaultOAuth2User(Collections.emptyList(), principalAttrs, "memberId");
-    }
-
-    private Member createMember(OAuthAttributes attrs) {
-        Member member = memberRepository.save(
-                Member.builder()
-                        .nickname(nicknameGenerator.generate())
-                        .email(attrs.getEmail())
-                        .build()
-        );
-        memberSocialRepository.save(
-                MemberSocial.builder()
-                        .member(member)
-                        .provider(attrs.getProvider())
-                        .providerId(attrs.getProviderId())
-                        .build()
-        );
-        return member;
     }
 }

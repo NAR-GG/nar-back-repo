@@ -1,10 +1,15 @@
 package com.toy.nar.api.auth;
 
+import com.toy.nar.api.auth.dto.KakaoMobileLoginRequest;
 import com.toy.nar.api.auth.dto.MemberResponse;
 import com.toy.nar.api.auth.dto.OnboardingRequest;
 import com.toy.nar.api.auth.dto.OnboardingTeamOptionResponse;
 import com.toy.nar.api.auth.dto.TokenResponse;
+import com.toy.nar.app.auth.AuthTokens;
 import com.toy.nar.app.auth.JwtTokenProvider;
+import com.toy.nar.app.auth.KakaoUserClient;
+import com.toy.nar.app.auth.SocialAccountInfo;
+import com.toy.nar.app.auth.SocialLoginService;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.RefreshToken;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -13,8 +18,6 @@ import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.TeamRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -46,9 +49,31 @@ public class AuthController {
     );
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final KakaoUserClient kakaoUserClient;
+    private final SocialLoginService socialLoginService;
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final TeamRepository teamRepository;
+
+    @Operation(
+            summary = "모바일 카카오 로그인",
+            description = "Flutter Kakao SDK에서 발급받은 카카오 Access Token을 검증하고 서비스 JWT를 발급합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "모바일 카카오 로그인 성공"),
+            @ApiResponse(responseCode = "401", description = "유효하지 않은 카카오 Access Token")
+    })
+    @PostMapping("/mobile/kakao")
+    public ResponseEntity<TokenResponse> loginWithKakaoAccessToken(
+            @Valid @RequestBody KakaoMobileLoginRequest request) {
+        SocialAccountInfo accountInfo = kakaoUserClient.fetchUser(request.accessToken());
+        AuthTokens tokens = socialLoginService.login(accountInfo);
+        return ResponseEntity.ok(new TokenResponse(
+                tokens.accessToken(),
+                tokens.refreshToken(),
+                tokens.isOnboarded()
+        ));
+    }
 
     @Operation(
             summary = "온보딩용 LCK 팀 목록 조회",
