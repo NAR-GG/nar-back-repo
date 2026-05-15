@@ -24,9 +24,13 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     private final JwtTokenProvider jwtTokenProvider;
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final CookieOAuth2AuthorizationRequestRepository authorizationRequestRepository;
 
     @Value("${app.frontend-url}")
     private String frontendUrl;
+
+    @Value("${app.mobile-redirect-url:nar://oauth/callback}")
+    private String mobileRedirectUrl;
 
     @Override
     @Transactional
@@ -48,12 +52,21 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
                 .expiresAt(jwtTokenProvider.getRefreshTokenExpiry())
                 .build());
 
-        String redirectUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/oauth/callback")
+        String callbackUrl = resolveCallbackUrl(request, response);
+        String redirectUrl = UriComponentsBuilder.fromUriString(callbackUrl)
                 .queryParam("accessToken", accessToken)
                 .queryParam("refreshToken", refreshTokenValue)
                 .queryParam("isOnboarded", isOnboarded)
                 .build().toUriString();
 
         getRedirectStrategy().sendRedirect(request, response, redirectUrl);
+    }
+
+    private String resolveCallbackUrl(HttpServletRequest request, HttpServletResponse response) {
+        String target = authorizationRequestRepository.removeRedirectTarget(request, response);
+        if ("mobile".equals(target)) {
+            return mobileRedirectUrl;
+        }
+        return frontendUrl + "/oauth/callback";
     }
 }

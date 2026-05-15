@@ -55,6 +55,7 @@ app:
   server:
     url: ${APP_SERVER_URL:http://localhost:8080}
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  mobile-redirect-url: ${MOBILE_REDIRECT_URL:nar://oauth/callback}
 
 riot:
   api:

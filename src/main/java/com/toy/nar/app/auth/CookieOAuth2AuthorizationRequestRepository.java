@@ -15,7 +15,9 @@ public class CookieOAuth2AuthorizationRequestRepository
         implements AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
 
     private static final String COOKIE_NAME = "oauth2_auth_request";
+    private static final String REDIRECT_TARGET_COOKIE_NAME = "oauth2_redirect_target";
     private static final int COOKIE_MAX_AGE = 180;
+    private static final String MOBILE_TARGET = "mobile";
 
     @Override
     public OAuth2AuthorizationRequest loadAuthorizationRequest(HttpServletRequest request) {
@@ -29,11 +31,13 @@ public class CookieOAuth2AuthorizationRequestRepository
                                          HttpServletRequest request, HttpServletResponse response) {
         if (authorizationRequest == null) {
             CookieUtils.deleteCookie(request, response, COOKIE_NAME);
+            CookieUtils.deleteCookie(request, response, REDIRECT_TARGET_COOKIE_NAME);
             log.debug("[OAuth2Cookie] save - deleted cookie");
             return;
         }
         log.debug("[OAuth2Cookie] save - setting cookie, state={}", authorizationRequest.getState());
         CookieUtils.addCookie(response, COOKIE_NAME, CookieUtils.serialize(authorizationRequest), COOKIE_MAX_AGE);
+        saveRedirectTarget(request, response);
     }
 
     @Override
@@ -42,5 +46,22 @@ public class CookieOAuth2AuthorizationRequestRepository
         OAuth2AuthorizationRequest request0 = loadAuthorizationRequest(request);
         CookieUtils.deleteCookie(request, response, COOKIE_NAME);
         return request0;
+    }
+
+    public String removeRedirectTarget(HttpServletRequest request, HttpServletResponse response) {
+        String target = CookieUtils.getCookie(request, REDIRECT_TARGET_COOKIE_NAME)
+                .map(Cookie::getValue)
+                .orElse(null);
+        CookieUtils.deleteCookie(request, response, REDIRECT_TARGET_COOKIE_NAME);
+        return target;
+    }
+
+    private void saveRedirectTarget(HttpServletRequest request, HttpServletResponse response) {
+        String target = request.getParameter("target");
+        if (MOBILE_TARGET.equalsIgnoreCase(target)) {
+            CookieUtils.addCookie(response, REDIRECT_TARGET_COOKIE_NAME, MOBILE_TARGET, COOKIE_MAX_AGE);
+            return;
+        }
+        CookieUtils.deleteCookie(request, response, REDIRECT_TARGET_COOKIE_NAME);
     }
 }
