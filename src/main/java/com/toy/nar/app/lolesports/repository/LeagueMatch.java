@@ -49,10 +49,11 @@ public class LeagueMatch {
 
 	private LocalDateTime lastUpdated;
 
-	public void update(String matchTitle, LocalDateTime matchDate, String state,
+	public void update(String leagueName, String matchTitle, LocalDateTime matchDate, String state,
 					   String blueTeamCode, String blueTeamName, String blueExternalTeamId, String blueTeamImageUrl, Integer blueScore,
 					   String redTeamCode, String redTeamName, String redExternalTeamId, String redTeamImageUrl, Integer redScore,
 					   boolean hasVod, String matchDetailsJson, LocalDateTime lastUpdated) {
+		this.leagueName = leagueName;
 		this.matchTitle = matchTitle;
 		this.matchDate = matchDate;
 		this.state = state;
