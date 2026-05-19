@@ -17,6 +17,8 @@ public class MatchResultDto {
 	private TeamInfo redTeam;
 	private List<SetVod> sets; // 세트별 VOD 리스트
 	private String liveStreamUrl; // 진행중 경기 라이브 스트림 URL
+	private List<String> liveGameIds; // 진행중 gameId 목록 (livestats polling 대상)
+	private List<String> gameIds; // match 하위 전체 gameId 목록 (completed 포함)
 
 	@Data
 	@Builder

@@ -995,6 +995,12 @@ public class LeagueMatchService {
 		if ("inProgress".equalsIgnoreCase(entity.getState())) {
 			liveStreamUrl = LeagueConstants.getLiveStreamUrl(entity.getLeagueName());
 		}
+		List<String> gameIds = leagueMatchGameRepository.findByLeagueMatch_IdOrderByGameOrderAsc(entity.getId()).stream()
+				.map(LeagueMatchGame::getGameId)
+				.filter(gameId -> gameId != null && !gameId.isBlank())
+				.distinct()
+				.toList();
+		List<String> liveGameIds = resolveLiveGameIds(entity, gameIds);
 
 		return MatchResultDto.builder().matchId(entity.getId()).leagueName(entity.getLeagueName())
 				.matchTitle(entity.getMatchTitle()).matchDate(entity.getMatchDate().toString()) // ISO
@@ -1011,7 +1017,22 @@ public class LeagueMatchService {
 						.externalTeamId(entity.getRedExternalTeamId())
 						.code(entity.getRedTeamCode()).name(entity.getRedTeamName())
 						.imageUrl(entity.getRedTeamImageUrl()).wins(entity.getRedScore()).build())
-				.sets(sets).liveStreamUrl(liveStreamUrl).build();
+				.sets(sets)
+				.gameIds(gameIds)
+				.liveGameIds(liveGameIds)
+				.liveStreamUrl(liveStreamUrl).build();
+	}
+
+	private List<String> resolveLiveGameIds(LeagueMatch entity, List<String> gameIds) {
+		if (!"inProgress".equalsIgnoreCase(entity.getState()) || gameIds == null || gameIds.isEmpty()) {
+			return List.of();
+		}
+		int completedGames = entity.getBlueScore() + entity.getRedScore();
+		int currentGameIndex = Math.min(completedGames, gameIds.size() - 1);
+		if (currentGameIndex < 0 || currentGameIndex >= gameIds.size()) {
+			return List.of();
+		}
+		return List.of(gameIds.get(currentGameIndex));
 	}
 
 	private boolean hasRealtimeRelevantChange(LeagueMatch existing, LeagueMatch incoming) {

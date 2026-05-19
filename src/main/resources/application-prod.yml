@@ -118,9 +118,12 @@ lolesports:
     team-metadata-cron: ${LOL_TEAM_METADATA_CRON:0 15 4 * * *}
     active-leagues: ${LOL_ACTIVE_LEAGUES:LCK,LPL,LEC,LCS,LCP,CBLOL,MSI,WORLDS,FIRST_STAND}
   live:
-    enabled: true
+    enabled: ${LOL_LIVE_ENABLED:false}
     discovery-interval-ms: 60000
-    poll-interval-ms: 10000
+    poll-interval-ms: 5000
     stale-threshold-ms: 180000
     request-timeout-ms: 3000
     max-consecutive-failures: 6
+    queue:
+      snapshot-capacity: ${LOL_LIVE_SNAPSHOT_QUEUE_CAPACITY:600}
+      object-capacity: ${LOL_LIVE_OBJECT_QUEUE_CAPACITY:1200}
