@@ -710,6 +710,7 @@ public class LeagueMatchService {
 				}
 
 				existing.update(
+						incoming.getLeagueName(),
 						incoming.getMatchTitle(),
 						incoming.getMatchDate(),
 						incoming.getState(),
@@ -966,7 +967,9 @@ public class LeagueMatchService {
 		boolean hasVod = dto.getSets() != null && !dto.getSets().isEmpty()
 				&& dto.getSets().stream().anyMatch(s -> s.getVodUrl() != null && !s.getVodUrl().isEmpty());
 
-		return LeagueMatch.builder().id(dto.getMatchId()).leagueName(leagueSlug).matchTitle(dto.getMatchTitle())
+		String resolvedLeagueName = resolveLeagueName(dto.getLeagueName(), leagueSlug);
+
+		return LeagueMatch.builder().id(dto.getMatchId()).leagueName(resolvedLeagueName).matchTitle(dto.getMatchTitle())
 				.matchDate(matchDate).state(dto.getState()) // [수정]
 															// DTO에서
 															// 상태
@@ -1036,6 +1039,9 @@ public class LeagueMatchService {
 	}
 
 	private boolean hasRealtimeRelevantChange(LeagueMatch existing, LeagueMatch incoming) {
+		if (!java.util.Objects.equals(existing.getLeagueName(), incoming.getLeagueName())) {
+			return true;
+		}
 		if (!java.util.Objects.equals(existing.getMatchDate(), incoming.getMatchDate())) {
 			return true;
 		}
@@ -1061,6 +1067,13 @@ public class LeagueMatchService {
 			return true;
 		}
 		return !java.util.Objects.equals(existing.getRedExternalTeamId(), incoming.getRedExternalTeamId());
+	}
+
+	private String resolveLeagueName(String detailLeagueName, String requestedLeagueSlug) {
+		if (detailLeagueName != null && !detailLeagueName.isBlank()) {
+			return detailLeagueName.trim().toUpperCase();
+		}
+		return requestedLeagueSlug == null ? "" : requestedLeagueSlug.trim().toUpperCase();
 	}
 
 	private Map<String, List<String>> loadGameIdsByMatchIds(List<LeagueMatch> matches) {
