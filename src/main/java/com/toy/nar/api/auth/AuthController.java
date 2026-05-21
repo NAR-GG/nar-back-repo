@@ -12,7 +12,6 @@ import com.toy.nar.app.auth.JwtTokenProvider;
 import com.toy.nar.app.auth.KakaoUserClient;
 import com.toy.nar.app.auth.SocialAccountInfo;
 import com.toy.nar.app.auth.SocialLoginService;
-import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.RefreshToken;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -57,12 +56,38 @@ public class AuthController {
             "DNS", "BFX", "NS", "BRO", "KRX"
     );
 
+    private static final List<OnboardingLeagueOptionResponse> ONBOARDING_LEAGUES = List.of(
+            new OnboardingLeagueOptionResponse(
+                    "LCK",
+                    "대한민국",
+                    "http://static.lolesports.com/leagues/lck-color-on-black.png"),
+            new OnboardingLeagueOptionResponse(
+                    "LPL",
+                    "중국",
+                    "http://static.lolesports.com/leagues/1592516115322_LPL-01-FullonDark.png"),
+            new OnboardingLeagueOptionResponse(
+                    "LEC",
+                    "유럽/중동/아프리카",
+                    "http://static.lolesports.com/leagues/1592516184297_LEC-01-FullonDark.png"),
+            new OnboardingLeagueOptionResponse(
+                    "LCS",
+                    "북아메리카",
+                    "http://static.lolesports.com/leagues/1706356907418_LCSNew-01-FullonDark.png"),
+            new OnboardingLeagueOptionResponse(
+                    "LCP",
+                    "아시아 태평양",
+                    "http://static.lolesports.com/leagues/1733468139601_lcp-color-golden.png"),
+            new OnboardingLeagueOptionResponse(
+                    "CBLOL",
+                    "남아메리카",
+                    "http://static.lolesports.com/leagues/cblol-logo-symbol-offwhite.png")
+    );
+
     private final JwtTokenProvider jwtTokenProvider;
     private final KakaoUserClient kakaoUserClient;
     private final SocialLoginService socialLoginService;
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final LeagueRepository leagueRepository;
     private final TeamRepository teamRepository;
     private final PlayerRepository playerRepository;
 
@@ -92,25 +117,19 @@ public class AuthController {
     )
     @ApiResponse(responseCode = "200", description = "리그 목록 조회 성공")
     @GetMapping("/onboarding/leagues")
-    public ResponseEntity<List<OnboardingLeagueOptionResponse>> getOnboardingLeagues(
-            @Parameter(description = "연도", example = "2026") @RequestParam(defaultValue = "2026") int year) {
-        List<OnboardingLeagueOptionResponse> leagues = leagueRepository.findDistinctLeagueNamesByYear(year).stream()
-                .map(OnboardingLeagueOptionResponse::new)
-                .toList();
-        return ResponseEntity.ok(leagues);
+    public ResponseEntity<List<OnboardingLeagueOptionResponse>> getOnboardingLeagues() {
+        return ResponseEntity.ok(ONBOARDING_LEAGUES);
     }
 
     @Operation(
             summary = "온보딩용 팀 목록 조회",
-            description = "온보딩 화면에서 선택한 리그/시즌의 팀 목록을 조회합니다."
+            description = "온보딩 화면에서 선택할 LCK 팀 목록을 조회합니다."
     )
     @ApiResponse(responseCode = "200", description = "팀 목록 조회 성공")
     @GetMapping("/onboarding/teams")
     public ResponseEntity<List<OnboardingTeamOptionResponse>> getOnboardingTeams(
-            @Parameter(description = "리그명", example = "LCK") @RequestParam(defaultValue = "LCK") String league,
             @Parameter(description = "연도", example = "2026") @RequestParam(defaultValue = "2026") int year) {
-        String leagueName = normalizeLeagueName(league);
-        List<OnboardingTeamOptionResponse> teams = findSelectableTeams(leagueName, year).stream()
+        List<OnboardingTeamOptionResponse> teams = findSelectableTeams(year).stream()
                 .map(OnboardingTeamOptionResponse::from)
                 .toList();
         return ResponseEntity.ok(teams);
@@ -123,11 +142,9 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "선수 목록 조회 성공")
     @GetMapping("/onboarding/players")
     public ResponseEntity<List<OnboardingPlayerOptionResponse>> getOnboardingPlayers(
-            @Parameter(description = "리그명", example = "LCK") @RequestParam(defaultValue = "LCK") String league,
             @Parameter(description = "연도", example = "2026") @RequestParam(defaultValue = "2026") int year,
             @Parameter(description = "팀 ID", example = "1") @RequestParam(required = false) Long teamId) {
-        String leagueName = normalizeLeagueName(league);
-        List<OnboardingPlayerOptionResponse> players = playerRepository.findOnboardingPlayers(leagueName, year, teamId)
+        List<OnboardingPlayerOptionResponse> players = playerRepository.findOnboardingPlayers("LCK", year, teamId)
                 .stream()
                 .map(OnboardingPlayerOptionResponse::from)
                 .toList();
@@ -202,11 +219,10 @@ public class AuthController {
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"));
         Team team = teamRepository.findById(request.favoriteTeamId())
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "팀을 찾을 수 없습니다"));
-        String favoriteLeagueName = normalizeLeagueName(request.favoriteLeagueName());
-        validateSelectableTeam(favoriteLeagueName, team.getId());
-        List<Player> favoritePlayers = resolveFavoritePlayers(request.favoritePlayerIds(), favoriteLeagueName, team.getId());
+        validateSelectableTeam(team.getId());
+        List<Player> favoritePlayers = resolveFavoritePlayers(request.favoritePlayerIds(), team.getId());
 
-        member.completeOnboarding(favoriteLeagueName, team, favoritePlayers);
+        member.completeOnboarding("LCK", team, favoritePlayers);
         return ResponseEntity.ok(MemberResponse.from(member));
     }
 
@@ -227,9 +243,9 @@ public class AuthController {
         return ResponseEntity.ok(MemberResponse.from(member));
     }
 
-    private List<Team> findSelectableTeams(String leagueName, int year) {
-        List<Team> onboardingTeams = teamRepository.findOnboardingTeams(leagueName, year);
-        if (onboardingTeams.isEmpty() && "LCK".equals(leagueName)) {
+    private List<Team> findSelectableTeams(int year) {
+        List<Team> onboardingTeams = teamRepository.findOnboardingTeams("LCK", year);
+        if (onboardingTeams.isEmpty()) {
             return findDefaultLckTeams();
         }
         return onboardingTeams;
@@ -245,15 +261,15 @@ public class AuthController {
                 .toList();
     }
 
-    private void validateSelectableTeam(String leagueName, Long teamId) {
-        boolean isSelectableTeam = findSelectableTeams(leagueName, DEFAULT_ONBOARDING_YEAR).stream()
+    private void validateSelectableTeam(Long teamId) {
+        boolean isSelectableTeam = findSelectableTeams(DEFAULT_ONBOARDING_YEAR).stream()
                 .anyMatch(team -> team.getId().equals(teamId));
         if (!isSelectableTeam) {
-            throw new ResponseStatusException(BAD_REQUEST, "선택한 리그에 속하지 않는 팀입니다");
+            throw new ResponseStatusException(BAD_REQUEST, "LCK에 속하지 않는 팀입니다");
         }
     }
 
-    private List<Player> resolveFavoritePlayers(List<Long> favoritePlayerIds, String leagueName, Long teamId) {
+    private List<Player> resolveFavoritePlayers(List<Long> favoritePlayerIds, Long teamId) {
         if (favoritePlayerIds == null || favoritePlayerIds.isEmpty()) {
             return List.of();
         }
@@ -264,7 +280,7 @@ public class AuthController {
             throw new ResponseStatusException(NOT_FOUND, "선수를 찾을 수 없습니다");
         }
 
-        Set<Long> selectablePlayerIds = playerRepository.findOnboardingPlayers(leagueName, DEFAULT_ONBOARDING_YEAR, teamId).stream()
+        Set<Long> selectablePlayerIds = playerRepository.findOnboardingPlayers("LCK", DEFAULT_ONBOARDING_YEAR, teamId).stream()
                 .map(Player::getId)
                 .collect(Collectors.toSet());
         boolean hasUnavailablePlayer = requestedIds.stream()
@@ -274,12 +290,5 @@ public class AuthController {
         }
 
         return players;
-    }
-
-    private String normalizeLeagueName(String leagueName) {
-        if (leagueName == null || leagueName.isBlank()) {
-            return "LCK";
-        }
-        return leagueName.trim().toUpperCase();
     }
 }
