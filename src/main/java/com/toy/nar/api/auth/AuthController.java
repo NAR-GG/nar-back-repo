@@ -9,10 +9,10 @@ import com.toy.nar.api.auth.dto.OnboardingTeamOptionResponse;
 import com.toy.nar.api.auth.dto.TokenResponse;
 import com.toy.nar.app.auth.AuthTokens;
 import com.toy.nar.app.auth.JwtTokenProvider;
-import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.app.auth.KakaoUserClient;
 import com.toy.nar.app.auth.SocialAccountInfo;
 import com.toy.nar.app.auth.SocialLoginService;
+import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.RefreshToken;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -67,8 +67,6 @@ public class AuthController {
     private final PlayerRepository playerRepository;
 
     @Operation(
-            summary = "온보딩용 리그 목록 조회",
-            description = "온보딩 화면에서 선택할 시즌별 리그 목록을 조회합니다."
             summary = "모바일 카카오 로그인",
             description = "Flutter Kakao SDK에서 발급받은 카카오 Access Token을 검증하고 서비스 JWT를 발급합니다."
     )
@@ -89,8 +87,8 @@ public class AuthController {
     }
 
     @Operation(
-            summary = "온보딩용 LCK 팀 목록 조회",
-            description = "온보딩 화면에서 선택할 최신 시즌 LCK 팀 목록을 조회합니다."
+            summary = "온보딩용 리그 목록 조회",
+            description = "온보딩 화면에서 선택할 시즌별 리그 목록을 조회합니다."
     )
     @ApiResponse(responseCode = "200", description = "리그 목록 조회 성공")
     @GetMapping("/onboarding/leagues")
