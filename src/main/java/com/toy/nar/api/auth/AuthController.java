@@ -56,6 +56,33 @@ public class AuthController {
             "DNS", "BFX", "NS", "BRO", "KRX"
     );
 
+    private static final List<OnboardingLeagueOptionResponse> ONBOARDING_LEAGUES = List.of(
+            new OnboardingLeagueOptionResponse(
+                    "LCK",
+                    "대한민국",
+                    "http://static.lolesports.com/leagues/lck-color-on-black.png"),
+            new OnboardingLeagueOptionResponse(
+                    "LPL",
+                    "중국",
+                    "http://static.lolesports.com/leagues/1592516115322_LPL-01-FullonDark.png"),
+            new OnboardingLeagueOptionResponse(
+                    "LEC",
+                    "유럽/중동/아프리카",
+                    "http://static.lolesports.com/leagues/1592516184297_LEC-01-FullonDark.png"),
+            new OnboardingLeagueOptionResponse(
+                    "LCS",
+                    "북아메리카",
+                    "http://static.lolesports.com/leagues/1706356907418_LCSNew-01-FullonDark.png"),
+            new OnboardingLeagueOptionResponse(
+                    "LCP",
+                    "아시아 태평양",
+                    "http://static.lolesports.com/leagues/1733468139601_lcp-color-golden.png"),
+            new OnboardingLeagueOptionResponse(
+                    "CBLOL",
+                    "남아메리카",
+                    "http://static.lolesports.com/leagues/cblol-logo-symbol-offwhite.png")
+    );
+
     private final JwtTokenProvider jwtTokenProvider;
     private final KakaoUserClient kakaoUserClient;
     private final SocialLoginService socialLoginService;
@@ -91,7 +118,7 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "리그 목록 조회 성공")
     @GetMapping("/onboarding/leagues")
     public ResponseEntity<List<OnboardingLeagueOptionResponse>> getOnboardingLeagues() {
-        return ResponseEntity.ok(List.of(new OnboardingLeagueOptionResponse("LCK")));
+        return ResponseEntity.ok(ONBOARDING_LEAGUES);
     }
 
     @Operation(
