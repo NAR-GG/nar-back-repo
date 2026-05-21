@@ -1,7 +1,10 @@
 package com.toy.nar.api.auth.dto;
 
 import com.toy.nar.domain.member.entity.Member;
+import com.toy.nar.domain.member.entity.MemberFavoritePlayer;
 import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.util.List;
 
 @Schema(description = "로그인 사용자 정보 응답")
 public record MemberResponse(
@@ -9,8 +12,12 @@ public record MemberResponse(
 		Long id,
 		@Schema(description = "랜덤 생성 또는 사용 중인 닉네임", example = "용맹한바론")
 		String nickname,
+		@Schema(description = "선호 리그명", example = "LCK", nullable = true)
+		String favoriteLeagueName,
 		@Schema(description = "선호 팀 ID", example = "3", nullable = true)
 		Long favoriteTeamId,
+		@Schema(description = "선호 선수 ID 목록", example = "[10, 11]")
+		List<Long> favoritePlayerIds,
 		@Schema(description = "온보딩 완료 여부", example = "false")
 		boolean isOnboarded) {
 
@@ -18,7 +25,12 @@ public record MemberResponse(
         return new MemberResponse(
                 member.getId(),
                 member.getNickname(),
+                member.getFavoriteLeagueName(),
                 member.getFavoriteTeam() != null ? member.getFavoriteTeam().getId() : null,
+                member.getFavoritePlayers().stream()
+                        .map(MemberFavoritePlayer::getPlayer)
+                        .map(player -> player.getId())
+                        .toList(),
                 member.isOnboarded()
         );
     }
