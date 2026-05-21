@@ -34,6 +34,9 @@ public interface LeagueRepository extends JpaRepository<League, Long> {
 	@Query("SELECT DISTINCT l.leagueName FROM League l WHERE l.seasonYear = 2025")
 	List<String> findDistinctLeagueNames();
 
+	@Query("SELECT DISTINCT l.leagueName FROM League l WHERE l.seasonYear = :year ORDER BY l.leagueName")
+	List<String> findDistinctLeagueNamesByYear(@Param("year") int year);
+
 	@Query("SELECT DISTINCT l.seasonSplit FROM League l WHERE l.leagueName = :leagueName AND l.seasonYear = :seasonYear")
 	List<String> findSplitsByLeague(@Param("leagueName") String leagueName, @Param("seasonYear") Integer seasonYear);
 

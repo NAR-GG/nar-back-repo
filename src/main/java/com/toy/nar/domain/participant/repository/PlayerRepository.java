@@ -20,4 +20,21 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 		"JOIN g.league l " +
 		"WHERE l.leagueName = :leagueName")
 	List<Player> findPlayersByLeagueName(@Param("leagueName") String leagueName);
+
+	@Query("""
+			SELECT DISTINCT p
+			FROM GameParticipant gp
+			JOIN gp.player p
+			JOIN gp.team t
+			JOIN gp.game g
+			JOIN g.league l
+			WHERE l.leagueName = :leagueName
+			  AND l.seasonYear = :year
+			  AND (:teamId IS NULL OR t.id = :teamId)
+			ORDER BY p.name
+			""")
+	List<Player> findOnboardingPlayers(
+			@Param("leagueName") String leagueName,
+			@Param("year") int year,
+			@Param("teamId") Long teamId);
 }
