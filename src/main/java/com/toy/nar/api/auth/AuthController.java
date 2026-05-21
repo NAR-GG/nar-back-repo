@@ -244,11 +244,7 @@ public class AuthController {
     }
 
     private List<Team> findSelectableTeams(int year) {
-        List<Team> onboardingTeams = teamRepository.findOnboardingTeams("LCK", year);
-        if (onboardingTeams.isEmpty()) {
-            return findDefaultLckTeams();
-        }
-        return onboardingTeams;
+        return findDefaultLckTeams();
     }
 
     private List<Team> findDefaultLckTeams() {
