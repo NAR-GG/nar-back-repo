@@ -9,6 +9,7 @@ import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.security.GeneralSecurityException;
 import java.util.Collections;
 
 @Configuration
+@Profile({ "local", "dev", "prod" })
 public class GoogleDriveConfig {
 
 	private static final String APPLICATION_NAME = "NAR Game Data Importer";

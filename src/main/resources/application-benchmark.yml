@@ -28,6 +28,15 @@ spring:
   elasticsearch:
     uris: ${ELASTICSEARCH_URI:http://127.0.0.1:9200}
 
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: benchmark-client-id
+            client-secret: benchmark-client-secret
+            scope: email, profile
+
 jwt:
   secret: ${JWT_SECRET:dev-secret-key-must-be-at-least-32-characters-long}
 
@@ -65,5 +74,16 @@ riot:
     enabled: false
 
 lolesports:
+  riot-api:
+    key: ${LOL_ESPORTS_KEY:benchmark-dummy-key}
   live:
     enabled: false
+
+nar:
+  data:
+    ingestion:
+      jdbc:
+        parallel:
+          enabled: ${NAR_DATA_INGESTION_JDBC_PARALLEL_ENABLED:true}
+          threads: ${NAR_DATA_INGESTION_JDBC_PARALLEL_THREADS:4}
+          max-in-flight: ${NAR_DATA_INGESTION_JDBC_PARALLEL_MAX_IN_FLIGHT:8}
