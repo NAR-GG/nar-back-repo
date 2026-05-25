@@ -35,3 +35,12 @@ app:
         - "UCORzxHO2quCHbE2fTo_snEg" # 롤뻔뻔
         - "UCBjjh72yM1KoMHfFhNBQr8w" # 대유쾌마운틴
         - "UCwvk_uRd0w-n0O1I4QRdM0g" # 롤꺾마
+
+nar:
+  data:
+    ingestion:
+      jdbc:
+        parallel:
+          enabled: ${NAR_DATA_INGESTION_JDBC_PARALLEL_ENABLED:false}
+          threads: ${NAR_DATA_INGESTION_JDBC_PARALLEL_THREADS:4}
+          max-in-flight: ${NAR_DATA_INGESTION_JDBC_PARALLEL_MAX_IN_FLIGHT:8}

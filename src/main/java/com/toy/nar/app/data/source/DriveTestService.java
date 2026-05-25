@@ -5,6 +5,7 @@ import com.google.api.services.drive.model.File;
 import com.opencsv.CSVReader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
+@Profile({ "local", "dev", "prod" })
 @RequiredArgsConstructor
 @Slf4j
 public class DriveTestService {

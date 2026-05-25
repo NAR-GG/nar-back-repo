@@ -4,14 +4,15 @@ import java.io.InputStream;
 import java.time.LocalDateTime;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.google.api.services.drive.Drive;
 import com.toy.nar.app.analysis.service.CombinationService;
+import com.toy.nar.app.data.ingestion.JdbcBatchDataIngestionFacade;
 import com.toy.nar.app.data.ingestion.dto.DataIngestionResult;
 import com.toy.nar.app.data.source.dto.DataSyncResult;
-import com.toy.nar.app.data.ingestion.DataIngestionFacade;
 import com.toy.nar.app.monitor.SchedulerAlertService;
 import com.toy.nar.app.schedule.CacheEvictionService;
 import com.toy.nar.domain.sync.SyncStatusRepository;
@@ -20,17 +21,19 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Profile({ "local", "dev", "prod" })
 @RequiredArgsConstructor
 @Slf4j
 public class GoogleDriveDataSyncService {
 
 	private final Drive drive;
-	private final DataIngestionFacade dataIngestionFacade;
+	private final JdbcBatchDataIngestionFacade dataIngestionFacade;
 	private final SchedulerAlertService schedulerAlertService;
 	private final CombinationService combinationService;
 	private final CacheEvictionService cacheEvictionService;
 	private final SyncStatusRepository syncStatusRepository;
 
+	@Value("${google.drive.csv-file-id:1hnpbrUpBMS1TZI7IovfpKeZfWJH1Aptm}")
 	private String csvFileId = "1hnpbrUpBMS1TZI7IovfpKeZfWJH1Aptm";
 
 	@Scheduled(cron = "0 30 4,10,16,22 * * ?", zone = "Asia/Seoul")

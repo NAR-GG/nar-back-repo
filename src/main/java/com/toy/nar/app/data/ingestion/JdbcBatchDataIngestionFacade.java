@@ -21,11 +21,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import org.jooq.DSLContext;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -82,6 +89,15 @@ public class JdbcBatchDataIngestionFacade {
 	private final TransactionTemplate transactionTemplate;
 	private final ReentrantLock ingestionLock = new ReentrantLock();
 
+	@Value("${nar.data.ingestion.jdbc.parallel.enabled:false}")
+	private boolean parallelChunkProcessingEnabled;
+
+	@Value("${nar.data.ingestion.jdbc.parallel.threads:4}")
+	private int parallelChunkThreads;
+
+	@Value("${nar.data.ingestion.jdbc.parallel.max-in-flight:8}")
+	private int maxInFlightChunks;
+
 	public DataIngestionResult ingestFromStream(InputStream csvStream, String lastProcessedGameId) throws Exception {
 		if (!ingestionLock.tryLock()) {
 			throw new IllegalStateException("Data ingestion is already running.");
@@ -100,6 +116,9 @@ public class JdbcBatchDataIngestionFacade {
 			log.info("Delta cursor detected ({}), but full-stream scan is used for consistency.", lastProcessedGameId);
 		}
 
+		boolean parallelProcessing = isParallelChunkProcessingEnabled();
+		log.info("JDBC batch ingestion mode: {}", parallelProcessing ? "parallel_process_write" : "sequential");
+
 		long startTime = System.currentTimeMillis();
 		DataIngestionResult.Builder resultBuilder = DataIngestionResult.builder();
 		entityResolver.clearCaches();
@@ -114,14 +133,18 @@ public class JdbcBatchDataIngestionFacade {
 					.build();
 
 			List<GameDataCsvDto> chunk = new ArrayList<>(ROW_CHUNK_SIZE);
-			for (GameDataCsvDto dto : csvToBean) {
-				chunk.add(dto);
-				lastIdInStream = dto.getGameid();
-				resultBuilder.incrementProcessedRows();
-				flushSafeChunkIfNeeded(chunk, resultBuilder);
-			}
-			if (!chunk.isEmpty()) {
-				resultBuilder.merge(processChunkInTransaction(chunk));
+			if (parallelProcessing) {
+				lastIdInStream = ingestWithParallelProcessWrite(csvToBean, chunk, resultBuilder);
+			} else {
+				for (GameDataCsvDto dto : csvToBean) {
+					chunk.add(dto);
+					lastIdInStream = dto.getGameid();
+					resultBuilder.incrementProcessedRows();
+					flushSafeChunkIfNeeded(chunk, resultBuilder);
+				}
+				if (!chunk.isEmpty()) {
+					resultBuilder.merge(processChunkInTransaction(chunk));
+				}
 			}
 		} finally {
 			entityResolver.clearCaches();
@@ -137,6 +160,70 @@ public class JdbcBatchDataIngestionFacade {
 		recordIngestionResult(result, processingTimeMs);
 		log.info("[Completed] JDBC batch stream ingestion completed. {}", result.getSummary());
 		return result;
+	}
+
+	private String ingestWithParallelProcessWrite(
+			CsvToBean<GameDataCsvDto> csvToBean,
+			List<GameDataCsvDto> chunk,
+			DataIngestionResult.Builder resultBuilder) throws Exception {
+		int workerCount = normalizedParallelism();
+		int maxInFlight = normalizedMaxInFlight(workerCount);
+		ExecutorService executor = Executors.newFixedThreadPool(workerCount);
+		CompletionService<ChunkProcessingResult> completionService = new ExecutorCompletionService<>(executor);
+		int inFlight = 0;
+		String lastIdInStream = null;
+
+		try {
+			for (GameDataCsvDto dto : csvToBean) {
+				chunk.add(dto);
+				lastIdInStream = dto.getGameid();
+				resultBuilder.incrementProcessedRows();
+
+				List<GameDataCsvDto> safeChunk = splitSafeChunkIfNeeded(chunk);
+				if (safeChunk != null) {
+					inFlight = submitResolvedChunk(completionService, safeChunk, inFlight);
+				}
+				if (inFlight >= maxInFlight) {
+					resultBuilder.merge(takeCompletedChunk(completionService));
+					inFlight--;
+				}
+			}
+
+			if (!chunk.isEmpty()) {
+				inFlight = submitResolvedChunk(completionService, new ArrayList<>(chunk), inFlight);
+				chunk.clear();
+			}
+
+			while (inFlight > 0) {
+				resultBuilder.merge(takeCompletedChunk(completionService));
+				inFlight--;
+			}
+			return lastIdInStream;
+		} catch (Exception e) {
+			executor.shutdownNow();
+			throw e;
+		} finally {
+			executor.shutdown();
+		}
+	}
+
+	private int submitResolvedChunk(
+			CompletionService<ChunkProcessingResult> completionService,
+			List<GameDataCsvDto> chunk,
+			int inFlight) {
+		// 공유 캐시에 새 팀/선수/리그를 등록하는 단계는 단일 reader 스레드에서 수행한다.
+		// worker는 이미 resolve된 엔티티를 읽고 game 처리와 DB write만 병렬로 실행한다.
+		long resolveStart = System.nanoTime();
+		entityResolver.resolveEntitiesFromChunk(chunk);
+		long resolveDurationNanos = System.nanoTime() - resolveStart;
+		completionService.submit(() -> processResolvedChunkInTransaction(chunk, resolveDurationNanos));
+		return inFlight + 1;
+	}
+
+	private ChunkProcessingResult takeCompletedChunk(CompletionService<ChunkProcessingResult> completionService)
+			throws InterruptedException, ExecutionException {
+		Future<ChunkProcessingResult> completed = completionService.take();
+		return completed.get();
 	}
 
 	private void flushSafeChunkIfNeeded(List<GameDataCsvDto> chunk, DataIngestionResult.Builder resultBuilder) {
@@ -163,17 +250,49 @@ public class JdbcBatchDataIngestionFacade {
 		chunk.addAll(carryOver);
 	}
 
+	private List<GameDataCsvDto> splitSafeChunkIfNeeded(List<GameDataCsvDto> chunk) {
+		if (chunk.size() < ROW_CHUNK_SIZE) {
+			return null;
+		}
+
+		String tailGameId = chunk.get(chunk.size() - 1).getGameid();
+		int splitIndex = chunk.size() - 1;
+		while (splitIndex >= 0 && Objects.equals(chunk.get(splitIndex).getGameid(), tailGameId)) {
+			splitIndex--;
+		}
+		splitIndex++;
+
+		if (splitIndex == 0) {
+			return null;
+		}
+
+		List<GameDataCsvDto> toProcess = new ArrayList<>(chunk.subList(0, splitIndex));
+		List<GameDataCsvDto> carryOver = new ArrayList<>(chunk.subList(splitIndex, chunk.size()));
+		chunk.clear();
+		chunk.addAll(carryOver);
+		return toProcess;
+	}
+
 	private ChunkProcessingResult processChunkInTransaction(List<GameDataCsvDto> chunk) {
 		return transactionTemplate.execute(status -> processChunk(chunk));
 	}
 
-	public ChunkProcessingResult processChunk(List<GameDataCsvDto> chunk) {
-		int invalidGames = 0;
-		int failedGames = 0;
+	private ChunkProcessingResult processResolvedChunkInTransaction(
+			List<GameDataCsvDto> chunk,
+			long resolveDurationNanos) {
+		return transactionTemplate.execute(status -> processResolvedChunk(chunk, resolveDurationNanos));
+	}
 
+	public ChunkProcessingResult processChunk(List<GameDataCsvDto> chunk) {
 		long resolveStart = System.nanoTime();
 		entityResolver.resolveEntitiesFromChunk(chunk);
 		long resolveDurationNanos = System.nanoTime() - resolveStart;
+		return processResolvedChunk(chunk, resolveDurationNanos);
+	}
+
+	private ChunkProcessingResult processResolvedChunk(List<GameDataCsvDto> chunk, long resolveDurationNanos) {
+		int invalidGames = 0;
+		int failedGames = 0;
 
 		long processStart = System.nanoTime();
 		Map<String, List<GameDataCsvDto>> gamesGroupedById = chunk.stream()
@@ -572,6 +691,18 @@ public class JdbcBatchDataIngestionFacade {
 
 	private String placeholders(int size) {
 		return String.join(",", Collections.nCopies(size, "?"));
+	}
+
+	private boolean isParallelChunkProcessingEnabled() {
+		return parallelChunkProcessingEnabled && normalizedParallelism() > 1;
+	}
+
+	private int normalizedParallelism() {
+		return Math.max(1, parallelChunkThreads);
+	}
+
+	private int normalizedMaxInFlight(int workerCount) {
+		return Math.max(workerCount, maxInFlightChunks);
 	}
 
 	private void set(PreparedStatement ps, int index, Object value) throws SQLException {

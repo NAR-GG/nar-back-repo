@@ -7,6 +7,9 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      data-source-properties:
+        rewriteBatchedStatements: true
 
   jpa:
     database-platform: org.hibernate.dialect.MySQL8Dialect
@@ -128,3 +131,12 @@ lolesports:
     queue:
       snapshot-capacity: ${LOL_LIVE_SNAPSHOT_QUEUE_CAPACITY:600}
       object-capacity: ${LOL_LIVE_OBJECT_QUEUE_CAPACITY:1200}
+
+nar:
+  data:
+    ingestion:
+      jdbc:
+        parallel:
+          enabled: ${NAR_DATA_INGESTION_JDBC_PARALLEL_ENABLED:false}
+          threads: ${NAR_DATA_INGESTION_JDBC_PARALLEL_THREADS:4}
+          max-in-flight: ${NAR_DATA_INGESTION_JDBC_PARALLEL_MAX_IN_FLIGHT:8}
