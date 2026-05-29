@@ -68,7 +68,8 @@ class ScheduleServicePerformanceBaselineTest {
                 gameParticipantRepository,
                 leagueMatchRepository,
                 leagueMatchGameRepository,
-                matchDetailFinder);
+                matchDetailFinder,
+                null);
         sessionFactory = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class);
         sessionFactory.getStatistics().setStatisticsEnabled(true);
     }

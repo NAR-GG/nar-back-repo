@@ -1,0 +1,60 @@
+package com.toy.nar.api.mobile.schedule;
+
+import com.toy.nar.app.mobile.schedule.MobileScheduleService;
+import com.toy.nar.app.mobile.schedule.dto.MobileScheduleCalendarResponse;
+import com.toy.nar.app.mobile.schedule.dto.MobileScheduleFilterResponse;
+import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.time.YearMonth;
+
+@Tag(name = "Mobile. 경기 일정", description = "모바일 앱 경기일정/경기리스트 전용 API")
+@RestController
+@RequestMapping("/api/mobile/schedules")
+@RequiredArgsConstructor
+public class MobileScheduleController {
+
+	private final MobileScheduleService mobileScheduleService;
+
+	@Operation(summary = "모바일 일정 필터 조회", description = "모바일 경기일정/경기리스트 화면의 리그와 팀 필터 옵션을 조회합니다.")
+	@GetMapping("/filters")
+	public ResponseEntity<MobileScheduleFilterResponse> getFilters(
+			@Parameter(description = "팀 옵션을 조회할 리그", example = "LCK")
+			@RequestParam(defaultValue = "LCK") String league) {
+		return ResponseEntity.ok(mobileScheduleService.getFilters(league));
+	}
+
+	@Operation(summary = "모바일 월별 캘린더 조회", description = "월별 캘린더 마킹용 경기 날짜와 경기 수를 조회합니다.")
+	@GetMapping("/calendar")
+	public ResponseEntity<MobileScheduleCalendarResponse> getCalendar(
+			@Parameter(description = "조회 월", example = "2026-04")
+			@RequestParam("month") @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
+			@Parameter(description = "리그", example = "LCK")
+			@RequestParam(defaultValue = "LCK") String league,
+			@Parameter(description = "팀 ID", example = "1")
+			@RequestParam(required = false) Long teamId) {
+		return ResponseEntity.ok(mobileScheduleService.getCalendar(month, league, teamId));
+	}
+
+	@Operation(summary = "모바일 일별 경기 리스트 조회", description = "선택 날짜의 모바일 경기 리스트 카드 데이터를 조회합니다.")
+	@GetMapping
+	public ResponseEntity<MobileScheduleListResponse> getDailySchedules(
+			@Parameter(description = "조회 일자", example = "2026-04-01")
+			@RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+			@Parameter(description = "리그", example = "LCK")
+			@RequestParam(defaultValue = "LCK") String league,
+			@Parameter(description = "팀 ID", example = "1")
+			@RequestParam(required = false) Long teamId) {
+		return ResponseEntity.ok(mobileScheduleService.getDailySchedules(date, league, teamId));
+	}
+}

@@ -41,6 +41,40 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("SELECT m FROM LeagueMatch m WHERE m.matchDate >= :start AND m.matchDate <= :end ORDER BY m.matchDate DESC")
 	List<LeagueMatch> findByDateRange(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
+	@Query("""
+			SELECT m
+			FROM LeagueMatch m
+			WHERE UPPER(m.leagueName) = UPPER(:leagueName)
+			  AND m.matchDate >= :start
+			  AND m.matchDate < :end
+			ORDER BY m.matchDate ASC
+			""")
+	List<LeagueMatch> findMobileMatchesInRange(
+			@Param("leagueName") String leagueName,
+			@Param("start") LocalDateTime start,
+			@Param("end") LocalDateTime end);
+
+	@Query("""
+			SELECT m
+			FROM LeagueMatch m
+			WHERE UPPER(m.leagueName) = UPPER(:leagueName)
+			  AND m.matchDate >= :start
+			  AND m.matchDate < :end
+			  AND (
+					LOWER(m.blueTeamName) = LOWER(:teamName)
+					OR LOWER(m.redTeamName) = LOWER(:teamName)
+					OR (:teamCode IS NOT NULL AND m.blueTeamCode IS NOT NULL AND LOWER(m.blueTeamCode) = LOWER(:teamCode))
+					OR (:teamCode IS NOT NULL AND m.redTeamCode IS NOT NULL AND LOWER(m.redTeamCode) = LOWER(:teamCode))
+			  )
+			ORDER BY m.matchDate ASC
+			""")
+	List<LeagueMatch> findMobileTeamMatchesInRange(
+			@Param("leagueName") String leagueName,
+			@Param("teamName") String teamName,
+			@Param("teamCode") String teamCode,
+			@Param("start") LocalDateTime start,
+			@Param("end") LocalDateTime end);
+
 	@Query(value = """
 			SELECT DATE(m.match_date) AS matchDay,
 			       COUNT(*) AS matchCount
