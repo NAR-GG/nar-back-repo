@@ -21,6 +21,30 @@ public record ScheduleCalendarResponseDto(
 			long matchCount,
 			
 			@Schema(description = "해당 날짜에 경기가 있는 리그 이름 목록", example = "[\"LCK\", \"LPL\"]")
-			List<String> leagues) {
+			List<String> leagues,
+
+			@Schema(description = "캘린더 칸 표시용 매치업 목록")
+			List<CalendarMatchDto> matches) {
+	}
+
+	@Schema(description = "캘린더 칸 표시용 매치업")
+	public record CalendarMatchDto(
+			@Schema(description = "매치 ID", example = "115654899804988513")
+			String matchId,
+
+			@Schema(description = "블루/좌측 팀 코드", example = "HLE")
+			String blueTeamCode,
+
+			@Schema(description = "레드/우측 팀 코드", example = "BRO")
+			String redTeamCode,
+
+			@Schema(description = "블루/좌측 팀명", example = "Hanwha Life Esports")
+			String blueTeamName,
+
+			@Schema(description = "레드/우측 팀명", example = "Hanjin Brion")
+			String redTeamName,
+
+			@Schema(description = "캘린더 표시 문자열", example = "HLE vs BRO")
+			String displayText) {
 	}
 }

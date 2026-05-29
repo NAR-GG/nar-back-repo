@@ -13,6 +13,8 @@ import com.toy.nar.domain.game.entity.Game;
 import com.toy.nar.domain.game.entity.GameParticipant;
 import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import com.toy.nar.domain.game.repository.GameRepository;
+import com.toy.nar.domain.participant.entity.Team;
+import com.toy.nar.domain.participant.repository.TeamRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +44,7 @@ public class ScheduleService {
 	private final LeagueMatchRepository leagueMatchRepository;
 	private final LeagueMatchGameRepository leagueMatchGameRepository;
 	private final MatchDetailFinder matchDetailFinder;
+	private final TeamRepository teamRepository;
 
 	/**
 	 * 일정 조회 공개 메서드.
@@ -59,35 +62,123 @@ public class ScheduleService {
 	}
 
 	public ScheduleCalendarResponseDto getMonthlyScheduleCalendar(YearMonth month) {
+		return getMonthlyScheduleCalendar(month, null, null);
+	}
+
+	public ScheduleCalendarResponseDto getMonthlyScheduleCalendar(YearMonth month, String league, Long teamId) {
 		if (month == null) {
 			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 
+		String leagueFilter = normalizeLeagueFilter(league);
+		Team teamFilter = resolveTeamFilter(teamId);
 		LocalDateTime start = month.atDay(1).atStartOfDay();
 		LocalDateTime end = month.plusMonths(1).atDay(1).atStartOfDay();
 
-		List<LeagueMatchRepository.MonthlyMatchLeagueRow> rows = leagueMatchRepository
-				.findMonthlyMatchCountsWithLeagues(start, end,
-						new ArrayList<>(com.toy.nar.app.lolesports.LeagueConstants.ALLOWED_LEAGUES));
+		List<com.toy.nar.app.lolesports.repository.LeagueMatch> matches = leagueMatchRepository
+				.findByDateRange(start, end.minusNanos(1)).stream()
+				.filter(match -> match.getLeagueName() != null)
+				.filter(match -> isAllowedLeague(match.getLeagueName()))
+				.filter(match -> leagueFilter == null || leagueFilter.equalsIgnoreCase(match.getLeagueName()))
+				.filter(match -> teamFilter == null || matchesTeam(match, teamFilter))
+				.sorted(Comparator.comparing(com.toy.nar.app.lolesports.repository.LeagueMatch::getMatchDate,
+						Comparator.nullsLast(Comparator.naturalOrder())))
+				.toList();
 
-		// 날짜별로 그룹핑: matchCount 합산 + leagues 수집
 		Map<String, ScheduleCalendarResponseDto.ScheduleDateSummaryDto> dateMap = new LinkedHashMap<>();
-		for (var row : rows) {
-			String dateKey = row.getMatchDay().toString();
+		for (var match : matches) {
+			if (match.getMatchDate() == null) {
+				continue;
+			}
+			String dateKey = match.getMatchDate().toLocalDate().toString();
 			ScheduleCalendarResponseDto.ScheduleDateSummaryDto existing = dateMap.get(dateKey);
 			if (existing == null) {
 				List<String> leagues = new ArrayList<>();
-				leagues.add(row.getLeagueName());
+				leagues.add(match.getLeagueName().toUpperCase());
 				dateMap.put(dateKey, new ScheduleCalendarResponseDto.ScheduleDateSummaryDto(
-						dateKey, row.getMatchCount(), leagues));
+						dateKey,
+						1,
+						leagues,
+						new ArrayList<>(List.of(toCalendarMatchDto(match)))));
 			} else {
-				existing.leagues().add(row.getLeagueName());
+				List<String> leagues = new ArrayList<>(existing.leagues());
+				String leagueName = match.getLeagueName().toUpperCase();
+				if (!leagues.contains(leagueName)) {
+					leagues.add(leagueName);
+				}
+				List<ScheduleCalendarResponseDto.CalendarMatchDto> dayMatches = new ArrayList<>(existing.matches());
+				dayMatches.add(toCalendarMatchDto(match));
 				dateMap.put(dateKey, new ScheduleCalendarResponseDto.ScheduleDateSummaryDto(
-						dateKey, existing.matchCount() + row.getMatchCount(), existing.leagues()));
+						dateKey,
+						existing.matchCount() + 1,
+						leagues,
+						dayMatches));
 			}
 		}
 
 		return new ScheduleCalendarResponseDto(month.toString(), new ArrayList<>(dateMap.values()));
+	}
+
+	private String normalizeLeagueFilter(String league) {
+		if (league == null || league.isBlank()) {
+			return null;
+		}
+		String normalized = league.trim().toUpperCase(Locale.ROOT);
+		if (!com.toy.nar.app.lolesports.LeagueConstants.ALLOWED_LEAGUES.contains(normalized)) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+		return normalized;
+	}
+
+	private Team resolveTeamFilter(Long teamId) {
+		if (teamId == null) {
+			return null;
+		}
+		return teamRepository.findById(teamId)
+				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
+	}
+
+	private boolean isAllowedLeague(String leagueName) {
+		return com.toy.nar.app.lolesports.LeagueConstants.ALLOWED_LEAGUES
+				.contains(leagueName.toUpperCase(Locale.ROOT));
+	}
+
+	private boolean matchesTeam(
+			com.toy.nar.app.lolesports.repository.LeagueMatch match,
+			Team team) {
+		return equalsIgnoreCase(match.getBlueTeamName(), team.getName())
+				|| equalsIgnoreCase(match.getRedTeamName(), team.getName())
+				|| equalsIgnoreCase(match.getBlueTeamCode(), team.getCode())
+				|| equalsIgnoreCase(match.getRedTeamCode(), team.getCode());
+	}
+
+	private boolean equalsIgnoreCase(String left, String right) {
+		if (left == null || right == null) {
+			return false;
+		}
+		return left.equalsIgnoreCase(right);
+	}
+
+	private ScheduleCalendarResponseDto.CalendarMatchDto toCalendarMatchDto(
+			com.toy.nar.app.lolesports.repository.LeagueMatch match) {
+		String blueTeamCode = match.getBlueTeamCode();
+		String redTeamCode = match.getRedTeamCode();
+		String blueTeamName = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(match.getBlueTeamName());
+		String redTeamName = com.toy.nar.common.util.NameNormalizer.normalizeTeamName(match.getRedTeamName());
+		return new ScheduleCalendarResponseDto.CalendarMatchDto(
+				match.getId(),
+				blueTeamCode,
+				redTeamCode,
+				blueTeamName,
+				redTeamName,
+				displayTeam(blueTeamCode, blueTeamName) + " vs " + displayTeam(redTeamCode, redTeamName));
+	}
+
+	private String displayTeam(String teamCode, String teamName) {
+		if (teamCode != null && !teamCode.isBlank()) {
+			return teamCode;
+		}
+		return teamName;
 	}
 
 	/**
