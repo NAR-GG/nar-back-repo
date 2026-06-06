@@ -9,6 +9,7 @@ import com.toy.nar.app.auth.OAuth2AuthenticationSuccessHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -35,6 +36,14 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/mobile/live/games/*/participants/*/my-rating"
+                        ).authenticated()
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/mobile/live/games/*/participants/*/my-rating"
+                        ).authenticated()
                         .requestMatchers(
                                 "/api/auth/me", "/api/auth/logout", "/api/auth/onboarding"
                         ).authenticated()
