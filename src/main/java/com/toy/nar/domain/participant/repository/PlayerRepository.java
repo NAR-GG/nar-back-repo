@@ -12,6 +12,8 @@ import java.util.Set;
 public interface PlayerRepository extends JpaRepository<Player, Long> {
 	Optional<Player> findByName(String name);
 
+	Optional<Player> findByPlayerOriginId(String playerOriginId);
+
 	List<Player> findAllByNameInIgnoreCase(Set<String> names);
 
 	@Query("SELECT DISTINCT p FROM Player p " +
