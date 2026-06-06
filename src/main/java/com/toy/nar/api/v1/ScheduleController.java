@@ -48,8 +48,12 @@ public class ScheduleController {
 	@GetMapping("/calendar")
 	public ResponseEntity<ScheduleCalendarResponseDto> getMonthlyScheduleCalendar(
 			@Parameter(description = "조회 월 (예: 2026-04)", example = "2026-04")
-			@RequestParam("month") @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-		ScheduleCalendarResponseDto calendar = scheduleService.getMonthlyScheduleCalendar(month);
+			@RequestParam("month") @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
+			@Parameter(description = "리그 필터 (예: LCK)", example = "LCK")
+			@RequestParam(required = false) String league,
+			@Parameter(description = "팀 ID", example = "1")
+			@RequestParam(required = false) Long teamId) {
+		ScheduleCalendarResponseDto calendar = scheduleService.getMonthlyScheduleCalendar(month, league, teamId);
 		return ResponseEntity.ok(calendar);
 	}
 
