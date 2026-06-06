@@ -1,6 +1,10 @@
 package com.toy.nar.app.lolesports;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -87,6 +91,47 @@ class LeagueMatchServiceLeagueNameTest {
 				incoming);
 
 		assertThat(changed).isTrue();
+	}
+
+	@Test
+	@DisplayName("실시간 경기 상태가 동일하면 DB를 다시 저장하지 않는다")
+	void syncRealtimeMatchStatus_skipsUnchangedMatch() {
+		MatchResultDto dto = matchDto("LCK");
+		LeagueMatch existing = leagueMatch("LCK");
+		when(leagueMatchRepository.findAllById(List.of(dto.getMatchId()))).thenReturn(List.of(existing));
+
+		boolean changed = leagueMatchService.syncRealtimeMatchStatus(dto, "LCK");
+
+		assertThat(changed).isFalse();
+		verify(leagueMatchRepository, never()).saveAll(anyList());
+	}
+
+	@Test
+	@DisplayName("실시간 점수가 바뀌면 DB를 갱신한다")
+	void syncRealtimeMatchStatus_updatesChangedScore() {
+		MatchResultDto dto = matchDto("LCK");
+		dto.getBlueTeam().setWins(1);
+		LeagueMatch existing = leagueMatch("LCK");
+		when(leagueMatchRepository.findAllById(List.of(dto.getMatchId()))).thenReturn(List.of(existing));
+
+		boolean changed = leagueMatchService.syncRealtimeMatchStatus(dto, "LCK");
+
+		assertThat(changed).isTrue();
+		assertThat(existing.getBlueScore()).isEqualTo(1);
+		verify(leagueMatchRepository).saveAll(List.of(existing));
+	}
+
+	@Test
+	@DisplayName("경기 ID가 없는 실시간 응답은 저장하지 않는다")
+	void syncRealtimeMatchStatus_rejectsMissingMatchId() {
+		MatchResultDto dto = matchDto("LCK");
+		dto.setMatchId(" ");
+
+		boolean changed = leagueMatchService.syncRealtimeMatchStatus(dto, "LCK");
+
+		assertThat(changed).isFalse();
+		verify(leagueMatchRepository, never()).findAllById(anyList());
+		verify(leagueMatchRepository, never()).saveAll(anyList());
 	}
 
 	private MatchResultDto matchDto(String leagueName) {
