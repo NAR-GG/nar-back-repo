@@ -18,8 +18,15 @@ public class LiveFrameProcessor {
 	private final LivePersistenceQueue livePersistenceQueue;
 
 	public Optional<LiveGameState> process(ActiveLiveGame activeGame, JsonNode windowResponse, JsonNode detailsResponse) {
+		if (activeGame == null || windowResponse == null || detailsResponse == null) {
+			return Optional.empty();
+		}
+
 		LiveGameState state = liveStateAggregator.aggregate(activeGame, windowResponse, detailsResponse);
 		if (state == null) {
+			return Optional.empty();
+		}
+		if (isStaleOrDuplicate(state)) {
 			return Optional.empty();
 		}
 
@@ -30,5 +37,12 @@ public class LiveFrameProcessor {
 				activeGame.gameId(),
 				activeGame.withLastSeenAt(LocalDateTime.now(ZoneOffset.UTC)).clearFailures());
 		return Optional.of(state);
+	}
+
+	private boolean isStaleOrDuplicate(LiveGameState state) {
+		return liveStateStore.getLatestState(state.gameId())
+				.filter(existing -> existing.frameTimestampUtc() != null && state.frameTimestampUtc() != null)
+				.map(existing -> !state.frameTimestampUtc().isAfter(existing.frameTimestampUtc()))
+				.orElse(false);
 	}
 }

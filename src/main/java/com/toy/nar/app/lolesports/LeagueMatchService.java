@@ -80,6 +80,25 @@ public class LeagueMatchService {
 		syncMatches(leagueSlug, false);
 	}
 
+	public boolean syncRealtimeMatchStatus(MatchResultDto match, String fallbackLeagueSlug) {
+		if (match == null || match.getMatchId() == null || match.getMatchId().isBlank()) {
+			return false;
+		}
+		String leagueSlug = match.getLeagueName() == null || match.getLeagueName().isBlank()
+				? fallbackLeagueSlug
+				: match.getLeagueName();
+		MatchSyncUpsertResult result = upsertLeagueMatches(leagueSlug, List.of(match));
+		boolean changed = result.insertedMatches() > 0 || result.updatedMatches() > 0;
+		if (changed) {
+			log.info("Realtime match status synced. matchId={} state={} score={}:{}",
+					match.getMatchId(),
+					match.getState(),
+					match.getBlueTeam() == null ? null : match.getBlueTeam().getWins(),
+					match.getRedTeam() == null ? null : match.getRedTeam().getWins());
+		}
+		return changed;
+	}
+
 	public void syncMatches(String leagueSlug, boolean includeTeamMetadataSync) {
 		log.info("Starting sync for league: {}", leagueSlug);
 		// 1. 외부 API에서 데이터 가져오기 (1페이지 분량, pageToken=null)

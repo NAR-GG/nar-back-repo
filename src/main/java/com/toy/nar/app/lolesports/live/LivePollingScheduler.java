@@ -2,9 +2,11 @@ package com.toy.nar.app.lolesports.live;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.toy.nar.app.lolesports.LeagueConstants;
+import com.toy.nar.app.lolesports.LeagueMatchService;
 import com.toy.nar.app.lolesports.MatchResponseWrapper;
 import com.toy.nar.app.lolesports.MatchResultDto;
 import com.toy.nar.app.lolesports.WorldsService;
+import com.toy.nar.app.schedule.CacheEvictionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -37,6 +39,8 @@ public class LivePollingScheduler {
 	private final LiveStateStore liveStateStore;
 	private final LiveFrameProcessor liveFrameProcessor;
 	private final LiveGameMetadataService liveGameMetadataService;
+	private final LeagueMatchService leagueMatchService;
+	private final CacheEvictionService cacheEvictionService;
 
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.stale-threshold-ms:180000}")
 	private long staleThresholdMs;
@@ -48,16 +52,24 @@ public class LivePollingScheduler {
 	public void discoverLiveGames() {
 		Map<String, ActiveLiveGame> activeGames = liveStateStore.getActiveGames();
 		Set<String> discoveredGameIds = new HashSet<>();
+		Set<String> activeMatchIds = activeMatchIds(activeGames);
 		LocalDateTime nowUtc = LocalDateTime.now(ZoneOffset.UTC);
+		boolean scheduleCacheDirty = false;
 
 		for (String league : LeagueConstants.TARGET_LEAGUES) {
 			try {
 				MatchResponseWrapper response = worldsService.getWorldsMatches(null, league);
 				for (MatchResultDto match : response.getMatches()) {
-					if (!"inProgress".equalsIgnoreCase(match.getState()) || match.getLiveGameIds() == null) {
+					boolean activeOrRecentlyActive = "inProgress".equalsIgnoreCase(match.getState())
+							|| activeMatchIds.contains(match.getMatchId());
+					if (!activeOrRecentlyActive) {
 						continue;
 					}
+					scheduleCacheDirty |= leagueMatchService.syncRealtimeMatchStatus(match, league);
 
+					if (match.getLiveGameIds() == null) {
+						continue;
+					}
 					for (String gameId : match.getLiveGameIds()) {
 						if (gameId == null || gameId.isBlank()) {
 							continue;
@@ -84,6 +96,10 @@ public class LivePollingScheduler {
 			}
 		}
 
+		if (scheduleCacheDirty) {
+			cacheEvictionService.evictScheduleCaches();
+		}
+
 		List<String> toRemove = new ArrayList<>();
 		for (ActiveLiveGame activeGame : activeGames.values()) {
 			boolean notDiscovered = !discoveredGameIds.contains(activeGame.gameId());
@@ -98,6 +114,16 @@ public class LivePollingScheduler {
 			liveStateStore.removeGame(gameId);
 			liveObjectEventRecorder.evict(gameId);
 		});
+	}
+
+	private Set<String> activeMatchIds(Map<String, ActiveLiveGame> activeGames) {
+		Set<String> matchIds = new HashSet<>();
+		for (ActiveLiveGame activeGame : activeGames.values()) {
+			if (activeGame.matchId() != null && !activeGame.matchId().isBlank()) {
+				matchIds.add(activeGame.matchId());
+			}
+		}
+		return matchIds;
 	}
 
 	@Scheduled(fixedDelayString = "${lolesports.live.poll-interval-ms:5000}")
@@ -129,7 +155,7 @@ public class LivePollingScheduler {
 
 	private String computeStartingTime(String gameId) {
 		Instant candidate = liveStateStore.getLatestState(gameId)
-				.map(state -> state.frameTimestampUtc().toInstant(ZoneOffset.UTC).minusSeconds(10))
+				.map(state -> nextWindowStart(state.frameTimestampUtc().toInstant(ZoneOffset.UTC)))
 				.orElseGet(() -> Instant.now().minusSeconds(INITIAL_LOOKBACK_SECONDS));
 
 		Instant minAllowed = Instant.now().minus(Duration.ofMinutes(5));
@@ -139,5 +165,10 @@ public class LivePollingScheduler {
 
 		long flooredSeconds = (candidate.getEpochSecond() / 10) * 10;
 		return LocalDateTime.ofInstant(Instant.ofEpochSecond(flooredSeconds), ZoneOffset.UTC).format(START_TIME_FORMATTER);
+	}
+
+	private Instant nextWindowStart(Instant latestFrameTimestamp) {
+		long nextWindowSecond = ((latestFrameTimestamp.getEpochSecond() / 10) + 1) * 10;
+		return Instant.ofEpochSecond(nextWindowSecond);
 	}
 }
