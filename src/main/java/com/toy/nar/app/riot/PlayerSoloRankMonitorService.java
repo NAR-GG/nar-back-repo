@@ -3,6 +3,7 @@ package com.toy.nar.app.riot;
 import com.toy.nar.app.data.source.ChampionDataService;
 import com.toy.nar.app.data.source.NotificationService;
 import com.toy.nar.app.monitor.SchedulerAlertService;
+import com.toy.nar.app.mobile.push.PlayerSoloRankPushService;
 import com.toy.nar.app.riot.dto.PlayerRiotAlertCheckResult;
 import com.toy.nar.app.riot.dto.PlayerSoloRankMonitorResult;
 import com.toy.nar.app.riot.dto.RiotCurrentGameResponse;
@@ -39,6 +40,7 @@ public class PlayerSoloRankMonitorService {
 	private final RiotApiClient riotApiClient;
 	private final RiotMonitorProperties riotMonitorProperties;
 	private final NotificationService notificationService;
+	private final PlayerSoloRankPushService playerSoloRankPushService;
 	private final SchedulerAlertService schedulerAlertService;
 
 	@Transactional
@@ -104,6 +106,13 @@ public class PlayerSoloRankMonitorService {
 							queueDisplayName,
 							champion == null ? null : champion.getChampionNameKr(),
 							champion == null ? null : champion.getImageUrl());
+					if (isRankedSolo(currentGame)) {
+						playerSoloRankPushService.notifySubscribers(
+								account.getPlayer(),
+								currentGameId,
+								champion == null ? null : champion.getChampionNameKr(),
+								champion == null ? null : champion.getImageUrl());
+					}
 					account.markAlertSent(currentGameId);
 					alertsSentCount++;
 				}

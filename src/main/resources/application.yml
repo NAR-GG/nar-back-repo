@@ -44,3 +44,7 @@ nar:
           enabled: ${NAR_DATA_INGESTION_JDBC_PARALLEL_ENABLED:false}
           threads: ${NAR_DATA_INGESTION_JDBC_PARALLEL_THREADS:4}
           max-in-flight: ${NAR_DATA_INGESTION_JDBC_PARALLEL_MAX_IN_FLIGHT:8}
+
+firebase:
+  messaging:
+    enabled: ${FIREBASE_MESSAGING_ENABLED:false}
