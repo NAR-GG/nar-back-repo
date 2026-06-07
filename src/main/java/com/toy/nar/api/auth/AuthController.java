@@ -12,10 +12,12 @@ import com.toy.nar.app.auth.JwtTokenProvider;
 import com.toy.nar.app.auth.KakaoUserClient;
 import com.toy.nar.app.auth.SocialAccountInfo;
 import com.toy.nar.app.auth.SocialLoginService;
+import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.RefreshToken;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.member.repository.RefreshTokenRepository;
+import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
@@ -51,11 +53,6 @@ public class AuthController {
 
     private static final int DEFAULT_ONBOARDING_YEAR = 2026;
 
-    private static final List<String> LCK_ONBOARDING_TEAM_CODES = List.of(
-            "T1", "HLE", "GEN", "DK", "KT",
-            "DNS", "BFX", "NS", "BRO", "KRX"
-    );
-
     private static final List<OnboardingLeagueOptionResponse> ONBOARDING_LEAGUES = List.of(
             new OnboardingLeagueOptionResponse(
                     "LCK",
@@ -90,6 +87,7 @@ public class AuthController {
     private final RefreshTokenRepository refreshTokenRepository;
     private final TeamRepository teamRepository;
     private final PlayerRepository playerRepository;
+    private final MobileTeamNotificationService mobileTeamNotificationService;
 
     @Operation(
             summary = "모바일 카카오 로그인",
@@ -223,6 +221,7 @@ public class AuthController {
         List<Player> favoritePlayers = resolveFavoritePlayers(request.favoritePlayerIds(), team.getId());
 
         member.completeOnboarding("LCK", team, favoritePlayers);
+        mobileTeamNotificationService.ensureDefaultSubscription(member, team);
         return ResponseEntity.ok(MemberResponse.from(member));
     }
 
@@ -248,10 +247,10 @@ public class AuthController {
     }
 
     private List<Team> findDefaultLckTeams() {
-        Map<String, Team> teamsByCode = teamRepository.findAllByCodeIn(LCK_ONBOARDING_TEAM_CODES).stream()
+        Map<String, Team> teamsByCode = teamRepository.findAllByCodeIn(LckTeamCatalog.TEAM_CODES).stream()
                 .collect(Collectors.toMap(Team::getCode, Function.identity()));
 
-        return LCK_ONBOARDING_TEAM_CODES.stream()
+        return LckTeamCatalog.TEAM_CODES.stream()
                 .map(teamsByCode::get)
                 .filter(team -> team != null)
                 .toList();
