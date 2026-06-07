@@ -12,6 +12,7 @@ import com.toy.nar.app.auth.JwtTokenProvider;
 import com.toy.nar.app.auth.KakaoUserClient;
 import com.toy.nar.app.auth.SocialAccountInfo;
 import com.toy.nar.app.auth.SocialLoginService;
+import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.RefreshToken;
@@ -87,6 +88,7 @@ public class AuthController {
     private final RefreshTokenRepository refreshTokenRepository;
     private final TeamRepository teamRepository;
     private final PlayerRepository playerRepository;
+    private final MobileDeviceService mobileDeviceService;
     private final MobileTeamNotificationService mobileTeamNotificationService;
 
     @Operation(
@@ -193,9 +195,14 @@ public class AuthController {
     @ApiResponse(responseCode = "204", description = "로그아웃 성공")
     @PostMapping("/logout")
     @Transactional
-    public ResponseEntity<Void> logout(@AuthenticationPrincipal Long memberId) {
+    public ResponseEntity<Void> logout(
+            @AuthenticationPrincipal Long memberId,
+            @RequestParam(required = false) Long deviceId) {
         if (memberId != null) {
             refreshTokenRepository.deleteByMemberId(memberId);
+            if (deviceId != null) {
+                mobileDeviceService.deactivate(memberId, deviceId);
+            }
         }
         return ResponseEntity.noContent().build();
     }

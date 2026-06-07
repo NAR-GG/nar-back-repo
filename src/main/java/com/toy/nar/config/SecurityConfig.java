@@ -37,6 +37,10 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
+                                "/api/mobile/me/player-subscriptions/**",
+                                "/api/mobile/me/devices/**"
+                        ).authenticated()
+                        .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/mobile/live/games/*/participants/*/my-rating"
                         ).authenticated()

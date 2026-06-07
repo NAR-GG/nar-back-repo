@@ -41,7 +41,7 @@ class MemberTeamNotificationSchemaMySqlIntegrationTest {
 
 		var result = flyway(null).migrate();
 
-		assertThat(result.targetSchemaVersion).isEqualTo("39");
+		assertThat(result.targetSchemaVersion).isEqualTo("40");
 		assertMigratedSubscription();
 		validateSubscriptionSchemaWithHibernate();
 	}

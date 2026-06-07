@@ -4,6 +4,7 @@ import com.toy.nar.api.auth.dto.OnboardingRequest;
 import com.toy.nar.app.auth.JwtTokenProvider;
 import com.toy.nar.app.auth.KakaoUserClient;
 import com.toy.nar.app.auth.SocialLoginService;
+import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -33,6 +34,7 @@ class AuthControllerOnboardingNotificationTest {
 		RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
 		TeamRepository teamRepository = mock(TeamRepository.class);
 		PlayerRepository playerRepository = mock(PlayerRepository.class);
+		MobileDeviceService mobileDeviceService = mock(MobileDeviceService.class);
 		MobileTeamNotificationService notificationService = mock(MobileTeamNotificationService.class);
 		AuthController controller = new AuthController(
 				jwtTokenProvider,
@@ -42,6 +44,7 @@ class AuthControllerOnboardingNotificationTest {
 				refreshTokenRepository,
 				teamRepository,
 				playerRepository,
+				mobileDeviceService,
 				notificationService);
 		Member member = Member.builder().nickname("용맹한바론").email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", 7L);

@@ -1,0 +1,113 @@
+package com.toy.nar.app.mobile.push;
+
+import com.toy.nar.domain.member.entity.Member;
+import com.toy.nar.domain.member.entity.MemberDevice;
+import com.toy.nar.domain.member.entity.MobileDevicePlatform;
+import com.toy.nar.domain.member.repository.MemberDeviceRepository;
+import com.toy.nar.domain.member.repository.PlayerSoloRankPushDeliveryRepository;
+import com.toy.nar.domain.participant.entity.Player;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class PlayerSoloRankPushServiceTest {
+
+	@Mock
+	private MemberDeviceRepository deviceRepository;
+
+	@Mock
+	private PlayerSoloRankPushDeliveryRepository deliveryRepository;
+
+	@Mock
+	private MobilePushGateway pushGateway;
+
+	private PlayerSoloRankPushService service;
+
+	@BeforeEach
+	void setUp() {
+		service = new PlayerSoloRankPushService(deviceRepository, deliveryRepository, pushGateway);
+		when(pushGateway.isAvailable()).thenReturn(true);
+	}
+
+	@Test
+	void sendsOncePerSubscribedMemberAndDeactivatesInvalidTokens() {
+		Player player = player(10L, "Faker");
+		Member firstMember = member(7L);
+		Member secondMember = member(8L);
+		MemberDevice first = device(1L, firstMember, "token-1");
+		MemberDevice second = device(2L, secondMember, "token-2");
+
+		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L))
+				.thenReturn(List.of(first, second));
+		when(deliveryRepository.reserve(any(), eq(10L), eq("game-1"))).thenReturn(1);
+		when(pushGateway.send(any(), any()))
+				.thenReturn(new MobilePushResult(1, 0, List.of()))
+				.thenReturn(new MobilePushResult(0, 1, List.of("token-2")));
+
+		service.notifySubscribers(player, "game-1", "아리", "ahri.png");
+
+		verify(deliveryRepository).markSent(7L, 10L, "game-1");
+		verify(deliveryRepository).markFailed(8L, 10L, "game-1", "FCM 전송 성공 기기가 없습니다.");
+		verify(deviceRepository).deactivateByFcmTokenIn(List.of("token-2"));
+	}
+
+	@Test
+	void skipsAlreadyReservedDelivery() {
+		Player player = player(10L, "Faker");
+		MemberDevice device = device(1L, member(7L), "token");
+		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
+		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(0);
+
+		service.notifySubscribers(player, "game-1", "아리", "ahri.png");
+
+		verify(pushGateway, never()).send(any(), any());
+	}
+
+	@Test
+	void pushFailureDoesNotEscapeMonitorFlow() {
+		Player player = player(10L, "Faker");
+		MemberDevice device = device(1L, member(7L), "token");
+		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
+		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(1);
+		when(pushGateway.send(any(), any())).thenThrow(new IllegalStateException("firebase down"));
+
+		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png"))
+				.doesNotThrowAnyException();
+		verify(deliveryRepository).markFailed(7L, 10L, "game-1", "firebase down");
+	}
+
+	private Member member(Long id) {
+		Member member = Member.builder().nickname("member-" + id).email("test@example.com").build();
+		ReflectionTestUtils.setField(member, "id", id);
+		return member;
+	}
+
+	private Player player(Long id, String name) {
+		Player player = Player.builder().name(name).imageUrl("faker.png").build();
+		ReflectionTestUtils.setField(player, "id", id);
+		return player;
+	}
+
+	private MemberDevice device(Long id, Member member, String token) {
+		MemberDevice device = MemberDevice.builder()
+				.member(member)
+				.fcmToken(token)
+				.platform(MobileDevicePlatform.ANDROID)
+				.build();
+		ReflectionTestUtils.setField(device, "id", id);
+		return device;
+	}
+}
