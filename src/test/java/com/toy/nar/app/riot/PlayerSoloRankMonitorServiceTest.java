@@ -3,6 +3,7 @@ package com.toy.nar.app.riot;
 import com.toy.nar.app.data.source.ChampionDataService;
 import com.toy.nar.app.data.source.NotificationService;
 import com.toy.nar.app.monitor.SchedulerAlertService;
+import com.toy.nar.app.mobile.push.PlayerSoloRankPushService;
 import com.toy.nar.app.riot.dto.PlayerRiotAlertCheckResult;
 import com.toy.nar.app.riot.dto.PlayerSoloRankMonitorResult;
 import com.toy.nar.app.riot.dto.RiotCurrentGameResponse;
@@ -42,6 +43,9 @@ class PlayerSoloRankMonitorServiceTest {
 	private NotificationService notificationService;
 
 	@Mock
+	private PlayerSoloRankPushService playerSoloRankPushService;
+
+	@Mock
 	private SchedulerAlertService schedulerAlertService;
 
 	private RiotMonitorProperties riotMonitorProperties;
@@ -58,6 +62,7 @@ class PlayerSoloRankMonitorServiceTest {
 				riotApiClient,
 				riotMonitorProperties,
 				notificationService,
+				playerSoloRankPushService,
 				schedulerAlertService);
 	}
 
@@ -106,6 +111,11 @@ class PlayerSoloRankMonitorServiceTest {
 				"KR1",
 				"222",
 				"솔로 랭크",
+				"야스오",
+				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png");
+		verify(playerSoloRankPushService).notifySubscribers(
+				player,
+				"222",
 				"야스오",
 				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png");
 	}
@@ -303,5 +313,10 @@ class PlayerSoloRankMonitorServiceTest {
 				"아레나",
 				"진",
 				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Jhin.png");
+		verify(playerSoloRankPushService, never()).notifySubscribers(
+				org.mockito.ArgumentMatchers.any(),
+				anyString(),
+				org.mockito.ArgumentMatchers.any(),
+				org.mockito.ArgumentMatchers.any());
 	}
 }

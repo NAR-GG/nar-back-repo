@@ -37,12 +37,19 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
+                                "/api/mobile/me/player-subscriptions/**",
+                                "/api/mobile/me/devices/**"
+                        ).authenticated()
+                        .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/mobile/live/games/*/participants/*/my-rating"
                         ).authenticated()
                         .requestMatchers(
                                 HttpMethod.DELETE,
                                 "/api/mobile/live/games/*/participants/*/my-rating"
+                        ).authenticated()
+                        .requestMatchers(
+                                "/api/mobile/me/notification-subscriptions/**"
                         ).authenticated()
                         .requestMatchers(
                                 "/api/auth/me", "/api/auth/logout", "/api/auth/onboarding"
