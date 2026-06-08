@@ -69,14 +69,28 @@ jobs:
     steps:
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v0.1.6
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}          
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: FIREBASE_SERVICE_ACCOUNT_BASE64
           script: |
             set -eu
 
             APP_IMAGE="${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}"
+            FIREBASE_SECRET_DIR="/opt/nar/secrets"
+            FIREBASE_SECRET_FILE="${FIREBASE_SECRET_DIR}/firebase-service-account.json"
+
+            : "${FIREBASE_SERVICE_ACCOUNT_BASE64:?FIREBASE_SERVICE_ACCOUNT_BASE64 secret is required}"
+
+            echo "Installing Firebase service account..."
+            sudo install -d -m 700 "${FIREBASE_SECRET_DIR}"
+            printf '%s' "${FIREBASE_SERVICE_ACCOUNT_BASE64}" \
+              | base64 --decode \
+              | sudo tee "${FIREBASE_SECRET_FILE}" > /dev/null
+            sudo chmod 600 "${FIREBASE_SECRET_FILE}"
 
             echo "Checking disk usage before cleanup..."
             df -h
@@ -125,6 +139,9 @@ jobs:
               -e NAVER_CLIENT_ID="${{ secrets.NAVER_CLIENT_ID }}" \
               -e NAVER_CLIENT_SECRET="${{ secrets.NAVER_CLIENT_SECRET }}" \
               -e FRONTEND_URL="${{ secrets.FRONTEND_URL }}" \
+              -e FIREBASE_MESSAGING_ENABLED="true" \
+              -e GOOGLE_APPLICATION_CREDENTIALS="/run/secrets/firebase-service-account.json" \
+              -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
               "${APP_IMAGE}"
 
             echo "Verifying deployed application..."
