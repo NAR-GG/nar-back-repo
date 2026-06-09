@@ -39,6 +39,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -58,27 +59,27 @@ public class AuthController {
             new OnboardingLeagueOptionResponse(
                     "LCK",
                     "대한민국",
-                    "http://static.lolesports.com/leagues/lck-color-on-black.png"),
+                    "https://static.lolesports.com/leagues/lck-color-on-black.png"),
             new OnboardingLeagueOptionResponse(
                     "LPL",
                     "중국",
-                    "http://static.lolesports.com/leagues/1592516115322_LPL-01-FullonDark.png"),
+                    "https://static.lolesports.com/leagues/1592516115322_LPL-01-FullonDark.png"),
             new OnboardingLeagueOptionResponse(
                     "LEC",
                     "유럽/중동/아프리카",
-                    "http://static.lolesports.com/leagues/1592516184297_LEC-01-FullonDark.png"),
+                    "https://static.lolesports.com/leagues/1592516184297_LEC-01-FullonDark.png"),
             new OnboardingLeagueOptionResponse(
                     "LCS",
                     "북아메리카",
-                    "http://static.lolesports.com/leagues/1706356907418_LCSNew-01-FullonDark.png"),
+                    "https://static.lolesports.com/leagues/1706356907418_LCSNew-01-FullonDark.png"),
             new OnboardingLeagueOptionResponse(
                     "LCP",
                     "아시아 태평양",
-                    "http://static.lolesports.com/leagues/1733468139601_lcp-color-golden.png"),
+                    "https://static.lolesports.com/leagues/1733468139601_lcp-color-golden.png"),
             new OnboardingLeagueOptionResponse(
                     "CBLOL",
                     "남아메리카",
-                    "http://static.lolesports.com/leagues/cblol-logo-symbol-offwhite.png")
+                    "https://static.lolesports.com/leagues/cblol-logo-symbol-offwhite.png")
     );
 
     private final JwtTokenProvider jwtTokenProvider;
@@ -137,14 +138,18 @@ public class AuthController {
 
     @Operation(
             summary = "온보딩용 선수 목록 조회",
-            description = "온보딩 화면에서 선택한 리그/시즌의 선수 목록을 조회합니다. teamId를 전달하면 해당 팀 선수만 조회합니다."
+            description = "온보딩 화면의 2026 LCK 선수 목록을 조회합니다. teamId를 전달하면 해당 팀 선수만 조회합니다."
     )
     @ApiResponse(responseCode = "200", description = "선수 목록 조회 성공")
     @GetMapping("/onboarding/players")
     public ResponseEntity<List<OnboardingPlayerOptionResponse>> getOnboardingPlayers(
             @Parameter(description = "연도", example = "2026") @RequestParam(defaultValue = "2026") int year,
             @Parameter(description = "팀 ID", example = "1") @RequestParam(required = false) Long teamId) {
-        List<OnboardingPlayerOptionResponse> players = playerRepository.findOnboardingPlayers("LCK", year, teamId)
+        if (teamId != null) {
+            validateSelectableTeam(teamId);
+        }
+        List<OnboardingPlayerOptionResponse> players = playerRepository
+                .findOnboardingPlayers("LCK", DEFAULT_ONBOARDING_YEAR, teamId)
                 .stream()
                 .map(OnboardingPlayerOptionResponse::from)
                 .toList();
@@ -222,12 +227,15 @@ public class AuthController {
                                                       @Valid @RequestBody OnboardingRequest request) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"));
+        String favoriteLeague = normalizeOnboardingLeague(request.favoriteLeagueName());
         Team team = teamRepository.findById(request.favoriteTeamId())
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "팀을 찾을 수 없습니다"));
         validateSelectableTeam(team.getId());
-        List<Player> favoritePlayers = resolveFavoritePlayers(request.favoritePlayerIds(), team.getId());
+        List<Player> favoritePlayers = resolveFavoritePlayers(
+                request.favoritePlayerIds(),
+                team.getId());
 
-        member.completeOnboarding("LCK", team, favoritePlayers);
+        member.completeOnboarding(favoriteLeague, team, favoritePlayers);
         mobileTeamNotificationService.ensureDefaultSubscription(member, team);
         return ResponseEntity.ok(MemberResponse.from(member));
     }
@@ -250,12 +258,12 @@ public class AuthController {
     }
 
     private List<Team> findSelectableTeams(int year) {
-        return findDefaultLckTeams();
-    }
-
-    private List<Team> findDefaultLckTeams() {
         Map<String, Team> teamsByCode = teamRepository.findAllByCodeIn(LckTeamCatalog.TEAM_CODES).stream()
-                .collect(Collectors.toMap(Team::getCode, Function.identity()));
+                .filter(team -> team.getCode() != null)
+                .collect(Collectors.toMap(
+                        Team::getCode,
+                        Function.identity(),
+                        (first, ignored) -> first));
 
         return LckTeamCatalog.TEAM_CODES.stream()
                 .map(teamsByCode::get)
@@ -271,7 +279,9 @@ public class AuthController {
         }
     }
 
-    private List<Player> resolveFavoritePlayers(List<Long> favoritePlayerIds, Long teamId) {
+    private List<Player> resolveFavoritePlayers(
+            List<Long> favoritePlayerIds,
+            Long teamId) {
         if (favoritePlayerIds == null || favoritePlayerIds.isEmpty()) {
             return List.of();
         }
@@ -282,15 +292,30 @@ public class AuthController {
             throw new ResponseStatusException(NOT_FOUND, "선수를 찾을 수 없습니다");
         }
 
-        Set<Long> selectablePlayerIds = playerRepository.findOnboardingPlayers("LCK", DEFAULT_ONBOARDING_YEAR, teamId).stream()
+        Set<Long> selectablePlayerIds = playerRepository
+                .findOnboardingPlayers("LCK", DEFAULT_ONBOARDING_YEAR, teamId)
+                .stream()
                 .map(Player::getId)
                 .collect(Collectors.toSet());
         boolean hasUnavailablePlayer = requestedIds.stream()
                 .anyMatch(playerId -> !selectablePlayerIds.contains(playerId));
         if (hasUnavailablePlayer) {
-            throw new ResponseStatusException(BAD_REQUEST, "선택한 리그/팀에 속하지 않는 선수가 포함되어 있습니다");
+            throw new ResponseStatusException(BAD_REQUEST, "선택한 LCK 팀에 속하지 않는 선수가 포함되어 있습니다");
         }
 
         return players;
+    }
+
+    private String normalizeOnboardingLeague(String league) {
+        if (league == null || league.isBlank()) {
+            throw new ResponseStatusException(BAD_REQUEST, "리그를 선택해주세요");
+        }
+        String normalized = league.trim().toUpperCase(Locale.ROOT);
+        boolean supported = ONBOARDING_LEAGUES.stream()
+                .anyMatch(option -> option.name().equals(normalized));
+        if (!supported) {
+            throw new ResponseStatusException(BAD_REQUEST, "선택할 수 없는 리그입니다");
+        }
+        return normalized;
     }
 }
