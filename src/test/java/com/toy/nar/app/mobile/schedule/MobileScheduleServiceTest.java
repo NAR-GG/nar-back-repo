@@ -180,10 +180,10 @@ class MobileScheduleServiceTest {
 		LeagueMatch first = match("match-2", "LCK", LocalDateTime.of(2026, 4, 2, 9, 0), "T1", "GEN", "completed");
 		LeagueMatch second = match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "DK", "HLE", "completed");
 		LeagueMatch overflow = match("match-0", "LCK", LocalDateTime.of(2026, 3, 31, 9, 0), "KT", "NS", "completed");
-		when(leagueMatchRepository.findMobileMatchPage("LCK", null, null, PageRequest.of(0, 3)))
+		when(leagueMatchRepository.findMobileMatchPage("LCK", null, null, null, null, PageRequest.of(0, 3)))
 				.thenReturn(List.of(first, second, overflow));
 
-		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, 2);
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, null, 2);
 
 		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
 				.containsExactly("match-2", "match-1");
@@ -196,10 +196,10 @@ class MobileScheduleServiceTest {
 
 	@Test
 	void getMatchPageReturnsNoCursorOnLastPage() {
-		when(leagueMatchRepository.findMobileMatchPage("LCK", null, null, PageRequest.of(0, 21)))
+		when(leagueMatchRepository.findMobileMatchPage("LCK", null, null, null, null, PageRequest.of(0, 21)))
 				.thenReturn(List.of(match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed")));
 
-		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null);
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, null, null);
 
 		assertThat(response.matches()).hasSize(1);
 		assertThat(response.hasNext()).isFalse();
@@ -212,17 +212,21 @@ class MobileScheduleServiceTest {
 				"2026-04-01T09:00:00|match-1".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 		when(leagueMatchRepository.findMobileMatchPage(
 				"LCK",
+				null,
+				null,
 				LocalDateTime.of(2026, 4, 1, 9, 0),
 				"match-1",
 				PageRequest.of(0, 21)))
 				.thenReturn(List.of());
 
-		MobileMatchPageResponse response = service.getMatchPage("LCK", null, cursor, null);
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, cursor, null);
 
 		assertThat(response.matches()).isEmpty();
 		assertThat(response.hasNext()).isFalse();
 		verify(leagueMatchRepository).findMobileMatchPage(
 				"LCK",
+				null,
+				null,
 				LocalDateTime.of(2026, 4, 1, 9, 0),
 				"match-1",
 				PageRequest.of(0, 21));
@@ -232,18 +236,46 @@ class MobileScheduleServiceTest {
 	void getMatchPageUsesTeamFilterWhenTeamIdExists() {
 		Team t1 = team(1L, "T1", "T1", "https://example.com/t1.png");
 		when(teamRepository.findById(1L)).thenReturn(Optional.of(t1));
-		when(leagueMatchRepository.findMobileTeamMatchPage("LCK", "T1", "T1", null, null, PageRequest.of(0, 21)))
+		when(leagueMatchRepository.findMobileTeamMatchPage("LCK", "T1", "T1", null, null, null, null, PageRequest.of(0, 21)))
 				.thenReturn(List.of());
 
-		MobileMatchPageResponse response = service.getMatchPage("LCK", 1L, null, null);
+		MobileMatchPageResponse response = service.getMatchPage("LCK", 1L, null, null, null, null);
 
 		assertThat(response.teamId()).isEqualTo(1L);
-		verify(leagueMatchRepository).findMobileTeamMatchPage("LCK", "T1", "T1", null, null, PageRequest.of(0, 21));
+		verify(leagueMatchRepository).findMobileTeamMatchPage("LCK", "T1", "T1", null, null, null, null, PageRequest.of(0, 21));
+	}
+
+	@Test
+	void getMatchPagePassesSeasonFilterToRepository() {
+		when(leagueMatchRepository.findMobileMatchPage("LCK", 2026, "Spring", null, null, PageRequest.of(0, 21)))
+				.thenReturn(List.of());
+
+		service.getMatchPage("LCK", null, 2026, "Spring", null, null);
+
+		verify(leagueMatchRepository).findMobileMatchPage("LCK", 2026, "Spring", null, null, PageRequest.of(0, 21));
+	}
+
+	@Test
+	void getFiltersIncludesSeasonOptions() {
+		when(teamRepository.findAllByCodeIn(org.mockito.ArgumentMatchers.anyList())).thenReturn(List.of());
+		LeagueMatchRepository.SeasonOptionRow row = mock(LeagueMatchRepository.SeasonOptionRow.class);
+		when(row.getSeasonYear()).thenReturn(2026);
+		when(row.getSeasonSplit()).thenReturn("Spring");
+		when(leagueMatchRepository.findSeasonOptions("LCK")).thenReturn(List.of(row));
+
+		MobileScheduleFilterResponse response = service.getFilters("LCK");
+
+		assertThat(response.seasons()).singleElement()
+				.satisfies(season -> {
+					assertThat(season.year()).isEqualTo(2026);
+					assertThat(season.split()).isEqualTo("Spring");
+					assertThat(season.label()).isEqualTo("2026 Spring");
+				});
 	}
 
 	@Test
 	void getMatchPageWithInvalidCursorThrowsInvalidInput() {
-		assertThatThrownBy(() -> service.getMatchPage("LCK", null, "not-a-cursor", null))
+		assertThatThrownBy(() -> service.getMatchPage("LCK", null, null, null, "not-a-cursor", null))
 				.isInstanceOf(CustomException.class)
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);

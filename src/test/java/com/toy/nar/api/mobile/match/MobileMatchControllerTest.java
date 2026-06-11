@@ -35,7 +35,7 @@ class MobileMatchControllerTest {
 
 	@Test
 	void getMatchesReturnsCursorPageShape() throws Exception {
-		when(mobileScheduleService.getMatchPage("LCK", null, null, 20))
+		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20))
 				.thenReturn(new MobileMatchPageResponse(
 						"LCK",
 						null,

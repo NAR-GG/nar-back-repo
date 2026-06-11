@@ -35,6 +35,8 @@ class LeagueMatchServiceLeagueNameTest {
 	@Mock
 	private LeagueMatchGameRepository leagueMatchGameRepository;
 	@Mock
+	private com.toy.nar.app.lolesports.season.LeagueSeasonResolver leagueSeasonResolver;
+	@Mock
 	private TeamRepository teamRepository;
 	@Mock
 	private TeamExternalIdentityRepository teamExternalIdentityRepository;
@@ -54,6 +56,7 @@ class LeagueMatchServiceLeagueNameTest {
 		leagueMatchService = new LeagueMatchService(
 				leagueMatchRepository,
 				leagueMatchGameRepository,
+				leagueSeasonResolver,
 				teamRepository,
 				teamExternalIdentityRepository,
 				gameExternalIdentityRepository,

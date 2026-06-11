@@ -40,14 +40,18 @@ class MobileScheduleControllerTest {
 		when(mobileScheduleService.getFilters("LCK")).thenReturn(new MobileScheduleFilterResponse(
 				"LCK",
 				List.of(new MobileScheduleFilterResponse.LeagueOption("LCK", "LCK")),
-				List.of(new MobileScheduleFilterResponse.TeamOption(1L, "T1", "T1", "https://example.com/t1.png"))));
+				List.of(new MobileScheduleFilterResponse.TeamOption(1L, "T1", "T1", "https://example.com/t1.png")),
+				List.of(new MobileScheduleFilterResponse.SeasonOption(2026, "Spring", "2026 Spring"))));
 
 		mockMvc.perform(get("/api/mobile/schedules/filters"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.defaultLeague").value("LCK"))
 				.andExpect(jsonPath("$.leagues[0].code").value("LCK"))
 				.andExpect(jsonPath("$.teams[0].teamId").value(1L))
-				.andExpect(jsonPath("$.teams[0].teamName").value("T1"));
+				.andExpect(jsonPath("$.teams[0].teamName").value("T1"))
+				.andExpect(jsonPath("$.seasons[0].year").value(2026))
+				.andExpect(jsonPath("$.seasons[0].split").value("Spring"))
+				.andExpect(jsonPath("$.seasons[0].label").value("2026 Spring"));
 	}
 
 	@Test

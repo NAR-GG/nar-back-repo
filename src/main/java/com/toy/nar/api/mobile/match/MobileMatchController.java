@@ -26,18 +26,23 @@ public class MobileMatchController {
 			summary = "모바일 경기 리스트 커서 페이지 조회",
 			description = "최신 경기부터 과거 방향으로 커서 기반 페이지네이션 조회합니다. "
 					+ "첫 페이지는 cursor 없이 호출하고, 이후 응답의 nextCursor를 cursor로 전달하면 이어서 조회됩니다. "
-					+ "각 경기에는 세트(games) 식별자 목록이 포함됩니다.")
+					+ "각 경기에는 세트(games) 식별자 목록이 포함됩니다. "
+					+ "시즌 필터 옵션은 /api/mobile/schedules/filters 응답의 seasons에서 가져옵니다.")
 	@GetMapping
 	public ResponseEntity<MobileMatchPageResponse> getMatches(
 			@Parameter(description = "리그", example = "LCK")
 			@RequestParam(defaultValue = "LCK") String league,
 			@Parameter(description = "팀 ID", example = "1")
 			@RequestParam(required = false) Long teamId,
+			@Parameter(description = "시즌 연도", example = "2026")
+			@RequestParam(required = false) Integer seasonYear,
+			@Parameter(description = "스플릿 (filters의 seasons.split 값)", example = "Spring")
+			@RequestParam(required = false) String split,
 			@Parameter(description = "이전 응답의 nextCursor. 첫 페이지는 생략")
 			@RequestParam(required = false) String cursor,
 			@Parameter(description = "페이지 크기(1~50)", example = "20")
 			@RequestParam(defaultValue = "20") Integer size) {
-		return ResponseEntity.ok(mobileScheduleService.getMatchPage(league, teamId, cursor, size));
+		return ResponseEntity.ok(mobileScheduleService.getMatchPage(league, teamId, seasonYear, split, cursor, size));
 	}
 
 	@Operation(
