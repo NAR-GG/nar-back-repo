@@ -8,6 +8,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -16,6 +17,11 @@ import org.springframework.context.annotation.Import;
 import com.toy.nar.domain.youtube.Channel;
 import com.toy.nar.domain.youtube.Video;
 
+/**
+ * 실데이터가 적재된 로컬 dev MySQL 전용 데이터 무결성 점검.
+ * 실행: ./gradlew test -Ddataintegrity.local.enabled=true --tests "...VideoDataIntegrityTest"
+ */
+@EnabledIfSystemProperty(named = "dataintegrity.local.enabled", matches = "true")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class VideoDataIntegrityTest {

@@ -22,7 +22,11 @@ import com.toy.nar.domain.youtube.Channel;
 import com.toy.nar.domain.youtube.ChannelType;
 import com.toy.nar.domain.youtube.Video;
 
-@DataJpaTest
+// 임베디드 H2에서 격리 실행: 마이그레이션은 MySQL 전용 문법이라 H2에서는 엔티티 기반 스키마를 사용한다.
+@DataJpaTest(properties = {
+		"spring.flyway.enabled=false",
+		"spring.jpa.hibernate.ddl-auto=create-drop"
+})
 class VideoRepositoryOrderingTest {
 
 	@Autowired
