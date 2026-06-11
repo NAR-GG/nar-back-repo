@@ -58,6 +58,7 @@ class LeagueMatchServicePerformanceBaselineTest {
         leagueMatchService = new LeagueMatchService(
                 leagueMatchRepository,
                 leagueMatchGameRepository,
+                null,
                 teamRepository,
                 teamExternalIdentityRepository,
                 null,

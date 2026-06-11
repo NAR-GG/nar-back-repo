@@ -28,16 +28,7 @@ public class WorldsService {
 	@Qualifier("applicationTaskExecutor")
 	private final Executor applicationTaskExecutor;
 
-	private static final java.util.Map<String, String> LEAGUE_IDS = java.util.Map.ofEntries(
-			java.util.Map.entry("LCK", "98767991310872058"),
-			java.util.Map.entry("LPL", "98767991314006698"),
-			java.util.Map.entry("LEC", "98767991302996019"),
-			java.util.Map.entry("LCS", "98767991299243165"),
-			java.util.Map.entry("LCP", "113476371197627891"),
-			java.util.Map.entry("CBLOL", "98767991332355509"),
-			java.util.Map.entry("FIRST_STAND", "113464388705111224"),
-			java.util.Map.entry("WORLDS", "98767975604431411"),
-			java.util.Map.entry("MSI", "98767991325878492"));
+	private static final java.util.Map<String, String> LEAGUE_IDS = LeagueConstants.LEAGUE_IDS;
 
 	@Value("${lolesports.riot-api.key}")
 	private String RIOT_API_KEY;

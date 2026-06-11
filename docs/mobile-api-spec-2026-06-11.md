@@ -24,8 +24,18 @@ GET /api/mobile/matches
 |----------|------|--------|------|
 | `league` | String | `LCK` | 리그 필터 |
 | `teamId` | Long | - | 팀 필터 (filters API의 teamId) |
+| `seasonYear` | int | - | 시즌 연도 필터 (filters API의 seasons.year) |
+| `split` | String | - | 스플릿 필터 (filters API의 seasons.split) |
 | `cursor` | String | - | 이전 응답의 `nextCursor`. 첫 페이지는 생략 |
 | `size` | int | 20 | 페이지 크기 (1~50) |
+
+시즌 필터 옵션은 `GET /api/mobile/schedules/filters` 응답에 추가된 `seasons[]`에서 가져온다:
+
+```json
+{ "seasons": [ { "year": 2026, "split": "Spring", "label": "2026 Spring" } ] }
+```
+
+시즌 정보가 아직 매겨지지 않은 경기(`season` 미산정)는 시즌 필터 적용 시 제외된다.
 
 - 정렬: 최신 경기 → 과거 방향 (`matchDate DESC`)
 - 커서는 불투명(opaque) 토큰. 그대로 돌려보내기만 하면 되고, 동시각 경기·실시간 경기 추가에도 중복/누락 없음
@@ -168,5 +178,4 @@ GET /api/mobile/me/ratings?page=0&size=20
 | 항목 | 상태 | 비고 |
 |------|------|------|
 | 4. 구글·네이버 모바일 로그인 (`POST /auth/mobile/google`, `/naver`) | **미구현** | 카카오(`POST /api/auth/mobile/kakao`)만 운영 중. 카카오 패턴 따라 신규 구현 필요 |
-| 경기 리스트 시즌(스플릿) 필터 | 미지원 | `LeagueMatch`에 시즌 컬럼이 없음. 당장은 날짜 범위로 대체, 필요 시 컬럼 추가 검토 |
 | record API의 String gameId 직접 지원 | 검토 | 현재는 `games[].recordGameId`로 변환값을 내려주는 방식으로 해소 |

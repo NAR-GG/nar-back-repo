@@ -26,6 +26,20 @@ public final class LeagueConstants {
             "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND");
 
     /**
+     * lolesports API의 리그 ID 매핑
+     */
+    public static final Map<String, String> LEAGUE_IDS = Map.ofEntries(
+            Map.entry("LCK", "98767991310872058"),
+            Map.entry("LPL", "98767991314006698"),
+            Map.entry("LEC", "98767991302996019"),
+            Map.entry("LCS", "98767991299243165"),
+            Map.entry("LCP", "113476371197627891"),
+            Map.entry("CBLOL", "98767991332355509"),
+            Map.entry("FIRST_STAND", "113464388705111224"),
+            Map.entry("WORLDS", "98767975604431411"),
+            Map.entry("MSI", "98767991325878492"));
+
+    /**
      * 리그별 기본 라이브 스트림 URL
      */
     public static final Map<String, String> LIVE_STREAM_URLS = Map.of(
