@@ -47,6 +47,11 @@ public class LeagueMatch {
 	@Column(columnDefinition = "TEXT")
 	private String matchDetailsJson;
 
+	private Integer seasonYear;
+
+	@Column(length = 20)
+	private String seasonSplit;
+
 	private LocalDateTime lastUpdated;
 
 	public void update(String leagueName, String matchTitle, LocalDateTime matchDate, String state,
@@ -70,6 +75,11 @@ public class LeagueMatch {
 		this.hasVod = hasVod;
 		this.matchDetailsJson = matchDetailsJson;
 		this.lastUpdated = lastUpdated;
+	}
+
+	public void applySeason(Integer seasonYear, String seasonSplit) {
+		this.seasonYear = seasonYear;
+		this.seasonSplit = seasonSplit;
 	}
 
 	public void updateExternalTeamIds(String blueExternalTeamId, String redExternalTeamId) {

@@ -62,6 +62,7 @@ public class LeagueMatchService {
 
 	private final LeagueMatchRepository leagueMatchRepository;
 	private final LeagueMatchGameRepository leagueMatchGameRepository;
+	private final com.toy.nar.app.lolesports.season.LeagueSeasonResolver leagueSeasonResolver;
 	private final com.toy.nar.domain.participant.repository.TeamRepository teamRepository;
 	private final TeamExternalIdentityRepository teamExternalIdentityRepository;
 	private final GameExternalIdentityRepository gameExternalIdentityRepository;
@@ -714,6 +715,7 @@ public class LeagueMatchService {
 		for (MatchResultDto dto : matches) {
 			try {
 				LeagueMatch incoming = convertToEntity(dto, leagueSlug);
+				applySeasonIfResolvable(incoming);
 				LeagueMatch existing = existingMatchesById.get(dto.getMatchId());
 
 				if (existing == null) {
@@ -724,6 +726,13 @@ public class LeagueMatchService {
 				}
 
 				if (!hasRealtimeRelevantChange(existing, incoming)) {
+					// 시즌만 비어 있으면 채운다 (dirtyMatchIds에는 넣지 않아 게임 ID 재동기화는 트리거하지 않음)
+					if (existing.getSeasonYear() == null) {
+						applySeasonIfResolvable(existing);
+						if (existing.getSeasonYear() != null) {
+							dirtyMatches.add(existing);
+						}
+					}
 					skipped++;
 					continue;
 				}
@@ -746,6 +755,7 @@ public class LeagueMatchService {
 						incoming.isHasVod(),
 						incoming.getMatchDetailsJson(),
 						incoming.getLastUpdated());
+				applySeasonIfResolvable(existing);
 				dirtyMatches.add(existing);
 				dirtyMatchIds.add(existing.getId());
 				updated++;
@@ -759,6 +769,14 @@ public class LeagueMatchService {
 		}
 
 		return new MatchSyncUpsertResult(dirtyMatchIds, inserted, updated, skipped);
+	}
+
+	private void applySeasonIfResolvable(LeagueMatch match) {
+		if (match.getMatchDate() == null) {
+			return;
+		}
+		leagueSeasonResolver.resolve(match.getLeagueName(), match.getMatchDate())
+				.ifPresent(season -> match.applySeason(season.year(), season.split()));
 	}
 
 	private MatchGameIdSyncResult syncLeagueMatchGameIdsForMatches(List<LeagueMatch> matches) {

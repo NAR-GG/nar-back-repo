@@ -67,8 +67,15 @@ public class MobileScheduleService {
 		List<MobileScheduleFilterResponse.TeamOption> teams = findFilterTeams(normalizedLeague).stream()
 				.map(this::toTeamOption)
 				.toList();
+		List<MobileScheduleFilterResponse.SeasonOption> seasons = leagueMatchRepository
+				.findSeasonOptions(normalizedLeague).stream()
+				.map(row -> new MobileScheduleFilterResponse.SeasonOption(
+						row.getSeasonYear(),
+						row.getSeasonSplit(),
+						row.getSeasonYear() + " " + row.getSeasonSplit()))
+				.toList();
 
-		return new MobileScheduleFilterResponse(DEFAULT_LEAGUE, leagues, teams);
+		return new MobileScheduleFilterResponse(DEFAULT_LEAGUE, leagues, teams, seasons);
 	}
 
 	public MobileScheduleCalendarResponse getCalendar(YearMonth month, String league, Long teamId) {
@@ -124,9 +131,16 @@ public class MobileScheduleService {
 		return new MobileScheduleListResponse(date.toString(), normalizedLeague, teamId, matches);
 	}
 
-	public MobileMatchPageResponse getMatchPage(String league, Long teamId, String cursor, Integer size) {
+	public MobileMatchPageResponse getMatchPage(
+			String league,
+			Long teamId,
+			Integer seasonYear,
+			String seasonSplit,
+			String cursor,
+			Integer size) {
 		String normalizedLeague = normalizeLeague(league);
 		TeamFilter teamFilter = resolveTeamFilter(teamId);
+		String normalizedSplit = seasonSplit == null || seasonSplit.isBlank() ? null : seasonSplit.trim();
 		int pageSize = size == null
 				? DEFAULT_PAGE_SIZE
 				: Math.max(1, Math.min(size, MAX_PAGE_SIZE));
@@ -136,6 +150,8 @@ public class MobileScheduleService {
 		List<LeagueMatch> fetched = teamFilter == null
 				? leagueMatchRepository.findMobileMatchPage(
 						normalizedLeague,
+						seasonYear,
+						normalizedSplit,
 						matchCursor != null ? matchCursor.matchDate() : null,
 						matchCursor != null ? matchCursor.matchId() : null,
 						fetchLimit)
@@ -143,6 +159,8 @@ public class MobileScheduleService {
 						normalizedLeague,
 						teamFilter.name(),
 						teamFilter.code(),
+						seasonYear,
+						normalizedSplit,
 						matchCursor != null ? matchCursor.matchDate() : null,
 						matchCursor != null ? matchCursor.matchId() : null,
 						fetchLimit);
