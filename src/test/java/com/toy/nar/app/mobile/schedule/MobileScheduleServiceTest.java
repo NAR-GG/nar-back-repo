@@ -1,7 +1,10 @@
 package com.toy.nar.app.mobile.schedule;
 
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
+import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
+import com.toy.nar.app.mobile.schedule.dto.MobileMatchGamesResponse;
+import com.toy.nar.app.mobile.schedule.dto.MobileMatchPageResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleCalendarResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleFilterResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
@@ -12,6 +15,7 @@ import com.toy.nar.domain.participant.repository.TeamRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -30,14 +34,16 @@ import static org.mockito.Mockito.when;
 class MobileScheduleServiceTest {
 
 	private LeagueMatchRepository leagueMatchRepository;
+	private LeagueMatchGameRepository leagueMatchGameRepository;
 	private TeamRepository teamRepository;
 	private MobileScheduleService service;
 
 	@BeforeEach
 	void setUp() {
 		leagueMatchRepository = mock(LeagueMatchRepository.class);
+		leagueMatchGameRepository = mock(LeagueMatchGameRepository.class);
 		teamRepository = mock(TeamRepository.class);
-		service = new MobileScheduleService(leagueMatchRepository, teamRepository);
+		service = new MobileScheduleService(leagueMatchRepository, leagueMatchGameRepository, teamRepository);
 	}
 
 	@Test
@@ -143,6 +149,135 @@ class MobileScheduleServiceTest {
 	}
 
 	@Test
+	void getDailySchedulesAttachesGamesPerMatch() {
+		when(leagueMatchRepository.findMobileMatchesInRange(
+				"LCK",
+				LocalDateTime.of(2026, 3, 31, 15, 0),
+				LocalDateTime.of(2026, 4, 1, 15, 0)))
+				.thenReturn(List.of(match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed")));
+		when(leagueMatchGameRepository.findMappedGameRowsByMatchIds(List.of("match-1"), "LOLESPORTS"))
+				.thenReturn(List.of(
+						new MappedRow("match-1", 1, "game-1", 100L),
+						new MappedRow("match-1", 2, "game-2", null)));
+
+		MobileScheduleListResponse response = service.getDailySchedules(LocalDate.of(2026, 4, 1), "LCK", null);
+
+		assertThat(response.matches()).singleElement()
+				.satisfies(match -> {
+					assertThat(match.date()).isEqualTo("2026-04-01");
+					assertThat(match.games()).extracting(
+									MobileScheduleListResponse.MobileGameSummary::gameOrder,
+									MobileScheduleListResponse.MobileGameSummary::gameId,
+									MobileScheduleListResponse.MobileGameSummary::recordGameId)
+							.containsExactly(
+									org.assertj.core.groups.Tuple.tuple(1, "game-1", 100L),
+									org.assertj.core.groups.Tuple.tuple(2, "game-2", null));
+				});
+	}
+
+	@Test
+	void getMatchPageReturnsNextCursorWhenMoreRowsExist() {
+		LeagueMatch first = match("match-2", "LCK", LocalDateTime.of(2026, 4, 2, 9, 0), "T1", "GEN", "completed");
+		LeagueMatch second = match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "DK", "HLE", "completed");
+		LeagueMatch overflow = match("match-0", "LCK", LocalDateTime.of(2026, 3, 31, 9, 0), "KT", "NS", "completed");
+		when(leagueMatchRepository.findMobileMatchPage("LCK", null, null, PageRequest.of(0, 3)))
+				.thenReturn(List.of(first, second, overflow));
+
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, 2);
+
+		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
+				.containsExactly("match-2", "match-1");
+		assertThat(response.hasNext()).isTrue();
+		String decoded = new String(
+				java.util.Base64.getUrlDecoder().decode(response.nextCursor()),
+				java.nio.charset.StandardCharsets.UTF_8);
+		assertThat(decoded).isEqualTo("2026-04-01T09:00:00|match-1");
+	}
+
+	@Test
+	void getMatchPageReturnsNoCursorOnLastPage() {
+		when(leagueMatchRepository.findMobileMatchPage("LCK", null, null, PageRequest.of(0, 21)))
+				.thenReturn(List.of(match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed")));
+
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null);
+
+		assertThat(response.matches()).hasSize(1);
+		assertThat(response.hasNext()).isFalse();
+		assertThat(response.nextCursor()).isNull();
+	}
+
+	@Test
+	void getMatchPagePassesDecodedCursorToRepository() {
+		String cursor = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+				"2026-04-01T09:00:00|match-1".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		when(leagueMatchRepository.findMobileMatchPage(
+				"LCK",
+				LocalDateTime.of(2026, 4, 1, 9, 0),
+				"match-1",
+				PageRequest.of(0, 21)))
+				.thenReturn(List.of());
+
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, cursor, null);
+
+		assertThat(response.matches()).isEmpty();
+		assertThat(response.hasNext()).isFalse();
+		verify(leagueMatchRepository).findMobileMatchPage(
+				"LCK",
+				LocalDateTime.of(2026, 4, 1, 9, 0),
+				"match-1",
+				PageRequest.of(0, 21));
+	}
+
+	@Test
+	void getMatchPageUsesTeamFilterWhenTeamIdExists() {
+		Team t1 = team(1L, "T1", "T1", "https://example.com/t1.png");
+		when(teamRepository.findById(1L)).thenReturn(Optional.of(t1));
+		when(leagueMatchRepository.findMobileTeamMatchPage("LCK", "T1", "T1", null, null, PageRequest.of(0, 21)))
+				.thenReturn(List.of());
+
+		MobileMatchPageResponse response = service.getMatchPage("LCK", 1L, null, null);
+
+		assertThat(response.teamId()).isEqualTo(1L);
+		verify(leagueMatchRepository).findMobileTeamMatchPage("LCK", "T1", "T1", null, null, PageRequest.of(0, 21));
+	}
+
+	@Test
+	void getMatchPageWithInvalidCursorThrowsInvalidInput() {
+		assertThatThrownBy(() -> service.getMatchPage("LCK", null, "not-a-cursor", null))
+				.isInstanceOf(CustomException.class)
+				.extracting("errorCode")
+				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+	}
+
+	@Test
+	void getMatchGamesReturnsMappedGames() {
+		when(leagueMatchRepository.findById("match-1"))
+				.thenReturn(Optional.of(match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed")));
+		when(leagueMatchGameRepository.findMappedGameRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new MappedRow("match-1", 1, "game-1", 100L)));
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.matchId()).isEqualTo("match-1");
+		assertThat(response.games()).singleElement()
+				.satisfies(game -> {
+					assertThat(game.gameOrder()).isEqualTo(1);
+					assertThat(game.gameId()).isEqualTo("game-1");
+					assertThat(game.recordGameId()).isEqualTo(100L);
+				});
+	}
+
+	@Test
+	void getMatchGamesWithUnknownMatchThrowsDataNotFound() {
+		when(leagueMatchRepository.findById("missing")).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> service.getMatchGames("missing"))
+				.isInstanceOf(CustomException.class)
+				.extracting("errorCode")
+				.isEqualTo(ErrorCode.DATA_NOT_FOUND);
+	}
+
+	@Test
 	void invalidLeagueThrowsInvalidInput() {
 		assertThatThrownBy(() -> service.getDailySchedules(LocalDate.of(2026, 4, 1), "abc", null))
 				.isInstanceOf(CustomException.class)
@@ -159,6 +294,33 @@ class MobileScheduleServiceTest {
 				.isInstanceOf(CustomException.class)
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.DATA_NOT_FOUND);
+	}
+
+	private record MappedRow(
+			String rowMatchId,
+			Integer rowGameOrder,
+			String rowExternalGameId,
+			Long rowInternalGameId) implements LeagueMatchGameRepository.MappedGameRow {
+
+		@Override
+		public String getMatchId() {
+			return rowMatchId;
+		}
+
+		@Override
+		public Integer getGameOrder() {
+			return rowGameOrder;
+		}
+
+		@Override
+		public String getExternalGameId() {
+			return rowExternalGameId;
+		}
+
+		@Override
+		public Long getInternalGameId() {
+			return rowInternalGameId;
+		}
 	}
 
 	private LeagueMatch match(

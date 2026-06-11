@@ -93,13 +93,15 @@ class MobileScheduleControllerTest {
 						null,
 						List.of(new MobileScheduleListResponse.MobileMatchSummary(
 								"match-1",
+								"2026-04-01",
 								"18:00",
 								"unstarted",
 								"T1 vs GEN",
 								"LCK",
 								new MobileScheduleListResponse.MobileTeamResult("T1", "T1", "https://example.com/t1.png", 0),
 								new MobileScheduleListResponse.MobileTeamResult("Gen.G", "GEN", "https://example.com/gen.png", 0),
-								null))));
+								null,
+								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L))))));
 
 		mockMvc.perform(get("/api/mobile/schedules")
 						.param("date", "2026-04-01")
@@ -108,7 +110,10 @@ class MobileScheduleControllerTest {
 				.andExpect(jsonPath("$.date").value("2026-04-01"))
 				.andExpect(jsonPath("$.league").value("LCK"))
 				.andExpect(jsonPath("$.matches[0].matchId").value("match-1"))
+				.andExpect(jsonPath("$.matches[0].date").value("2026-04-01"))
 				.andExpect(jsonPath("$.matches[0].blueTeam.teamCode").value("T1"))
-				.andExpect(jsonPath("$.matches[0].redTeam.teamName").value("Gen.G"));
+				.andExpect(jsonPath("$.matches[0].redTeam.teamName").value("Gen.G"))
+				.andExpect(jsonPath("$.matches[0].games[0].gameId").value("game-1"))
+				.andExpect(jsonPath("$.matches[0].games[0].recordGameId").value(100L));
 	}
 }
