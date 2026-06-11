@@ -187,6 +187,66 @@ class MobileLivePlayerRatingServiceTest {
 		verify(ratingRepository).delete(existing);
 	}
 
+	@Test
+	void getMyRatingsRequiresLogin() {
+		assertThatThrownBy(() -> service.getMyRatings(null, 0, 20))
+				.isInstanceOf(ResponseStatusException.class)
+				.hasMessageContaining("401 UNAUTHORIZED");
+	}
+
+	@Test
+	void getMyRatingsReturnsItemsWithMatchInfo() {
+		Member member = member(7L, "용맹한바론");
+		LivePlayerRating myRating = rating(member, 5, "역시 페이커");
+		ReflectionTestUtils.setField(myRating, "id", 11L);
+		ReflectionTestUtils.setField(myRating, "createdAt", LocalDateTime.of(2026, 6, 6, 13, 0));
+		ReflectionTestUtils.setField(myRating, "updatedAt", LocalDateTime.of(2026, 6, 6, 13, 0));
+		LeagueMatch match = LeagueMatch.builder()
+				.id("match-1")
+				.leagueName("LCK")
+				.matchTitle("DNS vs T1")
+				.matchDate(LocalDateTime.of(2026, 6, 6, 9, 0))
+				.state("completed")
+				.blueTeamCode("DNS")
+				.redTeamCode("T1")
+				.build();
+		when(ratingRepository.findByMember_IdOrderByCreatedAtDesc(7L, PageRequest.of(0, 20)))
+				.thenReturn(new PageImpl<>(List.of(myRating), PageRequest.of(0, 20), 1));
+		when(leagueMatchGameRepository.findAllWithMatchByGameIdIn(java.util.Set.of("game-1")))
+				.thenReturn(List.of(new LeagueMatchGame(match, "game-1", 2)));
+
+		var response = service.getMyRatings(7L, 0, 20);
+
+		assertThat(response.totalElements()).isEqualTo(1);
+		assertThat(response.ratings()).singleElement().satisfies(item -> {
+			assertThat(item.ratingId()).isEqualTo(11L);
+			assertThat(item.gameId()).isEqualTo("game-1");
+			assertThat(item.playerName()).isEqualTo("Faker");
+			assertThat(item.championName()).isEqualTo("Ahri");
+			assertThat(item.rating()).isEqualTo(5);
+			assertThat(item.comment()).isEqualTo("역시 페이커");
+			assertThat(item.match().matchId()).isEqualTo("match-1");
+			assertThat(item.match().gameOrder()).isEqualTo(2);
+			assertThat(item.match().blueTeamCode()).isEqualTo("DNS");
+			assertThat(item.match().matchDate()).isEqualTo(LocalDateTime.of(2026, 6, 6, 18, 0));
+		});
+	}
+
+	@Test
+	void getMyRatingsReturnsNullMatchWhenMappingMissing() {
+		Member member = member(7L, "용맹한바론");
+		LivePlayerRating myRating = rating(member, 4, null);
+		when(ratingRepository.findByMember_IdOrderByCreatedAtDesc(7L, PageRequest.of(0, 20)))
+				.thenReturn(new PageImpl<>(List.of(myRating), PageRequest.of(0, 20), 1));
+		when(leagueMatchGameRepository.findAllWithMatchByGameIdIn(java.util.Set.of("game-1")))
+				.thenReturn(List.of());
+
+		var response = service.getMyRatings(7L, 0, 20);
+
+		assertThat(response.ratings()).singleElement()
+				.satisfies(item -> assertThat(item.match()).isNull());
+	}
+
 	private Member member(Long id, String nickname) {
 		Member member = Member.builder().nickname(nickname).email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", id);

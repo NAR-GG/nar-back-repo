@@ -38,7 +38,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/mobile/me/player-subscriptions/**",
-                                "/api/mobile/me/devices/**"
+                                "/api/mobile/me/devices/**",
+                                "/api/mobile/me/ratings"
                         ).authenticated()
                         .requestMatchers(
                                 HttpMethod.PUT,

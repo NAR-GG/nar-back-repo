@@ -139,6 +139,11 @@ class ScheduleFinderTest {
 			}
 
 			@Override
+			public String getExternalGameId() {
+				return matchId + "-game-" + gameOrder;
+			}
+
+			@Override
 			public Long getInternalGameId() {
 				return internalGameId;
 			}

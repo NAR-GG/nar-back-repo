@@ -8,6 +8,7 @@ import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingDetailResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingListResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingRequest;
+import com.toy.nar.app.mobile.rating.dto.MyRatingListResponse;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
@@ -23,12 +24,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -36,6 +40,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MobileLivePlayerRatingService {
+
+	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+	private static final ZoneId UTC = ZoneId.of("UTC");
 
 	private final LiveStateQueryService liveStateQueryService;
 	private final LivePlayerRatingRepository ratingRepository;
@@ -160,6 +167,34 @@ public class MobileLivePlayerRatingService {
 						request.comment()));
 		rating.update(request.rating(), request.comment());
 		return toMyRating(ratingRepository.save(rating));
+	}
+
+	public MyRatingListResponse getMyRatings(Long memberId, int page, int size) {
+		if (memberId == null) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+		}
+		int safePage = Math.max(0, page);
+		int safeSize = Math.max(1, Math.min(size, 100));
+		Page<LivePlayerRating> ratings = ratingRepository.findByMember_IdOrderByCreatedAtDesc(
+				memberId,
+				PageRequest.of(safePage, safeSize));
+
+		Set<String> gameIds = ratings.getContent().stream()
+				.map(LivePlayerRating::getLiveGameId)
+				.collect(Collectors.toSet());
+		Map<String, LeagueMatchGame> matchGamesByGameId = gameIds.isEmpty()
+				? Map.of()
+				: leagueMatchGameRepository.findAllWithMatchByGameIdIn(gameIds).stream()
+						.collect(Collectors.toMap(LeagueMatchGame::getGameId, Function.identity(), (left, right) -> left));
+
+		return new MyRatingListResponse(
+				ratings.getContent().stream()
+						.map(rating -> toMyRatingItem(rating, matchGamesByGameId.get(rating.getLiveGameId())))
+						.toList(),
+				ratings.getNumber(),
+				ratings.getSize(),
+				ratings.getTotalElements(),
+				ratings.getTotalPages());
 	}
 
 	@Transactional
@@ -290,6 +325,46 @@ public class MobileLivePlayerRatingService {
 				.mapToDouble(value -> value.getRating() * value.getRatingCount())
 				.sum();
 		return sum / count;
+	}
+
+	private MyRatingListResponse.MyRatingItem toMyRatingItem(LivePlayerRating rating, LeagueMatchGame matchGame) {
+		Player player = rating.getPlayer();
+		return new MyRatingListResponse.MyRatingItem(
+				rating.getId(),
+				rating.getLiveGameId(),
+				rating.getLiveParticipantId(),
+				player != null ? player.getId() : null,
+				rating.getPlayerName(),
+				player != null ? player.getImageUrl() : null,
+				rating.getTeamSide(),
+				rating.getRole(),
+				rating.getChampionName(),
+				rating.getRating(),
+				rating.getComment(),
+				rating.getCreatedAt(),
+				rating.getUpdatedAt(),
+				toMatchInfo(matchGame));
+	}
+
+	private MyRatingListResponse.MatchInfo toMatchInfo(LeagueMatchGame matchGame) {
+		if (matchGame == null) {
+			return null;
+		}
+		return new MyRatingListResponse.MatchInfo(
+				matchGame.getLeagueMatch().getId(),
+				matchGame.getGameOrder(),
+				matchGame.getLeagueMatch().getLeagueName(),
+				matchGame.getLeagueMatch().getMatchTitle(),
+				matchGame.getLeagueMatch().getBlueTeamCode(),
+				matchGame.getLeagueMatch().getRedTeamCode(),
+				toKst(matchGame.getLeagueMatch().getMatchDate()));
+	}
+
+	private LocalDateTime toKst(LocalDateTime utcDateTime) {
+		if (utcDateTime == null) {
+			return null;
+		}
+		return utcDateTime.atZone(UTC).withZoneSameInstant(KST).toLocalDateTime();
 	}
 
 	private LivePlayerRatingDetailResponse.MyRating toMyRating(LivePlayerRating rating) {

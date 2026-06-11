@@ -2,7 +2,10 @@ package com.toy.nar.app.mobile.schedule;
 
 import com.toy.nar.app.lolesports.LeagueConstants;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
+import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
+import com.toy.nar.app.mobile.schedule.dto.MobileMatchGamesResponse;
+import com.toy.nar.app.mobile.schedule.dto.MobileMatchPageResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleCalendarResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleFilterResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
@@ -12,15 +15,18 @@ import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.TeamRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.function.Function;
 import java.util.LinkedHashMap;
@@ -43,8 +49,13 @@ public class MobileScheduleService {
 			"T1", "HLE", "GEN", "DK", "KT",
 			"DNS", "BFX", "NS", "BRO", "KRX"
 	);
+	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
+	private static final String CURSOR_DELIMITER = "|";
+	private static final int DEFAULT_PAGE_SIZE = 20;
+	private static final int MAX_PAGE_SIZE = 50;
 
 	private final LeagueMatchRepository leagueMatchRepository;
+	private final LeagueMatchGameRepository leagueMatchGameRepository;
 	private final TeamRepository teamRepository;
 
 	public MobileScheduleFilterResponse getFilters(String league) {
@@ -104,15 +115,56 @@ public class MobileScheduleService {
 		TeamFilter teamFilter = resolveTeamFilter(teamId);
 		LocalDateTime startUtc = toUtc(date.atStartOfDay());
 		LocalDateTime endUtc = toUtc(date.plusDays(1).atStartOfDay());
-		List<MobileScheduleListResponse.MobileMatchSummary> matches = findMatches(
-				normalizedLeague,
-				teamFilter,
-				startUtc,
-				endUtc).stream()
-				.map(this::toMatchSummary)
+		List<LeagueMatch> found = findMatches(normalizedLeague, teamFilter, startUtc, endUtc);
+		Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId = loadGames(found);
+		List<MobileScheduleListResponse.MobileMatchSummary> matches = found.stream()
+				.map(match -> toMatchSummary(match, gamesByMatchId))
 				.toList();
 
 		return new MobileScheduleListResponse(date.toString(), normalizedLeague, teamId, matches);
+	}
+
+	public MobileMatchPageResponse getMatchPage(String league, Long teamId, String cursor, Integer size) {
+		String normalizedLeague = normalizeLeague(league);
+		TeamFilter teamFilter = resolveTeamFilter(teamId);
+		int pageSize = size == null
+				? DEFAULT_PAGE_SIZE
+				: Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+		MatchCursor matchCursor = decodeCursor(cursor);
+		PageRequest fetchLimit = PageRequest.of(0, pageSize + 1);
+
+		List<LeagueMatch> fetched = teamFilter == null
+				? leagueMatchRepository.findMobileMatchPage(
+						normalizedLeague,
+						matchCursor != null ? matchCursor.matchDate() : null,
+						matchCursor != null ? matchCursor.matchId() : null,
+						fetchLimit)
+				: leagueMatchRepository.findMobileTeamMatchPage(
+						normalizedLeague,
+						teamFilter.name(),
+						teamFilter.code(),
+						matchCursor != null ? matchCursor.matchDate() : null,
+						matchCursor != null ? matchCursor.matchId() : null,
+						fetchLimit);
+
+		List<LeagueMatch> page = fetched.size() > pageSize ? fetched.subList(0, pageSize) : fetched;
+		Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId = loadGames(page);
+		List<MobileScheduleListResponse.MobileMatchSummary> matches = page.stream()
+				.map(match -> toMatchSummary(match, gamesByMatchId))
+				.toList();
+		String nextCursor = fetched.size() > pageSize ? encodeCursor(page.getLast()) : null;
+
+		return new MobileMatchPageResponse(normalizedLeague, teamId, matches, nextCursor, nextCursor != null);
+	}
+
+	public MobileMatchGamesResponse getMatchGames(String matchId) {
+		LeagueMatch match = leagueMatchRepository.findById(matchId)
+				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
+		List<MobileScheduleListResponse.MobileGameSummary> games = leagueMatchGameRepository
+				.findMappedGameRowsByMatchId(match.getId(), LOLESPORTS_SOURCE).stream()
+				.map(this::toGameSummary)
+				.toList();
+		return new MobileMatchGamesResponse(match.getId(), games);
 	}
 
 	private List<LeagueMatch> findMatches(
@@ -154,9 +206,12 @@ public class MobileScheduleService {
 				.toList();
 	}
 
-	private MobileScheduleListResponse.MobileMatchSummary toMatchSummary(LeagueMatch match) {
+	private MobileScheduleListResponse.MobileMatchSummary toMatchSummary(
+			LeagueMatch match,
+			Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId) {
 		return new MobileScheduleListResponse.MobileMatchSummary(
 				match.getId(),
+				match.getMatchDate() != null ? toKstDate(match).toString() : null,
 				toScheduledTime(match),
 				match.getState(),
 				match.getMatchTitle(),
@@ -171,7 +226,60 @@ public class MobileScheduleService {
 						match.getRedTeamCode(),
 						match.getRedTeamImageUrl(),
 						match.getRedScore()),
-				liveStreamUrl(match));
+				liveStreamUrl(match),
+				gamesByMatchId.getOrDefault(match.getId(), List.of()));
+	}
+
+	private Map<String, List<MobileScheduleListResponse.MobileGameSummary>> loadGames(List<LeagueMatch> matches) {
+		if (matches.isEmpty()) {
+			return Map.of();
+		}
+		List<String> matchIds = matches.stream().map(LeagueMatch::getId).toList();
+		return leagueMatchGameRepository.findMappedGameRowsByMatchIds(matchIds, LOLESPORTS_SOURCE).stream()
+				.collect(Collectors.groupingBy(
+						LeagueMatchGameRepository.MappedGameRow::getMatchId,
+						LinkedHashMap::new,
+						Collectors.mapping(this::toGameSummary, Collectors.toList())));
+	}
+
+	private MobileScheduleListResponse.MobileGameSummary toGameSummary(LeagueMatchGameRepository.MappedGameRow row) {
+		return new MobileScheduleListResponse.MobileGameSummary(
+				row.getGameOrder(),
+				row.getExternalGameId(),
+				row.getInternalGameId());
+	}
+
+	private MatchCursor decodeCursor(String cursor) {
+		if (cursor == null || cursor.isBlank()) {
+			return null;
+		}
+		try {
+			String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+			int delimiterIndex = decoded.lastIndexOf(CURSOR_DELIMITER);
+			LocalDateTime matchDate = LocalDateTime.parse(
+					decoded.substring(0, delimiterIndex),
+					DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+			String matchId = decoded.substring(delimiterIndex + 1);
+			if (matchId.isBlank()) {
+				throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+			}
+			return new MatchCursor(matchDate, matchId);
+		} catch (CustomException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+	}
+
+	private String encodeCursor(LeagueMatch match) {
+		if (match.getMatchDate() == null) {
+			// matchDate가 null인 행은 정렬 마지막에 위치해 커서 기준점이 될 수 없다
+			return null;
+		}
+		String raw = match.getMatchDate().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+				+ CURSOR_DELIMITER
+				+ match.getId();
+		return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
 	}
 
 	private MobileScheduleCalendarResponse.CalendarMatch toCalendarMatch(LeagueMatch match) {
@@ -258,5 +366,8 @@ public class MobileScheduleService {
 	}
 
 	private record TeamFilter(String name, String code) {
+	}
+
+	private record MatchCursor(LocalDateTime matchDate, String matchId) {
 	}
 }
