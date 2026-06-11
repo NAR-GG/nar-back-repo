@@ -12,6 +12,8 @@ public record MemberResponse(
 		Long id,
 		@Schema(description = "랜덤 생성 또는 사용 중인 닉네임", example = "용맹한바론")
 		String nickname,
+		@Schema(description = "소셜 로그인 이메일. 동의하지 않은 경우 null", example = "user@example.com", nullable = true)
+		String email,
 		@Schema(description = "선호 리그명", example = "LCK", nullable = true)
 		String favoriteLeagueName,
 		@Schema(description = "선호 팀 ID", example = "3", nullable = true)
@@ -25,6 +27,7 @@ public record MemberResponse(
         return new MemberResponse(
                 member.getId(),
                 member.getNickname(),
+                member.getEmail(),
                 member.getFavoriteLeagueName(),
                 member.getFavoriteTeam() != null ? member.getFavoriteTeam().getId() : null,
                 member.getFavoritePlayers().stream()

@@ -75,6 +75,44 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 			@Param("start") LocalDateTime start,
 			@Param("end") LocalDateTime end);
 
+	@Query("""
+			SELECT m
+			FROM LeagueMatch m
+			WHERE UPPER(m.leagueName) = UPPER(:leagueName)
+			  AND (:cursorId IS NULL
+					OR m.matchDate < :cursorDate
+					OR (m.matchDate = :cursorDate AND m.id < :cursorId))
+			ORDER BY m.matchDate DESC, m.id DESC
+			""")
+	List<LeagueMatch> findMobileMatchPage(
+			@Param("leagueName") String leagueName,
+			@Param("cursorDate") LocalDateTime cursorDate,
+			@Param("cursorId") String cursorId,
+			Pageable pageable);
+
+	@Query("""
+			SELECT m
+			FROM LeagueMatch m
+			WHERE UPPER(m.leagueName) = UPPER(:leagueName)
+			  AND (
+					LOWER(m.blueTeamName) = LOWER(:teamName)
+					OR LOWER(m.redTeamName) = LOWER(:teamName)
+					OR (:teamCode IS NOT NULL AND m.blueTeamCode IS NOT NULL AND LOWER(m.blueTeamCode) = LOWER(:teamCode))
+					OR (:teamCode IS NOT NULL AND m.redTeamCode IS NOT NULL AND LOWER(m.redTeamCode) = LOWER(:teamCode))
+			  )
+			  AND (:cursorId IS NULL
+					OR m.matchDate < :cursorDate
+					OR (m.matchDate = :cursorDate AND m.id < :cursorId))
+			ORDER BY m.matchDate DESC, m.id DESC
+			""")
+	List<LeagueMatch> findMobileTeamMatchPage(
+			@Param("leagueName") String leagueName,
+			@Param("teamName") String teamName,
+			@Param("teamCode") String teamCode,
+			@Param("cursorDate") LocalDateTime cursorDate,
+			@Param("cursorId") String cursorId,
+			Pageable pageable);
+
 	@Query(value = """
 			SELECT DATE(m.match_date) AS matchDay,
 			       COUNT(*) AS matchCount
