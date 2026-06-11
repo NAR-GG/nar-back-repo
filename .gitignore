@@ -44,3 +44,4 @@ docker-compose.yml
 /src/main/resources/application-dev.yml
 /src/main/resources/application-test.yml
 /src/main/resources/application-*.yml.DS_Store
+src/main/build/
