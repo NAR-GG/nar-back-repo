@@ -20,6 +20,9 @@ public class PlayerSoloRankPushService {
 
 	private static final String PUSH_TYPE = "PLAYER_SOLO_RANK_STARTED";
 
+	/** '전체 선수 솔랭 알림'(앱에서 구독하는 FCM 토픽) — 모바일과 이름이 일치해야 한다. */
+	private static final String ALL_SOLO_RANK_TOPIC = "all_solo_rank";
+
 	private final MemberDeviceRepository deviceRepository;
 	private final PlayerSoloRankPushDeliveryRepository deliveryRepository;
 	private final MobilePushGateway pushGateway;
@@ -33,6 +36,11 @@ public class PlayerSoloRankPushService {
 			return;
 		}
 
+		MobilePushMessage message = buildMessage(player, gameId, championName, championImageUrl);
+
+		// 전체 선수 솔랭 알림 토픽 구독자에게 발송 (구독 여부와 무관). 게임당 1회.
+		sendToAllSoloRankTopic(player, gameId, message);
+
 		try {
 			List<MemberDevice> devices = deviceRepository.findActiveDevicesBySubscribedPlayerId(player.getId());
 			Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
@@ -42,17 +50,23 @@ public class PlayerSoloRankPushService {
 							Collectors.toList()));
 
 			for (Map.Entry<Long, List<MemberDevice>> entry : devicesByMember.entrySet()) {
-				sendToMember(
-						entry.getKey(),
-						entry.getValue(),
-						player,
-						gameId,
-						championName,
-						championImageUrl);
+				sendToMember(entry.getKey(), entry.getValue(), player, gameId, message);
 			}
 		} catch (Exception e) {
 			log.warn(
 					"Failed to prepare player solo rank pushes playerId={} gameId={}",
+					player.getId(),
+					gameId,
+					e);
+		}
+	}
+
+	private void sendToAllSoloRankTopic(Player player, String gameId, MobilePushMessage message) {
+		try {
+			pushGateway.sendToTopic(ALL_SOLO_RANK_TOPIC, message);
+		} catch (Exception e) {
+			log.warn(
+					"Failed to send all-solo-rank topic push playerId={} gameId={}",
 					player.getId(),
 					gameId,
 					e);
@@ -64,16 +78,13 @@ public class PlayerSoloRankPushService {
 			List<MemberDevice> devices,
 			Player player,
 			String gameId,
-			String championName,
-			String championImageUrl) {
+			MobilePushMessage message) {
 		try {
 			if (deliveryRepository.reserve(memberId, player.getId(), gameId) == 0) {
 				return;
 			}
 			List<String> tokens = devices.stream().map(MemberDevice::getFcmToken).toList();
-			MobilePushResult result = pushGateway.send(
-					tokens,
-					buildMessage(player, gameId, championName, championImageUrl));
+			MobilePushResult result = pushGateway.send(tokens, message);
 			if (!result.invalidTokens().isEmpty()) {
 				deactivateInvalidTokens(result.invalidTokens(), player.getId(), gameId);
 			}
