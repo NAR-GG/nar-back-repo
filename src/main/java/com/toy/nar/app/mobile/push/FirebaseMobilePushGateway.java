@@ -6,6 +6,7 @@ import com.google.firebase.messaging.Aps;
 import com.google.firebase.messaging.BatchResponse;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingException;
+import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.MulticastMessage;
 import com.google.firebase.messaging.Notification;
@@ -50,6 +51,35 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 			collectInvalidTokens(batchTokens, response.getResponses(), invalidTokens);
 		}
 		return new MobilePushResult(successCount, failureCount, List.copyOf(invalidTokens));
+	}
+
+	@Override
+	public void sendToTopic(String topic, MobilePushMessage message) {
+		FirebaseMessaging firebaseMessaging = firebaseMessagingProvider.getIfAvailable();
+		if (firebaseMessaging == null) {
+			throw new IllegalStateException("FCM 발송이 비활성화되어 있습니다.");
+		}
+		Message topicMessage = Message.builder()
+				.setNotification(Notification.builder()
+						.setTitle(message.title())
+						.setBody(message.body())
+						.build())
+				.putAllData(message.data())
+				.setAndroidConfig(AndroidConfig.builder()
+						.setPriority(AndroidConfig.Priority.HIGH)
+						.build())
+				.setApnsConfig(ApnsConfig.builder()
+						.setAps(Aps.builder()
+								.setSound("default")
+								.build())
+						.build())
+				.setTopic(topic)
+				.build();
+		try {
+			firebaseMessaging.send(topicMessage);
+		} catch (FirebaseMessagingException e) {
+			throw new IllegalStateException("FCM 토픽 발송에 실패했습니다.", e);
+		}
 	}
 
 	private BatchResponse sendBatch(
