@@ -117,7 +117,9 @@ class PlayerSoloRankMonitorServiceTest {
 				player,
 				"222",
 				"야스오",
-				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png");
+				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png",
+				"솔로 랭크",
+				"https://www.op.gg/summoners/kr/Hide+on+bush-KR1");
 	}
 
 	@Test
@@ -316,6 +318,8 @@ class PlayerSoloRankMonitorServiceTest {
 		verify(playerSoloRankPushService, never()).notifySubscribers(
 				org.mockito.ArgumentMatchers.any(),
 				anyString(),
+				org.mockito.ArgumentMatchers.any(),
+				org.mockito.ArgumentMatchers.any(),
 				org.mockito.ArgumentMatchers.any(),
 				org.mockito.ArgumentMatchers.any());
 	}

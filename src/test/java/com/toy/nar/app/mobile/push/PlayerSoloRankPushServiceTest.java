@@ -59,7 +59,7 @@ class PlayerSoloRankPushServiceTest {
 				.thenReturn(new MobilePushResult(1, 0, List.of()))
 				.thenReturn(new MobilePushResult(0, 1, List.of("token-2")));
 
-		service.notifySubscribers(player, "game-1", "아리", "ahri.png");
+		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
 
 		verify(deliveryRepository).markSent(7L, 10L, "game-1");
 		verify(deliveryRepository).markFailed(8L, 10L, "game-1", "FCM 전송 성공 기기가 없습니다.");
@@ -71,7 +71,7 @@ class PlayerSoloRankPushServiceTest {
 		Player player = player(10L, "Faker");
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of());
 
-		service.notifySubscribers(player, "game-1", "아리", "ahri.png");
+		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
 
 		verify(pushGateway, times(1)).sendToTopic(eq("all_solo_rank"), any());
 	}
@@ -86,7 +86,7 @@ class PlayerSoloRankPushServiceTest {
 		doThrow(new IllegalStateException("topic down"))
 				.when(pushGateway).sendToTopic(any(), any());
 
-		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png"))
+		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1"))
 				.doesNotThrowAnyException();
 		verify(deliveryRepository).markSent(7L, 10L, "game-1");
 	}
@@ -98,7 +98,7 @@ class PlayerSoloRankPushServiceTest {
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
 		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(0);
 
-		service.notifySubscribers(player, "game-1", "아리", "ahri.png");
+		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
 
 		verify(pushGateway, never()).send(any(), any());
 	}
@@ -111,7 +111,7 @@ class PlayerSoloRankPushServiceTest {
 		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(1);
 		when(pushGateway.send(any(), any())).thenThrow(new IllegalStateException("firebase down"));
 
-		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png"))
+		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1"))
 				.doesNotThrowAnyException();
 		verify(deliveryRepository).markFailed(7L, 10L, "game-1", "firebase down");
 	}
