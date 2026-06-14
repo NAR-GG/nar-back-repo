@@ -2,6 +2,7 @@ package com.toy.nar.app.lolesports.live;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toy.nar.app.data.source.NotificationService;
 import com.toy.nar.app.lolesports.live.entity.LiveGameObjectEvent;
 import com.toy.nar.app.lolesports.live.repository.LiveGameObjectEventRepository;
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,7 @@ import static org.mockito.Mockito.when;
 class LiveObjectEventRecorderTest {
 
 	private final LiveGameObjectEventRepository objectEventRepository = mock(LiveGameObjectEventRepository.class);
-	private final LiveObjectEventRecorder recorder = new LiveObjectEventRecorder(objectEventRepository);
+	private final LiveObjectEventRecorder recorder = new LiveObjectEventRecorder(objectEventRepository, mock(NotificationService.class));
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Test

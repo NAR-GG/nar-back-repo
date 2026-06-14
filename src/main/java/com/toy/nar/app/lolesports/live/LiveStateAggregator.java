@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toy.nar.app.lolesports.live.dto.LiveGameState;
 import com.toy.nar.app.lolesports.live.dto.LiveParticipantState;
+import com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,15 +19,22 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class LiveStateAggregator {
 
+	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
+
 	private final ObjectMapper objectMapper;
 	private final RuneMetadataResolver runeMetadataResolver;
 	private final ItemMetadataResolver itemMetadataResolver;
+	private final TeamExternalIdentityRepository teamExternalIdentityRepository;
+
+	// 세트마다 블루/레드 진영이 바뀌므로, 피드의 진영별 esportsTeamId 로 팀명을 조회한다(esportsTeamId→팀명 캐시).
+	private final Map<String, String> teamNameByExternalId = new ConcurrentHashMap<>();
 
 	public LiveGameState aggregate(
 			ActiveLiveGame activeGame,
@@ -105,12 +113,8 @@ public class LiveStateAggregator {
 				activeGame.gameId(),
 				activeGame.matchId(),
 				activeGame.leagueName(),
-				firstNonBlank(
-						activeGame.blueTeamName(),
-						textOrNull(blueTeamMetadata, "esportsTeamId")),
-				firstNonBlank(
-						activeGame.redTeamName(),
-						textOrNull(redTeamMetadata, "esportsTeamId")),
+				resolveTeamName(textOrNull(blueTeamMetadata, "esportsTeamId"), activeGame.blueTeamName()),
+				resolveTeamName(textOrNull(redTeamMetadata, "esportsTeamId"), activeGame.redTeamName()),
 				minuteBucketUtc,
 				frameTimestampUtc,
 				participants,
@@ -227,5 +231,28 @@ public class LiveStateAggregator {
 			return first;
 		}
 		return second;
+	}
+
+	/**
+	 * 피드의 진영별 esportsTeamId 로 실제 팀명을 조회한다(team_external_identity). 매핑이 없으면 fallback(매치 기준 이름).
+	 * 세트마다 블루/레드가 스왑되므로 매치 고정 이름이 아니라 이 값으로 진영-팀을 맞춰야 한다. esportsTeamId→팀명은 캐시한다.
+	 */
+	private String resolveTeamName(String esportsTeamId, String fallback) {
+		if (esportsTeamId == null || esportsTeamId.isBlank()) {
+			return fallback;
+		}
+		String cached = teamNameByExternalId.get(esportsTeamId);
+		if (cached != null) {
+			return cached;
+		}
+		String resolved = teamExternalIdentityRepository
+				.findBySourceAndExternalTeamId(LOLESPORTS_SOURCE, esportsTeamId)
+				.map(identity -> identity.getTeam().getName())
+				.orElse(null);
+		if (resolved != null && !resolved.isBlank()) {
+			teamNameByExternalId.put(esportsTeamId, resolved);
+			return resolved;
+		}
+		return fallback;
 	}
 }

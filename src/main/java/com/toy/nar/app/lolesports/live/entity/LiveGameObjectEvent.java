@@ -50,6 +50,16 @@ public class LiveGameObjectEvent {
 	@Column(name = "value_after", nullable = false)
 	private Integer valueAfter;
 
+	// KILL 이벤트 전용. 그 외 이벤트는 NULL. (event_sub_type 은 하위호환을 위해 킬러 챔피언을 그대로 유지)
+	@Column(name = "killer_player_name", length = 64)
+	private String killerPlayerName;
+
+	@Column(name = "victim_champion", length = 40)
+	private String victimChampion;
+
+	@Column(name = "victim_player_name", length = 64)
+	private String victimPlayerName;
+
 	@Column(name = "source_frame_timestamp_utc", nullable = false)
 	private LocalDateTime sourceFrameTimestampUtc;
 
@@ -76,5 +86,26 @@ public class LiveGameObjectEvent {
 		this.eventOrder = eventOrder;
 		this.valueAfter = valueAfter;
 		this.sourceFrameTimestampUtc = sourceFrameTimestampUtc;
+	}
+
+	/** KILL 이벤트 전용 생성자. 킬러 챔피언은 하위호환을 위해 eventSubType 에 그대로 둔다. */
+	public LiveGameObjectEvent(
+			String gameId,
+			String matchId,
+			String leagueName,
+			String teamSide,
+			String eventType,
+			String eventSubType,
+			Integer eventOrder,
+			Integer valueAfter,
+			String killerPlayerName,
+			String victimChampion,
+			String victimPlayerName,
+			LocalDateTime sourceFrameTimestampUtc) {
+		this(gameId, matchId, leagueName, teamSide, eventType, eventSubType, eventOrder, valueAfter,
+				sourceFrameTimestampUtc);
+		this.killerPlayerName = killerPlayerName;
+		this.victimChampion = victimChampion;
+		this.victimPlayerName = victimPlayerName;
 	}
 }

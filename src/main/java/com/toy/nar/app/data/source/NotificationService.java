@@ -176,6 +176,148 @@ public class NotificationService {
 	}
 
 	/**
+	 * LCK 등 라이브 경기 시작 감지 알림 (운영 웹훅으로 발송)
+	 */
+	public void sendLiveMatchNotification(
+			String leagueName,
+			String blueTeamName,
+			String redTeamName,
+			String gameId,
+			String matchId) {
+		if (!notificationEnabled) return;
+
+		String league = leagueName == null || leagueName.isBlank() ? "LoL Esports" : leagueName;
+		String blue = blueTeamName == null || blueTeamName.isBlank() ? "?" : blueTeamName;
+		String red = redTeamName == null || redTeamName.isBlank() ? "?" : redTeamName;
+		String message = String.format("상태: 라이브 경기 시작 감지\n감지 시각: `%s`\n\n" +
+				"```text\n" +
+				"리그    : %s\n" +
+				"대진    : %s vs %s\n" +
+				"게임 ID : %s\n" +
+				"매치 ID : %s\n" +
+				"```",
+			LocalDateTime.now().format(ALERT_TIME_FORMATTER),
+			league,
+			blue,
+			red,
+			gameId == null || gameId.isBlank() ? "-" : gameId,
+			matchId == null || matchId.isBlank() ? "-" : matchId
+		);
+
+		sendNotification(String.format("[%s 라이브 경기 시작]", league), message, "danger");
+	}
+
+	/**
+	 * 라이브 경기 중 오브젝트(타워/바론/드래곤/억제기) 이벤트 알림 (운영 웹훅으로 발송)
+	 */
+	public void sendLiveObjectEventNotification(
+			String leagueName,
+			String teamName,
+			String teamSide,
+			String eventType,
+			String eventSubType,
+			int eventOrder,
+			String gameId) {
+		if (!notificationEnabled) return;
+
+		String league = leagueName == null || leagueName.isBlank() ? "LoL Esports" : leagueName;
+		String team = teamDisplay(teamSide, teamName);
+		String label = liveEventLabel(eventType, eventSubType);
+		String color = eventType == null ? "info"
+				: switch (eventType.toUpperCase()) {
+					case "BARON" -> "warning";
+					default -> "good";
+				};
+
+		String message = String.format("리그: %s\n감지 시각: `%s`\n\n" +
+				"```text\n" +
+				"팀      : %s\n" +
+				"이벤트  : %s (%d번째)\n" +
+				"게임 ID : %s\n" +
+				"```",
+			league,
+			LocalDateTime.now().format(ALERT_TIME_FORMATTER),
+			team,
+			label,
+			eventOrder,
+			gameId == null || gameId.isBlank() ? "-" : gameId
+		);
+
+		sendNotification(String.format("[%s] %s — %s", league, label, team), message, color);
+	}
+
+	/**
+	 * 라이브 경기 중 킬 이벤트 알림 — 킬러/피해자(선수·챔피언) 포함 (운영 웹훅으로 발송)
+	 */
+	public void sendLiveKillNotification(
+			String leagueName,
+			String killerTeamName,
+			String killerTeamSide,
+			String killerName,
+			String killerChampion,
+			String victimName,
+			String victimChampion,
+			int killOrder,
+			String gameId) {
+		if (!notificationEnabled) return;
+
+		String league = leagueName == null || leagueName.isBlank() ? "LoL Esports" : leagueName;
+		String killer = playerWithChampion(killerName, killerChampion);
+		String victim = playerWithChampion(victimName, victimChampion);
+		String killerTeam = teamDisplay(killerTeamSide, killerTeamName);
+
+		String message = String.format("리그: %s\n감지 시각: `%s`\n\n" +
+				"```text\n" +
+				"킬러   : %s  [%s]\n" +
+				"피해자 : %s\n" +
+				"팀 킬   : %d번째\n" +
+				"게임 ID : %s\n" +
+				"```",
+			league,
+			LocalDateTime.now().format(ALERT_TIME_FORMATTER),
+			killer,
+			killerTeam,
+			victim,
+			killOrder,
+			gameId == null || gameId.isBlank() ? "-" : gameId
+		);
+
+		sendNotification(String.format("[%s] ⚔️ %s → %s", league, killer, victim), message, "danger");
+	}
+
+	private String teamDisplay(String teamSide, String teamName) {
+		String emoji = "Blue".equalsIgnoreCase(teamSide) ? "🔵"
+				: "Red".equalsIgnoreCase(teamSide) ? "🔴" : "";
+		String name = teamName == null || teamName.isBlank()
+				? ("Blue".equalsIgnoreCase(teamSide) ? "블루" : "Red".equalsIgnoreCase(teamSide) ? "레드" : "-")
+				: teamName;
+		return (emoji.isBlank() ? "" : emoji + " ") + name;
+	}
+
+	private String playerWithChampion(String playerName, String champion) {
+		String name = playerName == null || playerName.isBlank() ? "?" : playerName;
+		if (champion == null || champion.isBlank()) {
+			return name;
+		}
+		return name + " (" + champion + ")";
+	}
+
+	private String liveEventLabel(String eventType, String eventSubType) {
+		if (eventType == null) {
+			return "이벤트";
+		}
+		return switch (eventType.toUpperCase()) {
+			case "TOWER" -> "🗼 포탑 파괴";
+			case "BARON" -> "🟣 바론 처치";
+			case "INHIBITOR" -> "🛡️ 억제기 파괴";
+			case "DRAGON" -> "🐉 드래곤 처치"
+					+ (eventSubType == null || eventSubType.isBlank() ? "" : " (" + eventSubType + ")");
+			case "KILL" -> "⚔️ 킬";
+			default -> eventType;
+		};
+	}
+
+	/**
 	 * 실제 알림 전송
 	 */
 	private void sendNotification(String title, String message, String color) {
