@@ -31,12 +31,15 @@ public class PlayerSoloRankPushService {
 			Player player,
 			String gameId,
 			String championName,
-			String championImageUrl) {
+			String championImageUrl,
+			String queueDisplayName,
+			String opggUrl) {
 		if (player == null || player.getId() == null || gameId == null || !pushGateway.isAvailable()) {
 			return;
 		}
 
-		MobilePushMessage message = buildMessage(player, gameId, championName, championImageUrl);
+		MobilePushMessage message = buildMessage(
+				player, gameId, championName, championImageUrl, queueDisplayName, opggUrl);
 
 		// 전체 선수 솔랭 알림 토픽 구독자에게 발송 (구독 여부와 무관). 게임당 1회.
 		sendToAllSoloRankTopic(player, gameId, message);
@@ -145,22 +148,32 @@ public class PlayerSoloRankPushService {
 			Player player,
 			String gameId,
 			String championName,
-			String championImageUrl) {
+			String championImageUrl,
+			String queueDisplayName,
+			String opggUrl) {
 		String normalizedChampionName = championName == null || championName.isBlank()
 				? "챔피언 정보 확인 중"
 				: championName;
+		String normalizedQueue = queueDisplayName == null || queueDisplayName.isBlank()
+				? "솔로 랭크"
+				: queueDisplayName;
 		Map<String, String> data = new LinkedHashMap<>();
 		data.put("type", PUSH_TYPE);
 		data.put("playerId", String.valueOf(player.getId()));
+		data.put("playerName", player.getName());
 		data.put("gameId", gameId);
 		data.put("championName", normalizedChampionName);
+		data.put("queueType", normalizedQueue);
 		data.put("deepLink", "nar://players/" + player.getId());
 		if (championImageUrl != null && !championImageUrl.isBlank()) {
 			data.put("championImageUrl", championImageUrl);
 		}
+		if (opggUrl != null && !opggUrl.isBlank()) {
+			data.put("opggUrl", opggUrl);
+		}
 		return new MobilePushMessage(
 				player.getName() + " 선수가 솔랭을 시작했어요",
-				normalizedChampionName + "로 솔로 랭크 플레이 중",
+				normalizedChampionName + "로 " + normalizedQueue + " 플레이 중",
 				Map.copyOf(data));
 	}
 
