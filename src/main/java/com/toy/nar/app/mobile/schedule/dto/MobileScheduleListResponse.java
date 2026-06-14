@@ -31,7 +31,9 @@ public record MobileScheduleListResponse(
 			@Schema(description = "라이브/선수 평점 API에서 사용하는 esports gameId", example = "113990000000000001")
 			String gameId,
 			@Schema(description = "기록(record) API에서 사용하는 내부 gameId. 기록 미적재 시 null", example = "1024", nullable = true)
-			Long recordGameId) {
+			Long recordGameId,
+			@Schema(description = "세트 상태: LIVE(진행 중)/ENDED(종료, 데이터 보유)/SCHEDULED(예정). 일정 목록에서는 null", example = "LIVE", nullable = true)
+			String status) {
 	}
 
 	public record MobileTeamResult(

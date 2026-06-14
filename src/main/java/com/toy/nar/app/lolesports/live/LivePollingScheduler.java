@@ -6,6 +6,7 @@ import com.toy.nar.app.lolesports.LeagueMatchService;
 import com.toy.nar.app.lolesports.MatchResponseWrapper;
 import com.toy.nar.app.lolesports.MatchResultDto;
 import com.toy.nar.app.lolesports.WorldsService;
+import com.toy.nar.app.data.source.NotificationService;
 import com.toy.nar.app.schedule.CacheEvictionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,10 @@ public class LivePollingScheduler {
 
 	private static final DateTimeFormatter START_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
 	private static final long INITIAL_LOOKBACK_SECONDS = 90L;
+	/** 라이브 엣지 추적: 이보다 더 뒤처지면 엣지 근처로 점프해 catch-up 지연(분 단위)을 막는다. */
+	private static final long MAX_LAG_SECONDS = 50L;
+	/** 피드는 window end-time이 20초보다 최신이면 거부하므로, 이보다 최신은 요청하지 않는다. */
+	private static final long MIN_FEED_AGE_SECONDS = 35L;
 
 	private final WorldsService worldsService;
 	private final LiveStatsClient liveStatsClient;
@@ -41,12 +46,20 @@ public class LivePollingScheduler {
 	private final LiveGameMetadataService liveGameMetadataService;
 	private final LeagueMatchService leagueMatchService;
 	private final CacheEvictionService cacheEvictionService;
+	private final NotificationService notificationService;
 
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.stale-threshold-ms:180000}")
 	private long staleThresholdMs;
 
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.max-consecutive-failures:6}")
 	private int maxConsecutiveFailures;
+
+	@org.springframework.beans.factory.annotation.Value("${lolesports.live.notification.enabled:false}")
+	private boolean liveNotificationEnabled;
+
+	// 디스코드 알림을 보낼 리그(쉼표 구분). 기본 LCK 만. 그 외 리그는 데이터 수집만 하고 알림은 보내지 않는다.
+	@org.springframework.beans.factory.annotation.Value("${lolesports.live.notification.leagues:LCK}")
+	private String notificationLeagues;
 
 	@Scheduled(fixedDelayString = "${lolesports.live.discovery-interval-ms:60000}")
 	public void discoverLiveGames() {
@@ -89,6 +102,17 @@ public class LivePollingScheduler {
 								current != null ? current.consecutiveFailures() : 0);
 						activeGames.put(gameId, next);
 						liveGameMetadataService.remember(next);
+
+						if (liveNotificationEnabled && current == null && isNotifiableLeague(resolvedLeagueName)) {
+							log.info("[live-notify] match-start league={} {} vs {} gameId={}",
+									resolvedLeagueName, next.blueTeamName(), next.redTeamName(), gameId);
+							notificationService.sendLiveMatchNotification(
+									resolvedLeagueName,
+									next.blueTeamName(),
+									next.redTeamName(),
+									gameId,
+									match.getMatchId());
+						}
 					}
 				}
 			} catch (Exception e) {
@@ -154,17 +178,37 @@ public class LivePollingScheduler {
 	}
 
 	private String computeStartingTime(String gameId) {
+		Instant now = Instant.now();
 		Instant candidate = liveStateStore.getLatestState(gameId)
 				.map(state -> nextWindowStart(state.frameTimestampUtc().toInstant(ZoneOffset.UTC)))
-				.orElseGet(() -> Instant.now().minusSeconds(INITIAL_LOOKBACK_SECONDS));
+				.orElseGet(() -> now.minusSeconds(INITIAL_LOOKBACK_SECONDS));
 
-		Instant minAllowed = Instant.now().minus(Duration.ofMinutes(5));
-		if (candidate.isBefore(minAllowed)) {
-			candidate = minAllowed;
+		// 뒤처졌으면 라이브 엣지로 점프 (분 단위 catch-up 지연 방지)
+		Instant liveEdgeFloor = now.minusSeconds(MAX_LAG_SECONDS);
+		if (candidate.isBefore(liveEdgeFloor)) {
+			candidate = liveEdgeFloor;
+		}
+		// 피드 20초 룰: 너무 최신 window는 거부되므로 상한을 둔다
+		Instant newestAllowed = now.minusSeconds(MIN_FEED_AGE_SECONDS);
+		if (candidate.isAfter(newestAllowed)) {
+			candidate = newestAllowed;
 		}
 
 		long flooredSeconds = (candidate.getEpochSecond() / 10) * 10;
 		return LocalDateTime.ofInstant(Instant.ofEpochSecond(flooredSeconds), ZoneOffset.UTC).format(START_TIME_FORMATTER);
+	}
+
+	/** 알림 대상 리그인지 (notificationLeagues 설정, 기본 LCK). 그 외 리그는 디스코드 알림 안 보냄. */
+	private boolean isNotifiableLeague(String league) {
+		if (league == null || league.isBlank()) {
+			return false;
+		}
+		for (String allowed : notificationLeagues.split(",")) {
+			if (allowed.trim().equalsIgnoreCase(league.trim())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private Instant nextWindowStart(Instant latestFrameTimestamp) {

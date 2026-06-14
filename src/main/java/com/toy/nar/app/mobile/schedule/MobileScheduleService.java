@@ -1,6 +1,9 @@
 package com.toy.nar.app.mobile.schedule;
 
 import com.toy.nar.app.lolesports.LeagueConstants;
+import com.toy.nar.app.lolesports.live.ActiveLiveGame;
+import com.toy.nar.app.lolesports.live.LiveStateStore;
+import com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
@@ -57,6 +60,8 @@ public class MobileScheduleService {
 	private final LeagueMatchRepository leagueMatchRepository;
 	private final LeagueMatchGameRepository leagueMatchGameRepository;
 	private final TeamRepository teamRepository;
+	private final LiveStateStore liveStateStore;
+	private final LiveGameMinuteSnapshotRepository minuteSnapshotRepository;
 
 	public MobileScheduleFilterResponse getFilters(String league) {
 		String normalizedLeague = normalizeLeague(league);
@@ -178,10 +183,43 @@ public class MobileScheduleService {
 	public MobileMatchGamesResponse getMatchGames(String matchId) {
 		LeagueMatch match = leagueMatchRepository.findById(matchId)
 				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
-		List<MobileScheduleListResponse.MobileGameSummary> games = leagueMatchGameRepository
-				.findMappedGameRowsByMatchId(match.getId(), LOLESPORTS_SOURCE).stream()
-				.map(this::toGameSummary)
-				.toList();
+		// 상태 판정용 집합: 현재 라이브(스토어) / 라이브 데이터 수집됨(영속 스냅샷, 종료 후에도 유지).
+		java.util.Set<String> liveGameIds = liveStateStore.getActiveGames().values().stream()
+				.filter(live -> match.getId().equals(live.matchId()))
+				.map(ActiveLiveGame::gameId)
+				.filter(gameId -> gameId != null && !gameId.isBlank())
+				.collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+		List<String> recordedGameIds = minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart(match.getId());
+		java.util.Set<String> recordedSet = new java.util.LinkedHashSet<>(recordedGameIds);
+
+		List<MobileScheduleListResponse.MobileGameSummary> games = new ArrayList<>();
+		java.util.Set<String> knownGameIds = new java.util.LinkedHashSet<>();
+		int maxOrder = 0;
+
+		// 1) DB 공식 매핑 게임 (gameOrder, recordGameId 보존) + 상태 계산
+		for (LeagueMatchGameRepository.MappedGameRow row :
+				leagueMatchGameRepository.findMappedGameRowsByMatchId(match.getId(), LOLESPORTS_SOURCE)) {
+			String gameId = row.getExternalGameId();
+			games.add(new MobileScheduleListResponse.MobileGameSummary(
+					row.getGameOrder(), gameId, row.getInternalGameId(),
+					gameStatus(gameId, liveGameIds, recordedSet)));
+			knownGameIds.add(gameId);
+			if (row.getGameOrder() != null) {
+				maxOrder = Math.max(maxOrder, row.getGameOrder());
+			}
+		}
+
+		// 2) DB 매핑에 없는 세트 보강: 라이브 데이터를 수집한 게임(영속, 시작 시각 순) + 현재 라이브 게임.
+		//    데이터도 없고 라이브도 아닌 gameId 는 자연히 제외된다. 게임 종료/서버 재기동 후에도 유지된다.
+		java.util.LinkedHashSet<String> extraGameIds = new java.util.LinkedHashSet<>(recordedGameIds);
+		extraGameIds.addAll(liveGameIds);
+		extraGameIds.removeAll(knownGameIds);
+		int nextOrder = maxOrder + 1;
+		for (String gameId : extraGameIds) {
+			games.add(new MobileScheduleListResponse.MobileGameSummary(
+					nextOrder++, gameId, null, gameStatus(gameId, liveGameIds, recordedSet)));
+		}
+
 		return new MobileMatchGamesResponse(match.getId(), games);
 	}
 
@@ -261,10 +299,23 @@ public class MobileScheduleService {
 	}
 
 	private MobileScheduleListResponse.MobileGameSummary toGameSummary(LeagueMatchGameRepository.MappedGameRow row) {
+		// 일정 목록에서는 세트 상태를 계산하지 않는다(상세 화면에서만 채움).
 		return new MobileScheduleListResponse.MobileGameSummary(
 				row.getGameOrder(),
 				row.getExternalGameId(),
-				row.getInternalGameId());
+				row.getInternalGameId(),
+				null);
+	}
+
+	/** 게임 상태 판정: 라이브 스토어에 있으면 LIVE, 영속 데이터가 있으면 ENDED, 아니면 SCHEDULED. */
+	private String gameStatus(String gameId, java.util.Set<String> liveGameIds, java.util.Set<String> recordedGameIds) {
+		if (liveGameIds.contains(gameId)) {
+			return "LIVE";
+		}
+		if (recordedGameIds.contains(gameId)) {
+			return "ENDED";
+		}
+		return "SCHEDULED";
 	}
 
 	private MatchCursor decodeCursor(String cursor) {
