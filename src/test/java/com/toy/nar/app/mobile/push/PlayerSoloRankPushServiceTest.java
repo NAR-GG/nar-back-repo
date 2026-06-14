@@ -18,7 +18,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +64,31 @@ class PlayerSoloRankPushServiceTest {
 		verify(deliveryRepository).markSent(7L, 10L, "game-1");
 		verify(deliveryRepository).markFailed(8L, 10L, "game-1", "FCM 전송 성공 기기가 없습니다.");
 		verify(deviceRepository).deactivateByFcmTokenIn(List.of("token-2"));
+	}
+
+	@Test
+	void sendsToAllSoloRankTopicOncePerGame() {
+		Player player = player(10L, "Faker");
+		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of());
+
+		service.notifySubscribers(player, "game-1", "아리", "ahri.png");
+
+		verify(pushGateway, times(1)).sendToTopic(eq("all_solo_rank"), any());
+	}
+
+	@Test
+	void topicSendFailureDoesNotBlockSubscriberPush() {
+		Player player = player(10L, "Faker");
+		MemberDevice device = device(1L, member(7L), "token");
+		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
+		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(1);
+		when(pushGateway.send(any(), any())).thenReturn(new MobilePushResult(1, 0, List.of()));
+		doThrow(new IllegalStateException("topic down"))
+				.when(pushGateway).sendToTopic(any(), any());
+
+		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png"))
+				.doesNotThrowAnyException();
+		verify(deliveryRepository).markSent(7L, 10L, "game-1");
 	}
 
 	@Test
