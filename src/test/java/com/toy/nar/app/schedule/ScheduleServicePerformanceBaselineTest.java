@@ -14,6 +14,7 @@ import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -31,6 +32,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 실데이터가 적재된 로컬 dev MySQL(application-dev.yml) 전용 벤치마크.
+ * 클린 체크아웃에는 dev 설정 파일이 없어 H2로 폴백되므로 기본 빌드에서는 건너뛴다.
+ * 실행: ./gradlew test -Dbenchmark.local.enabled=true --tests "...PerformanceBaselineTest"
+ */
+@EnabledIfSystemProperty(named = "benchmark.local.enabled", matches = "true")
 @DataJpaTest
 @ActiveProfiles("dev")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
