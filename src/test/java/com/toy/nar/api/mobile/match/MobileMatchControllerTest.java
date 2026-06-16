@@ -49,7 +49,7 @@ class MobileMatchControllerTest {
 								new MobileScheduleListResponse.MobileTeamResult("T1", "T1", "https://example.com/t1.png", 2),
 								new MobileScheduleListResponse.MobileTeamResult("Gen.G", "GEN", "https://example.com/gen.png", 1),
 								null,
-								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L)))),
+								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED")))),
 						"cursor-token",
 						true));
 
@@ -71,8 +71,8 @@ class MobileMatchControllerTest {
 				.thenReturn(new MobileMatchGamesResponse(
 						"match-1",
 						List.of(
-								new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L),
-								new MobileScheduleListResponse.MobileGameSummary(2, "game-2", null))));
+								new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED"),
+								new MobileScheduleListResponse.MobileGameSummary(2, "game-2", null, null))));
 
 		mockMvc.perform(get("/api/mobile/matches/match-1/games"))
 				.andExpect(status().isOk())

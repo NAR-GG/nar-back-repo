@@ -1,5 +1,7 @@
 package com.toy.nar.app.mobile.schedule;
 
+import com.toy.nar.app.lolesports.live.LiveStateStore;
+import com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
@@ -36,6 +38,8 @@ class MobileScheduleServiceTest {
 	private LeagueMatchRepository leagueMatchRepository;
 	private LeagueMatchGameRepository leagueMatchGameRepository;
 	private TeamRepository teamRepository;
+	private LiveStateStore liveStateStore;
+	private LiveGameMinuteSnapshotRepository minuteSnapshotRepository;
 	private MobileScheduleService service;
 
 	@BeforeEach
@@ -43,7 +47,10 @@ class MobileScheduleServiceTest {
 		leagueMatchRepository = mock(LeagueMatchRepository.class);
 		leagueMatchGameRepository = mock(LeagueMatchGameRepository.class);
 		teamRepository = mock(TeamRepository.class);
-		service = new MobileScheduleService(leagueMatchRepository, leagueMatchGameRepository, teamRepository);
+		liveStateStore = mock(LiveStateStore.class);
+		minuteSnapshotRepository = mock(LiveGameMinuteSnapshotRepository.class);
+		service = new MobileScheduleService(leagueMatchRepository, leagueMatchGameRepository,
+				teamRepository, liveStateStore, minuteSnapshotRepository);
 	}
 
 	@Test
