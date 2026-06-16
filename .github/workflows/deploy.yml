@@ -121,7 +121,7 @@ jobs:
               -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
               -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
               -e ELASTICSEARCH_URI="${{ secrets.ELASTICSEARCH_URI }}" \
-              -e GOOGLE_DRIVE_CSV_ID="${{ secrets.GOOGLE_DRIVE_CSV_FILE_ID }}" \
+              -e GOOGLE_DRIVE_CSV_ID="${{ secrets.GOOGLE_DRIVE_CSV_ID }}" \
               -e YOUTUBE_API_KEY="${{ secrets.YOUTUBE_API_KEY }}" \
               -e LOL_ESPORTS_KEY="${{ secrets.LOL_ESPORTS_KEY }}" \
               -e LOL_SYNC_CRON="0 0/30 * * * *" \
