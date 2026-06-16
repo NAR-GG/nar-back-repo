@@ -1,5 +1,6 @@
 package com.toy.nar.domain.game.repository;
 
+import com.toy.nar.app.mobile.match.dto.LiveBanRow;
 import com.toy.nar.app.schedule.dto.GameBanRow;
 import java.util.List;
 import java.util.Set;
@@ -23,6 +24,28 @@ public interface BanRepository extends JpaRepository<Ban, Long> {
 			"FROM Ban b " +
 			"WHERE b.game.id IN :gameIds")
 	List<GameBanRow> findScheduleBanRowsByGameIds(@Param("gameIds") Set<Long> gameIds);
+
+	/**
+	 * 라이브 경기상세용: 배치 game_id 의 밴을 진영(game_participants.side)별로 조회한다.
+	 *
+	 * <p>{@code bans.game_id} 는 유니크 인덱스 (game_id, banned_champion_id) 의 선두 컬럼이라
+	 * 인덱스 레인지 스캔이며(풀스캔 아님), 진영은 해당 게임의 game_participants 로만 좁혀 조인한다.
+	 */
+	@Query(value = """
+			SELECT UPPER(gp.side) AS side,
+			       c.champion_name_en AS championName,
+			       c.image_url AS imageUrl
+			FROM bans b
+			JOIN champions c ON c.champion_id = b.banned_champion_id
+			JOIN (
+				SELECT DISTINCT game_id, team_id, side
+				FROM game_participants
+				WHERE game_id = :gameId
+			) gp ON gp.game_id = b.game_id AND gp.team_id = b.team_id
+			WHERE b.game_id = :gameId
+			ORDER BY UPPER(gp.side), c.champion_name_en
+			""", nativeQuery = true)
+	List<LiveBanRow> findLiveBanRowsByGameId(@Param("gameId") Long gameId);
 
 	/**
 	 * 필터 기반 챔피언별 밴 횟수 조회
