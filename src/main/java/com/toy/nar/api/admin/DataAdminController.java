@@ -23,6 +23,8 @@ import com.toy.nar.app.data.maintenance.DataVerificationService;
 import com.toy.nar.app.data.maintenance.GameCleanupService;
 import com.toy.nar.app.data.source.GoogleDriveDataSyncService;
 import com.toy.nar.app.lolesports.LeagueConstants;
+import com.toy.nar.app.lolesports.live.LiveReconciliationService;
+import com.toy.nar.app.lolesports.live.repository.LiveGameMappingRepository;
 import com.toy.nar.app.schedule.CacheEvictionService;
 
 import io.swagger.v3.oas.annotations.Hidden;
@@ -54,6 +56,10 @@ public class DataAdminController {
 	// LoL Esports 서비스
 	private final com.toy.nar.app.lolesports.LeagueMatchService leagueMatchService;
 	private final CacheEvictionService cacheEvictionService;
+
+	// 라이브↔배치 reconciliation (특정 게임 강제 연결용)
+	private final LiveReconciliationService liveReconciliationService;
+	private final LiveGameMappingRepository liveGameMappingRepository;
 
 	// == 데이터 동기화 (Sync) ==
 	@PostMapping("/sync/matches/history")
@@ -330,6 +336,31 @@ public class DataAdminController {
 	public ResponseEntity<DataReconciliationService.ReconciliationResult> reconcileLeagueTeams() {
 		DataReconciliationService.ReconciliationResult result = reconciliationService.reconcileLeagueTeams();
 		return ResponseEntity.ok(result);
+	}
+
+	/**
+	 * 특정 라이브 게임을 배치 게임에 강제 reconcile 한다.
+	 * 스케줄러는 "최근" 게임만 처리하므로, 오래된 경기를 수동 연결할 때 쓴다.
+	 * 결과로 매핑 상태(internalGameId·status·reason)를 반환해 매칭 성공 여부를 확인할 수 있다.
+	 */
+	@PostMapping("/reconcile-live-game")
+	public ResponseEntity<Map<String, Object>> reconcileLiveGame(
+			@org.springframework.web.bind.annotation.RequestParam String gameId) {
+		log.info("Manual live-game reconcile requested: {}", gameId);
+		liveReconciliationService.reconcileByGameId(gameId);
+		Map<String, Object> resp = new LinkedHashMap<>();
+		resp.put("gameId", gameId);
+		liveGameMappingRepository.findByLiveGameId(gameId).ifPresentOrElse(
+				m -> {
+					resp.put("internalGameId", m.getInternalGameId());
+					resp.put("status", m.getStatus() != null ? m.getStatus().name() : null);
+					resp.put("mappingMethod", m.getMappingMethod());
+					resp.put("reason", m.getReason());
+					resp.put("liveBlueTeamName", m.getLiveBlueTeamName());
+					resp.put("liveRedTeamName", m.getLiveRedTeamName());
+				},
+				() -> resp.put("mapping", "NOT_CREATED"));
+		return ResponseEntity.ok(resp);
 	}
 
 	// == 데이터 검증 (Verification) ==
