@@ -3,13 +3,16 @@ package com.toy.nar.app.mobile.match;
 import com.toy.nar.app.lolesports.live.LiveStateQueryService;
 import com.toy.nar.app.lolesports.live.dto.LiveGameState;
 import com.toy.nar.app.lolesports.live.dto.LiveParticipantState;
+import com.toy.nar.app.lolesports.live.entity.LiveGameMapping;
 import com.toy.nar.app.lolesports.live.entity.LiveGameMinuteSnapshot;
 import com.toy.nar.app.lolesports.live.entity.LiveGameObjectEvent;
+import com.toy.nar.app.lolesports.live.repository.LiveGameMappingRepository;
 import com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository;
 import com.toy.nar.app.lolesports.live.repository.LiveGameObjectEventRepository;
 import com.toy.nar.app.mobile.match.dto.LiveGameChampionsResponse;
 import com.toy.nar.app.mobile.match.dto.LiveGameEventsResponse;
 import com.toy.nar.common.util.NameNormalizer;
+import com.toy.nar.domain.game.repository.BanRepository;
 import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.ChampionRepository;
@@ -27,6 +30,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +39,9 @@ public class MobileLiveGameService {
 
 	private static final String BLUE = "Blue";
 	private static final String RED = "Red";
+	// game_participants.side 를 대문자화한 진영 키 (밴 그룹핑용).
+	private static final String BLUE_SIDE_KEY = "BLUE";
+	private static final String RED_SIDE_KEY = "RED";
 	private static final String EVENT_KILL = "KILL";
 	private static final String EVENT_DRAGON = "DRAGON";
 
@@ -51,6 +58,8 @@ public class MobileLiveGameService {
 	private final LiveGameMinuteSnapshotRepository minuteSnapshotRepository;
 	private final ChampionRepository championRepository;
 	private final TeamRepository teamRepository;
+	private final LiveGameMappingRepository liveGameMappingRepository;
+	private final BanRepository banRepository;
 
 	public LiveGameChampionsResponse getChampions(String gameId) {
 		LiveGameState state = requireState(gameId);
@@ -64,10 +73,38 @@ public class MobileLiveGameService {
 				.sorted(pickComparator())
 				.toList();
 
+		Map<String, List<LiveGameChampionsResponse.Ban>> bansBySide = resolveBans(gameId);
+
 		return new LiveGameChampionsResponse(
 				gameId,
-				toTeamChampions(state.blueTeamName(), blue),
-				toTeamChampions(state.redTeamName(), red));
+				toTeamChampions(state.blueTeamName(), blue,
+						bansBySide.getOrDefault(BLUE_SIDE_KEY, List.of())),
+				toTeamChampions(state.redTeamName(), red,
+						bansBySide.getOrDefault(RED_SIDE_KEY, List.of())));
+	}
+
+	/**
+	 * 라이브 gameId 를 reconcile 된 배치 game 으로 매핑해 진영(BLUE/RED)별 밴 목록을 만든다.
+	 *
+	 * <p>라이브 피드에는 밴이 없어 배치 {@code bans} 테이블에서 가져온다. 아직 reconcile 되지
+	 * 않았거나(매핑의 internalGameId 가 null) 배치 적재 전이면 빈 맵을 반환한다. 배치는 6시간
+	 * 주기 적재라, 갓 끝난 경기의 밴은 다음 적재 + reconcile 이후에 노출된다(그 전엔 빈 목록).
+	 */
+	private Map<String, List<LiveGameChampionsResponse.Ban>> resolveBans(String liveGameId) {
+		Long internalGameId = liveGameMappingRepository.findByLiveGameId(liveGameId)
+				.map(LiveGameMapping::getInternalGameId)
+				.orElse(null);
+		if (internalGameId == null) {
+			return Map.of();
+		}
+		return banRepository.findLiveBanRowsByGameId(internalGameId).stream()
+				.filter(row -> row.getSide() != null)
+				.collect(Collectors.groupingBy(
+						row -> row.getSide().toUpperCase(Locale.ROOT),
+						Collectors.mapping(
+								row -> new LiveGameChampionsResponse.Ban(
+										row.getChampionName(), row.getImageUrl()),
+								Collectors.toList())));
 	}
 
 	public LiveGameEventsResponse getEvents(String gameId) {
@@ -130,7 +167,8 @@ public class MobileLiveGameService {
 	}
 
 	private LiveGameChampionsResponse.TeamChampions toTeamChampions(
-			String teamName, List<LiveParticipantState> participants) {
+			String teamName, List<LiveParticipantState> participants,
+			List<LiveGameChampionsResponse.Ban> bans) {
 		List<LiveGameChampionsResponse.Pick> picks = participants.stream()
 				.map(p -> new LiveGameChampionsResponse.Pick(
 						canonicalPosition(p.role()),
@@ -138,8 +176,8 @@ public class MobileLiveGameService {
 						resolveChampionImageUrl(p.championName()),
 						p.playerName()))
 				.toList();
-		// 라이브 상태에는 밴 정보가 없으므로 best-effort 로 빈 목록을 반환한다.
-		return new LiveGameChampionsResponse.TeamChampions(teamName, picks, List.of());
+		// 밴은 reconcile 된 배치 데이터에서 채운다(라이브 피드엔 밴이 없음). 없으면 빈 목록.
+		return new LiveGameChampionsResponse.TeamChampions(teamName, picks, bans);
 	}
 
 	private LiveGameEventsResponse.Event toEvent(
