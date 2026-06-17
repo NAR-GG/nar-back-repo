@@ -5,6 +5,7 @@ import com.toy.nar.app.lolesports.MatchResponseWrapper;
 import com.toy.nar.app.lolesports.MatchResultDto;
 import com.toy.nar.app.lolesports.WorldsService;
 import com.toy.nar.app.data.source.NotificationService;
+import com.toy.nar.app.mobile.push.TeamLiveEventPushService;
 import com.toy.nar.app.schedule.CacheEvictionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -41,7 +42,8 @@ class LivePollingSchedulerTest {
 				liveGameMetadataService,
 				leagueMatchService,
 				cacheEvictionService,
-				mock(NotificationService.class));
+				mock(NotificationService.class),
+				mock(TeamLiveEventPushService.class));
 		ReflectionTestUtils.setField(scheduler, "maxConsecutiveFailures", 2);
 		liveStateStore.getActiveGames().put("game-1", new ActiveLiveGame(
 				"game-1",
@@ -78,7 +80,8 @@ class LivePollingSchedulerTest {
 				liveGameMetadataService,
 				leagueMatchService,
 				cacheEvictionService,
-				mock(NotificationService.class));
+				mock(NotificationService.class),
+				mock(TeamLiveEventPushService.class));
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		ActiveLiveGame activeGame = new ActiveLiveGame(
 				"game-1",
@@ -116,7 +119,8 @@ class LivePollingSchedulerTest {
 				mock(LiveGameMetadataService.class),
 				mock(LeagueMatchService.class),
 				mock(CacheEvictionService.class),
-				mock(NotificationService.class));
+				mock(NotificationService.class),
+				mock(TeamLiveEventPushService.class));
 
 		Instant nextWindow = ReflectionTestUtils.invokeMethod(
 				scheduler,

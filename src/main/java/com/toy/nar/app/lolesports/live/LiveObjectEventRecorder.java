@@ -33,7 +33,10 @@ public class LiveObjectEventRecorder {
 
 	private final LiveGameObjectEventRepository objectEventRepository;
 	private final NotificationService notificationService;
+	private final com.toy.nar.app.mobile.push.TeamLiveEventPushService teamLiveEventPushService;
 	private final Map<String, ObservedObjectState> lastObservedByGame = new ConcurrentHashMap<>();
+	// [FCM #21] 세트마다 진영이 스왑되므로, 피드 window 의 진영별 esportsTeamId 를 게임별로 기억한다(Blue/Red → esportsTeamId).
+	private final Map<String, SideTeamIds> sideTeamIdsByGame = new ConcurrentHashMap<>();
 
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.notification.events-enabled:false}")
 	private boolean eventNotificationEnabled;
@@ -47,6 +50,7 @@ public class LiveObjectEventRecorder {
 			return;
 		}
 		lastObservedByGame.remove(gameId);
+		sideTeamIdsByGame.remove(gameId);
 	}
 
 	@Transactional
@@ -56,7 +60,10 @@ public class LiveObjectEventRecorder {
 			return;
 		}
 
-		Map<Integer, ParticipantMeta> metadata = parseMetadata(windowResponse.path("gameMetadata"));
+		JsonNode gameMetadata = windowResponse.path("gameMetadata");
+		Map<Integer, ParticipantMeta> metadata = parseMetadata(gameMetadata);
+		// [FCM #21] 진영별 esportsTeamId 기억(세트마다 스왑되므로 window 기준이 신뢰 가능). 플래그 무관하게 가벼운 파싱.
+		rememberSideTeamIds(activeGame.gameId(), gameMetadata);
 
 		List<FrameSnapshot> snapshots = toSnapshots(frames);
 		if (snapshots.isEmpty()) {
@@ -222,7 +229,7 @@ public class LiveObjectEventRecorder {
 				eventOrder,
 				valueAfter,
 				frameTimestampUtc);
-		objectEventRepository.save(event);
+		event = objectEventRepository.save(event);
 		log.info("[live-notify] event saved type={} team={} order={} gameId={} notify={}",
 				eventType, teamSide, eventOrder, activeGame.gameId(), eventNotificationEnabled);
 
@@ -235,6 +242,12 @@ public class LiveObjectEventRecorder {
 					eventSubType,
 					eventOrder,
 					activeGame.gameId());
+		}
+
+		// [FCM #21] LIVE_EVENT 푸시. live.notification.fcm.enabled 플래그로 게이트.
+		// 멱등 키 event_order 는 킬/오브젝트 충돌을 막기 위해 저장된 이벤트의 전역 id 를 쓴다.
+		if (teamLiveEventPushService.isEnabled() && isNotifiableLeague(activeGame.leagueName())) {
+			fireLiveEventPush(activeGame, teamSide, objectEventLabel(eventType, eventSubType), event.getId());
 		}
 	}
 
@@ -271,7 +284,7 @@ public class LiveObjectEventRecorder {
 				victim == null ? null : victim.champion(),
 				victim == null ? null : victim.summonerName(),
 				frameTimestampUtc);
-		objectEventRepository.save(event);
+		event = objectEventRepository.save(event);
 		log.info("[live-notify] kill saved order={} team={} killer={} victim={} gameId={} notify={}",
 				eventOrder, killerSide,
 				killer == null ? "?" : killer.summonerName(),
@@ -289,6 +302,11 @@ public class LiveObjectEventRecorder {
 					victim == null ? null : victim.champion(),
 					eventOrder,
 					activeGame.gameId());
+		}
+
+		// [FCM #21] LIVE_EVENT(킬) 푸시. live.notification.fcm.enabled 플래그로 게이트.
+		if (teamLiveEventPushService.isEnabled() && isNotifiableLeague(activeGame.leagueName())) {
+			fireLiveEventPush(activeGame, killerSide, killEventLabel(killerSide, teamKillsAfter), event.getId());
 		}
 	}
 
@@ -357,6 +375,75 @@ public class LiveObjectEventRecorder {
 		return result;
 	}
 
+	/**
+	 * [FCM #21] 피드 window 의 진영별 esportsTeamId 를 기억한다. 세트마다 진영이 스왑되므로
+	 * 매치 고정 ID 가 아니라 이 값으로 진영-팀을 맞춰야 한다.
+	 */
+	private void rememberSideTeamIds(String gameId, JsonNode gameMetadata) {
+		if (gameId == null || gameMetadata == null || gameMetadata.isMissingNode()) {
+			return;
+		}
+		String blue = textOrNull(gameMetadata.path("blueTeamMetadata"), "esportsTeamId");
+		String red = textOrNull(gameMetadata.path("redTeamMetadata"), "esportsTeamId");
+		if (blue != null || red != null) {
+			sideTeamIdsByGame.put(gameId, new SideTeamIds(blue, red));
+		}
+	}
+
+	/** [FCM #21] LIVE_EVENT 푸시 호출. 진영별 esportsTeamId(window 기준)로 이벤트를 일으킨 팀 구독자에게 발송. */
+	private void fireLiveEventPush(ActiveLiveGame activeGame, String teamSide, String eventLabel, long eventOrder) {
+		try {
+			SideTeamIds sideIds = sideTeamIdsByGame.get(activeGame.gameId());
+			if (sideIds == null) {
+				return;
+			}
+			boolean blue = "Blue".equalsIgnoreCase(teamSide);
+			String actingEsportsTeamId = blue ? sideIds.blue() : sideIds.red();
+			if (actingEsportsTeamId == null || actingEsportsTeamId.isBlank()) {
+				return;
+			}
+			String actingTeamName = teamNameOf(activeGame, teamSide);
+			String opponentTeamName = teamNameOf(activeGame, blue ? "Red" : "Blue");
+			teamLiveEventPushService.notifyLiveEvent(
+					activeGame.matchId(),
+					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
+					eventOrder,
+					actingEsportsTeamId,
+					actingTeamName,
+					opponentTeamName,
+					eventLabel);
+		} catch (Exception e) {
+			log.warn("[live-notify] live-event FCM failed gameId={} side={}: {}",
+					activeGame.gameId(), teamSide, e.getMessage());
+		}
+	}
+
+	private String objectEventLabel(String eventType, String eventSubType) {
+		return switch (eventType) {
+			case EVENT_DRAGON -> "드래곤 처치";
+			case EVENT_BARON -> "바론 처치";
+			case EVENT_TOWER -> "포탑 파괴";
+			case EVENT_INHIBITOR -> "억제기 파괴";
+			default -> eventType;
+		};
+	}
+
+	private String killEventLabel(String killerSide, int teamKillsAfter) {
+		return teamKillsAfter + "킬 달성";
+	}
+
+	private String textOrNull(JsonNode node, String field) {
+		if (node == null || node.isMissingNode()) {
+			return null;
+		}
+		JsonNode target = node.path(field);
+		if (target.isMissingNode() || target.isNull()) {
+			return null;
+		}
+		String value = target.asText(null);
+		return value == null || value.isBlank() ? null : value;
+	}
+
 	/** 알림 대상 리그인지 (notificationLeagues 설정, 기본 LCK). 그 외 리그는 디스코드 알림 안 보냄. */
 	private boolean isNotifiableLeague(String league) {
 		if (league == null || league.isBlank()) {
@@ -383,6 +470,10 @@ public class LiveObjectEventRecorder {
 	}
 
 	private record Kd(int kills, int deaths) {
+	}
+
+	/** [FCM #21] 피드 window 기준 진영별 esportsTeamId. 세트마다 스왑되므로 게임별로 캐시한다. */
+	private record SideTeamIds(String blue, String red) {
 	}
 
 	private record ParticipantMeta(String summonerName, String champion) {
