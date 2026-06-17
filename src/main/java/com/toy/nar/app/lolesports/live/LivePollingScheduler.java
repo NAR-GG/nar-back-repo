@@ -47,6 +47,7 @@ public class LivePollingScheduler {
 	private final LeagueMatchService leagueMatchService;
 	private final CacheEvictionService cacheEvictionService;
 	private final NotificationService notificationService;
+	private final com.toy.nar.app.mobile.push.TeamLiveEventPushService teamLiveEventPushService;
 
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.stale-threshold-ms:180000}")
 	private long staleThresholdMs;
@@ -92,6 +93,11 @@ public class LivePollingScheduler {
 						String resolvedLeagueName = (match.getLeagueName() == null || match.getLeagueName().isBlank())
 								? league
 								: match.getLeagueName();
+						// 세트마다 진영(블루/레드)이 스왑되므로 매치 기준 팀명/팀ID 만으로는 진영을 단정할 수 없다.
+						// SET_START 는 'A vs B' 매치 단위 프레이밍이라 매치 기준 esportsTeamId 로 충분하다.
+						Integer setNumber = resolveSetNumber(match, gameId);
+						String blueExternalId = match.getBlueTeam() != null ? match.getBlueTeam().getExternalTeamId() : null;
+						String redExternalId = match.getRedTeam() != null ? match.getRedTeam().getExternalTeamId() : null;
 						ActiveLiveGame next = new ActiveLiveGame(
 								gameId,
 								match.getMatchId(),
@@ -99,7 +105,10 @@ public class LivePollingScheduler {
 								match.getBlueTeam() != null ? match.getBlueTeam().getName() : null,
 								match.getRedTeam() != null ? match.getRedTeam().getName() : null,
 								nowUtc,
-								current != null ? current.consecutiveFailures() : 0);
+								current != null ? current.consecutiveFailures() : 0,
+								setNumber,
+								blueExternalId,
+								redExternalId);
 						activeGames.put(gameId, next);
 						liveGameMetadataService.remember(next);
 
@@ -112,6 +121,20 @@ public class LivePollingScheduler {
 									next.redTeamName(),
 									gameId,
 									match.getMatchId());
+						}
+
+						// [FCM #21] SET_START 푸시. live.notification.fcm.enabled 플래그로 게이트.
+						// 디스코드 알림과 같은 'current == null'(새 세트 최초 발견) 조건에서만 1회 발송.
+						if (teamLiveEventPushService.isEnabled() && current == null
+								&& isNotifiableLeague(resolvedLeagueName)) {
+							teamLiveEventPushService.notifyMatchEvent(
+									com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_START,
+									match.getMatchId(),
+									setNumber != null ? setNumber : 0,
+									blueExternalId,
+									redExternalId,
+									next.blueTeamName(),
+									next.redTeamName());
 						}
 					}
 				}
@@ -129,6 +152,15 @@ public class LivePollingScheduler {
 			boolean notDiscovered = !discoveredGameIds.contains(activeGame.gameId());
 			boolean stale = activeGame.lastSeenAtUtc() != null
 					&& java.time.Duration.between(activeGame.lastSeenAtUtc(), nowUtc).toMillis() > staleThresholdMs;
+
+			// [FCM #21] SET_END 감지(신규). 직전까지 활성이던 gameId 가 이번 사이클 피드의 라이브 세트에서
+			// 빠지면(=notDiscovered) 세트 종료로 본다. 플래그 게이트 + dedup 으로 1회만 발송된다.
+			// 플래그가 꺼져 있으면 어떤 부작용도 없다(기존 cleanup 동작과 바이트 동일).
+			if (notDiscovered && teamLiveEventPushService.isEnabled()
+					&& isNotifiableLeague(activeGame.leagueName())) {
+				fireSetEndNotification(activeGame);
+			}
+
 			if (notDiscovered && stale) {
 				toRemove.add(activeGame.gameId());
 			}
@@ -138,6 +170,32 @@ public class LivePollingScheduler {
 			liveStateStore.removeGame(gameId);
 			liveObjectEventRecorder.evict(gameId);
 		});
+	}
+
+	/** gameId 의 매치 내 1-based 세트 번호. match.gameIds 의 순서가 세트 순서다. 못 찾으면 null. */
+	private Integer resolveSetNumber(MatchResultDto match, String gameId) {
+		if (match.getGameIds() == null) {
+			return null;
+		}
+		int index = match.getGameIds().indexOf(gameId);
+		return index < 0 ? null : index + 1;
+	}
+
+	/** [FCM #21] SET_END 푸시. 매치 단위 프레이밍이라 매치 기준 esportsTeamId 로 양 팀 구독자에게 발송(dedup 1회). */
+	private void fireSetEndNotification(ActiveLiveGame activeGame) {
+		try {
+			teamLiveEventPushService.notifyMatchEvent(
+					com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_END,
+					activeGame.matchId(),
+					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
+					activeGame.blueEsportsTeamId(),
+					activeGame.redEsportsTeamId(),
+					activeGame.blueTeamName(),
+					activeGame.redTeamName());
+		} catch (Exception e) {
+			log.warn("[live-notify] set-end FCM failed gameId={} matchId={}: {}",
+					activeGame.gameId(), activeGame.matchId(), e.getMessage());
+		}
 	}
 
 	private Set<String> activeMatchIds(Map<String, ActiveLiveGame> activeGames) {

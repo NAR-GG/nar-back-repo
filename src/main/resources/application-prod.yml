@@ -140,3 +140,10 @@ nar:
           enabled: ${NAR_DATA_INGESTION_JDBC_PARALLEL_ENABLED:false}
           threads: ${NAR_DATA_INGESTION_JDBC_PARALLEL_THREADS:4}
           max-in-flight: ${NAR_DATA_INGESTION_JDBC_PARALLEL_MAX_IN_FLIGHT:8}
+
+# 라이브 경기 FCM 푸시 파이프라인(#21). 기본 OFF (env LIVE_NOTIFICATION_FCM_ENABLED 로 오버라이드).
+# OFF 면 라이브 폴링 동작은 기존과 바이트 동일하다. 활성화 전 라이브 경기 검증 필수.
+live:
+  notification:
+    fcm:
+      enabled: ${LIVE_NOTIFICATION_FCM_ENABLED:false}
