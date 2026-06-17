@@ -253,9 +253,21 @@ public class MobileLivePlayerRatingService {
 				return byOriginId;
 			}
 		}
-		return participant.playerName() == null
-				? Optional.empty()
-				: playerRepository.findByName(participant.playerName());
+		String name = participant.playerName();
+		if (name == null || name.isBlank()) {
+			return Optional.empty();
+		}
+		Optional<Player> byName = playerRepository.findByName(name);
+		if (byName.isPresent()) {
+			return byName;
+		}
+		// 라이브 피드의 참가자명이 "팀코드 소환사명"(예: "HLE Zeus") 형태라
+		// Player.name("Zeus")과 안 맞는다. 마지막 토큰(소환사명)으로 한 번 더 매칭한다.
+		int lastSpace = name.lastIndexOf(' ');
+		if (lastSpace > 0 && lastSpace < name.length() - 1) {
+			return playerRepository.findByName(name.substring(lastSpace + 1).trim());
+		}
+		return Optional.empty();
 	}
 
 	private LivePlayerRatingListResponse.PlayerRatingSummary toSummary(
