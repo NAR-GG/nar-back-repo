@@ -59,7 +59,10 @@ public class SecurityConfig {
                                 "/api/**",
                                 "/oauth2/**", "/login/oauth2/**",
                                 "/swagger-ui/**", "/v3/api-docs/**",
-                                "/actuator/**"
+                                "/actuator/**",
+                                // 정적 리소스(선수/팀 이미지 등)는 인증 없이 서빙. 없으면 302 로그인
+                                // 리다이렉트가 떠서 <img>/Image.network 로딩이 실패한다.
+                                "/images/**", "/static/**", "/favicon.ico"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
