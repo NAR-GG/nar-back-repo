@@ -32,6 +32,9 @@ public class Member {
     @Column(name = "favorite_league_name", length = 50)
     private String favoriteLeagueName;
 
+    @Column(name = "profile_image_url", length = 500)
+    private String profileImageUrl;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "favorite_team_id")
     private Team favoriteTeam;
@@ -71,6 +74,12 @@ public class Member {
                         .player(player)
                         .build())
                 .forEach(this.favoritePlayers::add);
+    }
+
+    public void updateProfile(String nickname, Team favoriteTeam, String profileImageUrl) {
+        this.nickname = nickname;
+        this.favoriteTeam = favoriteTeam;
+        this.profileImageUrl = profileImageUrl;
     }
 
     public boolean isOnboarded() {

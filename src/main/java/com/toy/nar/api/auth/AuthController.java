@@ -12,6 +12,8 @@ import com.toy.nar.app.auth.JwtTokenProvider;
 import com.toy.nar.app.auth.KakaoUserClient;
 import com.toy.nar.app.auth.SocialAccountInfo;
 import com.toy.nar.app.auth.SocialLoginService;
+import com.toy.nar.app.auth.profile.ProfileService;
+import com.toy.nar.app.auth.profile.dto.ProfileUpdateRequest;
 import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
@@ -91,6 +93,7 @@ public class AuthController {
     private final PlayerRepository playerRepository;
     private final MobileDeviceService mobileDeviceService;
     private final MobileTeamNotificationService mobileTeamNotificationService;
+    private final ProfileService profileService;
 
     @Operation(
             summary = "모바일 카카오 로그인",
@@ -255,6 +258,23 @@ public class AuthController {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"));
         return ResponseEntity.ok(MemberResponse.from(member));
+    }
+
+    @Operation(
+            summary = "프로필 수정",
+            description = "현재 로그인한 사용자의 닉네임, 응원 팀, 프로필 이미지를 수정합니다. "
+                    + "닉네임은 본인의 현재 닉네임과 같으면 통과하고, 다른 회원이 사용 중이면 409로 실패합니다."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "프로필 수정 성공"),
+            @ApiResponse(responseCode = "404", description = "회원 또는 팀을 찾을 수 없음"),
+            @ApiResponse(responseCode = "409", description = "이미 사용 중인 닉네임")
+    })
+    @PutMapping("/me")
+    public ResponseEntity<MemberResponse> updateProfile(@AuthenticationPrincipal Long memberId,
+                                                        @Valid @RequestBody ProfileUpdateRequest request) {
+        return ResponseEntity.ok(profileService.updateProfile(memberId, request));
     }
 
     private List<Team> findSelectableTeams(int year) {

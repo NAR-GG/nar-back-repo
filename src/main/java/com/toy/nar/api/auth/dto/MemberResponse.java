@@ -20,6 +20,8 @@ public record MemberResponse(
 		Long favoriteTeamId,
 		@Schema(description = "선호 선수 ID 목록", example = "[10, 11]")
 		List<Long> favoritePlayerIds,
+		@Schema(description = "프로필 이미지 URL", example = "https://storage.example.com/profiles/12.png", nullable = true)
+		String profileImageUrl,
 		@Schema(description = "온보딩 완료 여부", example = "false")
 		boolean isOnboarded) {
 
@@ -34,6 +36,7 @@ public record MemberResponse(
                         .map(MemberFavoritePlayer::getPlayer)
                         .map(player -> player.getId())
                         .toList(),
+                member.getProfileImageUrl(),
                 member.isOnboarded()
         );
     }
