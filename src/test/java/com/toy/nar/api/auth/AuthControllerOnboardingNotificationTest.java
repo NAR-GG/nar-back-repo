@@ -39,6 +39,8 @@ class AuthControllerOnboardingNotificationTest {
 		PlayerRepository playerRepository = mock(PlayerRepository.class);
 		MobileDeviceService mobileDeviceService = mock(MobileDeviceService.class);
 		MobileTeamNotificationService notificationService = mock(MobileTeamNotificationService.class);
+		com.toy.nar.app.auth.profile.ProfileService profileService =
+				mock(com.toy.nar.app.auth.profile.ProfileService.class);
 		AuthController controller = new AuthController(
 				jwtTokenProvider,
 				kakaoUserClient,
@@ -48,7 +50,8 @@ class AuthControllerOnboardingNotificationTest {
 				teamRepository,
 				playerRepository,
 				mobileDeviceService,
-				notificationService);
+				notificationService,
+				profileService);
 		Member member = Member.builder().nickname("용맹한바론").email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", 7L);
 		Team team = Team.builder().name("T1").code("T1").imageUrl("t1.png").build();
@@ -170,6 +173,8 @@ class AuthControllerOnboardingNotificationTest {
 		PlayerRepository playerRepository = mock(PlayerRepository.class);
 		MobileDeviceService mobileDeviceService = mock(MobileDeviceService.class);
 		MobileTeamNotificationService notificationService = mock(MobileTeamNotificationService.class);
+		com.toy.nar.app.auth.profile.ProfileService profileService =
+				mock(com.toy.nar.app.auth.profile.ProfileService.class);
 		AuthController controller = new AuthController(
 				jwtTokenProvider,
 				kakaoUserClient,
@@ -179,7 +184,8 @@ class AuthControllerOnboardingNotificationTest {
 				teamRepository,
 				playerRepository,
 				mobileDeviceService,
-				notificationService);
+				notificationService,
+				profileService);
 		return new TestContext(
 				controller,
 				memberRepository,
