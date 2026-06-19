@@ -19,23 +19,28 @@ public class NicknameGenerator {
 
     private final MemberRepository memberRepository;
 
-    public String generate() {
+    /** 랜덤 이름과 태그 조합. {@code (name, tag)}는 중복되지 않음을 보장한다. */
+    public record GeneratedNickname(String name, String tag) {
+    }
+
+    public GeneratedNickname generate() {
         int maxAttempts = 10;
         for (int i = 0; i < maxAttempts; i++) {
-            String candidate = buildNickname();
-            if (!memberRepository.existsByNickname(candidate)) {
+            GeneratedNickname candidate = build();
+            if (!memberRepository.existsByNameAndTag(candidate.name(), candidate.tag())) {
                 return candidate;
             }
         }
-        // 충돌 시 타임스탬프 suffix로 보장
-        return buildNickname() + System.currentTimeMillis() % 10000;
+        // 충돌 시 타임스탬프 suffix로 보장 (tag 컬럼 길이 10 이내)
+        GeneratedNickname candidate = build();
+        return new GeneratedNickname(candidate.name(), candidate.tag() + System.currentTimeMillis() % 1000);
     }
 
-    private String buildNickname() {
+    private GeneratedNickname build() {
         ThreadLocalRandom rng = ThreadLocalRandom.current();
         String adj = ADJECTIVES[rng.nextInt(ADJECTIVES.length)];
         String noun = NOUNS[rng.nextInt(NOUNS.length)];
         int num = rng.nextInt(1000, 9999);
-        return adj + noun + "#" + num;
+        return new GeneratedNickname(adj + noun, String.valueOf(num));
     }
 }

@@ -23,8 +23,11 @@ public class Member {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 50)
-    private String nickname;
+    @Column(nullable = false, length = 50)
+    private String name;
+
+    @Column(nullable = false, length = 10)
+    private String tag;
 
     @Column
     private String email;
@@ -49,10 +52,16 @@ public class Member {
     private LocalDateTime createdAt;
 
     @Builder
-    public Member(String nickname, String email) {
-        this.nickname = nickname;
+    public Member(String name, String tag, String email) {
+        this.name = name;
+        this.tag = tag;
         this.email = email;
         this.createdAt = LocalDateTime.now();
+    }
+
+    /** 표시용 닉네임. 이름과 태그를 {@code 이름#태그} 형태로 합성한다. */
+    public String getNickname() {
+        return name + "#" + tag;
     }
 
     public void completeOnboarding(String favoriteLeagueName, Team favoriteTeam, Collection<Player> favoritePlayers) {
@@ -76,8 +85,9 @@ public class Member {
                 .forEach(this.favoritePlayers::add);
     }
 
-    public void updateProfile(String nickname, Team favoriteTeam, String profileImageUrl) {
-        this.nickname = nickname;
+    public void updateProfile(String name, String tag, Team favoriteTeam, String profileImageUrl) {
+        this.name = name;
+        this.tag = tag;
         this.favoriteTeam = favoriteTeam;
         this.profileImageUrl = profileImageUrl;
     }

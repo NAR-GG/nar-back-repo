@@ -59,9 +59,11 @@ public class SocialLoginService {
 	}
 
 	private Member createMember(SocialAccountInfo accountInfo) {
+		NicknameGenerator.GeneratedNickname nickname = nicknameGenerator.generate();
 		Member member = memberRepository.save(
 				Member.builder()
-						.nickname(nicknameGenerator.generate())
+						.name(nickname.name())
+						.tag(nickname.tag())
 						.email(accountInfo.email())
 						.build()
 		);

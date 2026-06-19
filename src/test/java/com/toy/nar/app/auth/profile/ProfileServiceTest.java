@@ -34,8 +34,8 @@ class ProfileServiceTest {
 		profileService = new ProfileService(memberRepository, teamRepository);
 	}
 
-	private Member member(Long id, String nickname) {
-		Member member = Member.builder().nickname(nickname).email("test@example.com").build();
+	private Member member(Long id, String name, String tag) {
+		Member member = Member.builder().name(name).tag(tag).email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", id);
 		return member;
 	}
@@ -48,59 +48,79 @@ class ProfileServiceTest {
 
 	@Test
 	void updatesProfileSuccessfully() {
-		Member member = member(7L, "옛닉네임");
+		Member member = member(7L, "옛이름", "OLD1");
 		Team team = team(3L);
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
-		when(memberRepository.existsByNickname("새닉네임")).thenReturn(false);
+		when(memberRepository.existsByNameAndTag("짱아깨비", "KR2")).thenReturn(false);
 		when(teamRepository.findById(3L)).thenReturn(Optional.of(team));
 
 		MemberResponse response = profileService.updateProfile(
-				7L, new ProfileUpdateRequest("새닉네임", 3L, "https://img/p.png"));
+				7L, new ProfileUpdateRequest("짱아깨비", "KR2", 3L, "https://img/p.png"));
 
-		assertThat(response.nickname()).isEqualTo("새닉네임");
+		assertThat(response.name()).isEqualTo("짱아깨비");
+		assertThat(response.tag()).isEqualTo("KR2");
+		assertThat(response.nickname()).isEqualTo("짱아깨비#KR2");
 		assertThat(response.favoriteTeamId()).isEqualTo(3L);
 		assertThat(response.profileImageUrl()).isEqualTo("https://img/p.png");
-		assertThat(member.getNickname()).isEqualTo("새닉네임");
+		assertThat(member.getName()).isEqualTo("짱아깨비");
+		assertThat(member.getTag()).isEqualTo("KR2");
 		assertThat(member.getFavoriteTeam()).isSameAs(team);
-		assertThat(member.getProfileImageUrl()).isEqualTo("https://img/p.png");
 	}
 
 	@Test
-	void failsWhenNicknameTakenByAnotherMember() {
-		Member member = member(7L, "옛닉네임");
+	void changesTagOnlyKeepingName() {
+		// 롤처럼 이름은 그대로, 태그만 #OLD1 -> #KR2 로 변경
+		Member member = member(7L, "짱아깨비", "OLD1");
+		Team team = team(3L);
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
-		when(memberRepository.existsByNickname("중복닉네임")).thenReturn(true);
+		when(memberRepository.existsByNameAndTag("짱아깨비", "KR2")).thenReturn(false);
+		when(teamRepository.findById(3L)).thenReturn(Optional.of(team));
+
+		MemberResponse response = profileService.updateProfile(
+				7L, new ProfileUpdateRequest("짱아깨비", "KR2", 3L, null));
+
+		assertThat(response.nickname()).isEqualTo("짱아깨비#KR2");
+		assertThat(member.getTag()).isEqualTo("KR2");
+		// 조합이 바뀌었으므로 중복검사를 호출해야 한다
+		verify(memberRepository).existsByNameAndTag("짱아깨비", "KR2");
+	}
+
+	@Test
+	void failsWhenNameTagTakenByAnotherMember() {
+		Member member = member(7L, "옛이름", "OLD1");
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(memberRepository.existsByNameAndTag("짱아깨비", "KR1")).thenReturn(true);
 
 		assertThatThrownBy(() -> profileService.updateProfile(
-				7L, new ProfileUpdateRequest("중복닉네임", 3L, null)))
+				7L, new ProfileUpdateRequest("짱아깨비", "KR1", 3L, null)))
 				.isInstanceOf(ResponseStatusException.class)
-				.hasMessageContaining("이미 사용 중인 닉네임");
+				.hasMessageContaining("이미 사용 중인");
 	}
 
 	@Test
-	void passesWhenNicknameUnchanged() {
-		Member member = member(7L, "내닉네임");
+	void passesWhenNameAndTagUnchanged() {
+		Member member = member(7L, "짱아깨비", "KR1");
 		Team team = team(3L);
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
 		when(teamRepository.findById(3L)).thenReturn(Optional.of(team));
 
 		MemberResponse response = profileService.updateProfile(
-				7L, new ProfileUpdateRequest("내닉네임", 3L, null));
+				7L, new ProfileUpdateRequest("짱아깨비", "KR1", 3L, null));
 
-		assertThat(response.nickname()).isEqualTo("내닉네임");
-		// 본인 현재 닉네임과 동일하면 중복검사를 호출하지 않는다
-		verify(memberRepository, never()).existsByNickname(anyString());
+		assertThat(response.nickname()).isEqualTo("짱아깨비#KR1");
+		// 본인 현재 이름#태그와 동일하면 중복검사를 호출하지 않는다
+		verify(memberRepository, never()).existsByNameAndTag(anyString(), anyString());
 	}
 
 	@Test
 	void failsWhenFavoriteTeamNotFound() {
-		Member member = member(7L, "내닉네임");
+		Member member = member(7L, "내이름", "KR1");
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
-		when(memberRepository.existsByNickname("새닉네임")).thenReturn(false);
+		when(memberRepository.existsByNameAndTag("새이름", "KR9")).thenReturn(false);
 		when(teamRepository.findById(999L)).thenReturn(Optional.empty());
 
 		assertThatThrownBy(() -> profileService.updateProfile(
-				7L, new ProfileUpdateRequest("새닉네임", 999L, null)))
+				7L, new ProfileUpdateRequest("새이름", "KR9", 999L, null)))
 				.isInstanceOf(ResponseStatusException.class)
 				.hasMessageContaining("팀을 찾을 수 없습니다");
 	}

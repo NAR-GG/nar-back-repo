@@ -117,7 +117,7 @@ class PlayerSoloRankPushServiceTest {
 	}
 
 	private Member member(Long id) {
-		Member member = Member.builder().nickname("member-" + id).email("test@example.com").build();
+		Member member = Member.builder().name("member-" + id).tag("0000").email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", id);
 		return member;
 	}

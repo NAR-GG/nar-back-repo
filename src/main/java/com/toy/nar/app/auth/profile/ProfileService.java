@@ -29,16 +29,18 @@ public class ProfileService {
 		Member member = memberRepository.findById(memberId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다"));
 
-		String nickname = request.nickname().trim();
-		// 본인의 현재 닉네임과 동일하면 중복검사 통과, 변경되는 경우에만 중복 확인
-		if (!nickname.equals(member.getNickname()) && memberRepository.existsByNickname(nickname)) {
+		String name = request.name().trim();
+		String tag = request.tag().trim();
+		// 본인의 현재 이름#태그 조합과 동일하면 중복검사 통과, 조합이 바뀌는 경우에만 중복 확인
+		boolean unchanged = name.equals(member.getName()) && tag.equals(member.getTag());
+		if (!unchanged && memberRepository.existsByNameAndTag(name, tag)) {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다");
 		}
 
 		Team team = teamRepository.findById(request.favoriteTeamId())
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "팀을 찾을 수 없습니다"));
 
-		member.updateProfile(nickname, team, request.profileImageUrl());
+		member.updateProfile(name, tag, team, request.profileImageUrl());
 		return MemberResponse.from(member);
 	}
 }

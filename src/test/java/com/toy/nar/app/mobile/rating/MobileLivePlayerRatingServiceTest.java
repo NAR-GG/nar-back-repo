@@ -76,7 +76,7 @@ class MobileLivePlayerRatingServiceTest {
 
 	@Test
 	void createsRatingAfterSetEnds() {
-		Member member = Member.builder().nickname("용맹한바론").email("test@example.com").build();
+		Member member = Member.builder().name("용맹한바론").tag("0000").email("test@example.com").build();
 		Player player = Player.builder().name("Faker").imageUrl("faker.png").build();
 		when(leagueMatchGameRepository.findWithMatchByGameId("game-1"))
 				.thenReturn(Optional.of(matchGame("inProgress", 1, 0, 1)));
@@ -160,7 +160,7 @@ class MobileLivePlayerRatingServiceTest {
 						org.assertj.core.groups.Tuple.tuple(1, 0L, 0.0));
 		assertThat(response.myRating().ratingId()).isEqualTo(11L);
 		assertThat(response.reviews()).first().satisfies(review -> {
-			assertThat(review.nickname()).isEqualTo("용맹한바론");
+			assertThat(review.nickname()).isEqualTo("용맹한바론#0000");
 			assertThat(review.mine()).isTrue();
 		});
 	}
@@ -248,7 +248,7 @@ class MobileLivePlayerRatingServiceTest {
 	}
 
 	private Member member(Long id, String nickname) {
-		Member member = Member.builder().nickname(nickname).email("test@example.com").build();
+		Member member = Member.builder().name(nickname).tag("0000").email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", id);
 		return member;
 	}
