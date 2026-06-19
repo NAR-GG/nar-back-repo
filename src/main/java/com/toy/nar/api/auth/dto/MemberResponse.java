@@ -10,8 +10,12 @@ import java.util.List;
 public record MemberResponse(
 		@Schema(description = "회원 ID", example = "12")
 		Long id,
-		@Schema(description = "랜덤 생성 또는 사용 중인 닉네임", example = "용맹한바론")
+		@Schema(description = "이름#태그 합성 닉네임 (표시용)", example = "짱아깨비#KR2")
 		String nickname,
+		@Schema(description = "이름", example = "짱아깨비")
+		String name,
+		@Schema(description = "태그", example = "KR2")
+		String tag,
 		@Schema(description = "소셜 로그인 이메일. 동의하지 않은 경우 null", example = "user@example.com", nullable = true)
 		String email,
 		@Schema(description = "선호 리그명", example = "LCK", nullable = true)
@@ -29,6 +33,8 @@ public record MemberResponse(
         return new MemberResponse(
                 member.getId(),
                 member.getNickname(),
+                member.getName(),
+                member.getTag(),
                 member.getEmail(),
                 member.getFavoriteLeagueName(),
                 member.getFavoriteTeam() != null ? member.getFavoriteTeam().getId() : null,

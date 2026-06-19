@@ -91,7 +91,8 @@ class SocialLoginServiceTest {
 
 		when(memberSocialRepository.findByProviderAndProviderId(OAuthProvider.KAKAO, "67890"))
 				.thenReturn(Optional.empty());
-		when(nicknameGenerator.generate()).thenReturn("nar1234");
+		when(nicknameGenerator.generate())
+				.thenReturn(new NicknameGenerator.GeneratedNickname("nar", "1234"));
 		when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> {
 			Member saved = invocation.getArgument(0);
 			ReflectionTestUtils.setField(saved, "id", 11L);
@@ -117,7 +118,7 @@ class SocialLoginServiceTest {
 
 	private Member member(String email, Long id) {
 		Member member = Member.builder()
-				.nickname("nar-user")
+				.name("nar-user").tag("0000")
 				.email(email)
 				.build();
 		ReflectionTestUtils.setField(member, "id", id);

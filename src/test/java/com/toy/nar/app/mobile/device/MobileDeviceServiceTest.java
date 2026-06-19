@@ -92,7 +92,7 @@ class MobileDeviceServiceTest {
 	}
 
 	private Member member(Long id) {
-		Member member = Member.builder().nickname("용맹한바론").email("test@example.com").build();
+		Member member = Member.builder().name("용맹한바론").tag("0000").email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", id);
 		return member;
 	}
