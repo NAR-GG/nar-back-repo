@@ -42,58 +42,71 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 			@Param("year") int year,
 			@Param("teamId") Long teamId);
 
+	/**
+	 * 해당 리그·시즌에서 선수별로 "가장 최근 경기"의 팀 하나로 중복 제거해 페이지로 반환한다.
+	 *
+	 * <p>예전에는 각 행마다 상관 서브쿼리({@code = MAX(...)})로 최신 경기 시각을 구해
+	 * 선수 수의 수십 배에 달하는 중첩 반복이 일어나 페이지당 8~9초가 걸렸다. 이를 윈도우 함수
+	 * {@code ROW_NUMBER()}로 바꿔 참가 기록을 한 번만 스캔하도록 했다(동일 데이터 기준 ~55배 단축).
+	 * 또한 동일 시각 경기가 둘이어도 {@code game_id} 타이브레이크로 한 행만 남아 중복이 사라진다.
+	 *
+	 * <p>윈도우 함수와 파생 테이블을 쓰기 위해 네이티브 쿼리로 작성했다. 컬럼 별칭은
+	 * {@link LckPlayerOption} 프로젝션 게터명과 일치시킨다.
+	 */
 	@Query(
 			value = """
-					SELECT DISTINCT
-						p.id AS playerId,
-						p.name AS playerName,
-						p.imageUrl AS playerImageUrl,
-						p.role AS role,
-						t.id AS teamId,
-						t.code AS teamCode,
-						t.name AS teamName,
-						t.imageUrl AS teamImageUrl
-					FROM GameParticipant gp
-					JOIN gp.player p
-					JOIN gp.team t
-					JOIN gp.game g
-					JOIN g.league l
-					WHERE l.leagueName = :leagueName
-					  AND l.seasonYear = :year
-					  AND g.actualGameStartTime = (
-						  SELECT MAX(g2.actualGameStartTime)
-						  FROM GameParticipant gp2
-						  JOIN gp2.game g2
-						  JOIN g2.league l2
-						  WHERE gp2.player = p
-						    AND l2.leagueName = :leagueName
-						    AND l2.seasonYear = :year
-					  )
-					  AND (:teamId IS NULL OR t.id = :teamId)
-					  AND (:query IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')))
-					ORDER BY p.name
+					SELECT playerId, playerName, playerImageUrl, role,
+					       teamId, teamCode, teamName, teamImageUrl
+					FROM (
+						SELECT
+							p.player_id AS playerId,
+							p.player_name AS playerName,
+							p.image_url AS playerImageUrl,
+							p.role AS role,
+							t.team_id AS teamId,
+							t.team_code AS teamCode,
+							t.team_name AS teamName,
+							t.team_image_url AS teamImageUrl,
+							ROW_NUMBER() OVER (
+								PARTITION BY p.player_id
+								ORDER BY g.actual_game_start_time DESC, g.game_id DESC
+							) AS rn
+						FROM game_participants gp
+						JOIN games g ON gp.game_id = g.game_id
+						JOIN leagues l ON g.league_id = l.league_id
+						JOIN players p ON gp.player_id = p.player_id
+						JOIN teams t ON gp.team_id = t.team_id
+						WHERE l.league_name = :leagueName
+						  AND l.season_year = :year
+					) ranked
+					WHERE ranked.rn = 1
+					  AND (:teamId IS NULL OR ranked.teamId = :teamId)
+					  AND (:query IS NULL OR LOWER(ranked.playerName) LIKE LOWER(CONCAT('%', :query, '%')))
+					ORDER BY ranked.playerName
 					""",
 			countQuery = """
-					SELECT COUNT(DISTINCT p.id)
-					FROM GameParticipant gp
-					JOIN gp.player p
-					JOIN gp.team t
-					JOIN gp.game g
-					JOIN g.league l
-					WHERE l.leagueName = :leagueName
-					  AND l.seasonYear = :year
-					  AND g.actualGameStartTime = (
-						  SELECT MAX(g2.actualGameStartTime)
-						  FROM GameParticipant gp2
-						  JOIN gp2.game g2
-						  JOIN g2.league l2
-						  WHERE gp2.player = p
-						    AND l2.leagueName = :leagueName
-						    AND l2.seasonYear = :year
-					  )
-					  AND (:teamId IS NULL OR t.id = :teamId)
-					  AND (:query IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')))
-					""")
+					SELECT COUNT(*)
+					FROM (
+						SELECT
+							p.player_name AS playerName,
+							t.team_id AS teamId,
+							ROW_NUMBER() OVER (
+								PARTITION BY p.player_id
+								ORDER BY g.actual_game_start_time DESC, g.game_id DESC
+							) AS rn
+						FROM game_participants gp
+						JOIN games g ON gp.game_id = g.game_id
+						JOIN leagues l ON g.league_id = l.league_id
+						JOIN players p ON gp.player_id = p.player_id
+						JOIN teams t ON gp.team_id = t.team_id
+						WHERE l.league_name = :leagueName
+						  AND l.season_year = :year
+					) ranked
+					WHERE ranked.rn = 1
+					  AND (:teamId IS NULL OR ranked.teamId = :teamId)
+					  AND (:query IS NULL OR LOWER(ranked.playerName) LIKE LOWER(CONCAT('%', :query, '%')))
+					""",
+			nativeQuery = true)
 	Page<LckPlayerOption> findLckPlayerOptions(
 			@Param("leagueName") String leagueName,
 			@Param("year") int year,
