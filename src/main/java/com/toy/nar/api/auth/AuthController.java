@@ -12,7 +12,9 @@ import com.toy.nar.app.auth.JwtTokenProvider;
 import com.toy.nar.app.auth.KakaoUserClient;
 import com.toy.nar.app.auth.SocialAccountInfo;
 import com.toy.nar.app.auth.SocialLoginService;
+import com.toy.nar.app.auth.profile.CloudinarySignatureService;
 import com.toy.nar.app.auth.profile.ProfileService;
+import com.toy.nar.app.auth.profile.dto.ProfileImageUploadSignatureResponse;
 import com.toy.nar.app.auth.profile.dto.ProfileUpdateRequest;
 import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
@@ -39,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -94,6 +97,7 @@ public class AuthController {
     private final MobileDeviceService mobileDeviceService;
     private final MobileTeamNotificationService mobileTeamNotificationService;
     private final ProfileService profileService;
+    private final CloudinarySignatureService cloudinarySignatureService;
 
     @Operation(
             summary = "모바일 카카오 로그인",
@@ -275,6 +279,22 @@ public class AuthController {
     public ResponseEntity<MemberResponse> updateProfile(@AuthenticationPrincipal Long memberId,
                                                         @Valid @RequestBody ProfileUpdateRequest request) {
         return ResponseEntity.ok(profileService.updateProfile(memberId, request));
+    }
+
+    @Operation(
+            summary = "프로필 이미지 업로드 서명 발급",
+            description = "앱이 Cloudinary에 직접 서명 업로드할 때 사용할 파라미터(서명 포함)를 발급한다. "
+                    + "앱은 응답값으로 Cloudinary에 업로드한 뒤, 받은 secure_url을 PUT /api/auth/me 의 profileImageUrl로 저장한다."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/me/profile-image/signature")
+    public ResponseEntity<ProfileImageUploadSignatureResponse> profileImageUploadSignature(
+            @AuthenticationPrincipal Long memberId) {
+        if (memberId == null) {
+            throw new ResponseStatusException(UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        long timestamp = Instant.now().getEpochSecond();
+        return ResponseEntity.ok(cloudinarySignatureService.buildProfileUpload(memberId, timestamp));
     }
 
     private List<Team> findSelectableTeams(int year) {

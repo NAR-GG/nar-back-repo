@@ -56,3 +56,9 @@ live:
   notification:
     fcm:
       enabled: ${LIVE_NOTIFICATION_FCM_ENABLED:false}
+
+# 프로필 이미지 저장(Cloudinary 서명 업로드). 시크릿은 코드/깃에 박지 않고 env로 주입.
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}

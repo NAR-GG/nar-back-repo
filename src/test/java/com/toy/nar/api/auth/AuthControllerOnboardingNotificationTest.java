@@ -4,6 +4,7 @@ import com.toy.nar.api.auth.dto.OnboardingRequest;
 import com.toy.nar.app.auth.JwtTokenProvider;
 import com.toy.nar.app.auth.KakaoUserClient;
 import com.toy.nar.app.auth.SocialLoginService;
+import com.toy.nar.app.auth.profile.CloudinarySignatureService;
 import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
@@ -51,7 +52,8 @@ class AuthControllerOnboardingNotificationTest {
 				playerRepository,
 				mobileDeviceService,
 				notificationService,
-				profileService);
+				profileService,
+				mock(CloudinarySignatureService.class));
 		Member member = Member.builder().name("용맹한바론").tag("0000").email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", 7L);
 		Team team = Team.builder().name("T1").code("T1").imageUrl("t1.png").build();
@@ -185,7 +187,8 @@ class AuthControllerOnboardingNotificationTest {
 				playerRepository,
 				mobileDeviceService,
 				notificationService,
-				profileService);
+				profileService,
+				mock(CloudinarySignatureService.class));
 		return new TestContext(
 				controller,
 				memberRepository,
