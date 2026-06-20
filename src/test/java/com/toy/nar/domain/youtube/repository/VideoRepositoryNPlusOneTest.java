@@ -13,7 +13,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -23,8 +22,11 @@ import com.toy.nar.domain.youtube.Channel;
 import com.toy.nar.domain.youtube.ChannelType;
 import com.toy.nar.domain.youtube.Video;
 
-@DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+// 임베디드 H2에서 격리 실행: 마이그레이션은 MySQL 전용 문법이라 H2에서는 엔티티 기반 스키마를 사용한다.
+@DataJpaTest(properties = {
+		"spring.flyway.enabled=false",
+		"spring.jpa.hibernate.ddl-auto=create-drop"
+})
 class VideoRepositoryNPlusOneTest {
 
 	@Autowired
