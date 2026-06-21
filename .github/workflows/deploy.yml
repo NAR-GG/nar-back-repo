@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+    # 문서·지식 번들만 바뀐 머지는 운영 배포를 건너뛴다.
+    # (변경 파일이 전부 아래 패턴에 매칭될 때만 스킵 — 코드와 섞이면 정상 배포)
+    paths-ignore:
+      - 'nar-okf/**'
+      - 'docs/**'
+      - '**.md'
 
 jobs:
   build:
