@@ -22,8 +22,12 @@ CREATE TABLE games (
 );
 
 CREATE TABLE league_match (
-    id VARCHAR(50) PRIMARY KEY
+    id VARCHAR(50) PRIMARY KEY,
+    league_name VARCHAR(20) NOT NULL,
+    match_date DATETIME
 );
+
+CREATE INDEX idx_league_match_name_date ON league_match (league_name, match_date DESC);
 
 CREATE TABLE game_team_stat (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
