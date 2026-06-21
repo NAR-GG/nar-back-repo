@@ -8,10 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 브랜치 & 작업 규칙
 
+트렁크 기반 개발(Trunk-Based Development)을 따른다. `main`이 유일한 트렁크이며 항상 배포 가능한 상태를 유지한다.
+
 - **`main` 브랜치는 절대 직접 수정하지 않는다.** PR을 통해서만 업데이트된다.
-- **모든 개발 작업은 `v3-dev` 브랜치 기준으로 한다.** 새 기능/수정은 `v3-dev`에서 브랜치를 따거나 `v3-dev`를 타깃으로 PR을 올린다.
+- **모든 개발 작업은 `main` 브랜치 기준으로 한다.** 새 기능/수정은 `main`에서 단기 브랜치(`feat/*`, `fix/*` 등)를 따고, `main`을 타깃으로 PR을 올린다.
+- **브랜치는 짧게 유지한다.** 가능하면 하루~이틀 안에 머지하고, 장수 `develop` 류 통합 브랜치는 두지 않는다.
+- **미완성 기능은 feature flag로 OFF 상태로 머지한다** (예: `RIOT_MONITOR_ENABLED`, `RIOT_API_ENABLED` 패턴). 트렁크가 항상 배포 가능해야 하므로 미완성 코드를 장수 브랜치에 쌓지 않는다.
 - **메인 레포 디렉토리(`/Users/changha/Documents/25-3-quarter/nar`)는 직접 수정하지 않는다.** 작업은 워크트리에서 진행한다.
-- Claude가 작업할 때는 항상 워크트리를 사용하고, 완료 후 `v3-dev`로 PR을 올린다.
+- Claude가 작업할 때는 항상 워크트리를 사용하고, 완료 후 `main`으로 PR을 올린다.
 
 ## Project Overview
 
