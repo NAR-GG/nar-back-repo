@@ -23,7 +23,7 @@ public interface LivePlayerRatingRepository extends JpaRepository<LivePlayerRati
 	@EntityGraph(attributePaths = "player")
 	Page<LivePlayerRating> findByMember_IdOrderByCreatedAtDesc(Long memberId, Pageable pageable);
 
-	@EntityGraph(attributePaths = "member")
+	@EntityGraph(attributePaths = {"member", "member.favoriteTeam"})
 	Page<LivePlayerRating> findByLiveGameIdAndLiveParticipantIdOrderByCreatedAtDesc(
 			String liveGameId,
 			Integer liveParticipantId,

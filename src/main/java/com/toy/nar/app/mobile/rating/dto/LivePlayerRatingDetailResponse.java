@@ -39,6 +39,9 @@ public record LivePlayerRatingDetailResponse(
 	public record Review(
 			Long ratingId,
 			String nickname,
+			String profileImageUrl,
+			Long favoriteTeamId,
+			String teamImageUrl,
 			int rating,
 			String comment,
 			boolean mine,
