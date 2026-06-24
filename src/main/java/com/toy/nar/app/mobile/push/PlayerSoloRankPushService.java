@@ -1,6 +1,8 @@
 package com.toy.nar.app.mobile.push;
 
+import com.toy.nar.app.mobile.notification.MemberNotificationService;
 import com.toy.nar.domain.member.entity.MemberDevice;
+import com.toy.nar.domain.member.entity.MemberNotificationType;
 import com.toy.nar.domain.member.repository.MemberDeviceRepository;
 import com.toy.nar.domain.member.repository.PlayerSoloRankPushDeliveryRepository;
 import com.toy.nar.domain.participant.entity.Player;
@@ -26,6 +28,7 @@ public class PlayerSoloRankPushService {
 	private final MemberDeviceRepository deviceRepository;
 	private final PlayerSoloRankPushDeliveryRepository deliveryRepository;
 	private final MobilePushGateway pushGateway;
+	private final MemberNotificationService notificationService;
 
 	public void notifySubscribers(
 			Player player,
@@ -93,6 +96,7 @@ public class PlayerSoloRankPushService {
 			}
 			if (result.successCount() > 0) {
 				deliveryRepository.markSent(memberId, player.getId(), gameId);
+				recordFeed(memberId, message);
 			} else {
 				deliveryRepository.markFailed(
 						memberId,
@@ -141,6 +145,20 @@ public class PlayerSoloRankPushService {
 					playerId,
 					gameId,
 					persistenceException);
+		}
+	}
+
+	/** 마이구독 알림 피드에 기록한다. 피드 실패가 푸시 흐름을 깨면 안 되므로 예외를 흡수한다. */
+	private void recordFeed(Long memberId, MobilePushMessage message) {
+		try {
+			notificationService.record(
+					memberId,
+					MemberNotificationType.PLAYER_SOLO_RANK_STARTED,
+					message.title(),
+					message.body(),
+					message.data());
+		} catch (Exception e) {
+			log.warn("Failed to record solo rank notification feed memberId={}", memberId, e);
 		}
 	}
 
