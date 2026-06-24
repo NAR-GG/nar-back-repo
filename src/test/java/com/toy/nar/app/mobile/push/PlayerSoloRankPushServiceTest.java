@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.push;
 
+import com.toy.nar.app.mobile.notification.MemberNotificationService;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.MemberDevice;
 import com.toy.nar.domain.member.entity.MobileDevicePlatform;
@@ -36,11 +37,15 @@ class PlayerSoloRankPushServiceTest {
 	@Mock
 	private MobilePushGateway pushGateway;
 
+	@Mock
+	private MemberNotificationService notificationService;
+
 	private PlayerSoloRankPushService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new PlayerSoloRankPushService(deviceRepository, deliveryRepository, pushGateway);
+		service = new PlayerSoloRankPushService(
+				deviceRepository, deliveryRepository, pushGateway, notificationService);
 		when(pushGateway.isAvailable()).thenReturn(true);
 	}
 

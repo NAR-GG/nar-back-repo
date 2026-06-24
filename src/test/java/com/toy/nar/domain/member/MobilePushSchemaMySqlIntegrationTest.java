@@ -60,6 +60,7 @@ class MobilePushSchemaMySqlIntegrationTest {
 			new MetadataSources(registry)
 					.addAnnotatedClass(MemberDeviceSchemaProbe.class)
 					.addAnnotatedClass(PushDeliverySchemaProbe.class)
+					.addAnnotatedClass(MemberNotificationSchemaProbe.class)
 					.buildMetadata()
 					.buildSessionFactory()
 					.close();
@@ -88,6 +89,29 @@ class MobilePushSchemaMySqlIntegrationTest {
 		private LocalDateTime createdAt;
 		@Column(name = "updated_at", nullable = false)
 		private LocalDateTime updatedAt;
+	}
+
+	@Entity(name = "MemberNotificationSchemaProbe")
+	@Table(name = "member_notification")
+	static class MemberNotificationSchemaProbe {
+		@Id
+		@GeneratedValue(strategy = GenerationType.IDENTITY)
+		private Long id;
+		@Column(name = "member_id", nullable = false)
+		private Long memberId;
+		@Column(name = "type", nullable = false, length = 40)
+		private String type;
+		@Column(name = "title", nullable = false, length = 255)
+		private String title;
+		@Column(name = "body", length = 500)
+		private String body;
+		@org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+		@Column(name = "data")
+		private java.util.Map<String, String> data;
+		@Column(name = "read_at")
+		private LocalDateTime readAt;
+		@Column(name = "created_at", nullable = false)
+		private LocalDateTime createdAt;
 	}
 
 	@Entity(name = "PushDeliverySchemaProbe")

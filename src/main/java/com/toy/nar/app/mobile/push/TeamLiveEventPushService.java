@@ -1,6 +1,8 @@
 package com.toy.nar.app.mobile.push;
 
+import com.toy.nar.app.mobile.notification.MemberNotificationService;
 import com.toy.nar.domain.member.entity.MemberDevice;
+import com.toy.nar.domain.member.entity.MemberNotificationType;
 import com.toy.nar.domain.member.repository.MemberDeviceRepository;
 import com.toy.nar.domain.member.repository.MemberTeamEventPushDeliveryRepository;
 import com.toy.nar.domain.participant.LckTeamCatalog;
@@ -46,6 +48,7 @@ public class TeamLiveEventPushService {
 	private final MemberTeamEventPushDeliveryRepository deliveryRepository;
 	private final TeamExternalIdentityRepository teamExternalIdentityRepository;
 	private final MobilePushGateway pushGateway;
+	private final MemberNotificationService notificationService;
 
 	@Value("${live.notification.fcm.enabled:false}")
 	private boolean fcmNotificationEnabled;
@@ -167,6 +170,7 @@ public class TeamLiveEventPushService {
 			}
 			if (result.successCount() > 0) {
 				deliveryRepository.markSent(memberId, matchId, setNumber, eventType, eventOrder);
+				recordFeed(memberId, eventType, message);
 			} else {
 				deliveryRepository.markFailed(memberId, matchId, setNumber, eventType, eventOrder,
 						"FCM 전송 성공 기기가 없습니다.");
@@ -210,6 +214,21 @@ public class TeamLiveEventPushService {
 				.findBySourceAndExternalTeamId(LOLESPORTS_SOURCE, esportsTeamId)
 				.map(identity -> identity.getTeam())
 				.filter(team -> LckTeamCatalog.contains(team.getCode()));
+	}
+
+	/** 마이구독 알림 피드에 기록한다. 피드 실패가 푸시 흐름을 깨면 안 되므로 예외를 흡수한다. */
+	private void recordFeed(Long memberId, String eventType, MobilePushMessage message) {
+		try {
+			notificationService.record(
+					memberId,
+					MemberNotificationType.valueOf(eventType),
+					message.title(),
+					message.body(),
+					message.data());
+		} catch (Exception e) {
+			log.warn("Failed to record team event notification feed memberId={} eventType={}",
+					memberId, eventType, e);
+		}
 	}
 
 	private MobilePushMessage buildMatchEventMessage(

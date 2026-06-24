@@ -50,7 +50,8 @@ public class SecurityConfig {
                                 "/api/mobile/live/games/*/participants/*/my-rating"
                         ).authenticated()
                         .requestMatchers(
-                                "/api/mobile/me/notification-subscriptions/**"
+                                "/api/mobile/me/notification-subscriptions/**",
+                                "/api/mobile/me/notifications/**"
                         ).authenticated()
                         .requestMatchers(
                                 "/api/auth/me", "/api/auth/logout", "/api/auth/onboarding"
