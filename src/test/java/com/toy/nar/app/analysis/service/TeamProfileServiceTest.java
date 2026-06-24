@@ -6,7 +6,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -41,6 +44,17 @@ class TeamProfileServiceTest {
 	@InjectMocks
 	private TeamProfileService teamProfileService;
 
+	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+	// matchDate는 UTC로 저장되고 서비스가 KST로 변환해 "오늘"을 KST 날짜로 판정한다.
+	// KST 정오를 기준점으로 잡으면 양쪽 자정 경계에서 12시간 떨어져 있어 실행 시각과 무관하게 안정적이다.
+	private static LocalDateTime todayNoonUtc() {
+		return LocalDate.now(KST).atTime(12, 0)
+				.atZone(KST)
+				.withZoneSameInstant(ZoneOffset.UTC)
+				.toLocalDateTime();
+	}
+
 	@Test
 	@DisplayName("팀 헤더에서 이전/오늘/다음 순서로 경기 3개를 반환한다")
 	void getProfileHeader_returnsPreviousTodayNext() {
@@ -51,15 +65,15 @@ class TeamProfileServiceTest {
 		when(team.getImageUrl()).thenReturn("team-image");
 		when(teamRepository.findById(10L)).thenReturn(Optional.of(team));
 
-		LocalDateTime now = LocalDateTime.now();
+		LocalDateTime base = todayNoonUtc();
 			List<LeagueMatch> matches = List.of(
-					LeagueMatch.builder().id("m1").leagueName("LCK").matchDate(now.minusDays(1)).state("completed")
+					LeagueMatch.builder().id("m1").leagueName("LCK").matchDate(base.minusDays(1)).state("completed")
 							.blueTeamCode("HLE").blueTeamName("HLE").redTeamCode("GEN").redTeamName("Gen.G").blueScore(0).redScore(2).build(),
-					LeagueMatch.builder().id("m2").leagueName("LCK").matchDate(now.minusHours(1)).state("inProgress")
+					LeagueMatch.builder().id("m2").leagueName("LCK").matchDate(base).state("inProgress")
 							.blueTeamCode("GEN").blueTeamName("Gen.G").redTeamCode("T1").redTeamName("T1").blueScore(1).redScore(0).build(),
-					LeagueMatch.builder().id("m3").leagueName("LCK").matchDate(now.plusHours(1)).state("unstarted")
+					LeagueMatch.builder().id("m3").leagueName("LCK").matchDate(base.plusHours(3)).state("unstarted")
 							.blueTeamCode("GEN").blueTeamName("Gen.G").redTeamCode("DK").redTeamName("DK").blueScore(0).redScore(0).build(),
-					LeagueMatch.builder().id("m4").leagueName("LCK").matchDate(now.plusDays(1)).state("unstarted")
+					LeagueMatch.builder().id("m4").leagueName("LCK").matchDate(base.plusDays(1)).state("unstarted")
 							.blueTeamCode("GEN").blueTeamName("Gen.G").redTeamCode("KT").redTeamName("KT").blueScore(0).redScore(0).build());
 
 		when(leagueMatchRepository.findTeamMatchesInDateRange(
@@ -92,11 +106,11 @@ class TeamProfileServiceTest {
 		when(team.getImageUrl()).thenReturn("team-image");
 		when(teamRepository.findById(10L)).thenReturn(Optional.of(team));
 
-		LocalDateTime now = LocalDateTime.now();
+		LocalDateTime base = todayNoonUtc();
 			List<LeagueMatch> matches = List.of(
-					LeagueMatch.builder().id("m1").leagueName("LCK").matchDate(now.minusDays(2)).state("completed")
+					LeagueMatch.builder().id("m1").leagueName("LCK").matchDate(base.minusDays(2)).state("completed")
 							.blueTeamCode("HLE").blueTeamName("HLE").redTeamCode("GEN").redTeamName("Gen.G").blueScore(0).redScore(2).build(),
-					LeagueMatch.builder().id("m2").leagueName("LCK").matchDate(now.plusDays(1)).state("unstarted")
+					LeagueMatch.builder().id("m2").leagueName("LCK").matchDate(base.plusDays(1)).state("unstarted")
 							.blueTeamCode("GEN").blueTeamName("Gen.G").redTeamCode("DK").redTeamName("DK").blueScore(0).redScore(0).build());
 
 		when(leagueMatchRepository.findTeamMatchesInDateRange(
