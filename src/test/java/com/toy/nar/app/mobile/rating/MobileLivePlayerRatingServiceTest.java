@@ -12,6 +12,7 @@ import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingRequest;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
+import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.rating.entity.LivePlayerRating;
 import com.toy.nar.domain.rating.repository.LivePlayerRatingRepository;
@@ -126,6 +127,10 @@ class MobileLivePlayerRatingServiceTest {
 	@Test
 	void returnsRatingDistributionReviewsAndMyRating() {
 		Member member = member(7L, "용맹한바론");
+		ReflectionTestUtils.setField(member, "profileImageUrl", "https://cdn/profile/7.png");
+		Team favoriteTeam = new Team("T1", "T1", "https://cdn/team/t1.png");
+		ReflectionTestUtils.setField(favoriteTeam, "id", 3L);
+		ReflectionTestUtils.setField(member, "favoriteTeam", favoriteTeam);
 		LivePlayerRating rating = rating(member, 5, "역시 페이커");
 		ReflectionTestUtils.setField(rating, "id", 11L);
 
@@ -162,6 +167,9 @@ class MobileLivePlayerRatingServiceTest {
 		assertThat(response.reviews()).first().satisfies(review -> {
 			assertThat(review.nickname()).isEqualTo("용맹한바론#0000");
 			assertThat(review.mine()).isTrue();
+			assertThat(review.profileImageUrl()).isEqualTo("https://cdn/profile/7.png");
+			assertThat(review.favoriteTeamId()).isEqualTo(3L);
+			assertThat(review.teamImageUrl()).isEqualTo("https://cdn/team/t1.png");
 		});
 	}
 

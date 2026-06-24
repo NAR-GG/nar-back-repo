@@ -12,6 +12,7 @@ import com.toy.nar.app.mobile.rating.dto.MyRatingListResponse;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
+import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.rating.entity.LivePlayerRating;
 import com.toy.nar.domain.rating.repository.LivePlayerRatingRepository;
@@ -387,12 +388,17 @@ public class MobileLivePlayerRatingService {
 	}
 
 	private LivePlayerRatingDetailResponse.Review toReview(LivePlayerRating rating, Long memberId) {
+		Member member = rating.getMember();
+		Team favoriteTeam = member.getFavoriteTeam();
 		return new LivePlayerRatingDetailResponse.Review(
 				rating.getId(),
-				rating.getMember().getNickname(),
+				member.getNickname(),
+				member.getProfileImageUrl(),
+				favoriteTeam != null ? favoriteTeam.getId() : null,
+				favoriteTeam != null ? favoriteTeam.getImageUrl() : null,
 				rating.getRating(),
 				rating.getComment(),
-				memberId != null && memberId.equals(rating.getMember().getId()),
+				memberId != null && memberId.equals(member.getId()),
 				rating.getCreatedAt(),
 				rating.getUpdatedAt());
 	}
