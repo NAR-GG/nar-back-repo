@@ -112,6 +112,40 @@ class MemberNotificationServiceTest {
 				.isInstanceOf(ResponseStatusException.class);
 	}
 
+	@Test
+	void deleteRemovesWhenOwnedByMember() {
+		when(notificationRepository.deleteByIdAndMember_Id(9L, 7L)).thenReturn(1);
+
+		service().delete(7L, 9L);
+
+		verify(notificationRepository).deleteByIdAndMember_Id(9L, 7L);
+	}
+
+	@Test
+	void deleteThrowsNotFoundWhenNotOwnedOrMissing() {
+		when(notificationRepository.deleteByIdAndMember_Id(9L, 7L)).thenReturn(0);
+
+		assertThatThrownBy(() -> service().delete(7L, 9L))
+				.isInstanceOf(ResponseStatusException.class);
+	}
+
+	@Test
+	void deleteAllReturnsDeletedCount() {
+		when(notificationRepository.deleteAllByMember(7L)).thenReturn(3);
+
+		assertThat(service().deleteAll(7L)).isEqualTo(3);
+	}
+
+	@Test
+	void deleteRequiresLogin() {
+		assertThatThrownBy(() -> service().delete(null, 9L))
+				.isInstanceOf(ResponseStatusException.class);
+		assertThatThrownBy(() -> service().deleteAll(null))
+				.isInstanceOf(ResponseStatusException.class);
+		verify(notificationRepository, never()).deleteByIdAndMember_Id(any(), any());
+		verify(notificationRepository, never()).deleteAllByMember(any());
+	}
+
 	private Member member(Long id) {
 		Member member = Member.builder().name("nick").tag("0000").email("a@b.c").build();
 		ReflectionTestUtils.setField(member, "id", id);

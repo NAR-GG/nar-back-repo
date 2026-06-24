@@ -26,4 +26,10 @@ public interface MemberNotificationRepository extends JpaRepository<MemberNotifi
 	@Modifying(clearAutomatically = true)
 	@Query("UPDATE MemberNotification n SET n.readAt = :now WHERE n.member.id = :memberId AND n.readAt IS NULL")
 	int markAllReadByMember(@Param("memberId") Long memberId, @Param("now") LocalDateTime now);
+
+	int deleteByIdAndMember_Id(Long id, Long memberId);
+
+	@Modifying(clearAutomatically = true)
+	@Query("DELETE FROM MemberNotification n WHERE n.member.id = :memberId")
+	int deleteAllByMember(@Param("memberId") Long memberId);
 }

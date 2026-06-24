@@ -83,6 +83,22 @@ public class MemberNotificationService {
 		notification.markRead();
 	}
 
+	/** 단건 삭제. 본인 알림이 아니거나 없으면 404. */
+	@Transactional
+	public void delete(Long memberId, Long notificationId) {
+		requireLogin(memberId);
+		if (notificationRepository.deleteByIdAndMember_Id(notificationId, memberId) == 0) {
+			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다.");
+		}
+	}
+
+	/** 회원의 알림을 모두 삭제하고 삭제 건수를 반환한다. */
+	@Transactional
+	public int deleteAll(Long memberId) {
+		requireLogin(memberId);
+		return notificationRepository.deleteAllByMember(memberId);
+	}
+
 	private void requireLogin(Long memberId) {
 		if (memberId == null) {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
