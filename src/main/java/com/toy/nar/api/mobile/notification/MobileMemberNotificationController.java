@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -50,6 +51,23 @@ public class MobileMemberNotificationController {
 			@AuthenticationPrincipal Long memberId,
 			@PathVariable Long notificationId) {
 		notificationService.markRead(memberId, notificationId);
+		return ResponseEntity.noContent().build();
+	}
+
+	@Operation(summary = "알림 전체 삭제", description = "회원의 알림을 모두 삭제하고 삭제 건수를 반환한다.")
+	@SecurityRequirement(name = "bearerAuth")
+	@DeleteMapping
+	public ResponseEntity<Integer> deleteAll(@AuthenticationPrincipal Long memberId) {
+		return ResponseEntity.ok(notificationService.deleteAll(memberId));
+	}
+
+	@Operation(summary = "알림 단건 삭제")
+	@SecurityRequirement(name = "bearerAuth")
+	@DeleteMapping("/{notificationId}")
+	public ResponseEntity<Void> delete(
+			@AuthenticationPrincipal Long memberId,
+			@PathVariable Long notificationId) {
+		notificationService.delete(memberId, notificationId);
 		return ResponseEntity.noContent().build();
 	}
 }
