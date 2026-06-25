@@ -22,7 +22,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,6 +50,9 @@ class PlayerSoloRankMonitorServiceTest {
 	@Mock
 	private SchedulerAlertService schedulerAlertService;
 
+	@Mock
+	private SoloRankGameHistoryRecorder soloRankGameHistoryRecorder;
+
 	private RiotMonitorProperties riotMonitorProperties;
 	private PlayerSoloRankMonitorService playerSoloRankMonitorService;
 
@@ -63,7 +68,8 @@ class PlayerSoloRankMonitorServiceTest {
 				riotMonitorProperties,
 				notificationService,
 				playerSoloRankPushService,
-				schedulerAlertService);
+				schedulerAlertService,
+				soloRankGameHistoryRecorder);
 	}
 
 	@Test
@@ -120,6 +126,7 @@ class PlayerSoloRankMonitorServiceTest {
 				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png",
 				"솔로 랭크",
 				"https://www.op.gg/summoners/kr/Hide+on+bush-KR1");
+		verify(soloRankGameHistoryRecorder).record(eq(player), eq("222"), any(), any());
 	}
 
 	@Test
@@ -322,5 +329,6 @@ class PlayerSoloRankMonitorServiceTest {
 				org.mockito.ArgumentMatchers.any(),
 				org.mockito.ArgumentMatchers.any(),
 				org.mockito.ArgumentMatchers.any());
+		verify(soloRankGameHistoryRecorder, never()).record(any(), anyString(), any(), any());
 	}
 }

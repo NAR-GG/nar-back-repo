@@ -44,6 +44,7 @@ public class PlayerSoloRankMonitorService {
 	private final NotificationService notificationService;
 	private final PlayerSoloRankPushService playerSoloRankPushService;
 	private final SchedulerAlertService schedulerAlertService;
+	private final SoloRankGameHistoryRecorder soloRankGameHistoryRecorder;
 
 	@Transactional
 	public PlayerSoloRankMonitorResult pollTrackedAccounts() {
@@ -81,9 +82,15 @@ public class PlayerSoloRankMonitorService {
 					continue;
 				}
 
+				// 새 게임 1회만 챔피언 해석(추가 Riot 콜 없음 — spectator 응답에서 조회).
+				Champion champion = resolveTrackedChampion(currentGame, account.getPuuid());
+
 				if (isRankedSolo(currentGame)) {
 					account.markRecentRankedSolo(currentGameId, checkedAt);
 					rankedSoloCount++;
+					// 구독 여부와 무관하게 솔랭 게임 이력 적재(선수 카드 최근 솔랭·챔프 폭).
+					soloRankGameHistoryRecorder.record(
+							account.getPlayer(), currentGameId, champion, checkedAt);
 				} else {
 					account.markRecentOtherQueue(currentGameId, checkedAt);
 					otherQueueCount++;
@@ -97,7 +104,6 @@ public class PlayerSoloRankMonitorService {
 				}
 
 				if (account.shouldSendAlertFor(currentGameId)) {
-					Champion champion = resolveTrackedChampion(currentGame, account.getPuuid());
 					String queueDisplayName = resolveQueueDisplayName(currentGame.gameQueueConfigId());
 					notificationService.sendPlayerGameNotification(
 							account.getPlayer().getName(),
