@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS player_solo_rank_game (
     CONSTRAINT uk_player_solo_rank_game UNIQUE (player_id, game_id),
     INDEX idx_player_solo_rank_game_player_detected (player_id, detected_at),
     CONSTRAINT fk_player_solo_rank_game_player
-        FOREIGN KEY (player_id) REFERENCES player (id) ON DELETE CASCADE,
+        FOREIGN KEY (player_id) REFERENCES players (player_id) ON DELETE CASCADE,
     CONSTRAINT fk_player_solo_rank_game_champion
-        FOREIGN KEY (champion_id) REFERENCES champion (id)
+        FOREIGN KEY (champion_id) REFERENCES champions (champion_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
