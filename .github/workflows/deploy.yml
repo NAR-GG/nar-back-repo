@@ -131,7 +131,7 @@ jobs:
               -e YOUTUBE_API_KEY="${{ secrets.YOUTUBE_API_KEY }}" \
               -e LOL_ESPORTS_KEY="${{ secrets.LOL_ESPORTS_KEY }}" \
               -e LOL_SYNC_CRON="0 0/30 * * * *" \
-              -e LOL_ACTIVE_LEAGUES="LCK,MSI" \
+              -e LOL_ACTIVE_LEAGUES="${{ secrets.LOL_ACTIVE_LEAGUES }}" \
               -e LOL_LIVE_ENABLED="true" \
               -e LOL_TEAM_METADATA_CRON="0 15 4 * * *" \
               -e DISCORD_PLAYER_WEBHOOK_URL="${{ secrets.DISCORD_PLAYER_WEBHOOK_URL }}" \

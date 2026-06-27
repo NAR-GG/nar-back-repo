@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 최근 3개월 LCK+MSI 라이브(분단위) 데이터 백필. EC2 호스트에서 실행.
+# 최근 3개월 LCK 라이브(분단위) 데이터 백필. EC2 호스트에서 실행.
+# (MSI는 내일 시작이라 과거 백필 대상 없음 — 폴링으로 실시간 수집됨)
 # 외부 livestats 피드는 ~3개월만 보존하므로 그 이상은 받아올 수 없다.
 #
 # 사전:
@@ -17,8 +18,7 @@ SLEEP="${SLEEP_BETWEEN:-3}"   # 게임 간 대기(초). 외부 API 부하 방지
 
 mysql_q() { mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B -e "$1"; }
 
-# 0단계(수동, 1회): MSI 매치/gameId 동기화 — 안 돼 있으면 백필할 gameId가 없다.
-#   curl -fsS -X POST "$APP/api/admin/data/sync/matches/recent-backfill?league=MSI&includeTeamMetadata=true"
+# 0단계(수동, 1회): LCK 매치/gameId 동기화 — 안 돼 있으면 백필할 gameId가 없다.
 #   curl -fsS -X POST "$APP/api/admin/data/sync/matches/recent-backfill?league=LCK&includeTeamMetadata=true"
 # 3개월이 1페이지에 안 들어오면(과거 더 필요) 전체 히스토리:
 #   curl -fsS -X POST "$APP/api/admin/data/sync/matches/history"
@@ -26,7 +26,7 @@ mysql_q() { mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_N
 # 최신순, 최근 3개월, 아직 스냅샷 없는 gameId만.
 SQL="SELECT g.game_id
      FROM league_match_game g JOIN league_match m ON m.id = g.match_id
-     WHERE m.league_name IN ('LCK','MSI')
+     WHERE m.league_name = 'LCK'
        AND m.match_date >= DATE_SUB(NOW(), INTERVAL 3 MONTH)
        AND g.game_id NOT IN (SELECT game_id FROM live_game_minute_snapshot)
      ORDER BY m.match_date DESC"
