@@ -13,46 +13,46 @@ import java.util.Optional;
 
 public interface LivePlayerRatingRepository extends JpaRepository<LivePlayerRating, Long> {
 
-	Optional<LivePlayerRating> findByLiveGameIdAndLiveParticipantIdAndMember_Id(
-			String liveGameId,
-			Integer liveParticipantId,
+	Optional<LivePlayerRating> findByMatchIdAndPlayerRefAndMember_Id(
+			String matchId,
+			String playerRef,
 			Long memberId);
 
-	List<LivePlayerRating> findByLiveGameIdAndMember_Id(String liveGameId, Long memberId);
+	List<LivePlayerRating> findByMatchIdAndMember_Id(String matchId, Long memberId);
 
 	@EntityGraph(attributePaths = "player")
 	Page<LivePlayerRating> findByMember_IdOrderByCreatedAtDesc(Long memberId, Pageable pageable);
 
 	@EntityGraph(attributePaths = {"member", "member.favoriteTeam"})
-	Page<LivePlayerRating> findByLiveGameIdAndLiveParticipantIdOrderByCreatedAtDesc(
-			String liveGameId,
-			Integer liveParticipantId,
+	Page<LivePlayerRating> findByMatchIdAndPlayerRefOrderByCreatedAtDesc(
+			String matchId,
+			String playerRef,
 			Pageable pageable);
 
 	@Query("""
-			SELECT r.liveParticipantId AS participantId,
+			SELECT r.playerRef AS playerRef,
 			       AVG(r.rating) AS averageRating,
 			       COUNT(r.id) AS ratingCount
 			FROM LivePlayerRating r
-			WHERE r.liveGameId = :gameId
-			GROUP BY r.liveParticipantId
+			WHERE r.matchId = :matchId
+			GROUP BY r.playerRef
 			""")
-	List<ParticipantRatingAggregate> aggregateByGameId(@Param("gameId") String gameId);
+	List<PlayerRatingAggregate> aggregateByMatchId(@Param("matchId") String matchId);
 
 	@Query("""
 			SELECT r.rating AS rating,
 			       COUNT(r.id) AS ratingCount
 			FROM LivePlayerRating r
-			WHERE r.liveGameId = :gameId
-			  AND r.liveParticipantId = :participantId
+			WHERE r.matchId = :matchId
+			  AND r.playerRef = :playerRef
 			GROUP BY r.rating
 			""")
 	List<RatingDistributionAggregate> distribution(
-			@Param("gameId") String gameId,
-			@Param("participantId") Integer participantId);
+			@Param("matchId") String matchId,
+			@Param("playerRef") String playerRef);
 
-	interface ParticipantRatingAggregate {
-		Integer getParticipantId();
+	interface PlayerRatingAggregate {
+		String getPlayerRef();
 		Double getAverageRating();
 		Long getRatingCount();
 	}
