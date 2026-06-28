@@ -28,6 +28,10 @@ public record MyRatingListResponse(
 			String comment,
 			LocalDateTime createdAt,
 			LocalDateTime updatedAt,
+			@Schema(description = "작성자(나) 프로필 이미지 URL. 없으면 null", nullable = true)
+			String profileImageUrl,
+			@Schema(description = "작성자(나) 응원팀 로고 URL. 없으면 null", nullable = true)
+			String teamImageUrl,
 			@Schema(description = "세트가 속한 매치 정보. 매핑이 없으면 null", nullable = true)
 			MatchInfo match) {
 	}
