@@ -322,6 +322,8 @@ public class MobileLivePlayerRatingService {
 
 	private MyRatingListResponse.MyRatingItem toMyRatingItem(LivePlayerRating rating, LeagueMatchGame matchGame) {
 		Player player = rating.getPlayer();
+		Member member = rating.getMember();
+		Team favoriteTeam = member != null ? member.getFavoriteTeam() : null;
 		return new MyRatingListResponse.MyRatingItem(
 				rating.getId(),
 				rating.getLiveGameId(),
@@ -336,6 +338,8 @@ public class MobileLivePlayerRatingService {
 				rating.getComment(),
 				rating.getCreatedAt(),
 				rating.getUpdatedAt(),
+				member != null ? member.getProfileImageUrl() : null,
+				favoriteTeam != null ? favoriteTeam.getImageUrl() : null,
 				toMatchInfo(matchGame));
 	}
 
