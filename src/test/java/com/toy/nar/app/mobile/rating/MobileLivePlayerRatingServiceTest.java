@@ -37,6 +37,8 @@ import static org.mockito.Mockito.when;
 
 class MobileLivePlayerRatingServiceTest {
 
+	private static final String PLAYER_REF = "oe:player:faker";
+
 	private LiveStateQueryService liveStateQueryService;
 	private LivePlayerRatingRepository ratingRepository;
 	private MemberRepository memberRepository;
@@ -60,22 +62,18 @@ class MobileLivePlayerRatingServiceTest {
 	}
 
 	@Test
-	void 라이브_경기_중에도_평가를_저장한다() {
+	void canRateEvenBeforeSetEnds() {
 		Member member = Member.builder().name("용맹한바론").tag("0000").email("test@example.com").build();
 		Player player = Player.builder().name("Faker").imageUrl("faker.png").build();
-		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state()));
+		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state("game-1", 1)));
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
-		when(playerRepository.findByPlayerOriginId("oe:player:faker")).thenReturn(Optional.of(player));
-		when(ratingRepository.findByLiveGameIdAndLiveParticipantIdAndMember_Id("game-1", 1, 7L))
+		when(playerRepository.findByPlayerOriginId(PLAYER_REF)).thenReturn(Optional.of(player));
+		when(ratingRepository.findByMatchIdAndPlayerRefAndMember_Id("match-1", PLAYER_REF, 7L))
 				.thenReturn(Optional.empty());
 		when(ratingRepository.save(any(LivePlayerRating.class)))
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
-		var response = service.save(
-				"game-1",
-				1,
-				7L,
-				new LivePlayerRatingRequest(5, "캐리했습니다"));
+		var response = service.save("game-1", 1, 7L, new LivePlayerRatingRequest(5, "캐리했습니다"));
 
 		assertThat(response.rating()).isEqualTo(5);
 		assertThat(response.comment()).isEqualTo("캐리했습니다");
@@ -83,15 +81,36 @@ class MobileLivePlayerRatingServiceTest {
 	}
 
 	@Test
-	void returnsTeamAndPlayerRatingSummaries() {
-		LivePlayerRatingRepository.ParticipantRatingAggregate aggregate = mock(
-				LivePlayerRatingRepository.ParticipantRatingAggregate.class);
-		when(aggregate.getParticipantId()).thenReturn(1);
+	void ratingSamePlayerInAnotherSetUpdatesSameMatchReview() {
+		Member member = member(7L, "용맹한바론");
+		LivePlayerRating existing = rating(member, 3, "1세트는 무난");
+		when(liveStateQueryService.getLatestState("game-2")).thenReturn(Optional.of(state("game-2", 51)));
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(playerRepository.findByPlayerOriginId(PLAYER_REF)).thenReturn(Optional.empty());
+		when(playerRepository.findByName("Faker")).thenReturn(Optional.empty());
+		// 다른 세트(game-2, participant 51)지만 같은 매치+선수라 기존 리뷰를 찾아 갱신해야 한다
+		when(ratingRepository.findByMatchIdAndPlayerRefAndMember_Id("match-1", PLAYER_REF, 7L))
+				.thenReturn(Optional.of(existing));
+		when(ratingRepository.save(existing)).thenReturn(existing);
+
+		var response = service.save("game-2", 51, 7L, new LivePlayerRatingRequest(5, "2세트 캐리"));
+
+		assertThat(response.rating()).isEqualTo(5);
+		assertThat(response.comment()).isEqualTo("2세트 캐리");
+		// 새 엔티티가 아니라 기존(1세트에서 만든) 리뷰를 갱신
+		verify(ratingRepository).save(existing);
+	}
+
+	@Test
+	void returnsTeamAndPlayerRatingSummariesAggregatedByMatch() {
+		LivePlayerRatingRepository.PlayerRatingAggregate aggregate = mock(
+				LivePlayerRatingRepository.PlayerRatingAggregate.class);
+		when(aggregate.getPlayerRef()).thenReturn(PLAYER_REF);
 		when(aggregate.getAverageRating()).thenReturn(4.5);
 		when(aggregate.getRatingCount()).thenReturn(2L);
-		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state()));
-		when(ratingRepository.aggregateByGameId("game-1")).thenReturn(List.of(aggregate));
-		when(playerRepository.findByPlayerOriginId("oe:player:faker")).thenReturn(Optional.empty());
+		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state("game-1", 1)));
+		when(ratingRepository.aggregateByMatchId("match-1")).thenReturn(List.of(aggregate));
+		when(playerRepository.findByPlayerOriginId(PLAYER_REF)).thenReturn(Optional.empty());
 		when(playerRepository.findByName("Faker")).thenReturn(Optional.empty());
 
 		LivePlayerRatingListResponse response = service.getRatings("game-1", "ALL", null);
@@ -116,15 +135,15 @@ class MobileLivePlayerRatingServiceTest {
 
 		LivePlayerRatingRepository.RatingDistributionAggregate fiveStars = distribution(5, 3L);
 		LivePlayerRatingRepository.RatingDistributionAggregate fourStars = distribution(4, 1L);
-		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state()));
-		when(playerRepository.findByPlayerOriginId("oe:player:faker")).thenReturn(Optional.empty());
+		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state("game-1", 1)));
+		when(playerRepository.findByPlayerOriginId(PLAYER_REF)).thenReturn(Optional.empty());
 		when(playerRepository.findByName("Faker")).thenReturn(Optional.empty());
-		when(ratingRepository.findByLiveGameIdAndLiveParticipantIdOrderByCreatedAtDesc(
-				"game-1", 1, PageRequest.of(0, 20, org.springframework.data.domain.Sort.by(
+		when(ratingRepository.findByMatchIdAndPlayerRefOrderByCreatedAtDesc(
+				"match-1", PLAYER_REF, PageRequest.of(0, 20, org.springframework.data.domain.Sort.by(
 						org.springframework.data.domain.Sort.Direction.DESC, "createdAt"))))
 				.thenReturn(new PageImpl<>(List.of(rating, rating, rating, rating), PageRequest.of(0, 20), 4));
-		when(ratingRepository.distribution("game-1", 1)).thenReturn(List.of(fiveStars, fourStars));
-		when(ratingRepository.findByLiveGameIdAndLiveParticipantIdAndMember_Id("game-1", 1, 7L))
+		when(ratingRepository.distribution("match-1", PLAYER_REF)).thenReturn(List.of(fiveStars, fourStars));
+		when(ratingRepository.findByMatchIdAndPlayerRefAndMember_Id("match-1", PLAYER_REF, 7L))
 				.thenReturn(Optional.of(rating));
 
 		LivePlayerRatingDetailResponse response = service.getDetail("game-1", 1, 7L, 0, 20);
@@ -155,11 +174,11 @@ class MobileLivePlayerRatingServiceTest {
 	void updatesExistingRatingAndDeletesIt() {
 		Member member = member(7L, "용맹한바론");
 		LivePlayerRating existing = rating(member, 3, "무난했습니다");
-		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state()));
+		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state("game-1", 1)));
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
-		when(playerRepository.findByPlayerOriginId("oe:player:faker")).thenReturn(Optional.empty());
+		when(playerRepository.findByPlayerOriginId(PLAYER_REF)).thenReturn(Optional.empty());
 		when(playerRepository.findByName("Faker")).thenReturn(Optional.empty());
-		when(ratingRepository.findByLiveGameIdAndLiveParticipantIdAndMember_Id("game-1", 1, 7L))
+		when(ratingRepository.findByMatchIdAndPlayerRefAndMember_Id("match-1", PLAYER_REF, 7L))
 				.thenReturn(Optional.of(existing));
 		when(ratingRepository.save(existing)).thenReturn(existing);
 
@@ -239,14 +258,16 @@ class MobileLivePlayerRatingServiceTest {
 
 	private LivePlayerRating rating(Member member, int score, String comment) {
 		return new LivePlayerRating(
+				"match-1",
 				"game-1",
 				1,
+				PLAYER_REF,
 				member,
 				null,
 				"Red",
 				"mid",
 				"Faker",
-				"oe:player:faker",
+				PLAYER_REF,
 				"Ahri",
 				score,
 				comment);
@@ -260,9 +281,9 @@ class MobileLivePlayerRatingServiceTest {
 		return aggregate;
 	}
 
-	private LiveGameState state() {
+	private LiveGameState state(String gameId, int participantId) {
 		return new LiveGameState(
-				"game-1",
+				gameId,
 				"match-1",
 				"LCK",
 				"DNS",
@@ -270,11 +291,11 @@ class MobileLivePlayerRatingServiceTest {
 				LocalDateTime.of(2026, 6, 6, 12, 30),
 				LocalDateTime.of(2026, 6, 6, 12, 30, 10),
 				List.of(new LiveParticipantState(
-						1,
+						participantId,
 						"Red",
 						"mid",
 						"Faker",
-						"oe:player:faker",
+						PLAYER_REF,
 						"Ahri",
 						18,
 						4,

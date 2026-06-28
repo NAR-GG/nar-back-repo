@@ -24,8 +24,8 @@ import java.util.Objects;
 @Entity
 @Table(name = "live_player_rating", uniqueConstraints = {
 		@UniqueConstraint(
-				name = "uk_live_player_rating_member_target",
-				columnNames = { "live_game_id", "live_participant_id", "member_id" })
+				name = "uk_live_player_rating_match_player_member",
+				columnNames = { "match_id", "player_ref", "member_id" })
 })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -35,6 +35,15 @@ public class LivePlayerRating {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
+	// 매치 단위 리뷰 식별: (match_id, player_ref, member). 한 매치에서 선수 1명당 리뷰 1개.
+	@Column(name = "match_id", nullable = false, length = 64)
+	private String matchId;
+
+	// 세트 무관 선수 식별 키. esportsPlayerId 우선, 없으면 "name:{playerName}".
+	@Column(name = "player_ref", nullable = false, length = 128)
+	private String playerRef;
+
+	// 리뷰가 작성된 세트 메타(디버깅/표시용)
 	@Column(name = "live_game_id", nullable = false, length = 64)
 	private String liveGameId;
 
@@ -77,8 +86,10 @@ public class LivePlayerRating {
 	private LocalDateTime updatedAt;
 
 	public LivePlayerRating(
+			String matchId,
 			String liveGameId,
 			Integer liveParticipantId,
+			String playerRef,
 			Member member,
 			Player player,
 			String teamSide,
@@ -88,6 +99,8 @@ public class LivePlayerRating {
 			String championName,
 			Integer rating,
 			String comment) {
+		this.matchId = Objects.requireNonNull(matchId);
+		this.playerRef = Objects.requireNonNull(playerRef);
 		this.liveGameId = Objects.requireNonNull(liveGameId);
 		this.liveParticipantId = Objects.requireNonNull(liveParticipantId);
 		this.member = Objects.requireNonNull(member);
