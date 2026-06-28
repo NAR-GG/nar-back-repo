@@ -56,6 +56,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/me", "/api/auth/logout", "/api/auth/onboarding"
                         ).authenticated()
+                        // 백오피스 admin 영역. /api/** permitAll 보다 먼저 와야 적용된다(순서 우선).
+                        .requestMatchers("/api/admin/**", "/api/debug/**").hasRole("ADMIN")
                         .requestMatchers(
                                 "/api/**",
                                 "/oauth2/**", "/login/oauth2/**",

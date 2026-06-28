@@ -1,9 +1,11 @@
 package com.toy.nar.app.auth;
 
 import com.toy.nar.domain.member.entity.Member;
+import com.toy.nar.domain.member.entity.MemberRole;
 import com.toy.nar.domain.member.entity.MemberSocial;
 import com.toy.nar.domain.member.entity.OAuthProvider;
 import com.toy.nar.domain.member.entity.RefreshToken;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.member.repository.MemberSocialRepository;
 import com.toy.nar.domain.member.repository.RefreshTokenRepository;
@@ -19,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -66,7 +69,7 @@ class SocialLoginServiceTest {
 						.provider(OAuthProvider.KAKAO)
 						.providerId("12345")
 						.build()));
-		when(jwtTokenProvider.createAccessToken(7L, false)).thenReturn("access-token");
+		when(jwtTokenProvider.createAccessToken(7L, false, "USER")).thenReturn("access-token");
 		when(jwtTokenProvider.createRefreshToken(7L)).thenReturn("refresh-token");
 		when(jwtTokenProvider.getRefreshTokenExpiry()).thenReturn(LocalDateTime.now().plusDays(14));
 
@@ -98,7 +101,7 @@ class SocialLoginServiceTest {
 			ReflectionTestUtils.setField(saved, "id", 11L);
 			return saved;
 		});
-		when(jwtTokenProvider.createAccessToken(11L, false)).thenReturn("new-access-token");
+		when(jwtTokenProvider.createAccessToken(11L, false, "USER")).thenReturn("new-access-token");
 		when(jwtTokenProvider.createRefreshToken(11L)).thenReturn("new-refresh-token");
 		when(jwtTokenProvider.getRefreshTokenExpiry()).thenReturn(LocalDateTime.now().plusDays(14));
 
@@ -114,6 +117,43 @@ class SocialLoginServiceTest {
 		assertThat(socialCaptor.getValue().getProviderId()).isEqualTo("67890");
 		assertThat(socialCaptor.getValue().getMember().getEmail()).isEqualTo("new-user@example.com");
 		verify(refreshTokenRepository).deleteByMemberId(11L);
+	}
+
+	@Test
+	void findAdminMemberReturnsAdmin() {
+		Member member = member("admin@example.com", 2L);
+		ReflectionTestUtils.setField(member, "role", MemberRole.ADMIN);
+		SocialAccountInfo info = new SocialAccountInfo(OAuthProvider.GOOGLE, "g-1", "admin@example.com");
+		when(memberSocialRepository.findByProviderAndProviderId(OAuthProvider.GOOGLE, "g-1"))
+				.thenReturn(Optional.of(MemberSocial.builder()
+						.member(member).provider(OAuthProvider.GOOGLE).providerId("g-1").build()));
+
+		assertThat(socialLoginService.findAdminMember(info)).isSameAs(member);
+	}
+
+	@Test
+	void findAdminMemberRejectsNonAdmin() {
+		Member member = member("user@example.com", 3L); // 기본 role USER
+		SocialAccountInfo info = new SocialAccountInfo(OAuthProvider.GOOGLE, "g-2", "user@example.com");
+		when(memberSocialRepository.findByProviderAndProviderId(OAuthProvider.GOOGLE, "g-2"))
+				.thenReturn(Optional.of(MemberSocial.builder()
+						.member(member).provider(OAuthProvider.GOOGLE).providerId("g-2").build()));
+
+		assertThatThrownBy(() -> socialLoginService.findAdminMember(info))
+				.isInstanceOf(OAuth2AuthenticationException.class);
+		verify(memberRepository, never()).save(any());
+	}
+
+	@Test
+	void findAdminMemberRejectsUnknownAccountWithoutCreating() {
+		SocialAccountInfo info = new SocialAccountInfo(OAuthProvider.GOOGLE, "g-x", "nobody@example.com");
+		when(memberSocialRepository.findByProviderAndProviderId(OAuthProvider.GOOGLE, "g-x"))
+				.thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> socialLoginService.findAdminMember(info))
+				.isInstanceOf(OAuth2AuthenticationException.class);
+		verify(memberRepository, never()).save(any());
+		verify(memberSocialRepository, never()).save(any());
 	}
 
 	private Member member(String email, Long id) {

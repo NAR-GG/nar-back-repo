@@ -186,7 +186,7 @@ public class AuthController {
         }
 
         Member member = stored.getMember();
-        String newAccessToken = jwtTokenProvider.createAccessToken(member.getId(), member.isOnboarded());
+        String newAccessToken = jwtTokenProvider.createAccessToken(member.getId(), member.isOnboarded(), member.getRole().name());
         String newRefreshToken = jwtTokenProvider.createRefreshToken(member.getId());
 
         refreshTokenRepository.delete(stored);

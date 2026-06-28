@@ -45,6 +45,10 @@ public class Member {
     @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MemberFavoritePlayer> favoritePlayers = new ArrayList<>();
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private MemberRole role = MemberRole.USER;
+
     @Column(name = "onboarded_at")
     private LocalDateTime onboardedAt;
 

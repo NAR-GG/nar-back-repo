@@ -25,6 +25,9 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
     @Value("${app.mobile-redirect-url:nar://oauth/callback}")
     private String mobileRedirectUrl;
 
+    @Value("${app.backoffice-url:http://localhost:5173}")
+    private String backofficeUrl;
+
     @Override
     public void onAuthenticationFailure(HttpServletRequest request,
                                         HttpServletResponse response,
@@ -41,6 +44,9 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
         String target = authorizationRequestRepository.removeRedirectTarget(request, response);
         if ("mobile".equals(target)) {
             return mobileRedirectUrl;
+        }
+        if ("backoffice".equals(target)) {
+            return backofficeUrl + "/login";
         }
         return frontendUrl + "/oauth/callback";
     }

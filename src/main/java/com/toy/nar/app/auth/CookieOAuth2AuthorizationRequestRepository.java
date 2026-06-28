@@ -18,6 +18,7 @@ public class CookieOAuth2AuthorizationRequestRepository
     private static final String REDIRECT_TARGET_COOKIE_NAME = "oauth2_redirect_target";
     private static final int COOKIE_MAX_AGE = 180;
     private static final String MOBILE_TARGET = "mobile";
+    private static final String BACKOFFICE_TARGET = "backoffice";
 
     @Override
     public OAuth2AuthorizationRequest loadAuthorizationRequest(HttpServletRequest request) {
@@ -48,6 +49,14 @@ public class CookieOAuth2AuthorizationRequestRepository
         return request0;
     }
 
+    /** 현재 요청이 백오피스 로그인 흐름인지(쿠키만 확인, 제거하지 않음). */
+    public boolean isBackofficeLogin(HttpServletRequest request) {
+        return CookieUtils.getCookie(request, REDIRECT_TARGET_COOKIE_NAME)
+                .map(Cookie::getValue)
+                .filter(BACKOFFICE_TARGET::equals)
+                .isPresent();
+    }
+
     public String removeRedirectTarget(HttpServletRequest request, HttpServletResponse response) {
         String target = CookieUtils.getCookie(request, REDIRECT_TARGET_COOKIE_NAME)
                 .map(Cookie::getValue)
@@ -58,8 +67,9 @@ public class CookieOAuth2AuthorizationRequestRepository
 
     private void saveRedirectTarget(HttpServletRequest request, HttpServletResponse response) {
         String target = request.getParameter("target");
-        if (MOBILE_TARGET.equalsIgnoreCase(target)) {
-            CookieUtils.addCookie(response, REDIRECT_TARGET_COOKIE_NAME, MOBILE_TARGET, COOKIE_MAX_AGE);
+        if (MOBILE_TARGET.equalsIgnoreCase(target) || BACKOFFICE_TARGET.equalsIgnoreCase(target)) {
+            CookieUtils.addCookie(response, REDIRECT_TARGET_COOKIE_NAME,
+                    target.toLowerCase(), COOKIE_MAX_AGE);
             return;
         }
         CookieUtils.deleteCookie(request, response, REDIRECT_TARGET_COOKIE_NAME);
