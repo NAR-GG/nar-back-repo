@@ -114,6 +114,11 @@ riot:
     target-league: ${RIOT_MONITOR_TARGET_LEAGUE:LCK}
     platform: ${RIOT_MONITOR_PLATFORM:KR}
 
+player:
+  profile-sync:
+    # LCK 선수 프로필 동기화 크론(KST). 기본 매일 새벽 5시 30분
+    cron: ${PLAYER_PROFILE_SYNC_CRON:0 30 5 * * *}
+
 lolesports:
   riot-api:
     key: ${LOL_ESPORTS_KEY}
