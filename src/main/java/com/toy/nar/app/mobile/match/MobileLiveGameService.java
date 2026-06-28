@@ -173,7 +173,7 @@ public class MobileLiveGameService {
 				.map(p -> new LiveGameChampionsResponse.Pick(
 						canonicalPosition(p.role()),
 						p.championName(),
-						resolveChampionImageUrl(p.championName()),
+						resolveChampionLoadingImageUrl(p.championName()),
 						p.playerName()))
 				.toList();
 		// 밴은 reconcile 된 배치 데이터에서 채운다(라이브 피드엔 밴이 없음). 없으면 빈 목록.
@@ -232,7 +232,7 @@ public class MobileLiveGameService {
 		};
 	}
 
-	/** 영문 챔피언명으로 이미지 URL 을 조회한다. 매핑이 없으면 null (Flutter 가 Data Dragon 으로 폴백). */
+	/** 영문 챔피언명으로 정사각 아이콘 URL 을 조회한다. 작은 아이콘(킬 피드 등)용. 매핑 없으면 null (Flutter 가 Data Dragon 폴백). */
 	private String resolveChampionImageUrl(String championName) {
 		if (championName == null || championName.isBlank()) {
 			return null;
@@ -240,6 +240,22 @@ public class MobileLiveGameService {
 		String normalized = NameNormalizer.normalizeChampionName(championName);
 		return championRepository.findByChampionNameEn(normalized)
 				.map(Champion::getImageUrl)
+				.orElse(null);
+	}
+
+	/**
+	 * 챔피언 픽 카드(세로)용 고화질 로딩 이미지 URL. loading_image_url(CommunityDragon centered splash)이
+	 * 비면 정사각 아이콘으로 폴백한다. 정사각을 세로로 늘리면 화질이 저하되므로 픽에는 이쪽을 쓴다.
+	 */
+	private String resolveChampionLoadingImageUrl(String championName) {
+		if (championName == null || championName.isBlank()) {
+			return null;
+		}
+		String normalized = NameNormalizer.normalizeChampionName(championName);
+		return championRepository.findByChampionNameEn(normalized)
+				.map(c -> c.getLoadingImageUrl() != null && !c.getLoadingImageUrl().isBlank()
+						? c.getLoadingImageUrl()
+						: c.getImageUrl())
 				.orElse(null);
 	}
 
