@@ -60,27 +60,9 @@ class MobileLivePlayerRatingServiceTest {
 	}
 
 	@Test
-	void cannotRateBeforeSetEnds() {
-		when(leagueMatchGameRepository.findWithMatchByGameId("game-1"))
-				.thenReturn(Optional.of(matchGame("inProgress", 0, 0, 1)));
-
-		assertThatThrownBy(() -> service.save(
-				"game-1",
-				1,
-				7L,
-				new LivePlayerRatingRequest(5, "좋은 경기")))
-				.isInstanceOf(ResponseStatusException.class)
-				.hasMessageContaining("409 CONFLICT");
-
-		verify(ratingRepository, never()).save(any());
-	}
-
-	@Test
-	void createsRatingAfterSetEnds() {
+	void 라이브_경기_중에도_평가를_저장한다() {
 		Member member = Member.builder().name("용맹한바론").tag("0000").email("test@example.com").build();
 		Player player = Player.builder().name("Faker").imageUrl("faker.png").build();
-		when(leagueMatchGameRepository.findWithMatchByGameId("game-1"))
-				.thenReturn(Optional.of(matchGame("inProgress", 1, 0, 1)));
 		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state()));
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
 		when(playerRepository.findByPlayerOriginId("oe:player:faker")).thenReturn(Optional.of(player));
@@ -109,8 +91,6 @@ class MobileLivePlayerRatingServiceTest {
 		when(aggregate.getRatingCount()).thenReturn(2L);
 		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state()));
 		when(ratingRepository.aggregateByGameId("game-1")).thenReturn(List.of(aggregate));
-		when(leagueMatchGameRepository.findWithMatchByGameId("game-1"))
-				.thenReturn(Optional.of(matchGame("completed", 2, 1, 1)));
 		when(playerRepository.findByPlayerOriginId("oe:player:faker")).thenReturn(Optional.empty());
 		when(playerRepository.findByName("Faker")).thenReturn(Optional.empty());
 
@@ -146,8 +126,6 @@ class MobileLivePlayerRatingServiceTest {
 		when(ratingRepository.distribution("game-1", 1)).thenReturn(List.of(fiveStars, fourStars));
 		when(ratingRepository.findByLiveGameIdAndLiveParticipantIdAndMember_Id("game-1", 1, 7L))
 				.thenReturn(Optional.of(rating));
-		when(leagueMatchGameRepository.findWithMatchByGameId("game-1"))
-				.thenReturn(Optional.of(matchGame("completed", 2, 1, 1)));
 
 		LivePlayerRatingDetailResponse response = service.getDetail("game-1", 1, 7L, 0, 20);
 
@@ -177,8 +155,6 @@ class MobileLivePlayerRatingServiceTest {
 	void updatesExistingRatingAndDeletesIt() {
 		Member member = member(7L, "용맹한바론");
 		LivePlayerRating existing = rating(member, 3, "무난했습니다");
-		when(leagueMatchGameRepository.findWithMatchByGameId("game-1"))
-				.thenReturn(Optional.of(matchGame("completed", 2, 1, 1)));
 		when(liveStateQueryService.getLatestState("game-1")).thenReturn(Optional.of(state()));
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
 		when(playerRepository.findByPlayerOriginId("oe:player:faker")).thenReturn(Optional.empty());
@@ -316,16 +292,5 @@ class MobileLivePlayerRatingServiceTest {
 						null,
 						List.of())),
 				List.of());
-	}
-
-	private LeagueMatchGame matchGame(String state, int blueScore, int redScore, int gameOrder) {
-		LeagueMatch match = LeagueMatch.builder()
-				.id("match-1")
-				.leagueName("LCK")
-				.state(state)
-				.blueScore(blueScore)
-				.redScore(redScore)
-				.build();
-		return new LeagueMatchGame(match, "game-1", gameOrder);
 	}
 }

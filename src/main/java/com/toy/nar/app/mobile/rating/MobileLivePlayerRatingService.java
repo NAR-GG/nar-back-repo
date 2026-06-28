@@ -74,7 +74,7 @@ public class MobileLivePlayerRatingService {
 
 		return new LivePlayerRatingListResponse(
 				gameId,
-				isRateable(gameId),
+				true,
 				buildTeamSummaries(state, aggregates),
 				summaries);
 	}
@@ -111,7 +111,7 @@ public class MobileLivePlayerRatingService {
 
 		return new LivePlayerRatingDetailResponse(
 				gameId,
-				isRateable(gameId),
+				true,
 				new LivePlayerRatingDetailResponse.PlayerHeader(
 						participant.participantId(),
 						player != null ? player.getId() : null,
@@ -143,9 +143,7 @@ public class MobileLivePlayerRatingService {
 		if (memberId == null) {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
 		}
-		if (!isRateable(gameId)) {
-			throw new ResponseStatusException(HttpStatus.CONFLICT, "세트 종료 후 평가할 수 있습니다.");
-		}
+		// 라이브 경기 중에도 평가 허용(세트 종료 제한 해제). 평가는 라이브 상태가 존재하면 언제든 가능.
 		LiveGameState state = requireState(gameId);
 		LiveParticipantState participant = requireParticipant(state, participantId);
 		Member member = memberRepository.findById(memberId)
@@ -219,24 +217,6 @@ public class MobileLivePlayerRatingService {
 				.filter(participant -> participant.participantId().equals(participantId))
 				.findFirst()
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "선수 정보를 찾을 수 없습니다."));
-	}
-
-	private boolean isRateable(String gameId) {
-		Optional<LeagueMatchGame> matchGame = leagueMatchGameRepository.findWithMatchByGameId(gameId);
-		if (matchGame.isEmpty()) {
-			return false;
-		}
-		LeagueMatchGame game = matchGame.get();
-		if ("completed".equalsIgnoreCase(game.getLeagueMatch().getState())) {
-			return true;
-		}
-		Integer gameOrder = game.getGameOrder();
-		Integer blueScore = game.getLeagueMatch().getBlueScore();
-		Integer redScore = game.getLeagueMatch().getRedScore();
-		return gameOrder != null
-				&& blueScore != null
-				&& redScore != null
-				&& blueScore + redScore >= gameOrder;
 	}
 
 	private Map<Integer, Player> resolvePlayers(List<LiveParticipantState> participants) {
