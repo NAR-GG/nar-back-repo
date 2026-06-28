@@ -18,8 +18,6 @@ import lombok.RequiredArgsConstructor;
 @Transactional(readOnly = true)
 public class ChampionService {
 
-	private static final String DDRAGON_LOADING_URL_FORMAT = "https://ddragon.leagueoflegends.com/cdn/img/champion/loading/%s_0.jpg";
-
 	private final ChampionRepository championRepository;
 
 	public List<ChampionDto> getAllChampions() {
@@ -53,31 +51,6 @@ public class ChampionService {
 		champion.updateLoadingImageUrl(imageUrl);
 	}
 
-	@Transactional
-	public int updateAllChampionLoadingImages(boolean overwrite) {
-		List<Champion> champions = championRepository.findAll();
-		int updatedCount = 0;
-
-		for (Champion champion : champions) {
-			if (!overwrite && hasText(champion.getLoadingImageUrl())) {
-				continue;
-			}
-
-			String loadingImageUrl = buildLoadingImageUrl(champion);
-			if (!hasText(loadingImageUrl)) {
-				continue;
-			}
-			if (loadingImageUrl.equals(champion.getLoadingImageUrl())) {
-				continue;
-			}
-
-			champion.updateLoadingImageUrl(loadingImageUrl);
-			updatedCount++;
-		}
-
-		return updatedCount;
-	}
-
 	private ChampionDto convertToDto(Champion champion) {
 		return new ChampionDto(
 			champion.getId(),
@@ -86,40 +59,6 @@ public class ChampionService {
 			champion.getImageUrl(),
 			champion.getLoadingImageUrl()
 		);
-	}
-
-	private String buildLoadingImageUrl(Champion champion) {
-		String championKey = extractChampionKeyFromImageUrl(champion.getImageUrl());
-		if (!hasText(championKey)) {
-			championKey = normalizeChampionKey(champion.getChampionNameEn());
-		}
-		if (!hasText(championKey)) {
-			return null;
-		}
-		return String.format(DDRAGON_LOADING_URL_FORMAT, championKey);
-	}
-
-	private String extractChampionKeyFromImageUrl(String championImageUrl) {
-		if (!hasText(championImageUrl)) {
-			return null;
-		}
-		int slashIdx = championImageUrl.lastIndexOf('/');
-		String fileName = slashIdx >= 0 ? championImageUrl.substring(slashIdx + 1) : championImageUrl;
-		int dotIdx = fileName.lastIndexOf('.');
-		return dotIdx > 0 ? fileName.substring(0, dotIdx) : fileName;
-	}
-
-	private String normalizeChampionKey(String championNameEn) {
-		if (!hasText(championNameEn)) {
-			return null;
-		}
-		return championNameEn
-				.trim()
-				.replaceAll("[^A-Za-z0-9]", "");
-	}
-
-	private boolean hasText(String value) {
-		return value != null && !value.isBlank();
 	}
 
 	private String safe(String value) {
