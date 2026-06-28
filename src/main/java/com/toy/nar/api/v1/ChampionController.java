@@ -98,12 +98,4 @@ public class ChampionController {
 		return ResponseEntity.ok("Champion loading image updated successfully.");
 	}
 
-	@Operation(summary = "전체 챔피언 로딩 이미지 URL 일괄 업데이트", description = "모든 챔피언의 loading 이미지 URL을 자동 생성해 저장합니다.")
-	@PostMapping("/loading-image/all")
-	public ResponseEntity<String> updateAllChampionLoadingImages(
-			@RequestParam(defaultValue = "false") boolean overwrite) {
-		int updatedCount = championService.updateAllChampionLoadingImages(overwrite);
-		return ResponseEntity.ok("Champion loading images updated: " + updatedCount);
-	}
-
 }

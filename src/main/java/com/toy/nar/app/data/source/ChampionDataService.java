@@ -30,6 +30,15 @@ public class ChampionDataService {
 
 	private static final String VERSION_URL = "https://ddragon.leagueoflegends.com/api/versions.json";
 	private static final String BASE_URL = "https://ddragon.leagueoflegends.com/cdn/";
+	private static final String SPLASH_URL_FORMAT = "https://cdn.communitydragon.org/latest/champion/%s/splash-art/centered";
+
+	/** numeric Riot key("266") → CommunityDragon centered splash(고화질 세로 크롭용). key 없으면 null. */
+	private static String buildSplashImageUrl(String riotKey) {
+		if (riotKey == null || riotKey.isBlank()) {
+			return null;
+		}
+		return String.format(SPLASH_URL_FORMAT, riotKey.trim());
+	}
 
 	private volatile Map<Integer, String> championNameByRiotKey = Collections.emptyMap();
 
@@ -108,17 +117,29 @@ public class ChampionDataService {
 			String normalizedName = NameNormalizer.normalizeChampionName(enChampionData.id());
 			String championKrName = krResponse.data().get(enChampionData.id()).name();
 			String imageUrl = versionedBaseUrl + "/img/champion/" + enChampionData.image().full();
+			// 세로 로딩 이미지는 CommunityDragon centered splash(고화질, numeric Riot key 사용)로 통일.
+			String loadingImageUrl = buildSplashImageUrl(enChampionData.key());
 
 			if (existingChampionNames.contains(normalizedName)) {
 				// 기존 챔피언이 있는 경우 이미지 URL 업데이트 확인
 				Champion existingChampion = championRepository.findByChampionNameEn(normalizedName)
 					.orElse(null);
+				if (existingChampion == null) {
+					continue;
+				}
 
-				if (existingChampion != null && !imageUrl.equals(existingChampion.getImageUrl())) {
+				boolean dirty = false;
+				if (!imageUrl.equals(existingChampion.getImageUrl())) {
 					log.info("🔄 Updating image URL for champion: {} (old: {}, new: {})",
 						normalizedName, existingChampion.getImageUrl(), imageUrl);
-
 					existingChampion.updateImageUrl(imageUrl);
+					dirty = true;
+				}
+				if (loadingImageUrl != null && !loadingImageUrl.equals(existingChampion.getLoadingImageUrl())) {
+					existingChampion.updateLoadingImageUrl(loadingImageUrl);
+					dirty = true;
+				}
+				if (dirty) {
 					championsToUpdate.add(existingChampion);
 				}
 			} else {
@@ -129,6 +150,7 @@ public class ChampionDataService {
 					.championNameEn(normalizedName)
 					.championNameKr(championKrName)
 					.imageUrl(imageUrl)
+					.loadingImageUrl(loadingImageUrl)
 					.build());
 			}
 		}
