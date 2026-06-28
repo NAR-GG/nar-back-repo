@@ -146,6 +146,7 @@ jobs:
               -e NAVER_CLIENT_ID="${{ secrets.NAVER_CLIENT_ID }}" \
               -e NAVER_CLIENT_SECRET="${{ secrets.NAVER_CLIENT_SECRET }}" \
               -e FRONTEND_URL="${{ secrets.FRONTEND_URL }}" \
+              -e BACKOFFICE_URL="https://admin.nar.kr" \
               -e CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
               -e CLOUDINARY_API_KEY="${{ secrets.CLOUDINARY_API_KEY }}" \
               -e CLOUDINARY_API_SECRET="${{ secrets.CLOUDINARY_API_SECRET }}" \

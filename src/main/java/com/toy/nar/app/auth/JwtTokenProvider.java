@@ -24,10 +24,11 @@ public class JwtTokenProvider {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String createAccessToken(Long memberId, boolean isOnboarded) {
+    public String createAccessToken(Long memberId, boolean isOnboarded, String role) {
         return Jwts.builder()
                 .subject(String.valueOf(memberId))
                 .claim("onboarded", isOnboarded)
+                .claim("role", role)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + ACCESS_TOKEN_EXPIRY_MS))
                 .signWith(secretKey)
@@ -49,6 +50,12 @@ public class JwtTokenProvider {
 
     public Long getMemberId(String token) {
         return Long.parseLong(parseClaims(token).getSubject());
+    }
+
+    /** 토큰의 role claim. 구버전 토큰(claim 없음)은 USER 로 간주. */
+    public String getRole(String token) {
+        String role = parseClaims(token).get("role", String.class);
+        return role != null ? role : "USER";
     }
 
     public boolean validate(String token) {

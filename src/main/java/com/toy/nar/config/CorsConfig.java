@@ -15,8 +15,10 @@ public class CorsConfig implements WebMvcConfigurer {
 
 	private static final List<String> ALLOWED_ORIGINS = List.of(
 		"http://localhost:3000",
+		"http://localhost:5173",   // 백오피스(Vite) 로컬 개발
 		"https://d1q54t7r1dfm7m.cloudfront.net",
-		"https://nar.kr"
+		"https://nar.kr",
+		"https://admin.nar.kr"     // 백오피스 배포
 	);
 
 	private static final List<String> ALLOWED_METHODS = List.of(

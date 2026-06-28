@@ -18,6 +18,8 @@ springdoc:
     operations-sorter: alpha
 
 app:
+  # 백오피스 웹 OAuth 콜백 베이스 URL. target=backoffice 로 로그인 시 여기로 토큰 리다이렉트.
+  backoffice-url: ${BACKOFFICE_URL:http://localhost:5173}
   youtube:
     seed-channels:
       PRO_TEAMS:

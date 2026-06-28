@@ -1,12 +1,15 @@
 package com.toy.nar.app.auth;
 
 import com.toy.nar.domain.member.entity.Member;
+import com.toy.nar.domain.member.entity.MemberRole;
 import com.toy.nar.domain.member.entity.MemberSocial;
 import com.toy.nar.domain.member.entity.RefreshToken;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.member.repository.MemberSocialRepository;
 import com.toy.nar.domain.member.repository.RefreshTokenRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,6 +34,24 @@ public class SocialLoginService {
 				.orElseGet(() -> createMember(accountInfo));
 	}
 
+	/**
+	 * 백오피스 로그인 전용. 기존 회원이면서 ADMIN 인 경우만 통과. 회원을 생성하지 않는다.
+	 * 미등록/비ADMIN 이면 OAuth2AuthenticationException → 실패 핸들러로.
+	 */
+	@Transactional(readOnly = true)
+	public Member findAdminMember(SocialAccountInfo accountInfo) {
+		Member member = memberSocialRepository
+				.findByProviderAndProviderId(accountInfo.provider(), accountInfo.providerId())
+				.map(MemberSocial::getMember)
+				.orElseThrow(() -> new OAuth2AuthenticationException(
+						new OAuth2Error("access_denied"), "백오피스에 등록되지 않은 계정입니다"));
+		if (member.getRole() != MemberRole.ADMIN) {
+			throw new OAuth2AuthenticationException(
+					new OAuth2Error("access_denied"), "관리자 권한이 없습니다");
+		}
+		return member;
+	}
+
 	@Transactional
 	public AuthTokens login(SocialAccountInfo accountInfo) {
 		Member member = findOrCreateMember(accountInfo);
@@ -45,7 +66,7 @@ public class SocialLoginService {
 	}
 
 	private AuthTokens issueTokens(Member member) {
-		String accessToken = jwtTokenProvider.createAccessToken(member.getId(), member.isOnboarded());
+		String accessToken = jwtTokenProvider.createAccessToken(member.getId(), member.isOnboarded(), member.getRole().name());
 		String refreshTokenValue = jwtTokenProvider.createRefreshToken(member.getId());
 
 		refreshTokenRepository.deleteByMemberId(member.getId());
