@@ -48,11 +48,16 @@ class PlayerCardServiceTest {
 		when(gameParticipantRepository.findPlayerMostChampionsByFilter(
 				List.of(1L, 2L), "LCK", 2026, "Round 3-5", "14.1", null))
 				.thenReturn(List.of(
-						new Object[] { 1L, 101L, "아리", "Ahri", "ahri.png", 10L, 7L },
-						new Object[] { 1L, 102L, "아지르", "Azir", "azir.png", 9L, 6L },
-						new Object[] { 1L, 103L, "요네", "Yone", "yone.png", 8L, 5L },
-						new Object[] { 1L, 104L, "탈리야", "Taliyah", "taliyah.png", 4L, 3L },
-						new Object[] { 2L, 201L, "레나타", "Renata", "renata.png", 12L, 8L }));
+						new Object[] { 1L, 101L, "아리", "Ahri", "ahri.png", 10L, 7L,
+								"https://cdn.communitydragon.org/latest/champion/103/splash-art/centered" },
+						new Object[] { 1L, 102L, "아지르", "Azir", "azir.png", 9L, 6L,
+								"https://cdn.communitydragon.org/latest/champion/268/splash-art/centered" },
+						new Object[] { 1L, 103L, "요네", "Yone", "yone.png", 8L, 5L,
+								"https://cdn.communitydragon.org/latest/champion/777/splash-art/centered" },
+						new Object[] { 1L, 104L, "탈리야", "Taliyah", "taliyah.png", 4L, 3L,
+								"https://cdn.communitydragon.org/latest/champion/163/splash-art/centered" },
+						new Object[] { 2L, 201L, "레나타", "Renata", "renata.png", 12L, 8L,
+								"https://cdn.communitydragon.org/latest/champion/888/splash-art/centered" }));
 
 		PlayerCardListResponse response = playerCardService.getPlayerCards(
 				"LCK", 2026, "Round 3-5", "14.1", "ALL", 1, 20);
@@ -70,9 +75,9 @@ class PlayerCardServiceTest {
 		assertThat(response.getPlayers().get(0).getMostChampions()).hasSize(3);
 		assertThat(response.getPlayers().get(0).getMostChampions().get(0).getWinRatePct()).isEqualTo(70.0);
 		assertThat(response.getPlayers().get(0).getMostChampions().get(0).getChampionLoadingImageUrl())
-				.isEqualTo("https://ddragon.leagueoflegends.com/cdn/img/champion/loading/ahri_0.jpg");
+				.isEqualTo("https://cdn.communitydragon.org/latest/champion/103/splash-art/centered");
 		assertThat(response.getPlayers().get(0).getTopChampionLoadingImageUrl())
-				.isEqualTo("https://ddragon.leagueoflegends.com/cdn/img/champion/loading/ahri_0.jpg");
+				.isEqualTo("https://cdn.communitydragon.org/latest/champion/103/splash-art/centered");
 		assertThat(response.getPlayers().get(0).getProfile().getKda()).isEqualTo(8.25);
 		assertThat(response.getPlayers().get(0).getProfile().getGpm()).isEqualTo(441.7);
 		assertThat(response.getPlayers().get(0).getProfile().getDpm()).isEqualTo(958.2);

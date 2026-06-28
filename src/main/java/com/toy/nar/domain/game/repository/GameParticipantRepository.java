@@ -482,7 +482,8 @@ public interface GameParticipantRepository
 				c.champion_name_en,
 				c.image_url,
 				COUNT(*) AS games_played,
-				SUM(CASE WHEN gp.is_win = 1 THEN 1 ELSE 0 END) AS wins
+				SUM(CASE WHEN gp.is_win = 1 THEN 1 ELSE 0 END) AS wins,
+				c.loading_image_url
 			FROM game_participants gp
 			JOIN champions c ON c.champion_id = gp.champion_id
 			JOIN games g ON g.game_id = gp.game_id
@@ -493,7 +494,7 @@ public interface GameParticipantRepository
 			  AND (:split IS NULL OR l.season_split = :split)
 			  AND (:patch IS NULL OR g.patch = :patch)
 			  AND (:side IS NULL OR UPPER(gp.side) = :side)
-			GROUP BY gp.player_id, c.champion_id, c.champion_name_kr, c.champion_name_en, c.image_url
+			GROUP BY gp.player_id, c.champion_id, c.champion_name_kr, c.champion_name_en, c.image_url, c.loading_image_url
 			ORDER BY gp.player_id, games_played DESC, wins DESC, c.champion_name_en
 			""", nativeQuery = true)
 	List<Object[]> findPlayerMostChampionsByFilter(
