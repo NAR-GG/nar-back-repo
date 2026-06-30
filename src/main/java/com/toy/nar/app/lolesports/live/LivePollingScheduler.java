@@ -1,7 +1,6 @@
 package com.toy.nar.app.lolesports.live;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.toy.nar.app.lolesports.LeagueConstants;
 import com.toy.nar.app.lolesports.LeagueMatchService;
 import com.toy.nar.app.lolesports.MatchResponseWrapper;
 import com.toy.nar.app.lolesports.MatchResultDto;
@@ -70,7 +69,20 @@ public class LivePollingScheduler {
 		LocalDateTime nowUtc = LocalDateTime.now(ZoneOffset.UTC);
 		boolean scheduleCacheDirty = false;
 
-		for (String league : LeagueConstants.TARGET_LEAGUES) {
+		// 디스커버리 대상 리그를 좁힌다(9개 전부 매 틱 외부 호출하던 것을 줄임):
+		//  (1) 현재 active 게임의 리그 — 진행 중인 라이브가 끊기지 않도록 무조건 포함
+		//  (2) 오늘 ±1일에 경기가 있는 리그 — 곧 시작/방금 끝난 경기 커버
+		// 둘 다 없으면(경기 없는 시간대) 외부 호출 0회. 무효 리그명은 WorldsService 가 알아서 skip.
+		Set<String> leaguesToPoll = new HashSet<>();
+		for (ActiveLiveGame activeGame : activeGames.values()) {
+			if (activeGame.leagueName() != null && !activeGame.leagueName().isBlank()) {
+				leaguesToPoll.add(activeGame.leagueName());
+			}
+		}
+		leaguesToPoll.addAll(
+				leagueMatchService.findLeaguesWithMatchesBetween(nowUtc.minusDays(1), nowUtc.plusDays(1)));
+
+		for (String league : leaguesToPoll) {
 			try {
 				MatchResponseWrapper response = worldsService.getWorldsMatches(null, league);
 				for (MatchResultDto match : response.getMatches()) {

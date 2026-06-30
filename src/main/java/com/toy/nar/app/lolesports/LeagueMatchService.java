@@ -81,6 +81,11 @@ public class LeagueMatchService {
 		syncMatches(leagueSlug, false);
 	}
 
+	/** [Scheduler용] 주어진 기간에 경기가 있는 리그명 목록(중복 제거). 라이브 디스커버리 대상을 좁힌다. */
+	public List<String> findLeaguesWithMatchesBetween(LocalDateTime start, LocalDateTime end) {
+		return leagueMatchRepository.findDistinctLeagueNamesByDateRange(start, end);
+	}
+
 	public boolean syncRealtimeMatchStatus(MatchResultDto match, String fallbackLeagueSlug) {
 		if (match == null || match.getMatchId() == null || match.getMatchId().isBlank()) {
 			return false;
