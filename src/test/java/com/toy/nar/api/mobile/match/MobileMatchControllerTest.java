@@ -49,7 +49,7 @@ class MobileMatchControllerTest {
 								new MobileScheduleListResponse.MobileTeamResult("T1", "T1", "https://example.com/t1.png", 2),
 								new MobileScheduleListResponse.MobileTeamResult("Gen.G", "GEN", "https://example.com/gen.png", 1),
 								null,
-								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED")))),
+								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED", null)))),
 						"cursor-token",
 						true));
 
@@ -71,15 +71,17 @@ class MobileMatchControllerTest {
 				.thenReturn(new MobileMatchGamesResponse(
 						"match-1",
 						List.of(
-								new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED"),
-								new MobileScheduleListResponse.MobileGameSummary(2, "game-2", null, null))));
+								new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED", "https://youtu.be/vod-1"),
+								new MobileScheduleListResponse.MobileGameSummary(2, "game-2", null, null, null))));
 
 		mockMvc.perform(get("/api/mobile/matches/match-1/games"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.matchId").value("match-1"))
 				.andExpect(jsonPath("$.games[0].gameId").value("game-1"))
 				.andExpect(jsonPath("$.games[0].recordGameId").value(100L))
+				.andExpect(jsonPath("$.games[0].vodUrl").value("https://youtu.be/vod-1"))
 				.andExpect(jsonPath("$.games[1].gameOrder").value(2))
-				.andExpect(jsonPath("$.games[1].recordGameId").doesNotExist());
+				.andExpect(jsonPath("$.games[1].recordGameId").doesNotExist())
+				.andExpect(jsonPath("$.games[1].vodUrl").doesNotExist());
 	}
 }
