@@ -56,6 +56,8 @@ public class MobileScheduleService {
 	private static final String CURSOR_DELIMITER = "|";
 	private static final int DEFAULT_PAGE_SIZE = 20;
 	private static final int MAX_PAGE_SIZE = 50;
+	private static final com.fasterxml.jackson.databind.ObjectMapper VOD_MAPPER =
+			new com.fasterxml.jackson.databind.ObjectMapper();
 
 	private final LeagueMatchRepository leagueMatchRepository;
 	private final LeagueMatchGameRepository leagueMatchGameRepository;
@@ -183,6 +185,8 @@ public class MobileScheduleService {
 	public MobileMatchGamesResponse getMatchGames(String matchId) {
 		LeagueMatch match = leagueMatchRepository.findById(matchId)
 				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
+		// 세트별 다시보기 VOD URL (setNumber == gameOrder 기준). 없으면 빈 맵.
+		Map<Integer, String> vodMap = parseVodMap(match.getMatchDetailsJson());
 		// 상태 판정용 집합: 현재 라이브(스토어) / 라이브 데이터 수집됨(영속 스냅샷, 종료 후에도 유지).
 		java.util.Set<String> liveGameIds = liveStateStore.getActiveGames().values().stream()
 				.filter(live -> match.getId().equals(live.matchId()))
@@ -202,7 +206,8 @@ public class MobileScheduleService {
 			String gameId = row.getExternalGameId();
 			games.add(new MobileScheduleListResponse.MobileGameSummary(
 					row.getGameOrder(), gameId, row.getInternalGameId(),
-					gameStatus(gameId, liveGameIds, recordedSet)));
+					gameStatus(gameId, liveGameIds, recordedSet),
+					row.getGameOrder() != null ? vodMap.get(row.getGameOrder()) : null));
 			knownGameIds.add(gameId);
 			if (row.getGameOrder() != null) {
 				maxOrder = Math.max(maxOrder, row.getGameOrder());
@@ -217,7 +222,7 @@ public class MobileScheduleService {
 		int nextOrder = maxOrder + 1;
 		for (String gameId : extraGameIds) {
 			games.add(new MobileScheduleListResponse.MobileGameSummary(
-					nextOrder++, gameId, null, gameStatus(gameId, liveGameIds, recordedSet)));
+					nextOrder++, gameId, null, gameStatus(gameId, liveGameIds, recordedSet), null));
 		}
 
 		return new MobileMatchGamesResponse(match.getId(), games);
@@ -299,12 +304,35 @@ public class MobileScheduleService {
 	}
 
 	private MobileScheduleListResponse.MobileGameSummary toGameSummary(LeagueMatchGameRepository.MappedGameRow row) {
-		// 일정 목록에서는 세트 상태를 계산하지 않는다(상세 화면에서만 채움).
+		// 일정 목록에서는 세트 상태·VOD를 계산하지 않는다(상세 화면에서만 채움).
 		return new MobileScheduleListResponse.MobileGameSummary(
 				row.getGameOrder(),
 				row.getExternalGameId(),
 				row.getInternalGameId(),
+				null,
 				null);
+	}
+
+	// ponytail: ScheduleService.parseVodMap 과 동일 로직 소량 중복. 공유 유틸은 두 호출처뿐이라 보류.
+	private Map<Integer, String> parseVodMap(String matchDetailsJson) {
+		Map<Integer, String> vodMap = new LinkedHashMap<>();
+		if (matchDetailsJson == null || matchDetailsJson.isBlank()) {
+			return vodMap;
+		}
+		try {
+			List<com.toy.nar.app.lolesports.MatchResultDto.SetVod> sets = VOD_MAPPER.readValue(
+					matchDetailsJson,
+					new com.fasterxml.jackson.core.type.TypeReference<>() {
+					});
+			for (com.toy.nar.app.lolesports.MatchResultDto.SetVod setVod : sets) {
+				if (setVod.getVodUrl() != null && !setVod.getVodUrl().isBlank()) {
+					vodMap.put(setVod.getSetNumber(), setVod.getVodUrl());
+				}
+			}
+		} catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+			// 파싱 실패는 VOD 없음으로 간주.
+		}
+		return vodMap;
 	}
 
 	/** 게임 상태 판정: 라이브 스토어에 있으면 LIVE, 영속 데이터가 있으면 ENDED, 아니면 SCHEDULED. */

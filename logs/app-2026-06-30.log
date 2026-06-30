@@ -1,0 +1,334 @@
+2026-06-30 19:26:34.712 INFO  --- [    Test worker] c.t.n.a.m.d.MobileDeviceSecurityTest     : Starting MobileDeviceSecurityTest using Java 21.0.2 with PID 82017 (started by changha in /Users/changha/Documents/사이드플젝/nar-back-repo)
+2026-06-30 19:26:34.721 INFO  --- [    Test worker] c.t.n.a.m.d.MobileDeviceSecurityTest     : The following 1 profile is active: "dev"
+2026-06-30 19:26:36.496 INFO  --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:36.497 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:36.497 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:36.601 INFO  --- [    Test worker] c.t.n.a.m.d.MobileDeviceSecurityTest     : Started MobileDeviceSecurityTest in 2.528 seconds (process running for 7.431)
+2026-06-30 19:26:36.731 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:36.732 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:36.732 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:36.753 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:36.754 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:36.754 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:36.768 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:36.768 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:36.769 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:36.783 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:36.783 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:36.783 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:36.794 WARN  --- [    Test worker] .w.s.m.s.DefaultHandlerExceptionResolver : Resolved [org.springframework.web.bind.MethodArgumentNotValidException: Validation failed for argument [1] in public org.springframework.http.ResponseEntity<com.toy.nar.app.mobile.notification.dto.TeamNotificationSubscriptionResponse> com.toy.nar.api.mobile.notification.MobileTeamNotificationController.subscribe(java.lang.Long,com.toy.nar.app.mobile.notification.dto.TeamNotificationSubscribeRequest): [Field error in object 'teamNotificationSubscribeRequest' on field 'teamId': rejected value [null]; codes [NotNull.teamNotificationSubscribeRequest.teamId,NotNull.teamId,NotNull.java.lang.Long,NotNull]; arguments [org.springframework.context.support.DefaultMessageSourceResolvable: codes [teamNotificationSubscribeRequest.teamId,teamId]; arguments []; default message [teamId]]; default message [must not be null]] ]
+2026-06-30 19:26:36.809 WARN  --- [    Test worker] .w.s.m.s.DefaultHandlerExceptionResolver : Resolved [org.springframework.web.bind.MethodArgumentNotValidException: Validation failed for argument [2] in public org.springframework.http.ResponseEntity<com.toy.nar.app.mobile.notification.dto.TeamNotificationSubscriptionResponse> com.toy.nar.api.mobile.notification.MobileTeamNotificationController.update(java.lang.Long,java.lang.Long,com.toy.nar.app.mobile.notification.dto.TeamNotificationUpdateRequest) with 2 errors: [Field error in object 'teamNotificationUpdateRequest' on field 'setEndEnabled': rejected value [null]; codes [NotNull.teamNotificationUpdateRequest.setEndEnabled,NotNull.setEndEnabled,NotNull.java.lang.Boolean,NotNull]; arguments [org.springframework.context.support.DefaultMessageSourceResolvable: codes [teamNotificationUpdateRequest.setEndEnabled,setEndEnabled]; arguments []; default message [setEndEnabled]]; default message [must not be null]] [Field error in object 'teamNotificationUpdateRequest' on field 'liveEventEnabled': rejected value [null]; codes [NotNull.teamNotificationUpdateRequest.liveEventEnabled,NotNull.liveEventEnabled,NotNull.java.lang.Boolean,NotNull]; arguments [org.springframework.context.support.DefaultMessageSourceResolvable: codes [teamNotificationUpdateRequest.liveEventEnabled,liveEventEnabled]; arguments []; default message [liveEventEnabled]]; default message [must not be null]] ]
+2026-06-30 19:26:36.817 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:36.817 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:36.817 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:36.863 INFO  --- [    Test worker] a.m.n.MobileTeamNotificationSecurityTest : Starting MobileTeamNotificationSecurityTest using Java 21.0.2 with PID 82017 (started by changha in /Users/changha/Documents/사이드플젝/nar-back-repo)
+2026-06-30 19:26:36.863 INFO  --- [    Test worker] a.m.n.MobileTeamNotificationSecurityTest : The following 1 profile is active: "dev"
+2026-06-30 19:26:37.146 INFO  --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.146 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.146 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:37.152 INFO  --- [    Test worker] a.m.n.MobileTeamNotificationSecurityTest : Started MobileTeamNotificationSecurityTest in 0.312 seconds (process running for 7.982)
+2026-06-30 19:26:37.206 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.207 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.211 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-30 19:26:37.265 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.265 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.267 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:37.399 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.400 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.401 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-30 19:26:37.428 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.429 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.429 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:37.446 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.447 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.447 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:37.497 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.497 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.497 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:37.507 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.508 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.508 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:37.518 INFO  --- [    Test worker] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.518 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.518 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:37.525 WARN  --- [    Test worker] .w.s.m.s.DefaultHandlerExceptionResolver : Resolved [org.springframework.web.bind.MethodArgumentNotValidException: Validation failed for argument [1] in public org.springframework.http.ResponseEntity<com.toy.nar.app.mobile.subscription.dto.PlayerSubscriptionResponse> com.toy.nar.api.mobile.subscription.MobilePlayerSubscriptionController.subscribe(java.lang.Long,com.toy.nar.app.mobile.subscription.dto.PlayerSubscriptionRequest): [Field error in object 'playerSubscriptionRequest' on field 'playerId': rejected value [null]; codes [NotNull.playerSubscriptionRequest.playerId,NotNull.playerId,NotNull.java.lang.Long,NotNull]; arguments [org.springframework.context.support.DefaultMessageSourceResolvable: codes [playerSubscriptionRequest.playerId,playerId]; arguments []; default message [playerId]]; default message [must not be null]] ]
+2026-06-30 19:26:37.553 INFO  --- [    Test worker] m.s.MobilePlayerSubscriptionSecurityTest : Starting MobilePlayerSubscriptionSecurityTest using Java 21.0.2 with PID 82017 (started by changha in /Users/changha/Documents/사이드플젝/nar-back-repo)
+2026-06-30 19:26:37.554 INFO  --- [    Test worker] m.s.MobilePlayerSubscriptionSecurityTest : The following 1 profile is active: "dev"
+2026-06-30 19:26:37.741 INFO  --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-30 19:26:37.742 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-30 19:26:37.742 INFO  --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-30 19:26:37.747 INFO  --- [    Test worker] m.s.MobilePlayerSubscriptionSecurityTest : Started MobilePlayerSubscriptionSecurityTest in 0.209 seconds (process running for 8.577)
+2026-06-30 19:26:38.470 INFO  --- [    Test worker] c.t.n.app.data.ingestion.EntityResolver  : Initialized Team cache with 1 entries.
+2026-06-30 19:26:38.472 INFO  --- [    Test worker] c.t.n.app.data.ingestion.EntityResolver  : Initialized Champion cache with 0 entries.
+2026-06-30 19:26:39.276 INFO  --- [    Test worker] c.t.n.app.lolesports.LeagueMatchService  : Realtime match status synced. matchId=115548128962971911 state=unstarted score=1:0
+2026-06-30 19:26:39.677 INFO  --- [    Test worker] c.t.n.a.l.live.LiveObjectEventRecorder   : [live-notify] event saved type=TOWER team=Blue order=1 gameId=game-1 notify=false
+2026-06-30 19:26:39.678 INFO  --- [    Test worker] c.t.n.a.l.live.LiveObjectEventRecorder   : [live-notify] event saved type=DRAGON team=Blue order=1 gameId=game-1 notify=false
+2026-06-30 19:26:39.804 WARN  --- [    Test worker] c.t.n.a.l.live.LivePollingScheduler      : Live discovery failed for league LPL: Cannot invoke "com.toy.nar.app.lolesports.MatchResponseWrapper.getMatches()" because "response" is null
+2026-06-30 19:26:39.804 WARN  --- [    Test worker] c.t.n.a.l.live.LivePollingScheduler      : Live discovery failed for league LEC: Cannot invoke "com.toy.nar.app.lolesports.MatchResponseWrapper.getMatches()" because "response" is null
+2026-06-30 19:26:39.805 WARN  --- [    Test worker] c.t.n.a.l.live.LivePollingScheduler      : Live discovery failed for league LCS: Cannot invoke "com.toy.nar.app.lolesports.MatchResponseWrapper.getMatches()" because "response" is null
+2026-06-30 19:26:39.805 WARN  --- [    Test worker] c.t.n.a.l.live.LivePollingScheduler      : Live discovery failed for league LCP: Cannot invoke "com.toy.nar.app.lolesports.MatchResponseWrapper.getMatches()" because "response" is null
+2026-06-30 19:26:39.805 WARN  --- [    Test worker] c.t.n.a.l.live.LivePollingScheduler      : Live discovery failed for league CBLOL: Cannot invoke "com.toy.nar.app.lolesports.MatchResponseWrapper.getMatches()" because "response" is null
+2026-06-30 19:26:39.805 WARN  --- [    Test worker] c.t.n.a.l.live.LivePollingScheduler      : Live discovery failed for league MSI: Cannot invoke "com.toy.nar.app.lolesports.MatchResponseWrapper.getMatches()" because "response" is null
+2026-06-30 19:26:39.806 WARN  --- [    Test worker] c.t.n.a.l.live.LivePollingScheduler      : Live discovery failed for league WORLDS: Cannot invoke "com.toy.nar.app.lolesports.MatchResponseWrapper.getMatches()" because "response" is null
+2026-06-30 19:26:39.806 WARN  --- [    Test worker] c.t.n.a.l.live.LivePollingScheduler      : Live discovery failed for league FIRST_STAND: Cannot invoke "com.toy.nar.app.lolesports.MatchResponseWrapper.getMatches()" because "response" is null
+2026-06-30 19:26:39.811 WARN  --- [    Test worker] c.t.n.a.l.live.LivePollingScheduler      : Removing game game-1 after 2 consecutive polling failures
+2026-06-30 19:26:39.876 INFO  --- [    Test worker] n.a.l.s.LeagueMatchSeasonBackfillService : 시즌 백필 - LCK 완료 (dryRun=false): 미해석 잔여 0건
+2026-06-30 19:26:39.879 WARN  --- [    Test worker] n.a.l.s.LeagueMatchSeasonBackfillService : 시즌 백필 - 토너먼트 정보를 찾지 못해 건너뜀: UNKNOWN
+2026-06-30 19:26:39.882 INFO  --- [    Test worker] n.a.l.s.LeagueMatchSeasonBackfillService : 시즌 백필 - LCK 시즌 값 초기화: 0건
+2026-06-30 19:26:39.883 INFO  --- [    Test worker] n.a.l.s.LeagueMatchSeasonBackfillService : 시즌 백필 - LCK 완료 (dryRun=false): 미해석 잔여 0건
+2026-06-30 19:26:39.884 INFO  --- [    Test worker] n.a.l.s.LeagueMatchSeasonBackfillService : 시즌 백필 - LCK 완료 (dryRun=true): 미해석 잔여 42건
+2026-06-30 19:26:40.187 WARN  --- [    Test worker] c.t.n.a.m.p.PlayerSoloRankPushService    : Player solo rank push failed memberId=7 playerId=10 gameId=game-1
+java.lang.IllegalStateException: firebase down
+	at com.toy.nar.app.mobile.push.PlayerSoloRankPushService.sendToMember(PlayerSoloRankPushService.java:93)
+	at com.toy.nar.app.mobile.push.PlayerSoloRankPushService.notifySubscribers(PlayerSoloRankPushService.java:59)
+	at com.toy.nar.app.mobile.push.PlayerSoloRankPushServiceTest.lambda$pushFailureDoesNotEscapeMonitorFlow$1(PlayerSoloRankPushServiceTest.java:119)
+	at org.assertj.core.api.ThrowableAssert.catchThrowable(ThrowableAssert.java:63)
+	at org.assertj.core.api.AssertionsForClassTypes.catchThrowable(AssertionsForClassTypes.java:904)
+	at org.assertj.core.api.AssertionsForClassTypes.assertThatCode(AssertionsForClassTypes.java:875)
+	at org.assertj.core.api.Assertions.assertThatCode(Assertions.java:1392)
+	at com.toy.nar.app.mobile.push.PlayerSoloRankPushServiceTest.pushFailureDoesNotEscapeMonitorFlow(PlayerSoloRankPushServiceTest.java:119)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:775)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:479)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:161)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:152)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:91)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:112)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:94)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:87)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:216)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:212)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:137)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+2026-06-30 19:26:40.192 WARN  --- [    Test worker] c.t.n.a.m.p.PlayerSoloRankPushService    : Failed to send all-solo-rank topic push playerId=10 gameId=game-1
+java.lang.IllegalStateException: topic down
+	at com.toy.nar.app.mobile.push.PlayerSoloRankPushService.sendToAllSoloRankTopic(PlayerSoloRankPushService.java:72)
+	at com.toy.nar.app.mobile.push.PlayerSoloRankPushService.notifySubscribers(PlayerSoloRankPushService.java:48)
+	at com.toy.nar.app.mobile.push.PlayerSoloRankPushServiceTest.lambda$topicSendFailureDoesNotBlockSubscriberPush$0(PlayerSoloRankPushServiceTest.java:94)
+	at org.assertj.core.api.ThrowableAssert.catchThrowable(ThrowableAssert.java:63)
+	at org.assertj.core.api.AssertionsForClassTypes.catchThrowable(AssertionsForClassTypes.java:904)
+	at org.assertj.core.api.AssertionsForClassTypes.assertThatCode(AssertionsForClassTypes.java:875)
+	at org.assertj.core.api.Assertions.assertThatCode(Assertions.java:1392)
+	at com.toy.nar.app.mobile.push.PlayerSoloRankPushServiceTest.topicSendFailureDoesNotBlockSubscriberPush(PlayerSoloRankPushServiceTest.java:94)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:775)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:479)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:161)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:152)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:91)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:112)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:94)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:87)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:216)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:212)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:137)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+2026-06-30 19:26:40.623 INFO  --- [    Test worker] c.t.n.a.r.PlayerSoloRankMonitorService   : Primed live game baseline for player=Faker gameId=333
+2026-06-30 19:26:41.054 INFO  --- [    Test worker] c.t.nar.app.youtube.YoutubeSyncService   : ### 비디오 Sync 시작. 기준: 최근 7일 (2026-06-23T19:26:41.054451 이후), 대상 채널: 1개 ###
+2026-06-30 19:26:41.055 INFO  --- [    Test worker] c.t.nar.app.youtube.YoutubeSyncService   : [Test Channel] 영상 3개 수집 완료 (PlaylistItems API)
+2026-06-30 19:26:41.055 INFO  --- [    Test worker] c.t.nar.app.youtube.YoutubeSyncService   : ### 비디오 전체 동기화 완료. 총 3개의 신규 영상 저장됨 ###
+2026-06-30 19:26:41.057 INFO  --- [    Test worker] c.t.nar.app.youtube.YoutubeSyncService   : ### 비디오 Sync 시작. 기준: 최근 7일 (2026-06-23T19:26:41.057612 이후), 대상 채널: 1개 ###
+2026-06-30 19:26:41.057 INFO  --- [    Test worker] c.t.nar.app.youtube.YoutubeSyncService   : [Test Channel] 영상 1개 수집 완료 (PlaylistItems API)
+2026-06-30 19:26:41.058 INFO  --- [    Test worker] c.t.nar.app.youtube.YoutubeSyncService   : ### 비디오 전체 동기화 완료. 총 1개의 신규 영상 저장됨 ###
+2026-06-30 19:26:41.861 INFO  --- [    Test worker] org.testcontainers.DockerClientFactory   : Testcontainers version: 1.21.2
+2026-06-30 19:26:42.321 INFO  --- [    Test worker] .t.d.DockerMachineClientProviderStrategy : docker-machine executable was not found on PATH ([/var/folders/w2/wg8wc3112kb33bmhlgs9c87m0000gn/T//cmux-cli-shims/CA831863-0FE8-4FF1-8A12-A003617471D7, /Applications/cmux.app/Contents/Resources/bin, /Users/changha/.local/bin, /opt/homebrew/opt/libpq/bin, /Users/changha/.antigravity/antigravity/bin, /Users/changha/.nvm/versions/node/v22.18.0/bin, /Users/changha/.bun/bin, /Users/changha/.sdkman/candidates/java/current/bin, /opt/anaconda3/bin, /opt/anaconda3/condabin, /Users/changha/Library/Android/sdk/platform-tools, /Library/Frameworks/Python.framework/Versions/3.10/bin, /opt/homebrew/bin, /opt/homebrew/sbin, /usr/local/bin, /System/Cryptexes/App/usr/bin, /usr/bin, /bin, /usr/sbin, /sbin, /var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin, /var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin, /var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin, /pkg/env/global/bin, /Library/Apple/usr/bin, /Applications/VMware Fusion.app/Contents/Public, /var/folders/w2/wg8wc3112kb33bmhlgs9c87m0000gn/T/cmux-cli-shims/CA831863-0FE8-4FF1-8A12-A003617471D7, /var/folders/w2/wg8wc3112kb33bmhlgs9c87m0000gn/T/cmux-cli-shims/CA831863-0FE8-4FF1-8A12-A003617471D7, /Users/changha/Documents/flutter/bin, /Users/changha/.orbstack/bin, /Users/changha/development/flutter/bin, /Users/changha/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/bin, /Users/changha/.claude/plugins/cache/ponytail/ponytail/4.7.0/bin, /Users/changha/.claude/plugins/cache/caveman/caveman/25d22f864ad6/bin, /Users/changha/.claude/plugins/cache/im-not-ai/humanize-korean/1.5.0/bin])
+2026-06-30 19:26:42.322 ERROR --- [    Test worker] o.t.d.DockerClientProviderStrategy       : Could not find a valid Docker environment. Please check configuration. Attempted configurations were:
+	UnixSocketClientProviderStrategy: failed with exception BadRequestException (Status 400: {"message":"client version 1.32 is too old. Minimum supported API version is 1.40, please upgrade your client to a newer version"}
+)
+	DockerDesktopClientProviderStrategy: failed with exception NullPointerException (Cannot invoke "java.nio.file.Path.toString()" because the return value of "org.testcontainers.dockerclient.DockerDesktopClientProviderStrategy.getSocketPath()" is null)As no valid configuration was found, execution cannot continue.
+See https://java.testcontainers.org/on_failure.html for more details.
+2026-06-30 19:26:42.324 INFO  --- [    Test worker] org.testcontainers.DockerClientFactory   : Testcontainers version: 1.21.2
+2026-06-30 19:26:42.368 INFO  --- [    Test worker] p.r.PlayerRepositoryLckPlayerOptionsTest : Starting PlayerRepositoryLckPlayerOptionsTest using Java 21.0.2 with PID 82017 (started by changha in /Users/changha/Documents/사이드플젝/nar-back-repo)
+2026-06-30 19:26:42.368 INFO  --- [    Test worker] p.r.PlayerRepositoryLckPlayerOptionsTest : The following 1 profile is active: "dev"
+2026-06-30 19:26:42.450 INFO  --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-30 19:26:42.450 INFO  --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-30 19:26:42.491 INFO  --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 32 ms. Found 7 JPA repository interfaces.
+2026-06-30 19:26:42.537 INFO  --- [    Test worker] beddedDataSourceBeanFactoryPostProcessor : Replacing 'dataSource' DataSource bean with embedded version
+2026-06-30 19:26:42.573 INFO  --- [    Test worker] o.s.j.d.e.EmbeddedDatabaseFactory        : Starting embedded database: url='jdbc:h2:mem:8cb4cdf8-3345-4415-8221-260ceceed6f9;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false', username='sa'
+2026-06-30 19:26:42.864 INFO  --- [    Test worker] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-06-30 19:26:43.004 INFO  --- [    Test worker] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.6.18.Final
+2026-06-30 19:26:43.055 INFO  --- [    Test worker] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-06-30 19:26:43.268 INFO  --- [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-30 19:26:43.515 INFO  --- [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [Connecting through datasource 'org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseFactory$EmbeddedDataSourceProxy@fb054f4']
+	Database driver: undefined/unknown
+	Database version: 2.3.232
+	Autocommit mode: undefined/unknown
+	Isolation level: undefined/unknown
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-06-30 19:26:45.003 INFO  --- [    Test worker] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-30 19:26:45.100 INFO  --- [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-30 19:26:45.478 INFO  --- [    Test worker] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-06-30 19:26:47.934 INFO  --- [    Test worker] p.r.PlayerRepositoryLckPlayerOptionsTest : Started PlayerRepositoryLckPlayerOptionsTest in 5.582 seconds (process running for 18.765)
+2026-06-30 19:26:48.378 INFO  --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.toy.nar.domain.youtube.repository.VideoRepositoryNPlusOneTest]: VideoRepositoryNPlusOneTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-30 19:26:48.438 INFO  --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.toy.nar.domain.youtube.repository.VideoRepositoryOrderingTest$TestJpaConfiguration for test class com.toy.nar.domain.youtube.repository.VideoRepositoryNPlusOneTest
+2026-06-30 19:26:48.462 INFO  --- [    Test worker] c.t.n.d.y.r.VideoRepositoryNPlusOneTest  : Starting VideoRepositoryNPlusOneTest using Java 21.0.2 with PID 82017 (started by changha in /Users/changha/Documents/사이드플젝/nar-back-repo)
+2026-06-30 19:26:48.462 INFO  --- [    Test worker] c.t.n.d.y.r.VideoRepositoryNPlusOneTest  : The following 1 profile is active: "dev"
+2026-06-30 19:26:48.544 INFO  --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-30 19:26:48.544 INFO  --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-30 19:26:48.557 INFO  --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 8 ms. Found 3 JPA repository interfaces.
+2026-06-30 19:26:48.577 INFO  --- [    Test worker] beddedDataSourceBeanFactoryPostProcessor : Replacing 'dataSource' DataSource bean with embedded version
+2026-06-30 19:26:48.583 INFO  --- [    Test worker] o.s.j.d.e.EmbeddedDatabaseFactory        : Starting embedded database: url='jdbc:h2:mem:6c12a848-34d7-4656-bac1-1c9d0b07f931;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false', username='sa'
+2026-06-30 19:26:48.611 INFO  --- [    Test worker] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-06-30 19:26:48.614 INFO  --- [    Test worker] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-06-30 19:26:48.627 INFO  --- [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-30 19:26:48.629 INFO  --- [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [Connecting through datasource 'org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseFactory$EmbeddedDataSourceProxy@5cab97f8']
+	Database driver: undefined/unknown
+	Database version: 2.3.232
+	Autocommit mode: undefined/unknown
+	Isolation level: undefined/unknown
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-06-30 19:26:48.683 INFO  --- [    Test worker] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-30 19:26:48.688 INFO  --- [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-30 19:26:48.757 INFO  --- [    Test worker] c.t.n.d.y.r.VideoRepositoryNPlusOneTest  : Started VideoRepositoryNPlusOneTest in 0.316 seconds (process running for 19.587)
+2026-06-30 19:26:48.994 INFO  --- [ionShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-06-30 19:26:49.002 INFO  --- [ionShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
