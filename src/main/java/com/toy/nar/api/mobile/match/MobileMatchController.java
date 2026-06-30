@@ -30,7 +30,7 @@ public class MobileMatchController {
 					+ "시즌 필터 옵션은 /api/mobile/schedules/filters 응답의 seasons에서 가져옵니다.")
 	@GetMapping
 	public ResponseEntity<MobileMatchPageResponse> getMatches(
-			@Parameter(description = "리그", example = "LCK")
+			@Parameter(description = "리그 (전체는 ALL)", example = "LCK")
 			@RequestParam(defaultValue = "LCK") String league,
 			@Parameter(description = "팀 ID", example = "1")
 			@RequestParam(required = false) Long teamId,

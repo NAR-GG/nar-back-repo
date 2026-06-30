@@ -326,6 +326,41 @@ class MobileScheduleServiceTest {
 	}
 
 	@Test
+	void allLeagueQueriesWithoutLeagueFilter() {
+		when(leagueMatchRepository.findMobileMatchesInRange(
+				null,
+				LocalDateTime.of(2026, 3, 31, 15, 0),
+				LocalDateTime.of(2026, 4, 1, 15, 0)))
+				.thenReturn(List.of(
+						match("m-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed"),
+						match("m-2", "LPL", LocalDateTime.of(2026, 4, 1, 11, 0), "BLG", "JDG", "completed")));
+
+		MobileScheduleListResponse response = service.getDailySchedules(LocalDate.of(2026, 4, 1), "ALL", null);
+
+		assertThat(response.league()).isEqualTo("ALL");
+		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
+				.containsExactly("m-1", "m-2");
+		verify(leagueMatchRepository).findMobileMatchesInRange(
+				null,
+				LocalDateTime.of(2026, 3, 31, 15, 0),
+				LocalDateTime.of(2026, 4, 1, 15, 0));
+	}
+
+	@Test
+	void getFiltersForAllLeagueOmitsTeamsAndAddsAllOption() {
+		when(leagueMatchRepository.findSeasonOptions(null)).thenReturn(List.of());
+
+		MobileScheduleFilterResponse response = service.getFilters("ALL");
+
+		assertThat(response.leagues()).first()
+				.extracting(MobileScheduleFilterResponse.LeagueOption::code,
+						MobileScheduleFilterResponse.LeagueOption::name)
+				.containsExactly("ALL", "전체");
+		assertThat(response.teams()).isEmpty();
+		verifyNoInteractions(teamRepository);
+	}
+
+	@Test
 	void unknownTeamThrowsDataNotFound() {
 		when(teamRepository.findById(999L)).thenReturn(Optional.empty());
 
