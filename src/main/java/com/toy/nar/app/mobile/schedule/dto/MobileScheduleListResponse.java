@@ -33,7 +33,9 @@ public record MobileScheduleListResponse(
 			@Schema(description = "기록(record) API에서 사용하는 내부 gameId. 기록 미적재 시 null", example = "1024", nullable = true)
 			Long recordGameId,
 			@Schema(description = "세트 상태: LIVE(진행 중)/ENDED(종료, 데이터 보유)/SCHEDULED(예정). 일정 목록에서는 null", example = "LIVE", nullable = true)
-			String status) {
+			String status,
+			@Schema(description = "세트 다시보기 VOD URL(주로 한국어 유튜브). 없으면 null. 일정 목록에서는 null", example = "https://youtu.be/abc?t=10", nullable = true)
+			String vodUrl) {
 	}
 
 	public record MobileTeamResult(
