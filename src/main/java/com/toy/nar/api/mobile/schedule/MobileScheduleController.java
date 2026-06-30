@@ -29,7 +29,7 @@ public class MobileScheduleController {
 	@Operation(summary = "모바일 일정 필터 조회", description = "모바일 경기일정/경기리스트 화면의 리그와 팀 필터 옵션을 조회합니다.")
 	@GetMapping("/filters")
 	public ResponseEntity<MobileScheduleFilterResponse> getFilters(
-			@Parameter(description = "팀 옵션을 조회할 리그", example = "LCK")
+			@Parameter(description = "팀 옵션을 조회할 리그 (전체는 ALL)", example = "LCK")
 			@RequestParam(defaultValue = "LCK") String league) {
 		return ResponseEntity.ok(mobileScheduleService.getFilters(league));
 	}
@@ -39,7 +39,7 @@ public class MobileScheduleController {
 	public ResponseEntity<MobileScheduleCalendarResponse> getCalendar(
 			@Parameter(description = "조회 월", example = "2026-04")
 			@RequestParam("month") @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
-			@Parameter(description = "리그", example = "LCK")
+			@Parameter(description = "리그 (전체는 ALL)", example = "LCK")
 			@RequestParam(defaultValue = "LCK") String league,
 			@Parameter(description = "팀 ID", example = "1")
 			@RequestParam(required = false) Long teamId) {
@@ -51,7 +51,7 @@ public class MobileScheduleController {
 	public ResponseEntity<MobileScheduleListResponse> getDailySchedules(
 			@Parameter(description = "조회 일자", example = "2026-04-01")
 			@RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-			@Parameter(description = "리그", example = "LCK")
+			@Parameter(description = "리그 (전체는 ALL)", example = "LCK")
 			@RequestParam(defaultValue = "LCK") String league,
 			@Parameter(description = "팀 ID", example = "1")
 			@RequestParam(required = false) Long teamId) {

@@ -44,6 +44,7 @@ import java.util.stream.Collectors;
 public class MobileScheduleService {
 
 	private static final String DEFAULT_LEAGUE = "LCK";
+	private static final String ALL_LEAGUES = "ALL";
 	private static final int DEFAULT_TEAM_YEAR = 2026;
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 	private static final ZoneId UTC = ZoneId.of("UTC");
@@ -67,15 +68,19 @@ public class MobileScheduleService {
 
 	public MobileScheduleFilterResponse getFilters(String league) {
 		String normalizedLeague = normalizeLeague(league);
-		List<MobileScheduleFilterResponse.LeagueOption> leagues = LeagueConstants.ALLOWED_LEAGUES.stream()
+		List<MobileScheduleFilterResponse.LeagueOption> leagues = new ArrayList<>();
+		leagues.add(new MobileScheduleFilterResponse.LeagueOption(ALL_LEAGUES, "전체"));
+		LeagueConstants.ALLOWED_LEAGUES.stream()
 				.sorted()
-				.map(code -> new MobileScheduleFilterResponse.LeagueOption(code, code))
-				.toList();
-		List<MobileScheduleFilterResponse.TeamOption> teams = findFilterTeams(normalizedLeague).stream()
-				.map(this::toTeamOption)
-				.toList();
+				.forEach(code -> leagues.add(new MobileScheduleFilterResponse.LeagueOption(code, code)));
+		// 전체 리그 선택 시 팀 필터는 비활성(특정 리그 소속이라 의미 없음).
+		List<MobileScheduleFilterResponse.TeamOption> teams = ALL_LEAGUES.equals(normalizedLeague)
+				? List.of()
+				: findFilterTeams(normalizedLeague).stream()
+						.map(this::toTeamOption)
+						.toList();
 		List<MobileScheduleFilterResponse.SeasonOption> seasons = leagueMatchRepository
-				.findSeasonOptions(normalizedLeague).stream()
+				.findSeasonOptions(leagueParam(normalizedLeague)).stream()
 				.map(row -> new MobileScheduleFilterResponse.SeasonOption(
 						row.getSeasonYear(),
 						row.getSeasonSplit(),
@@ -146,6 +151,7 @@ public class MobileScheduleService {
 			String cursor,
 			Integer size) {
 		String normalizedLeague = normalizeLeague(league);
+		String leagueParam = leagueParam(normalizedLeague);
 		TeamFilter teamFilter = resolveTeamFilter(teamId);
 		String normalizedSplit = seasonSplit == null || seasonSplit.isBlank() ? null : seasonSplit.trim();
 		int pageSize = size == null
@@ -156,14 +162,14 @@ public class MobileScheduleService {
 
 		List<LeagueMatch> fetched = teamFilter == null
 				? leagueMatchRepository.findMobileMatchPage(
-						normalizedLeague,
+						leagueParam,
 						seasonYear,
 						normalizedSplit,
 						matchCursor != null ? matchCursor.matchDate() : null,
 						matchCursor != null ? matchCursor.matchId() : null,
 						fetchLimit)
 				: leagueMatchRepository.findMobileTeamMatchPage(
-						normalizedLeague,
+						leagueParam,
 						teamFilter.name(),
 						teamFilter.code(),
 						seasonYear,
@@ -233,11 +239,12 @@ public class MobileScheduleService {
 			TeamFilter teamFilter,
 			LocalDateTime startUtc,
 			LocalDateTime endUtc) {
+		String leagueParam = leagueParam(league);
 		if (teamFilter == null) {
-			return leagueMatchRepository.findMobileMatchesInRange(league, startUtc, endUtc);
+			return leagueMatchRepository.findMobileMatchesInRange(leagueParam, startUtc, endUtc);
 		}
 		return leagueMatchRepository.findMobileTeamMatchesInRange(
-				league,
+				leagueParam,
 				teamFilter.name(),
 				teamFilter.code(),
 				startUtc,
@@ -456,10 +463,18 @@ public class MobileScheduleService {
 		String normalized = league == null || league.isBlank()
 				? DEFAULT_LEAGUE
 				: league.trim().toUpperCase(Locale.ROOT);
+		if (ALL_LEAGUES.equals(normalized)) {
+			return ALL_LEAGUES;
+		}
 		if (!LeagueConstants.ALLOWED_LEAGUES.contains(normalized)) {
 			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 		return normalized;
+	}
+
+	/** 리포지토리 필터용 리그 값. 전체(ALL) 선택이면 null 을 반환해 리그 조건을 건다. */
+	private String leagueParam(String normalizedLeague) {
+		return ALL_LEAGUES.equals(normalizedLeague) ? null : normalizedLeague;
 	}
 
 	private record TeamFilter(String name, String code) {
