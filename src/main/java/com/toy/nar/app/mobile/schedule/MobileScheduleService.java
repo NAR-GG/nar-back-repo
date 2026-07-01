@@ -73,12 +73,10 @@ public class MobileScheduleService {
 		LeagueConstants.ALLOWED_LEAGUES.stream()
 				.sorted()
 				.forEach(code -> leagues.add(new MobileScheduleFilterResponse.LeagueOption(code, code)));
-		// 전체 리그 선택 시 팀 필터는 비활성(특정 리그 소속이라 의미 없음).
-		List<MobileScheduleFilterResponse.TeamOption> teams = ALL_LEAGUES.equals(normalizedLeague)
-				? List.of()
-				: findFilterTeams(normalizedLeague).stream()
-						.map(this::toTeamOption)
-						.toList();
+		// 전체 리그 선택 시 팀 필터는 모든 리그 팀의 합집합을 노출한다.
+		List<MobileScheduleFilterResponse.TeamOption> teams = findFilterTeams(normalizedLeague).stream()
+				.map(this::toTeamOption)
+				.toList();
 		List<MobileScheduleFilterResponse.SeasonOption> seasons = leagueMatchRepository
 				.findSeasonOptions(leagueParam(normalizedLeague)).stream()
 				.map(row -> new MobileScheduleFilterResponse.SeasonOption(
@@ -260,6 +258,11 @@ public class MobileScheduleService {
 	}
 
 	private List<Team> findFilterTeams(String league) {
+		if (ALL_LEAGUES.equals(league)) {
+			return teamRepository.findAllOnboardingTeams(DEFAULT_TEAM_YEAR).stream()
+					.sorted(Comparator.comparing(Team::getName))
+					.toList();
+		}
 		if (DEFAULT_LEAGUE.equals(league)) {
 			Map<String, Team> teamsByCode = teamRepository.findAllByCodeIn(LCK_TEAM_CODES).stream()
 					.collect(Collectors.toMap(Team::getCode, Function.identity(), (left, right) -> left));
