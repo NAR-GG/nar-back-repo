@@ -49,7 +49,7 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("""
 			SELECT m
 			FROM LeagueMatch m
-			WHERE m.leagueName = :leagueName
+			WHERE (:leagueName IS NULL OR m.leagueName = :leagueName)
 			  AND m.matchDate >= :start
 			  AND m.matchDate < :end
 			ORDER BY m.matchDate ASC
@@ -62,7 +62,7 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("""
 			SELECT m
 			FROM LeagueMatch m
-			WHERE m.leagueName = :leagueName
+			WHERE (:leagueName IS NULL OR m.leagueName = :leagueName)
 			  AND m.matchDate >= :start
 			  AND m.matchDate < :end
 			  AND (
@@ -83,7 +83,7 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("""
 			SELECT m
 			FROM LeagueMatch m
-			WHERE m.leagueName = :leagueName
+			WHERE (:leagueName IS NULL OR m.leagueName = :leagueName)
 			  AND (:seasonYear IS NULL OR m.seasonYear = :seasonYear)
 			  AND (:seasonSplit IS NULL OR m.seasonSplit = :seasonSplit)
 			  AND (:cursorId IS NULL
@@ -102,7 +102,7 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("""
 			SELECT m
 			FROM LeagueMatch m
-			WHERE m.leagueName = :leagueName
+			WHERE (:leagueName IS NULL OR m.leagueName = :leagueName)
 			  AND (:seasonYear IS NULL OR m.seasonYear = :seasonYear)
 			  AND (:seasonSplit IS NULL OR m.seasonSplit = :seasonSplit)
 			  AND (
@@ -135,7 +135,7 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("""
 			SELECT DISTINCT m.seasonYear AS seasonYear, m.seasonSplit AS seasonSplit
 			FROM LeagueMatch m
-			WHERE m.leagueName = :leagueName
+			WHERE (:leagueName IS NULL OR m.leagueName = :leagueName)
 			  AND m.seasonYear IS NOT NULL
 			  AND m.seasonSplit IS NOT NULL
 			ORDER BY m.seasonYear DESC, m.seasonSplit ASC
