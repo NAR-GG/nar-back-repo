@@ -128,7 +128,9 @@ lolesports:
     active-leagues: ${LOL_ACTIVE_LEAGUES:LCK,LPL,LEC,LCS,LCP,CBLOL,MSI,WORLDS,FIRST_STAND}
   live:
     enabled: ${LOL_LIVE_ENABLED:false}
-    discovery-interval-ms: 60000
+    # 디스커버리 대상 리그를 active+오늘경기 리그로 좁혔으므로(보통 0~2개) 10초로 단축.
+    # 라이브 시작 인식 지연을 줄인다. 경기 없는 시간대엔 외부 호출 0회.
+    discovery-interval-ms: 10000
     poll-interval-ms: 5000
     stale-threshold-ms: 180000
     request-timeout-ms: 3000

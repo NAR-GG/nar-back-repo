@@ -42,6 +42,10 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("SELECT m FROM LeagueMatch m WHERE m.matchDate >= :start AND m.matchDate <= :end ORDER BY m.matchDate DESC")
 	List<LeagueMatch> findByDateRange(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
+	/** 주어진 기간에 경기가 있는 리그명(중복 제거). 라이브 디스커버리 대상 리그를 좁히는 데 쓴다. */
+	@Query("SELECT DISTINCT m.leagueName FROM LeagueMatch m WHERE m.matchDate >= :start AND m.matchDate <= :end")
+	List<String> findDistinctLeagueNamesByDateRange(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
 	@Query("""
 			SELECT m
 			FROM LeagueMatch m
