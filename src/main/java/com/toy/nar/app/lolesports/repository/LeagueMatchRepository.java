@@ -46,6 +46,18 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("SELECT DISTINCT m.leagueName FROM LeagueMatch m WHERE m.matchDate >= :start AND m.matchDate <= :end")
 	List<String> findDistinctLeagueNamesByDateRange(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
+	/**
+	 * 해당 시즌 경기에 출전한 팀의 blue/red 코드 쌍. 팀 필터의 '현재 시즌 출전팀' 판정에 쓴다.
+	 * leagueName 이 null 이면 전체 리그. 코드 평탄화·중복 제거는 호출부에서 처리한다.
+	 */
+	@Query("""
+			SELECT m.blueTeamCode, m.redTeamCode
+			FROM LeagueMatch m
+			WHERE m.seasonYear = :year
+			  AND (:leagueName IS NULL OR m.leagueName = :leagueName)
+			""")
+	List<Object[]> findTeamCodePairsBySeason(@Param("leagueName") String leagueName, @Param("year") int year);
+
 	@Query("""
 			SELECT m
 			FROM LeagueMatch m

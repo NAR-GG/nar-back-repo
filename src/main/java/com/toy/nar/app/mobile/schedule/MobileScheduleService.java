@@ -258,11 +258,7 @@ public class MobileScheduleService {
 	}
 
 	private List<Team> findFilterTeams(String league) {
-		if (ALL_LEAGUES.equals(league)) {
-			return teamRepository.findAllOnboardingTeams(DEFAULT_TEAM_YEAR).stream()
-					.sorted(Comparator.comparing(Team::getName))
-					.toList();
-		}
+		// LCK 는 큐레이션된 고정 순서를 유지한다.
 		if (DEFAULT_LEAGUE.equals(league)) {
 			Map<String, Team> teamsByCode = teamRepository.findAllByCodeIn(LCK_TEAM_CODES).stream()
 					.collect(Collectors.toMap(Team::getCode, Function.identity(), (left, right) -> left));
@@ -272,9 +268,25 @@ public class MobileScheduleService {
 					.toList();
 		}
 
-		return teamRepository.findOnboardingTeams(league, DEFAULT_TEAM_YEAR).stream()
+		// 그 외 리그 및 전체(ALL): 현재 시즌 경기 출전팀(이름순). ALL 은 리그 조건 없이 합집합.
+		// league_team(역대 누적) 대신 실제 경기 출전 코드를 활성 팀으로 본다.
+		java.util.Set<String> codes = new java.util.LinkedHashSet<>();
+		for (Object[] pair : leagueMatchRepository.findTeamCodePairsBySeason(leagueParam(league), DEFAULT_TEAM_YEAR)) {
+			addCode(codes, (String) pair[0]);
+			addCode(codes, (String) pair[1]);
+		}
+		if (codes.isEmpty()) {
+			return List.of();
+		}
+		return teamRepository.findAllByCodeIn(codes).stream()
 				.sorted(Comparator.comparing(Team::getName))
 				.toList();
+	}
+
+	private void addCode(java.util.Set<String> codes, String code) {
+		if (code != null && !code.isBlank()) {
+			codes.add(code);
+		}
 	}
 
 	private MobileScheduleListResponse.MobileMatchSummary toMatchSummary(
