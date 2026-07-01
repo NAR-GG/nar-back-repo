@@ -347,11 +347,18 @@ class MobileScheduleServiceTest {
 	}
 
 	@Test
-	void getFiltersForAllLeagueReturnsAllLeagueTeamsUnion() {
+	void getFiltersForAllLeagueReturnsCurrentSeasonTeamsUnion() {
 		when(leagueMatchRepository.findSeasonOptions(null)).thenReturn(List.of());
-		Team gen = team(2L, "GEN", "GEN", "https://example.com/gen.png");
-		Team t1 = team(1L, "T1", "T1", "https://example.com/t1.png");
-		when(teamRepository.findAllOnboardingTeams(2026)).thenReturn(List.of(gen, t1));
+		// ALL 은 리그 조건 없이(null) 현재 시즌 출전팀 코드 쌍을 조회한다. 빈 코드·중복은 걸러진다.
+		when(leagueMatchRepository.findTeamCodePairsBySeason(null, 2026)).thenReturn(List.<Object[]>of(
+				new Object[] {"T1", "GEN"},
+				new Object[] {"GEN", ""},
+				new Object[] {"BLG", null}));
+		Team gen = team(2L, "Gen.G", "GEN", null);
+		Team t1 = team(1L, "T1", "T1", null);
+		Team blg = team(3L, "Bilibili Gaming", "BLG", null);
+		when(teamRepository.findAllByCodeIn(org.mockito.ArgumentMatchers.anyCollection()))
+				.thenReturn(List.of(gen, t1, blg));
 
 		MobileScheduleFilterResponse response = service.getFilters("ALL");
 
@@ -359,9 +366,23 @@ class MobileScheduleServiceTest {
 				.extracting(MobileScheduleFilterResponse.LeagueOption::code,
 						MobileScheduleFilterResponse.LeagueOption::name)
 				.containsExactly("ALL", "전체");
-		// 이름순 정렬로 GEN → T1
+		// 이름순: Bilibili Gaming, Gen.G, T1
 		assertThat(response.teams()).extracting(MobileScheduleFilterResponse.TeamOption::teamCode)
-				.containsExactly("GEN", "T1");
+				.containsExactly("BLG", "GEN", "T1");
+	}
+
+	@Test
+	void getFiltersForNonLckLeagueUsesCurrentSeasonMatchTeams() {
+		when(leagueMatchRepository.findSeasonOptions("LPL")).thenReturn(List.of());
+		when(leagueMatchRepository.findTeamCodePairsBySeason("LPL", 2026))
+				.thenReturn(List.<Object[]>of(new Object[] {"BLG", "T1"}));
+		when(teamRepository.findAllByCodeIn(org.mockito.ArgumentMatchers.anyCollection()))
+				.thenReturn(List.of(team(3L, "Bilibili Gaming", "BLG", null)));
+
+		MobileScheduleFilterResponse response = service.getFilters("LPL");
+
+		assertThat(response.teams()).extracting(MobileScheduleFilterResponse.TeamOption::teamCode)
+				.containsExactly("BLG");
 	}
 
 	@Test

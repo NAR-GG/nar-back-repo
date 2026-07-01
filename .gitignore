@@ -45,3 +45,6 @@ docker-compose.yml
 /src/main/resources/application-test.yml
 /src/main/resources/application-*.yml.DS_Store
 src/main/build/
+
+# 애플리케이션 로그
+logs/
