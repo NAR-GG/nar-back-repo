@@ -347,8 +347,11 @@ class MobileScheduleServiceTest {
 	}
 
 	@Test
-	void getFiltersForAllLeagueOmitsTeamsAndAddsAllOption() {
+	void getFiltersForAllLeagueReturnsAllLeagueTeamsUnion() {
 		when(leagueMatchRepository.findSeasonOptions(null)).thenReturn(List.of());
+		Team gen = team(2L, "GEN", "GEN", "https://example.com/gen.png");
+		Team t1 = team(1L, "T1", "T1", "https://example.com/t1.png");
+		when(teamRepository.findAllOnboardingTeams(2026)).thenReturn(List.of(gen, t1));
 
 		MobileScheduleFilterResponse response = service.getFilters("ALL");
 
@@ -356,8 +359,9 @@ class MobileScheduleServiceTest {
 				.extracting(MobileScheduleFilterResponse.LeagueOption::code,
 						MobileScheduleFilterResponse.LeagueOption::name)
 				.containsExactly("ALL", "전체");
-		assertThat(response.teams()).isEmpty();
-		verifyNoInteractions(teamRepository);
+		// 이름순 정렬로 GEN → T1
+		assertThat(response.teams()).extracting(MobileScheduleFilterResponse.TeamOption::teamCode)
+				.containsExactly("GEN", "T1");
 	}
 
 	@Test

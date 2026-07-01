@@ -46,6 +46,16 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 			""")
 	List<Team> findOnboardingTeams(@Param("leagueName") String leagueName, @Param("year") int year);
 
+	/** 전체 리그 팀 필터용: 해당 시즌 모든 리그의 온보딩 팀 합집합. */
+	@Query("""
+			SELECT DISTINCT t
+			FROM LeagueTeam lt
+			JOIN lt.team t
+			WHERE lt.league.seasonYear = :year
+			ORDER BY t.name
+			""")
+	List<Team> findAllOnboardingTeams(@Param("year") int year);
+
 	@Query("SELECT t FROM Team t WHERE LOWER(t.name) = LOWER(:name)")
 	Optional<Team> findByNameIgnoreCase(@Param("name") String name);
 }
