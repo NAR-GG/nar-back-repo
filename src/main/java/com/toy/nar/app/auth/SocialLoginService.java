@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Optional;
+
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Service
@@ -80,14 +82,10 @@ public class SocialLoginService {
 	}
 
 	private Member createMember(SocialAccountInfo accountInfo) {
-		NicknameGenerator.GeneratedNickname nickname = nicknameGenerator.generate();
-		Member member = memberRepository.save(
-				Member.builder()
-						.name(nickname.name())
-						.tag(nickname.tag())
-						.email(accountInfo.email())
-						.build()
-		);
+		// 같은 이메일의 기존 회원이 있으면 새 계정을 만들지 않고 소셜 계정만 연동한다.
+		// (카카오/구글/네이버 모두 공급자가 검증한 이메일을 내려주므로 이메일 기준 연동이 안전)
+		Member member = findLinkTargetByEmail(accountInfo.email())
+				.orElseGet(() -> newMember(accountInfo));
 		memberSocialRepository.save(
 				MemberSocial.builder()
 						.member(member)
@@ -96,5 +94,23 @@ public class SocialLoginService {
 						.build()
 		);
 		return member;
+	}
+
+	private Optional<Member> findLinkTargetByEmail(String email) {
+		if (email == null || email.isBlank()) {
+			return Optional.empty();
+		}
+		return memberRepository.findFirstByEmailOrderByIdAsc(email);
+	}
+
+	private Member newMember(SocialAccountInfo accountInfo) {
+		NicknameGenerator.GeneratedNickname nickname = nicknameGenerator.generate();
+		return memberRepository.save(
+				Member.builder()
+						.name(nickname.name())
+						.tag(nickname.tag())
+						.email(accountInfo.email())
+						.build()
+		);
 	}
 }
