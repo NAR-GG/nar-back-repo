@@ -1,15 +1,19 @@
 package com.toy.nar.api.auth;
 
+import com.toy.nar.api.auth.dto.GoogleMobileLoginRequest;
 import com.toy.nar.api.auth.dto.KakaoMobileLoginRequest;
 import com.toy.nar.api.auth.dto.MemberResponse;
+import com.toy.nar.api.auth.dto.NaverMobileLoginRequest;
 import com.toy.nar.api.auth.dto.OnboardingLeagueOptionResponse;
 import com.toy.nar.api.auth.dto.OnboardingPlayerOptionResponse;
 import com.toy.nar.api.auth.dto.OnboardingRequest;
 import com.toy.nar.api.auth.dto.OnboardingTeamOptionResponse;
 import com.toy.nar.api.auth.dto.TokenResponse;
 import com.toy.nar.app.auth.AuthTokens;
+import com.toy.nar.app.auth.GoogleUserClient;
 import com.toy.nar.app.auth.JwtTokenProvider;
 import com.toy.nar.app.auth.KakaoUserClient;
+import com.toy.nar.app.auth.NaverUserClient;
 import com.toy.nar.app.auth.SocialAccountInfo;
 import com.toy.nar.app.auth.SocialLoginService;
 import com.toy.nar.app.auth.profile.CloudinarySignatureService;
@@ -89,6 +93,8 @@ public class AuthController {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final KakaoUserClient kakaoUserClient;
+    private final GoogleUserClient googleUserClient;
+    private final NaverUserClient naverUserClient;
     private final SocialLoginService socialLoginService;
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -111,6 +117,46 @@ public class AuthController {
     public ResponseEntity<TokenResponse> loginWithKakaoAccessToken(
             @Valid @RequestBody KakaoMobileLoginRequest request) {
         SocialAccountInfo accountInfo = kakaoUserClient.fetchUser(request.accessToken());
+        AuthTokens tokens = socialLoginService.login(accountInfo);
+        return ResponseEntity.ok(new TokenResponse(
+                tokens.accessToken(),
+                tokens.refreshToken(),
+                tokens.isOnboarded()
+        ));
+    }
+
+    @Operation(
+            summary = "모바일 Google 로그인",
+            description = "Google Sign-In SDK에서 발급받은 ID Token을 검증하고 서비스 JWT를 발급합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "모바일 Google 로그인 성공"),
+            @ApiResponse(responseCode = "401", description = "유효하지 않은 Google ID Token")
+    })
+    @PostMapping("/mobile/google")
+    public ResponseEntity<TokenResponse> loginWithGoogleIdToken(
+            @Valid @RequestBody GoogleMobileLoginRequest request) {
+        SocialAccountInfo accountInfo = googleUserClient.fetchUser(request.idToken());
+        AuthTokens tokens = socialLoginService.login(accountInfo);
+        return ResponseEntity.ok(new TokenResponse(
+                tokens.accessToken(),
+                tokens.refreshToken(),
+                tokens.isOnboarded()
+        ));
+    }
+
+    @Operation(
+            summary = "모바일 Naver 로그인",
+            description = "Naver Login SDK에서 발급받은 Access Token을 검증하고 서비스 JWT를 발급합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "모바일 Naver 로그인 성공"),
+            @ApiResponse(responseCode = "401", description = "유효하지 않은 Naver Access Token")
+    })
+    @PostMapping("/mobile/naver")
+    public ResponseEntity<TokenResponse> loginWithNaverAccessToken(
+            @Valid @RequestBody NaverMobileLoginRequest request) {
+        SocialAccountInfo accountInfo = naverUserClient.fetchUser(request.accessToken());
         AuthTokens tokens = socialLoginService.login(accountInfo);
         return ResponseEntity.ok(new TokenResponse(
                 tokens.accessToken(),
