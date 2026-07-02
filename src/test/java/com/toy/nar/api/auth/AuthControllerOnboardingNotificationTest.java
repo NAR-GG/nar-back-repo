@@ -2,7 +2,9 @@ package com.toy.nar.api.auth;
 
 import com.toy.nar.api.auth.dto.OnboardingRequest;
 import com.toy.nar.app.auth.JwtTokenProvider;
+import com.toy.nar.app.auth.GoogleUserClient;
 import com.toy.nar.app.auth.KakaoUserClient;
+import com.toy.nar.app.auth.NaverUserClient;
 import com.toy.nar.app.auth.SocialLoginService;
 import com.toy.nar.app.auth.profile.CloudinarySignatureService;
 import com.toy.nar.app.mobile.device.MobileDeviceService;
@@ -45,6 +47,8 @@ class AuthControllerOnboardingNotificationTest {
 		AuthController controller = new AuthController(
 				jwtTokenProvider,
 				kakaoUserClient,
+				mock(GoogleUserClient.class),
+				mock(NaverUserClient.class),
 				socialLoginService,
 				memberRepository,
 				refreshTokenRepository,
@@ -180,6 +184,8 @@ class AuthControllerOnboardingNotificationTest {
 		AuthController controller = new AuthController(
 				jwtTokenProvider,
 				kakaoUserClient,
+				mock(GoogleUserClient.class),
+				mock(NaverUserClient.class),
 				socialLoginService,
 				memberRepository,
 				refreshTokenRepository,
