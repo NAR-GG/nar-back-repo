@@ -120,6 +120,58 @@ class SocialLoginServiceTest {
 	}
 
 	@Test
+	void loginLinksNewProviderToExistingMemberWithSameEmail() {
+		// 카카오로 가입된 회원이 같은 이메일의 네이버로 로그인 → 새 계정 생성 없이 소셜만 연동
+		Member existing = member("same@naver.com", 21L);
+		SocialAccountInfo accountInfo = new SocialAccountInfo(
+				OAuthProvider.NAVER,
+				"naver-1",
+				"same@naver.com"
+		);
+
+		when(memberSocialRepository.findByProviderAndProviderId(OAuthProvider.NAVER, "naver-1"))
+				.thenReturn(Optional.empty());
+		when(memberRepository.findFirstByEmailOrderByIdAsc("same@naver.com"))
+				.thenReturn(Optional.of(existing));
+		when(jwtTokenProvider.createAccessToken(21L, false, "USER")).thenReturn("linked-access");
+		when(jwtTokenProvider.createRefreshToken(21L)).thenReturn("linked-refresh");
+		when(jwtTokenProvider.getRefreshTokenExpiry()).thenReturn(LocalDateTime.now().plusDays(14));
+
+		AuthTokens tokens = socialLoginService.login(accountInfo);
+
+		assertThat(tokens.accessToken()).isEqualTo("linked-access");
+		verify(memberRepository, never()).save(any()); // 새 회원 생성 없음
+		ArgumentCaptor<MemberSocial> socialCaptor = ArgumentCaptor.forClass(MemberSocial.class);
+		verify(memberSocialRepository).save(socialCaptor.capture());
+		assertThat(socialCaptor.getValue().getMember()).isSameAs(existing);
+		assertThat(socialCaptor.getValue().getProvider()).isEqualTo(OAuthProvider.NAVER);
+	}
+
+	@Test
+	void loginSkipsEmailLinkingWhenEmailMissing() {
+		// 이메일 미동의(null) 계정은 연동하지 않고 신규 생성
+		SocialAccountInfo accountInfo = new SocialAccountInfo(OAuthProvider.KAKAO, "k-null", null);
+
+		when(memberSocialRepository.findByProviderAndProviderId(OAuthProvider.KAKAO, "k-null"))
+				.thenReturn(Optional.empty());
+		when(nicknameGenerator.generate())
+				.thenReturn(new NicknameGenerator.GeneratedNickname("nar", "9999"));
+		when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> {
+			Member saved = invocation.getArgument(0);
+			ReflectionTestUtils.setField(saved, "id", 31L);
+			return saved;
+		});
+		when(jwtTokenProvider.createAccessToken(31L, false, "USER")).thenReturn("a");
+		when(jwtTokenProvider.createRefreshToken(31L)).thenReturn("r");
+		when(jwtTokenProvider.getRefreshTokenExpiry()).thenReturn(LocalDateTime.now().plusDays(14));
+
+		socialLoginService.login(accountInfo);
+
+		verify(memberRepository, never()).findFirstByEmailOrderByIdAsc(any());
+		verify(memberRepository).save(any(Member.class));
+	}
+
+	@Test
 	void findAdminMemberReturnsAdmin() {
 		Member member = member("admin@example.com", 2L);
 		ReflectionTestUtils.setField(member, "role", MemberRole.ADMIN);
