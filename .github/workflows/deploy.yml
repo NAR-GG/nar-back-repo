@@ -151,6 +151,7 @@ jobs:
               -e CLOUDINARY_API_KEY="${{ secrets.CLOUDINARY_API_KEY }}" \
               -e CLOUDINARY_API_SECRET="${{ secrets.CLOUDINARY_API_SECRET }}" \
               -e FIREBASE_MESSAGING_ENABLED="true" \
+              -e LIVE_NOTIFICATION_FCM_ENABLED="true" \
               -e GOOGLE_APPLICATION_CREDENTIALS="/run/secrets/firebase-service-account.json" \
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
               "${APP_IMAGE}"
