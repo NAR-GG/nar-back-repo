@@ -65,4 +65,47 @@ public final class LeagueConstants {
         }
         return LIVE_STREAM_URLS.getOrDefault(leagueName.toUpperCase(), DEFAULT_STREAM_URL);
     }
+
+    /**
+     * 라이브 중계 채널 링크. 앱에서 유저가 플랫폼을 골라 시청할 수 있게 리그당 여러 개를 내려준다.
+     */
+    public record StreamLink(String provider, String label, String description, String url) {
+    }
+
+    /** 치지직 LCK 공식 채널 — 2026~ 네이버가 LCK·글로벌 대회 한국어 중계권 보유. */
+    private static final StreamLink CHZZK_LCK = new StreamLink(
+            "chzzk", "치지직", "LCK 공식 채널 · 한국어",
+            "https://chzzk.naver.com/9381e7d6816e6d915a44a13c0195b202");
+
+    /** SOOP(아프리카TV) 공식 롤 중계 채널. */
+    private static final StreamLink SOOP_AFLOL = new StreamLink(
+            "soop", "SOOP", "aflol · 한국어",
+            "https://play.sooplive.co.kr/aflol");
+
+    private static final StreamLink CHZZK_LPL = new StreamLink(
+            "chzzk", "치지직", "LPL 한국어 중계",
+            "https://chzzk.naver.com/live/92b762ef6fac0cc8c68bc080868ad582");
+
+    /**
+     * 리그별 중계 채널 목록. 한국어 중계가 복수인 리그(LCK·국제전)는 치지직/SOOP 둘 다 내려주고,
+     * 그 외 리그는 기존 단일 링크를 유지한다.
+     */
+    public static final Map<String, List<StreamLink>> STREAM_LINKS = Map.of(
+            "LCK", List.of(CHZZK_LCK, SOOP_AFLOL),
+            "MSI", List.of(CHZZK_LCK, SOOP_AFLOL),
+            "WORLDS", List.of(CHZZK_LCK, SOOP_AFLOL),
+            "FIRST_STAND", List.of(CHZZK_LCK, SOOP_AFLOL),
+            "LPL", List.of(CHZZK_LPL),
+            "LEC", List.of(new StreamLink("twitch", "Twitch", "LEC 공식", "https://www.twitch.tv/lec")),
+            "LCS", List.of(new StreamLink("twitch", "Twitch", "LCS 공식", "https://www.twitch.tv/lcs")));
+
+    /**
+     * 리그의 중계 채널 목록 반환. 매핑이 없으면 SOOP 단일 링크로 폴백.
+     */
+    public static List<StreamLink> getStreamLinks(String leagueName) {
+        if (leagueName == null) {
+            return List.of(SOOP_AFLOL);
+        }
+        return STREAM_LINKS.getOrDefault(leagueName.toUpperCase(), List.of(SOOP_AFLOL));
+    }
 }

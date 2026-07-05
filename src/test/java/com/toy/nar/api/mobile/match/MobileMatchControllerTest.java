@@ -49,6 +49,7 @@ class MobileMatchControllerTest {
 								new MobileScheduleListResponse.MobileTeamResult("T1", "T1", "https://example.com/t1.png", 2),
 								new MobileScheduleListResponse.MobileTeamResult("Gen.G", "GEN", "https://example.com/gen.png", 1),
 								null,
+								List.of(),
 								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED", null)))),
 						"cursor-token",
 						true));

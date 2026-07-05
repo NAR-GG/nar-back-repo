@@ -131,7 +131,13 @@ class MobileScheduleServiceTest {
 					assertThat(match.matchStatus()).isEqualTo("inProgress");
 					assertThat(match.blueTeam().teamName()).isEqualTo("T1");
 					assertThat(match.redTeam().teamName()).isEqualTo("Gen.g");
-					assertThat(match.liveStreamUrl()).isEqualTo("https://play.sooplive.co.kr/aflol");
+					// 대표 링크는 streamLinks 첫 번째(치지직 LCK 공식)와 동일해야 한다.
+					assertThat(match.liveStreamUrl())
+							.isEqualTo("https://chzzk.naver.com/9381e7d6816e6d915a44a13c0195b202");
+					assertThat(match.streamLinks()).hasSize(2);
+					assertThat(match.streamLinks().get(0).provider()).isEqualTo("chzzk");
+					assertThat(match.streamLinks().get(1).provider()).isEqualTo("soop");
+					assertThat(match.liveStreamUrl()).isEqualTo(match.streamLinks().get(0).url());
 				});
 	}
 
