@@ -86,7 +86,7 @@ public class PlayerSoloRankPushService {
 			String gameId,
 			MobilePushMessage message) {
 		try {
-			if (deliveryRepository.reserve(memberId, player.getId(), gameId) == 0) {
+			if (!deliveryRepository.reserve(memberId, player.getId(), gameId)) {
 				return;
 			}
 			List<String> tokens = devices.stream().map(MemberDevice::getFcmToken).toList();

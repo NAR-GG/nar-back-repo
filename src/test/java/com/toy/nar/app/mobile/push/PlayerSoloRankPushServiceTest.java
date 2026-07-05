@@ -59,7 +59,7 @@ class PlayerSoloRankPushServiceTest {
 
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L))
 				.thenReturn(List.of(first, second));
-		when(deliveryRepository.reserve(any(), eq(10L), eq("game-1"))).thenReturn(1);
+		when(deliveryRepository.reserve(any(), eq(10L), eq("game-1"))).thenReturn(true);
 		when(pushGateway.send(any(), any()))
 				.thenReturn(new MobilePushResult(1, 0, List.of()))
 				.thenReturn(new MobilePushResult(0, 1, List.of("token-2")));
@@ -86,7 +86,7 @@ class PlayerSoloRankPushServiceTest {
 		Player player = player(10L, "Faker");
 		MemberDevice device = device(1L, member(7L), "token");
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
-		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(1);
+		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(true);
 		when(pushGateway.send(any(), any())).thenReturn(new MobilePushResult(1, 0, List.of()));
 		doThrow(new IllegalStateException("topic down"))
 				.when(pushGateway).sendToTopic(any(), any());
@@ -101,7 +101,7 @@ class PlayerSoloRankPushServiceTest {
 		Player player = player(10L, "Faker");
 		MemberDevice device = device(1L, member(7L), "token");
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
-		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(0);
+		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(false);
 
 		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
 
@@ -113,7 +113,7 @@ class PlayerSoloRankPushServiceTest {
 		Player player = player(10L, "Faker");
 		MemberDevice device = device(1L, member(7L), "token");
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
-		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(1);
+		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(true);
 		when(pushGateway.send(any(), any())).thenThrow(new IllegalStateException("firebase down"));
 
 		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1"))
