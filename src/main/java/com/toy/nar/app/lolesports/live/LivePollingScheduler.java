@@ -51,6 +51,13 @@ public class LivePollingScheduler {
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.stale-threshold-ms:180000}")
 	private long staleThresholdMs;
 
+	/**
+	 * SET_END 푸시를 이미 보낸 gameId. notDiscovered 는 stale 제거 전까지 매 사이클 참이라
+	 * 여기서 1회로 제한한다(같은 세트 종료 반복 발송 방지). 게임이 피드에 다시 나타나면
+	 * 오탐(일시 누락)으로 보고 해제한다.
+	 */
+	private final java.util.Set<String> setEndNotifiedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.max-consecutive-failures:6}")
 	private int maxConsecutiveFailures;
 
@@ -122,6 +129,8 @@ public class LivePollingScheduler {
 								blueExternalId,
 								redExternalId);
 						activeGames.put(gameId, next);
+						// 피드에 다시 나타났으면 SET_END 오탐(일시 누락)이었으므로 재발송 가능하게 해제.
+						setEndNotifiedGameIds.remove(gameId);
 						liveGameMetadataService.remember(next);
 
 						if (liveNotificationEnabled && current == null && isNotifiableLeague(resolvedLeagueName)) {
@@ -169,7 +178,8 @@ public class LivePollingScheduler {
 			// 빠지면(=notDiscovered) 세트 종료로 본다. 플래그 게이트 + dedup 으로 1회만 발송된다.
 			// 플래그가 꺼져 있으면 어떤 부작용도 없다(기존 cleanup 동작과 바이트 동일).
 			if (notDiscovered && teamLiveEventPushService.isEnabled()
-					&& isNotifiableLeague(activeGame.leagueName())) {
+					&& isNotifiableLeague(activeGame.leagueName())
+					&& setEndNotifiedGameIds.add(activeGame.gameId())) {
 				fireSetEndNotification(activeGame);
 			}
 
@@ -181,6 +191,7 @@ public class LivePollingScheduler {
 		toRemove.forEach(gameId -> {
 			liveStateStore.removeGame(gameId);
 			liveObjectEventRecorder.evict(gameId);
+			setEndNotifiedGameIds.remove(gameId);
 		});
 	}
 

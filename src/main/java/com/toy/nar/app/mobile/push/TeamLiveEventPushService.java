@@ -160,7 +160,7 @@ public class TeamLiveEventPushService {
 			MobilePushMessage message) {
 		try {
 			// dedup: 양 팀 구독자라도 (member, matchId, setNumber, eventType, eventOrder) 1회만 통과한다.
-			if (deliveryRepository.reserve(memberId, matchId, setNumber, eventType, eventOrder) == 0) {
+			if (!deliveryRepository.reserve(memberId, matchId, setNumber, eventType, eventOrder)) {
 				return;
 			}
 			List<String> tokens = devices.stream().map(MemberDevice::getFcmToken).toList();
