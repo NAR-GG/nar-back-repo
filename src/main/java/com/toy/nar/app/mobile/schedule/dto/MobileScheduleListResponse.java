@@ -21,8 +21,22 @@ public record MobileScheduleListResponse(
 			MobileTeamResult blueTeam,
 			MobileTeamResult redTeam,
 			String liveStreamUrl,
+			@Schema(description = "라이브 중계 채널 목록. 진행 중 경기에서만 채워지며, 복수면 앱이 선택 시트를 띄운다. "
+					+ "liveStreamUrl 은 하위호환용(첫 번째 링크와 동일)")
+			List<MobileStreamLink> streamLinks,
 			@Schema(description = "매치에 속한 세트(게임) 목록. 아직 세트가 생성되지 않은 매치는 빈 배열")
 			List<MobileGameSummary> games) {
+	}
+
+	public record MobileStreamLink(
+			@Schema(description = "플랫폼 식별자", example = "chzzk")
+			String provider,
+			@Schema(description = "표시 이름", example = "치지직")
+			String label,
+			@Schema(description = "부가 설명", example = "LCK 공식 채널 · 한국어")
+			String description,
+			@Schema(description = "중계 URL", example = "https://chzzk.naver.com/9381e7d6816e6d915a44a13c0195b202")
+			String url) {
 	}
 
 	public record MobileGameSummary(

@@ -310,6 +310,7 @@ public class MobileScheduleService {
 						match.getRedTeamImageUrl(),
 						match.getRedScore()),
 				liveStreamUrl(match),
+				streamLinks(match),
 				gamesByMatchId.getOrDefault(match.getId(), List.of()));
 	}
 
@@ -435,10 +436,24 @@ public class MobileScheduleService {
 	}
 
 	private String liveStreamUrl(LeagueMatch match) {
+		// 하위호환: 구버전 앱이 쓰는 단일 링크. streamLinks 의 첫 번째(대표 채널)와 동일하게 유지한다.
 		if ("inProgress".equalsIgnoreCase(match.getState())) {
-			return LeagueConstants.getLiveStreamUrl(match.getLeagueName());
+			return LeagueConstants.getStreamLinks(match.getLeagueName()).get(0).url();
 		}
 		return null;
+	}
+
+	/**
+	 * 라이브 중계 채널 목록. 진행 중 경기에서만 채워지고, 복수면 앱이 선택 시트를 띄운다.
+	 */
+	private List<MobileScheduleListResponse.MobileStreamLink> streamLinks(LeagueMatch match) {
+		if (!"inProgress".equalsIgnoreCase(match.getState())) {
+			return List.of();
+		}
+		return LeagueConstants.getStreamLinks(match.getLeagueName()).stream()
+				.map(link -> new MobileScheduleListResponse.MobileStreamLink(
+						link.provider(), link.label(), link.description(), link.url()))
+				.toList();
 	}
 
 	private String toScheduledTime(LeagueMatch match) {
