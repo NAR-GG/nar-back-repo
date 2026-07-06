@@ -186,6 +186,16 @@ public class MobileScheduleService {
 		return new MobileMatchPageResponse(normalizedLeague, teamId, matches, nextCursor, nextCursor != null);
 	}
 
+	/**
+	 * 매치 단건 조회. 푸시 알림 딥링크처럼 matchId 만 알고 진입하는 화면이
+	 * 리스트 응답과 동일한 형태(MobileMatchSummary)로 경기 정보를 채울 때 쓴다.
+	 */
+	public MobileScheduleListResponse.MobileMatchSummary getMatch(String matchId) {
+		LeagueMatch match = leagueMatchRepository.findById(matchId)
+				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
+		return toMatchSummary(match, loadGames(List.of(match)));
+	}
+
 	public MobileMatchGamesResponse getMatchGames(String matchId) {
 		LeagueMatch match = leagueMatchRepository.findById(matchId)
 				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));

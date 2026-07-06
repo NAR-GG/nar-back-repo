@@ -34,6 +34,32 @@ class MobileMatchControllerTest {
 	}
 
 	@Test
+	void getMatchReturnsSingleMatchSummary() throws Exception {
+		when(mobileScheduleService.getMatch("match-1"))
+				.thenReturn(new MobileScheduleListResponse.MobileMatchSummary(
+						"match-1",
+						"2026-07-06",
+						"17:00",
+						"inProgress",
+						"T1 vs FUR",
+						"MSI",
+						new MobileScheduleListResponse.MobileTeamResult("T1", "T1", "https://example.com/t1.png", 1),
+						new MobileScheduleListResponse.MobileTeamResult("Furia", "FUR", "https://example.com/fur.png", 0),
+						"https://chzzk.naver.com/abc",
+						List.of(new MobileScheduleListResponse.MobileStreamLink(
+								"chzzk", "치지직", "LCK 공식 채널 · 한국어", "https://chzzk.naver.com/abc")),
+						List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", null, "LIVE", null))));
+
+		mockMvc.perform(get("/api/mobile/matches/match-1"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.matchId").value("match-1"))
+				.andExpect(jsonPath("$.matchStatus").value("inProgress"))
+				.andExpect(jsonPath("$.blueTeam.teamName").value("T1"))
+				.andExpect(jsonPath("$.blueTeam.score").value(1))
+				.andExpect(jsonPath("$.streamLinks[0].provider").value("chzzk"));
+	}
+
+	@Test
 	void getMatchesReturnsCursorPageShape() throws Exception {
 		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20))
 				.thenReturn(new MobileMatchPageResponse(
