@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.push;
 
+import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.mobile.notification.MemberNotificationService;
 import com.toy.nar.domain.member.entity.MemberDevice;
 import com.toy.nar.domain.member.entity.MemberNotificationType;
@@ -47,6 +48,7 @@ public class TeamLiveEventPushService {
 	private final MemberDeviceRepository deviceRepository;
 	private final MemberTeamEventPushDeliveryRepository deliveryRepository;
 	private final TeamExternalIdentityRepository teamExternalIdentityRepository;
+	private final LeagueMatchRepository leagueMatchRepository;
 	private final MobilePushGateway pushGateway;
 	private final MemberNotificationService notificationService;
 
@@ -71,10 +73,33 @@ public class TeamLiveEventPushService {
 		if (!isReady() || matchId == null || matchId.isBlank()) {
 			return;
 		}
+		// SET_END 는 매치 스코어를 함께 보여준다. 같은 폴링 사이클에서 스코어 sync 가
+		// 발송보다 먼저 실행되므로 대부분 최신이지만, 합계가 0이면(미동기화) 생략한다.
+		String matchScoreLine = TYPE_SET_END.equals(eventType) ? buildMatchScoreLine(matchId) : null;
 		notifyTeamSide(eventType, matchId, setNumber, NO_EVENT_ORDER,
-				blueEsportsTeamId, blueTeamName, redTeamName, true);
+				blueEsportsTeamId, blueTeamName, redTeamName, true, matchScoreLine);
 		notifyTeamSide(eventType, matchId, setNumber, NO_EVENT_ORDER,
-				redEsportsTeamId, redTeamName, blueTeamName, false);
+				redEsportsTeamId, redTeamName, blueTeamName, false, matchScoreLine);
+	}
+
+	/** 발송 직전 DB 매치 스코어로 "T1 1 vs 2 HLE" 라인을 만든다. 스코어가 아직 0:0 이면 null. */
+	private String buildMatchScoreLine(String matchId) {
+		try {
+			return leagueMatchRepository.findById(matchId)
+					.map(match -> {
+						Integer blueScore = match.getBlueScore();
+						Integer redScore = match.getRedScore();
+						if (blueScore == null || redScore == null || blueScore + redScore <= 0) {
+							return null;
+						}
+						return matchup(match.getBlueTeamName(), match.getRedTeamName())
+								.replace(" vs ", " " + blueScore + " vs " + redScore + " ");
+					})
+					.orElse(null);
+		} catch (Exception e) {
+			log.warn("Failed to load match score for set-end push matchId={}", matchId, e);
+			return null;
+		}
 	}
 
 	/**
@@ -86,21 +111,20 @@ public class TeamLiveEventPushService {
 			int setNumber,
 			long eventOrder,
 			String actingEsportsTeamId,
-			String actingTeamName,
-			String opponentTeamName,
-			String eventLabel) {
+			String title,
+			String body) {
 		if (!isReady() || matchId == null || matchId.isBlank()) {
 			return;
 		}
+		// 문구(title/body)는 이벤트 상세(킬러/피해자·양팀 카운트)를 아는 LiveObjectEventRecorder 가 완성한다.
+		// 여기서는 구독 매칭용 팀 해석과 발송만 담당한다.
 		Optional<Team> team = resolveLckTeam(actingEsportsTeamId);
 		if (team.isEmpty()) {
 			return;
 		}
-		Team resolved = team.get();
-		String teamName = preferDisplayName(actingTeamName, resolved.getName());
-		MobilePushMessage message = buildLiveEventMessage(
-				matchId, setNumber, teamName, eventLabel);
-		fanOut(TYPE_LIVE_EVENT, matchId, setNumber, eventOrder, resolved.getId(), message);
+		MobilePushMessage message = new MobilePushMessage(
+				title, body, baseData(TYPE_LIVE_EVENT, matchId, setNumber));
+		fanOut(TYPE_LIVE_EVENT, matchId, setNumber, eventOrder, team.get().getId(), message);
 	}
 
 	private void notifyTeamSide(
@@ -111,7 +135,8 @@ public class TeamLiveEventPushService {
 			String esportsTeamId,
 			String teamName,
 			String opponentTeamName,
-			boolean blueSide) {
+			boolean blueSide,
+			String matchScoreLine) {
 		Optional<Team> team = resolveLckTeam(esportsTeamId);
 		if (team.isEmpty()) {
 			return;
@@ -122,7 +147,7 @@ public class TeamLiveEventPushService {
 		String blue = blueSide ? displayName : opponent;
 		String red = blueSide ? opponent : displayName;
 		MobilePushMessage message = buildMatchEventMessage(
-				eventType, matchId, setNumber, displayName, blue, red);
+				eventType, matchId, setNumber, displayName, blue, red, matchScoreLine);
 		fanOut(eventType, matchId, setNumber, eventOrder, resolved.getId(), message);
 	}
 
@@ -237,29 +262,22 @@ public class TeamLiveEventPushService {
 			int setNumber,
 			String teamName,
 			String blueTeamName,
-			String redTeamName) {
+			String redTeamName,
+			String matchScoreLine) {
 		String matchup = matchup(blueTeamName, redTeamName);
 		String title;
 		String body;
 		if (TYPE_SET_END.equals(eventType)) {
-			title = teamName + " 세트 종료";
-			body = matchup + " · " + setNumber + "세트 종료";
+			title = teamName + " " + setNumber + "세트 종료";
+			// 매치 스코어를 알면 "T1 1 vs 2 HLE" 로 경기 흐름을 보여준다.
+			body = matchScoreLine != null
+					? matchScoreLine + " · " + setNumber + "세트 종료"
+					: matchup + " · " + setNumber + "세트 종료";
 		} else {
 			title = teamName + " 세트 시작";
 			body = matchup + " · " + setNumber + "세트 시작";
 		}
 		return new MobilePushMessage(title, body, baseData(eventType, matchId, setNumber));
-	}
-
-	private MobilePushMessage buildLiveEventMessage(
-			String matchId,
-			int setNumber,
-			String teamName,
-			String eventLabel) {
-		String label = eventLabel == null || eventLabel.isBlank() ? "라이브 이벤트" : eventLabel;
-		String title = teamName + " " + label;
-		String body = teamName + " " + label + " · " + setNumber + "세트";
-		return new MobilePushMessage(title, body, baseData(TYPE_LIVE_EVENT, matchId, setNumber));
 	}
 
 	/** 모바일 계약: data.type / data.matchId / data.setNumber 는 모두 String. */
