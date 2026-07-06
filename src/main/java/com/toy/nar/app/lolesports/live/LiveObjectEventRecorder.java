@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -76,13 +77,18 @@ public class LiveObjectEventRecorder {
 				continue;
 			}
 			if (previous != null) {
-				recordObjectDiff(activeGame, "Blue", previous.blue(), snapshot.blue(), snapshot.frameTimestampUtc());
-				recordObjectDiff(activeGame, "Red", previous.red(), snapshot.red(), snapshot.frameTimestampUtc());
+				int gameTotalPrevKills = previous.blue().kills() + previous.red().kills();
+				recordObjectDiff(activeGame, "Blue", previous.blue(), snapshot.blue(), snapshot.red(),
+						snapshot.frameTimestampUtc());
+				recordObjectDiff(activeGame, "Red", previous.red(), snapshot.red(), snapshot.blue(),
+						snapshot.frameTimestampUtc());
 				recordKills(activeGame, "Blue", previous.blue().kills(), snapshot.blue().kills(),
+						snapshot.red().kills(), gameTotalPrevKills,
 						previous.blueParticipants(), snapshot.blueParticipants(),
 						previous.redParticipants(), snapshot.redParticipants(),
 						metadata, snapshot.frameTimestampUtc());
 				recordKills(activeGame, "Red", previous.red().kills(), snapshot.red().kills(),
+						snapshot.blue().kills(), gameTotalPrevKills,
 						previous.redParticipants(), snapshot.redParticipants(),
 						previous.blueParticipants(), snapshot.blueParticipants(),
 						metadata, snapshot.frameTimestampUtc());
@@ -118,12 +124,16 @@ public class LiveObjectEventRecorder {
 			String teamSide,
 			TeamObjectState previous,
 			TeamObjectState current,
+			TeamObjectState opponentCurrent,
 			LocalDateTime frameTimestampUtc) {
-		recordCounterEvents(activeGame, teamSide, EVENT_TOWER, previous.towers(), current.towers(), frameTimestampUtc);
-		recordCounterEvents(activeGame, teamSide, EVENT_BARON, previous.barons(), current.barons(), frameTimestampUtc);
+		recordCounterEvents(activeGame, teamSide, EVENT_TOWER, previous.towers(), current.towers(),
+				opponentCurrent.towers(), frameTimestampUtc);
+		recordCounterEvents(activeGame, teamSide, EVENT_BARON, previous.barons(), current.barons(),
+				opponentCurrent.barons(), frameTimestampUtc);
 		recordCounterEvents(activeGame, teamSide, EVENT_INHIBITOR, previous.inhibitors(), current.inhibitors(),
-				frameTimestampUtc);
-		recordDragonEvents(activeGame, teamSide, previous.dragons(), current.dragons(), frameTimestampUtc);
+				opponentCurrent.inhibitors(), frameTimestampUtc);
+		recordDragonEvents(activeGame, teamSide, previous.dragons(), current.dragons(),
+				opponentCurrent.dragons().size(), frameTimestampUtc);
 	}
 
 	/**
@@ -136,6 +146,8 @@ public class LiveObjectEventRecorder {
 			String killerSide,
 			int previousTeamKills,
 			int currentTeamKills,
+			int opponentCurrentKills,
+			int gameTotalPrevKills,
 			Map<Integer, Kd> killerPrevKd,
 			Map<Integer, Kd> killerCurKd,
 			Map<Integer, Kd> victimPrevKd,
@@ -154,8 +166,10 @@ public class LiveObjectEventRecorder {
 			int order = previousTeamKills + 1 + i;
 			Integer killerId = i < killers.size() ? killers.get(i) : null;
 			Integer victimId = i < victims.size() ? victims.get(i) : null;
-			saveKillEventIfAbsent(activeGame, killerSide, order, currentTeamKills, killerId, victimId, metadata,
-					frameTimestampUtc);
+			// 선취점: 이 프레임 이전까지 양팀 킬 합이 0이고, 이 팀의 첫 킬일 때.
+			boolean firstBlood = gameTotalPrevKills == 0 && order == 1 && i == 0;
+			saveKillEventIfAbsent(activeGame, killerSide, order, currentTeamKills, opponentCurrentKills,
+					firstBlood, killerId, victimId, metadata, frameTimestampUtc);
 		}
 	}
 
@@ -165,6 +179,7 @@ public class LiveObjectEventRecorder {
 			String eventType,
 			int previousValue,
 			int currentValue,
+			int opponentCurrentValue,
 			LocalDateTime frameTimestampUtc) {
 		if (currentValue <= previousValue) {
 			return;
@@ -178,6 +193,7 @@ public class LiveObjectEventRecorder {
 					null,
 					order,
 					order,
+					opponentCurrentValue,
 					frameTimestampUtc);
 		}
 	}
@@ -187,6 +203,7 @@ public class LiveObjectEventRecorder {
 			String teamSide,
 			List<String> previousDragons,
 			List<String> currentDragons,
+			int opponentDragonCount,
 			LocalDateTime frameTimestampUtc) {
 		if (currentDragons.size() <= previousDragons.size()) {
 			return;
@@ -201,6 +218,7 @@ public class LiveObjectEventRecorder {
 					dragonType,
 					index + 1,
 					index + 1,
+					opponentDragonCount,
 					frameTimestampUtc);
 		}
 	}
@@ -212,6 +230,7 @@ public class LiveObjectEventRecorder {
 			String eventSubType,
 			int eventOrder,
 			int valueAfter,
+			int opponentCurrentValue,
 			LocalDateTime frameTimestampUtc) {
 		boolean exists = objectEventRepository.existsByGameIdAndTeamSideAndEventTypeAndEventOrder(
 				activeGame.gameId(), teamSide, eventType, eventOrder);
@@ -247,7 +266,10 @@ public class LiveObjectEventRecorder {
 		// [FCM #21] LIVE_EVENT 푸시. live.notification.fcm.enabled 플래그로 게이트.
 		// 멱등 키 event_order 는 킬/오브젝트 충돌을 막기 위해 저장된 이벤트의 전역 id 를 쓴다.
 		if (teamLiveEventPushService.isEnabled() && isNotifiableLeague(activeGame.leagueName())) {
-			fireLiveEventPush(activeGame, teamSide, objectEventLabel(eventType, eventSubType), event.getId());
+			fireLiveEventPush(activeGame, teamSide,
+					objectEventTitle(activeGame, teamSide, eventType, eventSubType, valueAfter),
+					objectEventBody(activeGame, teamSide, eventType, valueAfter, opponentCurrentValue),
+					event.getId());
 		}
 	}
 
@@ -256,6 +278,8 @@ public class LiveObjectEventRecorder {
 			String killerSide,
 			int eventOrder,
 			int teamKillsAfter,
+			int opponentKillsCurrent,
+			boolean firstBlood,
 			Integer killerId,
 			Integer victimId,
 			Map<Integer, ParticipantMeta> metadata,
@@ -306,7 +330,16 @@ public class LiveObjectEventRecorder {
 
 		// [FCM #21] LIVE_EVENT(킬) 푸시. live.notification.fcm.enabled 플래그로 게이트.
 		if (teamLiveEventPushService.isEnabled() && isNotifiableLeague(activeGame.leagueName())) {
-			fireLiveEventPush(activeGame, killerSide, killEventLabel(killerSide, teamKillsAfter), event.getId());
+			fireLiveEventPush(activeGame, killerSide,
+					killEventTitle(activeGame, killerSide, firstBlood,
+							killer == null ? null : killer.summonerName(),
+							victim == null ? null : victim.summonerName(),
+							teamKillsAfter),
+					killEventBody(activeGame, killerSide, firstBlood,
+							killer == null ? null : killer.summonerName(),
+							victim == null ? null : victim.summonerName(),
+							teamKillsAfter, opponentKillsCurrent),
+					event.getId());
 		}
 	}
 
@@ -391,45 +424,107 @@ public class LiveObjectEventRecorder {
 	}
 
 	/** [FCM #21] LIVE_EVENT 푸시 호출. 진영별 esportsTeamId(window 기준)로 이벤트를 일으킨 팀 구독자에게 발송. */
-	private void fireLiveEventPush(ActiveLiveGame activeGame, String teamSide, String eventLabel, long eventOrder) {
+	private void fireLiveEventPush(ActiveLiveGame activeGame, String teamSide, String title, String body,
+			long eventOrder) {
 		try {
 			SideTeamIds sideIds = sideTeamIdsByGame.get(activeGame.gameId());
 			if (sideIds == null) {
 				return;
 			}
-			boolean blue = "Blue".equalsIgnoreCase(teamSide);
-			String actingEsportsTeamId = blue ? sideIds.blue() : sideIds.red();
+			String actingEsportsTeamId = "Blue".equalsIgnoreCase(teamSide) ? sideIds.blue() : sideIds.red();
 			if (actingEsportsTeamId == null || actingEsportsTeamId.isBlank()) {
 				return;
 			}
-			String actingTeamName = teamNameOf(activeGame, teamSide);
-			String opponentTeamName = teamNameOf(activeGame, blue ? "Red" : "Blue");
 			teamLiveEventPushService.notifyLiveEvent(
 					activeGame.matchId(),
 					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
 					eventOrder,
 					actingEsportsTeamId,
-					actingTeamName,
-					opponentTeamName,
-					eventLabel);
+					title,
+					body);
 		} catch (Exception e) {
-			log.warn("[live-notify] live-event FCM failed gameId={} side={}: {}",
-					activeGame.gameId(), teamSide, e.getMessage());
+			log.warn("[live-notify] live-event FCM failed gameId={} matchId={}: {}",
+					activeGame.gameId(), activeGame.matchId(), e.getMessage());
 		}
 	}
 
-	private String objectEventLabel(String eventType, String eventSubType) {
-		return switch (eventType) {
-			case EVENT_DRAGON -> "드래곤 처치";
-			case EVENT_BARON -> "바론 처치";
-			case EVENT_TOWER -> "포탑 파괴";
-			case EVENT_INHIBITOR -> "억제기 파괴";
-			default -> eventType;
+	/* ---------- 푸시 문구 빌더 (경기 흐름을 알 수 있게 상대 카운트를 함께 보여준다) ---------- */
+
+	private String opponentNameOf(ActiveLiveGame activeGame, String teamSide) {
+		return "Blue".equalsIgnoreCase(teamSide) ? activeGame.redTeamName() : activeGame.blueTeamName();
+	}
+
+	private String setSuffix(ActiveLiveGame activeGame) {
+		Integer setNumber = activeGame.setNumber();
+		return setNumber == null || setNumber <= 0 ? "" : " · " + setNumber + "세트";
+	}
+
+	private String dragonKo(String dragonType) {
+		if (dragonType == null) {
+			return "드래곤";
+		}
+		return switch (dragonType.toLowerCase(Locale.ROOT)) {
+			case "cloud" -> "바람용";
+			case "ocean" -> "바다용";
+			case "mountain" -> "대지용";
+			case "infernal" -> "화염용";
+			case "hextech" -> "마공학용";
+			case "chemtech" -> "화학공학용";
+			case "elder" -> "장로용";
+			default -> "드래곤";
 		};
 	}
 
-	private String killEventLabel(String killerSide, int teamKillsAfter) {
-		return teamKillsAfter + "킬 달성";
+	private String objectEventTitle(ActiveLiveGame activeGame, String teamSide, String eventType,
+			String eventSubType, int valueAfter) {
+		String acting = teamNameOf(activeGame, teamSide);
+		return switch (eventType) {
+			case EVENT_DRAGON -> acting + " " + dragonKo(eventSubType) + " 처치";
+			case EVENT_BARON -> acting + " 바론 처치";
+			case EVENT_TOWER -> acting + " " + valueAfter + "번째 포탑 파괴";
+			case EVENT_INHIBITOR -> acting + " 억제기 파괴";
+			default -> acting + " " + eventType;
+		};
+	}
+
+	private String objectEventBody(ActiveLiveGame activeGame, String teamSide, String eventType,
+			int valueAfter, int opponentValue) {
+		String acting = teamNameOf(activeGame, teamSide);
+		String opponent = opponentNameOf(activeGame, teamSide);
+		String counts = switch (eventType) {
+			case EVENT_DRAGON -> acting + " " + valueAfter + "용 vs " + opponentValue + "용 " + opponent;
+			case EVENT_BARON -> acting + " 바론 " + valueAfter + " vs " + opponentValue + " " + opponent;
+			case EVENT_TOWER -> acting + " 포탑 " + valueAfter + " vs " + opponentValue + " " + opponent;
+			case EVENT_INHIBITOR -> acting + " 억제기 " + valueAfter + " vs " + opponentValue + " " + opponent;
+			default -> acting + " " + valueAfter + " vs " + opponentValue + " " + opponent;
+		};
+		return counts + setSuffix(activeGame);
+	}
+
+	private String killEventTitle(ActiveLiveGame activeGame, String killerSide, boolean firstBlood,
+			String killerName, String victimName, int teamKillsAfter) {
+		String acting = teamNameOf(activeGame, killerSide);
+		if (killerName == null) {
+			return acting + " " + teamKillsAfter + "킬 달성";
+		}
+		if (firstBlood) {
+			return acting + " " + killerName + " 선취점 달성";
+		}
+		String opponent = opponentNameOf(activeGame, killerSide);
+		String victim = victimName == null ? opponent : opponent + " " + victimName;
+		return acting + " " + killerName + "님이 " + victim + "님을 처치했습니다";
+	}
+
+	private String killEventBody(ActiveLiveGame activeGame, String killerSide, boolean firstBlood,
+			String killerName, String victimName, int teamKillsAfter, int opponentKills) {
+		String acting = teamNameOf(activeGame, killerSide);
+		String opponent = opponentNameOf(activeGame, killerSide);
+		if (firstBlood && killerName != null && victimName != null) {
+			return acting + " " + killerName + "님이 " + opponent + " " + victimName + "님을 처치했습니다"
+					+ setSuffix(activeGame);
+		}
+		return acting + " " + teamKillsAfter + " Kill vs " + opponentKills + " Kill " + opponent
+				+ setSuffix(activeGame);
 	}
 
 	private String textOrNull(JsonNode node, String field) {
