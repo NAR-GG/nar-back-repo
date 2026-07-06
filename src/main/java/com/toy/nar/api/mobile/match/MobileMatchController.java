@@ -3,6 +3,7 @@ package com.toy.nar.api.mobile.match;
 import com.toy.nar.app.mobile.schedule.MobileScheduleService;
 import com.toy.nar.app.mobile.schedule.dto.MobileMatchGamesResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileMatchPageResponse;
+import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,6 +44,17 @@ public class MobileMatchController {
 			@Parameter(description = "페이지 크기(1~50)", example = "20")
 			@RequestParam(defaultValue = "20") Integer size) {
 		return ResponseEntity.ok(mobileScheduleService.getMatchPage(league, teamId, seasonYear, split, cursor, size));
+	}
+
+	@Operation(
+			summary = "매치 단건 조회",
+			description = "matchId로 경기 한 건을 조회합니다. 응답은 /api/mobile/schedules 의 "
+					+ "matches 배열 항목과 동일한 형태입니다. 푸시 알림 딥링크 진입 시 경기 정보를 채우는 용도입니다.")
+	@GetMapping("/{matchId}")
+	public ResponseEntity<MobileScheduleListResponse.MobileMatchSummary> getMatch(
+			@Parameter(description = "매치 ID", example = "113990000000000001")
+			@PathVariable String matchId) {
+		return ResponseEntity.ok(mobileScheduleService.getMatch(matchId));
 	}
 
 	@Operation(
