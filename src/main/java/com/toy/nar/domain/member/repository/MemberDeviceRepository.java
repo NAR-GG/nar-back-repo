@@ -58,6 +58,24 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 			@Param("teamId") Long teamId,
 			@Param("eventType") String eventType);
 
+	/**
+	 * 특정 경기를 예약 구독한 회원들의 활성 기기 목록. 팀 구독과 달리 토글이 없어
+	 * 세트 시작/종료/라이브 이벤트를 구분하지 않고 구독 여부만 본다.
+	 */
+	@EntityGraph(attributePaths = "member")
+	@Query("""
+			SELECT DISTINCT device
+			FROM MemberDevice device
+			WHERE device.active = true
+			  AND EXISTS (
+				  SELECT subscription.id
+				  FROM MemberMatchSubscription subscription
+				  WHERE subscription.member = device.member
+				    AND subscription.matchId = :matchId
+			  )
+			""")
+	List<MemberDevice> findActiveDevicesBySubscribedMatchId(@Param("matchId") String matchId);
+
 	@Modifying(clearAutomatically = true)
 	@Transactional
 	@Query("""

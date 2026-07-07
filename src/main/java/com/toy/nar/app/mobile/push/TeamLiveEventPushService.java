@@ -80,6 +80,56 @@ public class TeamLiveEventPushService {
 				blueEsportsTeamId, blueTeamName, redTeamName, true, matchScoreLine);
 		notifyTeamSide(eventType, matchId, setNumber, NO_EVENT_ORDER,
 				redEsportsTeamId, redTeamName, blueTeamName, false, matchScoreLine);
+
+		// 경기 예약 구독자(팀 무관)에게도 발송. 매치 중립 문구를 1회 만들어 fan-out 한다.
+		// dedup 키가 (member, matchId, ...) 라 팀+매치 양쪽 구독자여도 1회만 나간다.
+		MobilePushMessage matchMessage =
+				buildMatchScopedMessage(eventType, matchId, setNumber, blueTeamName, redTeamName, matchScoreLine);
+		fanOutToMatchSubscribers(eventType, matchId, setNumber, NO_EVENT_ORDER, matchMessage);
+	}
+
+	/** 경기 예약 구독자용 중립 문구. 특정 팀 관점이 아니라 대진 기준으로 표기한다. */
+	private MobilePushMessage buildMatchScopedMessage(
+			String eventType,
+			String matchId,
+			int setNumber,
+			String blueTeamName,
+			String redTeamName,
+			String matchScoreLine) {
+		String matchup = matchup(blueTeamName, redTeamName);
+		String title;
+		String body;
+		if (TYPE_SET_END.equals(eventType)) {
+			title = matchup + " " + setNumber + "세트 종료";
+			body = (matchScoreLine != null ? matchScoreLine : matchup) + " · " + setNumber + "세트 종료";
+		} else {
+			title = matchup + " " + setNumber + "세트 시작";
+			body = matchup + " · " + setNumber + "세트 시작";
+		}
+		return new MobilePushMessage(title, body, baseData(eventType, matchId, setNumber));
+	}
+
+	/** 경기 예약 구독자 fan-out. 팀 구독 fanOut 과 동일하게 sendToMember(dedup) 를 태운다. */
+	private void fanOutToMatchSubscribers(
+			String eventType,
+			String matchId,
+			int setNumber,
+			long eventOrder,
+			MobilePushMessage message) {
+		try {
+			List<MemberDevice> devices = deviceRepository.findActiveDevicesBySubscribedMatchId(matchId);
+			Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
+					.collect(Collectors.groupingBy(
+							device -> device.getMember().getId(),
+							LinkedHashMap::new,
+							Collectors.toList()));
+			for (Map.Entry<Long, List<MemberDevice>> entry : devicesByMember.entrySet()) {
+				sendToMember(entry.getKey(), entry.getValue(), eventType, matchId, setNumber, eventOrder, message);
+			}
+		} catch (Exception e) {
+			log.warn("Failed to prepare match-subscription pushes eventType={} matchId={} setNumber={}",
+					eventType, matchId, setNumber, e);
+		}
 	}
 
 	/** 발송 직전 DB 매치 스코어로 "T1 1 vs 2 HLE" 라인을 만든다. 스코어가 아직 0:0 이면 null. */
@@ -117,14 +167,14 @@ public class TeamLiveEventPushService {
 			return;
 		}
 		// 문구(title/body)는 이벤트 상세(킬러/피해자·양팀 카운트)를 아는 LiveObjectEventRecorder 가 완성한다.
-		// 여기서는 구독 매칭용 팀 해석과 발송만 담당한다.
-		Optional<Team> team = resolveLckTeam(actingEsportsTeamId);
-		if (team.isEmpty()) {
-			return;
-		}
+		// 여기서는 구독 매칭용 발송만 담당한다.
 		MobilePushMessage message = new MobilePushMessage(
 				title, body, baseData(TYPE_LIVE_EVENT, matchId, setNumber));
-		fanOut(TYPE_LIVE_EVENT, matchId, setNumber, eventOrder, team.get().getId(), message);
+		// 팀 구독자: acting 팀이 LCK 로 해석될 때만. (비LCK 팀은 팀 구독 대상이 아니다)
+		resolveLckTeam(actingEsportsTeamId).ifPresent(team ->
+				fanOut(TYPE_LIVE_EVENT, matchId, setNumber, eventOrder, team.getId(), message));
+		// 경기 예약 구독자: 팀 무관. 비LCK 대진(예: 국제전)이라도 발송된다.
+		fanOutToMatchSubscribers(TYPE_LIVE_EVENT, matchId, setNumber, eventOrder, message);
 	}
 
 	private void notifyTeamSide(
