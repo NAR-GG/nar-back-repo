@@ -34,6 +34,10 @@ public interface LeagueRepository extends JpaRepository<League, Long> {
 	@Query("SELECT DISTINCT l.leagueName FROM League l WHERE l.seasonYear = 2025")
 	List<String> findDistinctLeagueNames();
 
+	// 백오피스 리그 필터 옵션: 전 시즌 통틀어 실제 존재하는 리그명만.
+	@Query("SELECT DISTINCT l.leagueName FROM League l ORDER BY l.leagueName")
+	List<String> findAllDistinctLeagueNames();
+
 	@Query("SELECT DISTINCT l.leagueName FROM League l WHERE l.seasonYear = :year ORDER BY l.leagueName")
 	List<String> findDistinctLeagueNamesByYear(@Param("year") int year);
 

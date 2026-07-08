@@ -14,14 +14,18 @@ import java.util.Set;
 public interface PlayerRepository extends JpaRepository<Player, Long> {
 	Optional<Player> findByName(String name);
 
-	// 백오피스 검색: 선수명·실명 부분일치. q 가 null 이면 전체.
+	// 백오피스 검색: 선수명·실명 부분일치 + 리그 필터. q/league 가 null 이면 각 조건 무시.
+	// 리그는 출전 기록(GameParticipant→Game→League) 기준 EXISTS 로 판정(전 시즌 통합).
 	@Query("""
 			SELECT p FROM Player p
-			WHERE :q IS NULL
-			   OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
-			   OR LOWER(p.realName) LIKE LOWER(CONCAT('%', :q, '%'))
+			WHERE (:q IS NULL
+			       OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
+			       OR LOWER(p.realName) LIKE LOWER(CONCAT('%', :q, '%')))
+			  AND (:league IS NULL
+			       OR EXISTS (SELECT 1 FROM GameParticipant gp
+			                  WHERE gp.player = p AND gp.game.league.leagueName = :league))
 			""")
-	Page<Player> searchForBackoffice(@Param("q") String q, Pageable pageable);
+	Page<Player> searchForBackoffice(@Param("q") String q, @Param("league") String league, Pageable pageable);
 
 	Optional<Player> findByPlayerOriginId(String playerOriginId);
 
