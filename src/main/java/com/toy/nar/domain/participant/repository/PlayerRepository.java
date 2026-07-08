@@ -14,6 +14,15 @@ import java.util.Set;
 public interface PlayerRepository extends JpaRepository<Player, Long> {
 	Optional<Player> findByName(String name);
 
+	// 백오피스 검색: 선수명·실명 부분일치. q 가 null 이면 전체.
+	@Query("""
+			SELECT p FROM Player p
+			WHERE :q IS NULL
+			   OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
+			   OR LOWER(p.realName) LIKE LOWER(CONCAT('%', :q, '%'))
+			""")
+	Page<Player> searchForBackoffice(@Param("q") String q, Pageable pageable);
+
 	Optional<Player> findByPlayerOriginId(String playerOriginId);
 
 	List<Player> findAllByNameInIgnoreCase(Set<String> names);

@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -27,23 +28,28 @@ public class BackofficeController {
     private final TeamRepository teamRepository;
 
     @GetMapping("/members")
-    public Page<MemberRow> members(Pageable pageable) {
-        return memberRepository.findAll(pageable)
+    public Page<MemberRow> members(@RequestParam(required = false) String q, Pageable pageable) {
+        return memberRepository.searchForBackoffice(blankToNull(q), pageable)
                 .map(m -> new MemberRow(m.getId(), m.getNickname(), m.getEmail(),
                         m.getFavoriteLeagueName(), m.getCreatedAt()));
     }
 
     @GetMapping("/players")
-    public Page<PlayerRow> players(Pageable pageable) {
-        return playerRepository.findAll(pageable)
+    public Page<PlayerRow> players(@RequestParam(required = false) String q, Pageable pageable) {
+        return playerRepository.searchForBackoffice(blankToNull(q), pageable)
                 .map(p -> new PlayerRow(p.getId(), p.getName(), p.getRealName(),
                         p.getRole(), p.getAge()));
     }
 
     @GetMapping("/teams")
-    public Page<TeamRow> teams(Pageable pageable) {
-        return teamRepository.findAll(pageable)
+    public Page<TeamRow> teams(@RequestParam(required = false) String q, Pageable pageable) {
+        return teamRepository.searchForBackoffice(blankToNull(q), pageable)
                 .map(t -> new TeamRow(t.getId(), t.getName(), t.getCode()));
+    }
+
+    // 빈 문자열/공백은 null 로 정규화 → 검색 쿼리의 ":q IS NULL" 분기가 전체 조회로 동작.
+    private static String blankToNull(String q) {
+        return (q == null || q.isBlank()) ? null : q.trim();
     }
 
     @GetMapping("/cron-jobs")
