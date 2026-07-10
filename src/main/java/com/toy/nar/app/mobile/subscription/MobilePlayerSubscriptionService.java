@@ -6,6 +6,7 @@ import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.MemberFavoritePlayer;
 import com.toy.nar.domain.member.repository.MemberFavoritePlayerRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
+import com.toy.nar.domain.participant.PlayerRoleOrder;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,7 +58,9 @@ public class MobilePlayerSubscriptionService {
 				.map(subscription -> playerOptions.get(subscription.getPlayer().getId()))
 				.filter(option -> option != null)
 				.map(option -> PlayerSubscriptionResponse.from(option, true))
-				.sorted((left, right) -> left.playerName().compareToIgnoreCase(right.playerName()))
+				.sorted(Comparator
+						.comparingInt((PlayerSubscriptionResponse response) -> PlayerRoleOrder.of(response.role()))
+						.thenComparing(PlayerSubscriptionResponse::playerName, String.CASE_INSENSITIVE_ORDER))
 				.toList();
 	}
 

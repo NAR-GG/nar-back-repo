@@ -95,7 +95,14 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 					WHERE ranked.rn = 1
 					  AND (:teamId IS NULL OR ranked.teamId = :teamId)
 					  AND (:query IS NULL OR LOWER(ranked.playerName) LIKE LOWER(CONCAT('%', :query, '%')))
-					ORDER BY ranked.playerName
+					ORDER BY CASE UPPER(ranked.role)
+					             WHEN 'TOP' THEN 1
+					             WHEN 'JUNGLE' THEN 2
+					             WHEN 'MID' THEN 3
+					             WHEN 'ADC' THEN 4
+					             WHEN 'SUPPORT' THEN 5
+					             ELSE 6 END,
+					         ranked.playerName
 					""",
 			countQuery = """
 					SELECT COUNT(*)
