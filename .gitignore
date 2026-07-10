@@ -48,3 +48,4 @@ src/main/build/
 
 # 애플리케이션 로그
 logs/
+test_result.log
