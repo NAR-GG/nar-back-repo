@@ -61,7 +61,7 @@ class MobileTeamNotificationServiceTest {
 	}
 
 	@Test
-	void returnsAvailableTeamsInCatalogOrderWithSubscriptionState() {
+	void returnsAvailableTeamsWithSubscribedFirstThenCatalogOrder() {
 		Team t1 = team(1L, "T1", "T1");
 		Team gen = team(2L, "Gen.G", "GEN");
 		Member member = member(7L, t1);
@@ -73,14 +73,15 @@ class MobileTeamNotificationServiceTest {
 
 		var response = service.getAvailableTeams(7L);
 
+		// 구독 중인 GEN 이 카탈로그상 T1 보다 뒤여도 최상단에 노출된다.
 		assertThat(response).extracting(item -> item.teamCode())
-				.containsExactly("T1", "GEN");
-		assertThat(response.get(0).subscribed()).isFalse();
-		assertThat(response.get(0).setStartEnabled()).isTrue();
-		assertThat(response.get(0).setEndEnabled()).isTrue();
-		assertThat(response.get(0).liveEventEnabled()).isFalse();
-		assertThat(response.get(1).subscribed()).isTrue();
-		assertThat(response.get(1).liveEventEnabled()).isTrue();
+				.containsExactly("GEN", "T1");
+		assertThat(response.get(0).subscribed()).isTrue();
+		assertThat(response.get(0).liveEventEnabled()).isTrue();
+		assertThat(response.get(1).subscribed()).isFalse();
+		assertThat(response.get(1).setStartEnabled()).isTrue();
+		assertThat(response.get(1).setEndEnabled()).isTrue();
+		assertThat(response.get(1).liveEventEnabled()).isFalse();
 	}
 
 	@Test

@@ -148,16 +148,17 @@ class PlayerRepositoryLckPlayerOptionsTest {
 	}
 
 	@Test
-	@DisplayName("페이지네이션: size=2, page0 은 이름순 2건 + 전체 4건/2페이지")
+	@DisplayName("페이지네이션: size=2, page0 은 포지션순 2건 + 전체 4건/2페이지")
 	void paginates() {
 		Page<LckPlayerOption> page0 = playerRepository.findLckPlayerOptions(
 				LCK, YEAR, null, null, PageRequest.of(0, 2));
 
 		assertThat(page0.getTotalElements()).isEqualTo(4);
 		assertThat(page0.getTotalPages()).isEqualTo(2);
-		// 이름순: Faker, GenStar, Mover, Twin
+		// 포지션순(탑→정글→미드→바텀→서폿), 동일 포지션 내 이름순:
+		// Mover(Top), Faker(Mid), GenStar(Mid), Twin(Support)
 		assertThat(page0.getContent()).extracting(LckPlayerOption::getPlayerName)
-				.containsExactly("Faker", "GenStar");
+				.containsExactly("Mover", "Faker");
 	}
 
 	// ── 시딩 헬퍼 (네이티브 SQL) ─────────────────────────────────
