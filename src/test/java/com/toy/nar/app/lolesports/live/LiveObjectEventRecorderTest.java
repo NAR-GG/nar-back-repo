@@ -7,6 +7,7 @@ import com.toy.nar.app.lolesports.live.entity.LiveGameObjectEvent;
 import com.toy.nar.app.lolesports.live.repository.LiveGameObjectEventRepository;
 import com.toy.nar.app.mobile.push.TeamLiveEventPushService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,6 +16,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -42,6 +45,71 @@ class LiveObjectEventRecorderTest {
 
 	private String invokeWithTeam(String team, String player) {
 		return (String) ReflectionTestUtils.invokeMethod(recorder, "withTeam", team, player);
+	}
+
+	@Test
+	void killPushShowsWindowSideTeamsWhenSidesSwapBetweenSets() throws Exception {
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		LiveObjectEventRecorder swapRecorder = new LiveObjectEventRecorder(
+				objectEventRepository, mock(NotificationService.class), pushService);
+		ReflectionTestUtils.setField(swapRecorder, "notificationLeagues", "LCK");
+		when(objectEventRepository.existsByGameIdAndTeamSideAndEventTypeAndEventOrder(any(), any(), any(), any()))
+				.thenReturn(false);
+		when(objectEventRepository.save(any(LiveGameObjectEvent.class))).thenAnswer(invocation -> {
+			LiveGameObjectEvent saved = invocation.getArgument(0);
+			ReflectionTestUtils.setField(saved, "id", 42L);
+			return saved;
+		});
+
+		// 매치 기준 Blue=HLE, Red=BLG. 이번 세트는 진영이 스왑되어 window 기준 Blue=BLG, Red=HLE.
+		ActiveLiveGame game = new ActiveLiveGame("game-2", "match-2", "LCK",
+				"Hanwha Life Esports", "BILIBILI GAMING",
+				LocalDateTime.now(ZoneOffset.UTC), 0,
+				4, "team-hle", "team-blg");
+		JsonNode window = objectMapper.readTree("""
+				{
+				  "gameMetadata": {
+				    "blueTeamMetadata": {
+				      "esportsTeamId": "team-blg",
+				      "participantMetadata": [
+				        { "participantId": 1, "summonerName": "ON", "championId": "Alistar" }
+				      ]
+				    },
+				    "redTeamMetadata": {
+				      "esportsTeamId": "team-hle",
+				      "participantMetadata": [
+				        { "participantId": 6, "summonerName": "Zeus", "championId": "Rumble" }
+				      ]
+				    }
+				  },
+				  "frames": [
+				    {
+				      "rfc460Timestamp": "2026-07-09T11:20:00.000Z",
+				      "blueTeam": { "totalKills": 0, "dragons": [],
+				        "participants": [ { "participantId": 1, "kills": 0, "deaths": 0 } ] },
+				      "redTeam": { "totalKills": 1, "dragons": [],
+				        "participants": [ { "participantId": 6, "kills": 1, "deaths": 0 } ] }
+				    },
+				    {
+				      "rfc460Timestamp": "2026-07-09T11:20:10.000Z",
+				      "blueTeam": { "totalKills": 1, "dragons": [],
+				        "participants": [ { "participantId": 1, "kills": 1, "deaths": 0 } ] },
+				      "redTeam": { "totalKills": 1, "dragons": [],
+				        "participants": [ { "participantId": 6, "kills": 1, "deaths": 1 } ] }
+				    }
+				  ]
+				}
+				""");
+
+		swapRecorder.record(game, window);
+
+		// 킬러 ON 은 window 기준 Blue=BLG 소속. 팀명도 BLG 여야 한다(매치 기준 Blue=HLE 아님).
+		ArgumentCaptor<String> title = ArgumentCaptor.forClass(String.class);
+		verify(pushService).notifyLiveEvent(
+				eq("match-2"), eq(4), anyLong(), eq("team-blg"), title.capture(), any());
+		assertThat(title.getValue())
+				.isEqualTo("BILIBILI GAMING ON님이 Hanwha Life Esports Zeus님을 처치했습니다");
 	}
 
 	@Test
