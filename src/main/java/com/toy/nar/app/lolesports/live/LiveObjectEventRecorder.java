@@ -343,11 +343,40 @@ public class LiveObjectEventRecorder {
 		}
 	}
 
+	/**
+	 * 진영(Blue/Red)의 표시용 팀명. 세트마다 진영이 스왑되므로 매치 기준 blue/redTeamName 을 그대로 쓰면
+	 * 팀명과 선수가 어긋난다(#: HLE Gumayusi 가 BILIBILI GAMING 으로 표기). window 의 진영별
+	 * esportsTeamId 를 매치 메타데이터의 id↔팀명 쌍과 대조해 실제 팀명을 찾고, 대조가 불가능할 때만
+	 * 매치 기준으로 폴백한다.
+	 */
 	private String teamNameOf(ActiveLiveGame activeGame, String teamSide) {
+		String fromWindow = windowSideTeamName(activeGame, teamSide);
+		if (fromWindow != null) {
+			return fromWindow;
+		}
 		if ("Blue".equalsIgnoreCase(teamSide)) {
 			return activeGame.blueTeamName();
 		}
 		if ("Red".equalsIgnoreCase(teamSide)) {
+			return activeGame.redTeamName();
+		}
+		return null;
+	}
+
+	/** window 진영별 esportsTeamId 를 매치 메타데이터와 대조해 팀명을 찾는다. 못 찾으면 null. */
+	private String windowSideTeamName(ActiveLiveGame activeGame, String teamSide) {
+		SideTeamIds sideIds = sideTeamIdsByGame.get(activeGame.gameId());
+		if (sideIds == null) {
+			return null;
+		}
+		String sideTeamId = "Blue".equalsIgnoreCase(teamSide) ? sideIds.blue() : sideIds.red();
+		if (sideTeamId == null || sideTeamId.isBlank()) {
+			return null;
+		}
+		if (sideTeamId.equals(activeGame.blueEsportsTeamId())) {
+			return activeGame.blueTeamName();
+		}
+		if (sideTeamId.equals(activeGame.redEsportsTeamId())) {
 			return activeGame.redTeamName();
 		}
 		return null;
@@ -451,7 +480,7 @@ public class LiveObjectEventRecorder {
 	/* ---------- 푸시 문구 빌더 (경기 흐름을 알 수 있게 상대 카운트를 함께 보여준다) ---------- */
 
 	private String opponentNameOf(ActiveLiveGame activeGame, String teamSide) {
-		return "Blue".equalsIgnoreCase(teamSide) ? activeGame.redTeamName() : activeGame.blueTeamName();
+		return teamNameOf(activeGame, "Blue".equalsIgnoreCase(teamSide) ? "Red" : "Blue");
 	}
 
 	private String setSuffix(ActiveLiveGame activeGame) {
