@@ -60,6 +60,8 @@ public class MobileTeamNotificationService {
 							? defaultResponse(member, team)
 							: toResponse(member, subscription);
 				})
+				// 구독 중인 팀을 최상단에 올리고, 그 안에서는 리그 화면 순서(catalog) 유지(안정 정렬).
+				.sorted(Comparator.comparing((TeamNotificationSubscriptionResponse response) -> !response.subscribed()))
 				.toList();
 	}
 
