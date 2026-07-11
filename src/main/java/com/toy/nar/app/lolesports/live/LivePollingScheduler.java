@@ -58,6 +58,14 @@ public class LivePollingScheduler {
 	 */
 	private final java.util.Set<String> setEndNotifiedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+	/**
+	 * livestats 프레임 gameState=finished 로 종료를 확정한 gameId.
+	 * 업스트림 eventDetails 는 종료된 세트를 분 단위(최악: 다음 세트 끝까지) inProgress 로 방치하므로,
+	 * 프레임 신호가 1차 종료 판정이고 notDiscovered 는 fallback 이다.
+	 * 여기 있는 gameId 는 디스커버리에 다시 나타나도 SET_END dedup 을 해제하지 않는다(재발송 방지).
+	 */
+	private final java.util.Set<String> frameFinishedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.max-consecutive-failures:6}")
 	private int maxConsecutiveFailures;
 
@@ -130,7 +138,11 @@ public class LivePollingScheduler {
 								redExternalId);
 						activeGames.put(gameId, next);
 						// 피드에 다시 나타났으면 SET_END 오탐(일시 누락)이었으므로 재발송 가능하게 해제.
-						setEndNotifiedGameIds.remove(gameId);
+						// 단 프레임 finished 로 확정된 게임은 예외 — eventDetails 가 종료를 늦게 반영해
+						// inProgress 로 계속 보이는 것뿐이므로 dedup 을 유지한다.
+						if (!frameFinishedGameIds.contains(gameId)) {
+							setEndNotifiedGameIds.remove(gameId);
+						}
 						liveGameMetadataService.remember(next);
 
 						if (liveNotificationEnabled && current == null && isNotifiableLeague(resolvedLeagueName)) {
@@ -192,7 +204,20 @@ public class LivePollingScheduler {
 			liveStateStore.removeGame(gameId);
 			liveObjectEventRecorder.evict(gameId);
 			setEndNotifiedGameIds.remove(gameId);
+			frameFinishedGameIds.remove(gameId);
 		});
+	}
+
+	/** window 응답의 마지막 프레임이 gameState=finished 인지. 프레임이 없으면 false. */
+	private boolean isFrameFinished(JsonNode windowResponse) {
+		if (windowResponse == null) {
+			return false;
+		}
+		JsonNode frames = windowResponse.path("frames");
+		if (!frames.isArray() || frames.isEmpty()) {
+			return false;
+		}
+		return "finished".equalsIgnoreCase(frames.get(frames.size() - 1).path("gameState").asText());
 	}
 
 	/** gameId 의 매치 내 1-based 세트 번호. match.gameIds 의 순서가 세트 순서다. 못 찾으면 null. */
@@ -243,6 +268,19 @@ public class LivePollingScheduler {
 				String startingTime = computeStartingTime(activeGame.gameId());
 				JsonNode window = liveStatsClient.getWindow(activeGame.gameId(), startingTime);
 				JsonNode details = liveStatsClient.getDetails(activeGame.gameId(), startingTime);
+
+				// 세트 종료 1차 판정: 프레임 gameState=finished (실제 종료 후 수 초 내 반영).
+				// finished 프레임은 timestamp 가 멈춰 aggregator 의 stale 필터에 걸리므로 여기 raw 응답에서 본다.
+				if (isFrameFinished(window)
+						&& frameFinishedGameIds.add(activeGame.gameId())
+						&& teamLiveEventPushService.isEnabled()
+						&& isNotifiableLeague(activeGame.leagueName())
+						&& setEndNotifiedGameIds.add(activeGame.gameId())) {
+					log.info("[live-notify] set-end(frame) gameId={} matchId={} set={}",
+							activeGame.gameId(), activeGame.matchId(), activeGame.setNumber());
+					fireSetEndNotification(activeGame);
+				}
+
 				liveFrameProcessor.process(activeGame, window, details);
 			} catch (Exception e) {
 				ActiveLiveGame failed = activeGame.increaseFailures();
