@@ -111,16 +111,29 @@ jobs:
             df -h
             docker system df || true
 
-            # 1. 메인 Spring Boot 앱 배포
+            # 1. 메인 Spring Boot 앱 blue/green 배포
+            # nginx upstream(/etc/nginx/conf.d/nar-upstream.conf)이 가리키는 포트의 반대편에
+            # 새 컨테이너를 띄우고, 헬스체크 통과 후 upstream을 교체한다.
+            # 헬스체크 실패 시 구 컨테이너가 그대로 남아 롤백이 필요 없다.
+            UPSTREAM_CONF="/etc/nginx/conf.d/nar-upstream.conf"
+            ACTIVE_PORT=$(grep -oE '127\.0\.0\.1:[0-9]+' "${UPSTREAM_CONF}" | cut -d: -f2)
+
+            if [ "${ACTIVE_PORT}" = "8080" ]; then
+              NEW_PORT=8083; NEW_NAME=nar-gg-green; OLD_NAME=nar-gg-blue
+            else
+              NEW_PORT=8080; NEW_NAME=nar-gg-blue; OLD_NAME=nar-gg-green
+            fi
+            echo "Active port: ${ACTIVE_PORT} -> deploying ${NEW_NAME} on ${NEW_PORT}"
+
+            # 이전 배포 실패 잔재 정리
+            docker rm -f "${NEW_NAME}" 2>/dev/null || true
+
             echo "Pulling app image: ${APP_IMAGE}"
             docker pull "${APP_IMAGE}"
 
-            echo "Restarting app container..."
-            docker stop nar-gg-container || true
-            docker rm nar-gg-container || true
-            docker run -d --name nar-gg-container -p 8080:8080 \
+            docker run -d --name "${NEW_NAME}" -p 127.0.0.1:${NEW_PORT}:8080 \
               -m 768m \
-              -e JAVA_OPTS="-Xmx512m" \
+              --log-opt max-size=10m --log-opt max-file=5 \
               -e SPRING_PROFILES_ACTIVE="prod" \
               -e DISCORD_WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}" \
               -e DB_URL="${{ secrets.DB_URL }}" \
@@ -157,21 +170,36 @@ jobs:
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
               "${APP_IMAGE}"
 
-            echo "Verifying deployed application..."
-            for i in $(seq 1 30); do
-              if curl -fsS http://localhost:8080/v3/api-docs | grep -q '"leagues"'; then
+            # micro+swap 환경은 기동이 느릴 수 있어 상한 120초(60회 x 2초)
+            echo "Verifying new container on port ${NEW_PORT}..."
+            for i in $(seq 1 60); do
+              if curl -fsS "http://localhost:${NEW_PORT}/v3/api-docs" | grep -q '"leagues"'; then
                 echo "Deployment verification succeeded."
                 break
               fi
 
-              if [ "$i" -eq 30 ]; then
-                echo "Deployment verification failed: 'leagues' field not found in OpenAPI spec."
-                docker logs --tail 200 nar-gg-container || true
+              if [ "$i" -eq 60 ]; then
+                echo "Verification failed. Old container keeps serving traffic (no downtime)."
+                docker logs --tail 200 "${NEW_NAME}" || true
+                docker rm -f "${NEW_NAME}" || true
                 exit 1
               fi
 
               sleep 2
             done
+
+            echo "Switching nginx upstream to ${NEW_PORT}..."
+            printf 'upstream nar_backend {\n    server 127.0.0.1:%s;\n}\n' "${NEW_PORT}" \
+              | sudo tee "${UPSTREAM_CONF}" > /dev/null
+            sudo nginx -t && sudo nginx -s reload
+
+            # Spring graceful shutdown 유예 30초보다 길게 대기 (SIGKILL 방지)
+            echo "Stopping old container..."
+            docker stop -t 35 "${OLD_NAME}" 2>/dev/null || true
+            docker rm "${OLD_NAME}" 2>/dev/null || true
+            # 구 배포 방식(nar-gg-container) 잔재 정리 — 최초 전환 이후엔 no-op
+            docker stop -t 35 nar-gg-container 2>/dev/null || true
+            docker rm nar-gg-container 2>/dev/null || true
 
             # 2. Dozzle 배포
             echo "Deploying Dozzle..."
