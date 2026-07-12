@@ -149,7 +149,6 @@ jobs:
               -e YOUTUBE_API_KEY="${{ secrets.YOUTUBE_API_KEY }}" \
               -e LOL_ESPORTS_KEY="${{ secrets.LOL_ESPORTS_KEY }}" \
               -e LOL_SYNC_CRON="0 0/30 * * * *" \
-              -e LOL_ACTIVE_LEAGUES="${{ secrets.LOL_ACTIVE_LEAGUES }}" \
               -e LOL_LIVE_ENABLED="true" \
               -e LOL_TEAM_METADATA_CRON="0 15 4 * * *" \
               -e DISCORD_PLAYER_WEBHOOK_URL="${{ secrets.DISCORD_PLAYER_WEBHOOK_URL }}" \
@@ -170,7 +169,6 @@ jobs:
               -e CLOUDINARY_API_SECRET="${{ secrets.CLOUDINARY_API_SECRET }}" \
               -e FIREBASE_MESSAGING_ENABLED="true" \
               -e LIVE_NOTIFICATION_FCM_ENABLED="true" \
-              -e LOLESPORTS_LIVE_NOTIFICATION_LEAGUES="LCK,MSI" \
               -e GOOGLE_APPLICATION_CREDENTIALS="/run/secrets/firebase-service-account.json" \
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
               "${APP_IMAGE}"

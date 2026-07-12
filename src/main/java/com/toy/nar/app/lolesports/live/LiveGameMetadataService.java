@@ -2,7 +2,7 @@ package com.toy.nar.app.lolesports.live;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.toy.nar.app.lolesports.LeagueConstants;
+import com.toy.nar.app.lolesports.LeagueConfigService;
 import com.toy.nar.app.lolesports.MatchResponseWrapper;
 import com.toy.nar.app.lolesports.MatchResultDto;
 import com.toy.nar.app.lolesports.WorldsService;
@@ -26,6 +26,7 @@ public class LiveGameMetadataService {
 
 	private final WorldsService worldsService;
 	private final LeagueMatchGameRepository leagueMatchGameRepository;
+	private final LeagueConfigService leagueConfigService;
 	private final Cache<String, Optional<ActiveLiveGame>> metadataByGameId = Caffeine.newBuilder()
 			.expireAfterWrite(60, TimeUnit.SECONDS)
 			.maximumSize(1_000)
@@ -74,7 +75,7 @@ public class LiveGameMetadataService {
 	}
 
 	private Optional<ActiveLiveGame> loadFromSchedule(String gameId) {
-		for (String league : LeagueConstants.TARGET_LEAGUES) {
+		for (String league : leagueConfigService.liveLeagues()) {
 			try {
 				MatchResponseWrapper response = worldsService.getWorldsMatches(null, league);
 				Optional<ActiveLiveGame> match = response.getMatches().stream()

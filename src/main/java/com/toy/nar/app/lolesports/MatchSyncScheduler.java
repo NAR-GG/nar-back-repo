@@ -4,11 +4,9 @@ import com.toy.nar.app.monitor.SchedulerAlertService;
 import com.toy.nar.app.schedule.CacheEvictionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
 import java.util.List;
 
 @Slf4j
@@ -19,8 +17,7 @@ public class MatchSyncScheduler {
 	private final LeagueMatchService leagueMatchService;
 	private final SchedulerAlertService schedulerAlertService;
 	private final CacheEvictionService cacheEvictionService;
-	@Value("${lolesports.sync.active-leagues:}")
-	private String configuredActiveLeagues;
+	private final LeagueConfigService leagueConfigService;
 
 	// 기본 6시간 주기 (기존 30분 -> 비용 절감)
 	@Scheduled(cron = "${lolesports.sync.cron:0 0 */6 * * *}")
@@ -79,16 +76,8 @@ public class MatchSyncScheduler {
 		}
 	}
 
+	// 백오피스 리그 설정(sync_enabled)이 대상 결정. 구 env(LOL_ACTIVE_LEAGUES)는 폐기.
 	private List<String> resolveTargetLeagues() {
-		if (configuredActiveLeagues == null || configuredActiveLeagues.isBlank()) {
-			return LeagueConstants.TARGET_LEAGUES;
-		}
-		List<String> leagues = Arrays.stream(configuredActiveLeagues.split(","))
-				.map(String::trim)
-				.filter(value -> !value.isBlank())
-				.map(String::toUpperCase)
-				.distinct()
-				.toList();
-		return leagues.isEmpty() ? LeagueConstants.TARGET_LEAGUES : leagues;
+		return leagueConfigService.syncLeagues();
 	}
 }

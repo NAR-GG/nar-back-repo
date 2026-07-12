@@ -1,5 +1,7 @@
 package com.toy.nar.api.admin;
 
+import com.toy.nar.app.lolesports.LeagueConfigService;
+import com.toy.nar.app.lolesports.repository.LeagueConfig;
 import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
@@ -8,6 +10,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,8 +21,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 백오피스 조회 전용 API. {@code /api/admin/**} 는 SecurityConfig 에서 ROLE_ADMIN 으로 보호된다.
- * 응답은 Spring {@link Page} 형식({@code content}, {@code totalElements}) 그대로 — FE 데이터프로바이더가 흡수한다.
+ * 백오피스 API. {@code /api/admin/**} 는 SecurityConfig 에서 ROLE_ADMIN 으로 보호된다.
+ * 조회 응답은 Spring {@link Page} 형식({@code content}, {@code totalElements}) 그대로 — FE 데이터프로바이더가 흡수한다.
+ * 쓰기는 리그 설정 토글(PUT /league-configs/{leagueName})만 존재.
  */
 @RestController
 @RequestMapping("/api/admin")
@@ -28,6 +34,7 @@ public class BackofficeController {
     private final PlayerRepository playerRepository;
     private final TeamRepository teamRepository;
     private final LeagueRepository leagueRepository;
+    private final LeagueConfigService leagueConfigService;
 
     @GetMapping("/members")
     public Page<MemberRow> members(@RequestParam(required = false) String q, Pageable pageable) {
@@ -69,6 +76,18 @@ public class BackofficeController {
         return CRON_CATALOG;
     }
 
+    @GetMapping("/league-configs")
+    public List<LeagueConfigRow> leagueConfigs() {
+        return leagueConfigService.findAll().stream().map(LeagueConfigRow::from).toList();
+    }
+
+    @PutMapping("/league-configs/{leagueName}")
+    public LeagueConfigRow updateLeagueConfig(@PathVariable String leagueName,
+                                              @RequestBody LeagueConfigUpdateRequest request) {
+        return LeagueConfigRow.from(leagueConfigService.update(
+                leagueName, request.liveEnabled(), request.notificationEnabled(), request.syncEnabled()));
+    }
+
     public record MemberRow(Long id, String name, String email,
                             String favoriteLeagueName, LocalDateTime createdAt) {}
 
@@ -76,6 +95,17 @@ public class BackofficeController {
                             String role, Integer age) {}
 
     public record TeamRow(Long id, String name, String code) {}
+
+    public record LeagueConfigRow(String leagueName, boolean liveEnabled,
+                                  boolean notificationEnabled, boolean syncEnabled) {
+        static LeagueConfigRow from(LeagueConfig config) {
+            return new LeagueConfigRow(config.getLeagueName(), config.isLiveEnabled(),
+                    config.isNotificationEnabled(), config.isSyncEnabled());
+        }
+    }
+
+    public record LeagueConfigUpdateRequest(boolean liveEnabled, boolean notificationEnabled,
+                                            boolean syncEnabled) {}
 
     /**
      * @param type        CRON(달력 기준) | INTERVAL(간격 기준)

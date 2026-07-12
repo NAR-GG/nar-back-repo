@@ -1,5 +1,6 @@
 package com.toy.nar.app.lolesports.live;
 
+import com.toy.nar.app.lolesports.LeagueConfigService;
 import com.toy.nar.app.lolesports.MatchResponseWrapper;
 import com.toy.nar.app.lolesports.MatchResultDto;
 import com.toy.nar.app.lolesports.WorldsService;
@@ -21,7 +22,9 @@ class LiveGameMetadataServiceTest {
 	void resolvesMetadataFromScheduleAndCachesByGameId() {
 		WorldsService worldsService = mock(WorldsService.class);
 		LeagueMatchGameRepository leagueMatchGameRepository = mock(LeagueMatchGameRepository.class);
-		LiveGameMetadataService service = new LiveGameMetadataService(worldsService, leagueMatchGameRepository);
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("LCK"));
+		LiveGameMetadataService service = new LiveGameMetadataService(worldsService, leagueMatchGameRepository, leagueConfigService);
 		when(leagueMatchGameRepository.findWithMatchByGameId("game-1")).thenReturn(Optional.empty());
 		when(worldsService.getWorldsMatches(null, "LCK")).thenReturn(MatchResponseWrapper.builder()
 				.matches(List.of(MatchResultDto.builder()
