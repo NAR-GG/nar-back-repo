@@ -58,6 +58,14 @@ public final class LeagueConstants {
     public static final String DEFAULT_STREAM_URL = "https://play.sooplive.co.kr/aflol";
 
     /**
+     * lolesports API 리그 slug → 내부 리그명. slug이 리그 코드와 다른 리그(EWC: ewc_lol)만 보정한다.
+     */
+    public static String fromApiSlug(String slug) {
+        String upper = slug == null ? "" : slug.trim().toUpperCase();
+        return "EWC_LOL".equals(upper) ? "EWC" : upper;
+    }
+
+    /**
      * 리그에 해당하는 라이브 스트림 URL 반환
      */
     public static String getLiveStreamUrl(String leagueName) {

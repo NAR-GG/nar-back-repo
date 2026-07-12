@@ -189,12 +189,12 @@ public class WorldsService {
 
 			String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
 			if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
-				String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
+				String leagueSlug = LeagueConstants.fromApiSlug(event.path("league").path("slug").asText(""));
 				liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
 			}
 			return MatchResultDto.builder()
 					.matchId(eventId)
-					.leagueName(event.path("league").path("slug").asText("").toUpperCase())
+					.leagueName(LeagueConstants.fromApiSlug(event.path("league").path("slug").asText("")))
 					.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs "
 							+ teamB.path("code").asText())
 					.matchDate(matchDate)
@@ -348,12 +348,12 @@ public class WorldsService {
 		String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
 		// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
 		if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
-			String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
+			String leagueSlug = LeagueConstants.fromApiSlug(event.path("league").path("slug").asText(""));
 			liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
 		}
 		return MatchResultDto.builder()
 				.matchId(eventId)
-				.leagueName(event.path("league").path("slug").asText("").toUpperCase())
+				.leagueName(LeagueConstants.fromApiSlug(event.path("league").path("slug").asText("")))
 				.matchTitle(teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 				.matchDate(matchDate)
 				.state(finalState)
@@ -435,12 +435,12 @@ public class WorldsService {
 		String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
 		// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
 		if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
-			String leagueSlug = event.path("league").path("slug").asText("").toUpperCase();
+			String leagueSlug = LeagueConstants.fromApiSlug(event.path("league").path("slug").asText(""));
 			liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
 		}
 		return MatchResultDto.builder()
 				.matchId(eventId)
-				.leagueName(event.path("league").path("slug").asText("").toUpperCase())
+				.leagueName(LeagueConstants.fromApiSlug(event.path("league").path("slug").asText("")))
 				.matchTitle(stageName + " | " + teamA.path("code").asText() + " vs " + teamB.path("code").asText())
 				.matchDate(matchDate)
 				.state(finalState)
