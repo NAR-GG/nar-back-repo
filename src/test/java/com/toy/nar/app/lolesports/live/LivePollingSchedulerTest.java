@@ -193,6 +193,52 @@ class LivePollingSchedulerTest {
 				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
 	}
 
+	@Test
+	void discoveryFlapDoesNotFireSetEnd() {
+		// 픽밴 중 게임이 디스커버리에서 한두 사이클 빠지는 플랩(2026-07-12 MSI 결승 실사례):
+		// 즉시 SET_END 를 쏘면 오탐 발송 + DB dedup 키 소진으로 진짜 종료가 무음 스킵된다.
+		// stale(3분) 확정 전에는 발사하면 안 된다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		WorldsService worldsService = mock(WorldsService.class);
+		LivePollingScheduler scheduler = schedulerWith(
+				liveStateStore, pushService, worldsService, mock(LeagueMatchService.class));
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1")); // 방금 본 게임
+		when(worldsService.getWorldsMatches(null, "LCK")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of())
+				.build());
+
+		scheduler.discoverLiveGames();
+
+		verify(pushService, never()).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_END),
+				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+	}
+
+	@Test
+	void staleUndiscoveredGameFiresSetEndFallback() {
+		// 프레임 finished 를 못 본 채 게임이 피드에서 사라져 stale(3분) 확정되면 폴백으로 1회 발사.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		WorldsService worldsService = mock(WorldsService.class);
+		LivePollingScheduler scheduler = schedulerWith(
+				liveStateStore, pushService, worldsService, mock(LeagueMatchService.class));
+		liveStateStore.getActiveGames().put("game-1", new ActiveLiveGame(
+				"game-1", "match-1", "LCK", "KT", "HLE",
+				LocalDateTime.now(ZoneOffset.UTC).minusMinutes(4), 0, 2, "100", "200"));
+		when(worldsService.getWorldsMatches(null, "LCK")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of())
+				.build());
+
+		scheduler.discoverLiveGames();
+
+		verify(pushService, times(1)).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_END),
+				eq("match-1"), eq(2), eq("100"), eq("200"), eq("KT"), eq("HLE"));
+	}
+
 	private ActiveLiveGame lckGame(String gameId) {
 		return new ActiveLiveGame(
 				gameId,

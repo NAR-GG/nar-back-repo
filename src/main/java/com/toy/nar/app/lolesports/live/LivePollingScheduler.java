@@ -187,10 +187,11 @@ public class LivePollingScheduler {
 			boolean stale = activeGame.lastSeenAtUtc() != null
 					&& java.time.Duration.between(activeGame.lastSeenAtUtc(), nowUtc).toMillis() > staleThresholdMs;
 
-			// [FCM #21] SET_END 감지(신규). 직전까지 활성이던 gameId 가 이번 사이클 피드의 라이브 세트에서
-			// 빠지면(=notDiscovered) 세트 종료로 본다. 플래그 게이트 + dedup 으로 1회만 발송된다.
-			// 플래그가 꺼져 있으면 어떤 부작용도 없다(기존 cleanup 동작과 바이트 동일).
-			if (notDiscovered && teamLiveEventPushService.isEnabled()
+			// [FCM #21] SET_END 폴백. 1차 판정은 프레임 gameState=finished(pollActiveGames)이고,
+			// 여기는 프레임 신호를 놓친 채 게임이 피드에서 사라진 경우의 안전망이다.
+			// stale(기본 3분) 확정 전에 쏘면 픽밴 중 디스커버리 플랩으로 오탐 발송되고,
+			// DB dedup 키가 소진돼 진짜 종료가 무음 스킵된다(2026-07-12 MSI 결승 실사례).
+			if (notDiscovered && stale && teamLiveEventPushService.isEnabled()
 					&& isNotifiableLeague(activeGame.leagueName())
 					&& setEndNotifiedGameIds.add(activeGame.gameId())) {
 				fireSetEndNotification(activeGame);
