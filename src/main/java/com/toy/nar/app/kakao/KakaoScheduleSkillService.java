@@ -329,6 +329,10 @@ public class KakaoScheduleSkillService {
 		aliases.put("엘씨에스", "LCS");
 		aliases.put("lcp", "LCP");
 		aliases.put("cblol", "CBLOL");
+		aliases.put("ewc", "EWC");
+		aliases.put("esports world cup", "EWC");
+		aliases.put("이스포츠 월드컵", "EWC");
+		aliases.put("이스포츠월드컵", "EWC");
 		return aliases;
 	}
 

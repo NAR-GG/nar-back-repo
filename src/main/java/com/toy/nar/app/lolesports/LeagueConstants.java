@@ -17,13 +17,13 @@ public final class LeagueConstants {
      * 동기화 및 API 대상 리그 목록
      */
     public static final List<String> TARGET_LEAGUES = List.of(
-            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND");
+            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC");
 
     /**
      * 일정 조회 시 허용되는 리그 목록 (TARGET_LEAGUES + 추가 리그)
      */
     public static final Set<String> ALLOWED_LEAGUES = Set.of(
-            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND");
+            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC");
 
     /**
      * lolesports API의 리그 ID 매핑
@@ -37,7 +37,8 @@ public final class LeagueConstants {
             Map.entry("CBLOL", "98767991332355509"),
             Map.entry("FIRST_STAND", "113464388705111224"),
             Map.entry("WORLDS", "98767975604431411"),
-            Map.entry("MSI", "98767991325878492"));
+            Map.entry("MSI", "98767991325878492"),
+            Map.entry("EWC", "116838530616006090"));
 
     /**
      * 리그별 기본 라이브 스트림 URL
