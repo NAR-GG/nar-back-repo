@@ -31,23 +31,6 @@ class LiveObjectEventRecorderTest {
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Test
-	void withTeamAvoidsDuplicatingTeamTagAlreadyInPlayerName() {
-		// summonerName 이 팀 태그를 포함하면("T1 Doran") 팀명을 다시 붙이지 않는다.
-		assertThat(invokeWithTeam("T1", "T1 Doran")).isEqualTo("T1 Doran");
-		assertThat(invokeWithTeam("T1", "t1 doran")).isEqualTo("t1 doran"); // 대소문자 무시
-		// 태그가 없거나 다르면 팀명을 붙인다.
-		assertThat(invokeWithTeam("HLE", "Zeka")).isEqualTo("HLE Zeka");
-		// 선수명이 팀명과 완전히 같으면 팀명만.
-		assertThat(invokeWithTeam("T1", "T1")).isEqualTo("T1");
-		// 선수명이 비면 팀명만.
-		assertThat(invokeWithTeam("T1", null)).isEqualTo("T1");
-	}
-
-	private String invokeWithTeam(String team, String player) {
-		return (String) ReflectionTestUtils.invokeMethod(recorder, "withTeam", team, player);
-	}
-
-	@Test
 	void killPushShowsWindowSideTeamsWhenSidesSwapBetweenSets() throws Exception {
 		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
 		when(pushService.isEnabled()).thenReturn(true);
@@ -104,12 +87,12 @@ class LiveObjectEventRecorderTest {
 
 		swapRecorder.record(game, window);
 
-		// 킬러 ON 은 window 기준 Blue=BLG 소속. 팀명도 BLG 여야 한다(매치 기준 Blue=HLE 아님).
+		// 킬러 ON 은 window 기준 Blue=BLG 소속 → 구독 대상 팀은 team-blg.
+		// 문구는 선수명(summonerName)만 쓴다 — 태그가 이미 포함되고 정식 팀명을 붙이면 중복돼 보인다.
 		ArgumentCaptor<String> title = ArgumentCaptor.forClass(String.class);
 		verify(pushService).notifyLiveEvent(
 				eq("match-2"), eq(4), anyLong(), eq("team-blg"), title.capture(), any());
-		assertThat(title.getValue())
-				.isEqualTo("BILIBILI GAMING ON님이 Hanwha Life Esports Zeus님을 처치했습니다");
+		assertThat(title.getValue()).isEqualTo("ON님이 Zeus님을 처치했습니다");
 	}
 
 	@Test
