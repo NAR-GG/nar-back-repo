@@ -112,6 +112,30 @@ class YoutubeSyncServiceTest {
 		org.junit.jupiter.api.Assertions.assertTrue(collectedIds.containsAll(List.of("videoA", "videoB", "videoC")));
 	}
 
+	@Test
+	@DisplayName("PubSub 구독: 전 채널 실패 시 예외를 던져 스케줄러 알림이 울리게 한다")
+	void subscribeAllChannelsThrowsWhenAllFail() {
+		Channel c1 = testChannel();
+		when(channelRepository.findAll()).thenReturn(List.of(c1, c1));
+		when(youtubeService.subscribeToChannel(any(), any())).thenReturn(false);
+
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+				() -> youtubeSyncService.subscribeAllChannels("https://api.nar.kr"));
+	}
+
+	@Test
+	@DisplayName("PubSub 구독: 일부만 실패하면 예외 없이 완료한다")
+	void subscribeAllChannelsToleratesPartialFailure() {
+		Channel c1 = testChannel();
+		when(channelRepository.findAll()).thenReturn(List.of(c1, c1));
+		when(youtubeService.subscribeToChannel(any(), any())).thenReturn(true, false);
+
+		youtubeSyncService.subscribeAllChannels("https://api.nar.kr");
+
+		verify(youtubeService, org.mockito.Mockito.times(2))
+				.subscribeToChannel(eq("UC_test_channel"), eq("https://api.nar.kr/api/youtube/webhook"));
+	}
+
 	private Channel testChannel() {
 		return Channel.builder()
 				.youtubeChannelId("UC_test_channel")
