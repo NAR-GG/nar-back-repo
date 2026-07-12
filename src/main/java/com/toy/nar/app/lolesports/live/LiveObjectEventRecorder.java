@@ -35,16 +35,13 @@ public class LiveObjectEventRecorder {
 	private final LiveGameObjectEventRepository objectEventRepository;
 	private final NotificationService notificationService;
 	private final com.toy.nar.app.mobile.push.TeamLiveEventPushService teamLiveEventPushService;
+	private final com.toy.nar.app.lolesports.LeagueConfigService leagueConfigService;
 	private final Map<String, ObservedObjectState> lastObservedByGame = new ConcurrentHashMap<>();
 	// [FCM #21] 세트마다 진영이 스왑되므로, 피드 window 의 진영별 esportsTeamId 를 게임별로 기억한다(Blue/Red → esportsTeamId).
 	private final Map<String, SideTeamIds> sideTeamIdsByGame = new ConcurrentHashMap<>();
 
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.notification.events-enabled:false}")
 	private boolean eventNotificationEnabled;
-
-	// 디스코드 알림을 보낼 리그(쉼표 구분). 기본 LCK 만. 그 외 리그는 이벤트를 DB에 기록만 하고 알림은 안 보낸다.
-	@org.springframework.beans.factory.annotation.Value("${lolesports.live.notification.leagues:LCK}")
-	private String notificationLeagues;
 
 	public void evict(String gameId) {
 		if (gameId == null || gameId.isBlank()) {
@@ -570,17 +567,9 @@ public class LiveObjectEventRecorder {
 		return value == null || value.isBlank() ? null : value;
 	}
 
-	/** 알림 대상 리그인지 (notificationLeagues 설정, 기본 LCK). 그 외 리그는 디스코드 알림 안 보냄. */
+	/** 알림 대상 리그인지 (백오피스 리그 설정 notification_enabled). 폴러(LivePollingScheduler)와 같은 기준. */
 	private boolean isNotifiableLeague(String league) {
-		if (league == null || league.isBlank()) {
-			return false;
-		}
-		for (String allowed : notificationLeagues.split(",")) {
-			if (allowed.trim().equalsIgnoreCase(league.trim())) {
-				return true;
-			}
-		}
-		return false;
+		return leagueConfigService.isNotificationEnabled(league);
 	}
 
 	private LocalDateTime parseFrameTimestamp(String raw) {
