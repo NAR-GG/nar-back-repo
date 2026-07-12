@@ -67,6 +67,13 @@ public class LivePollingScheduler {
 	 */
 	private final java.util.Set<String> frameFinishedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+	/**
+	 * 시작 알림(디스코드+SET_START 푸시)을 이미 보낸 gameId. 업스트림 eventDetails 는
+	 * 픽밴 시작 시점에 다음 게임을 inProgress 로 뒤집으므로 디스커버리 등장은 "픽밴 시작"이지
+	 * 게임 시작이 아니다. 실제 시작 신호는 livestats 첫 프레임 도착이고, 여기서 1회로 제한한다.
+	 */
+	private final java.util.Set<String> startNotifiedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.max-consecutive-failures:6}")
 	private int maxConsecutiveFailures;
 
@@ -145,31 +152,8 @@ public class LivePollingScheduler {
 							setEndNotifiedGameIds.remove(gameId);
 						}
 						liveGameMetadataService.remember(next);
-
-						if (liveNotificationEnabled && current == null && isNotifiableLeague(resolvedLeagueName)) {
-							log.info("[live-notify] match-start league={} {} vs {} gameId={}",
-									resolvedLeagueName, next.blueTeamName(), next.redTeamName(), gameId);
-							notificationService.sendLiveMatchNotification(
-									resolvedLeagueName,
-									next.blueTeamName(),
-									next.redTeamName(),
-									gameId,
-									match.getMatchId());
-						}
-
-						// [FCM #21] SET_START 푸시. live.notification.fcm.enabled 플래그로 게이트.
-						// 디스코드 알림과 같은 'current == null'(새 세트 최초 발견) 조건에서만 1회 발송.
-						if (teamLiveEventPushService.isEnabled() && current == null
-								&& isNotifiableLeague(resolvedLeagueName)) {
-							teamLiveEventPushService.notifyMatchEvent(
-									com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_START,
-									match.getMatchId(),
-									setNumber != null ? setNumber : 0,
-									blueExternalId,
-									redExternalId,
-									next.blueTeamName(),
-									next.redTeamName());
-						}
+						// 시작 알림은 여기(디스커버리)가 아니라 pollActiveGames 의 첫 프레임 관측에서 쏜다.
+						// 디스커버리 등장 = 픽밴 시작이라, 여기서 쏘면 "이전 세트 종료 몇 분 뒤" 오탐이 된다.
 					}
 				}
 			} catch (Exception e) {
@@ -207,7 +191,48 @@ public class LivePollingScheduler {
 			liveObjectEventRecorder.evict(gameId);
 			setEndNotifiedGameIds.remove(gameId);
 			frameFinishedGameIds.remove(gameId);
+			startNotifiedGameIds.remove(gameId);
 		});
+	}
+
+	/** window 응답에 프레임이 하나라도 있는지. 픽밴/로딩 중엔 프레임이 없다. */
+	private boolean hasFrames(JsonNode windowResponse) {
+		return windowResponse != null
+				&& windowResponse.path("frames").isArray()
+				&& !windowResponse.path("frames").isEmpty();
+	}
+
+	/**
+	 * 세트 시작 알림(디스코드 + SET_START 푸시). 첫 프레임 관측 시 1회.
+	 * 알림 실패가 폴링 실패로 집계되지 않게 여기서 삼킨다.
+	 */
+	private void fireSetStartNotification(ActiveLiveGame activeGame) {
+		log.info("[live-notify] set-start(frame) league={} {} vs {} gameId={} matchId={} set={}",
+				activeGame.leagueName(), activeGame.blueTeamName(), activeGame.redTeamName(),
+				activeGame.gameId(), activeGame.matchId(), activeGame.setNumber());
+		try {
+			if (liveNotificationEnabled) {
+				notificationService.sendLiveMatchNotification(
+						activeGame.leagueName(),
+						activeGame.blueTeamName(),
+						activeGame.redTeamName(),
+						activeGame.gameId(),
+						activeGame.matchId());
+			}
+			if (teamLiveEventPushService.isEnabled()) {
+				teamLiveEventPushService.notifyMatchEvent(
+						com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_START,
+						activeGame.matchId(),
+						activeGame.setNumber() != null ? activeGame.setNumber() : 0,
+						activeGame.blueEsportsTeamId(),
+						activeGame.redEsportsTeamId(),
+						activeGame.blueTeamName(),
+						activeGame.redTeamName());
+			}
+		} catch (Exception e) {
+			log.warn("[live-notify] set-start failed gameId={} matchId={}: {}",
+					activeGame.gameId(), activeGame.matchId(), e.getMessage());
+		}
 	}
 
 	/** window 응답의 마지막 프레임이 gameState=finished 인지. 프레임이 없으면 false. */
@@ -270,6 +295,14 @@ public class LivePollingScheduler {
 				String startingTime = computeStartingTime(activeGame.gameId());
 				JsonNode window = liveStatsClient.getWindow(activeGame.gameId(), startingTime);
 				JsonNode details = liveStatsClient.getDetails(activeGame.gameId(), startingTime);
+
+				// 세트 시작 판정: livestats 첫 프레임 도착 = 실제 인게임 시작.
+				// 첫 관측이 이미 finished 면(재기동 등) 시작 알림은 건너뛴다.
+				if (hasFrames(window) && !isFrameFinished(window)
+						&& isNotifiableLeague(activeGame.leagueName())
+						&& startNotifiedGameIds.add(activeGame.gameId())) {
+					fireSetStartNotification(activeGame);
+				}
 
 				// 세트 종료 1차 판정: 프레임 gameState=finished (실제 종료 후 수 초 내 반영).
 				// finished 프레임은 timestamp 가 멈춰 aggregator 의 stale 필터에 걸리므로 여기 raw 응답에서 본다.
