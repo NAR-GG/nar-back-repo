@@ -239,6 +239,70 @@ class LivePollingSchedulerTest {
 				eq("match-1"), eq(2), eq("100"), eq("200"), eq("KT"), eq("HLE"));
 	}
 
+	@Test
+	void setStartFiresOnFirstFrameNotOnDiscovery() {
+		// 디스커버리 등장 = 픽밴 시작(업스트림이 픽밴 때 inProgress 로 뒤집음)이므로
+		// 그 시점에 쏘면 "이전 세트 종료 몇 분 뒤" 오탐. 첫 프레임 도착 때 1회만 쏴야 한다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		WorldsService worldsService = mock(WorldsService.class);
+		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
+		when(leagueMatchService.findLeaguesWithMatchesBetween(
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(List.of("LCK"));
+		LivePollingScheduler scheduler = schedulerWith(
+				liveStateStore, pushService, worldsService, leagueMatchService);
+		MatchResultDto inProgress = MatchResultDto.builder()
+				.matchId("match-1")
+				.leagueName("LCK")
+				.state("inProgress")
+				.blueTeam(MatchResultDto.TeamInfo.builder().name("KT").externalTeamId("100").build())
+				.redTeam(MatchResultDto.TeamInfo.builder().name("HLE").externalTeamId("200").build())
+				.liveGameIds(List.of("game-1"))
+				.gameIds(List.of("game-0", "game-1"))
+				.build();
+		when(worldsService.getWorldsMatches(null, "LCK")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of(inProgress))
+				.build());
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("in_game"));
+
+		scheduler.discoverLiveGames();
+
+		verify(pushService, never()).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_START),
+				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+
+		scheduler.pollActiveGames();
+		scheduler.pollActiveGames();
+
+		verify(pushService, times(1)).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_START),
+				eq("match-1"), eq(2), eq("100"), eq("200"), eq("KT"), eq("HLE"));
+	}
+
+	@Test
+	void firstObservedFrameFinishedSkipsSetStart() {
+		// 재기동 등으로 첫 관측이 이미 finished 면 시작 알림은 건너뛰고 종료만 쏜다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+
+		scheduler.pollActiveGames();
+
+		verify(pushService, never()).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_START),
+				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+		verify(pushService, times(1)).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_END),
+				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+	}
+
 	private ActiveLiveGame lckGame(String gameId) {
 		return new ActiveLiveGame(
 				gameId,
