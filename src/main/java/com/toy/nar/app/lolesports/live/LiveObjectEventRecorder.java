@@ -531,38 +531,20 @@ public class LiveObjectEventRecorder {
 	}
 
 	/**
-	 * 팀명과 선수명을 합치되 중복을 막는다. Riot summonerName 은 보통 팀 태그를 포함해
-	 * ("T1 Doran") 팀명을 그대로 덧붙이면 "T1 T1 Doran" 이 된다. 선수명이 이미 팀명(태그)으로
-	 * 시작하면 선수명만 쓴다.
+	 * 킬 알림 문구는 선수명(summonerName)만 쓴다. summonerName 에 팀 태그가 이미 포함되고
+	 * ("HLE Zeka"), 태그와 정식 팀명(Hanwha Life Esports)이 달라 팀명을 덧붙이면
+	 * "Hanwha Life Esports HLE Zeka" 처럼 중복돼 보인다.
 	 */
-	private String withTeam(String teamName, String playerName) {
-		String player = playerName == null ? "" : playerName.trim();
-		String team = teamName == null ? "" : teamName.trim();
-		if (player.isEmpty()) {
-			return team;
-		}
-		if (team.isEmpty()) {
-			return player;
-		}
-		if (player.equalsIgnoreCase(team)
-				|| player.regionMatches(true, 0, team + " ", 0, team.length() + 1)) {
-			return player;
-		}
-		return team + " " + player;
-	}
-
 	private String killEventTitle(ActiveLiveGame activeGame, String killerSide, boolean firstBlood,
 			String killerName, String victimName, int teamKillsAfter) {
-		String acting = teamNameOf(activeGame, killerSide);
 		if (killerName == null) {
-			return acting + " " + teamKillsAfter + "킬 달성";
+			return teamNameOf(activeGame, killerSide) + " " + teamKillsAfter + "킬 달성";
 		}
 		if (firstBlood) {
-			return withTeam(acting, killerName) + " 선취점 달성";
+			return killerName + " 선취점 달성";
 		}
-		String opponent = opponentNameOf(activeGame, killerSide);
-		String victim = victimName == null ? opponent : withTeam(opponent, victimName);
-		return withTeam(acting, killerName) + "님이 " + victim + "님을 처치했습니다";
+		String victim = victimName == null ? opponentNameOf(activeGame, killerSide) : victimName;
+		return killerName + "님이 " + victim + "님을 처치했습니다";
 	}
 
 	private String killEventBody(ActiveLiveGame activeGame, String killerSide, boolean firstBlood,
@@ -570,8 +552,7 @@ public class LiveObjectEventRecorder {
 		String acting = teamNameOf(activeGame, killerSide);
 		String opponent = opponentNameOf(activeGame, killerSide);
 		if (firstBlood && killerName != null && victimName != null) {
-			return withTeam(acting, killerName) + "님이 " + withTeam(opponent, victimName) + "님을 처치했습니다"
-					+ setSuffix(activeGame);
+			return killerName + "님이 " + victimName + "님을 처치했습니다" + setSuffix(activeGame);
 		}
 		return acting + " " + teamKillsAfter + " Kill vs " + opponentKills + " Kill " + opponent
 				+ setSuffix(activeGame);
