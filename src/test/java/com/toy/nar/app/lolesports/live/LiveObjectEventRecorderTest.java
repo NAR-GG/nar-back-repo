@@ -26,8 +26,11 @@ import static org.mockito.Mockito.when;
 class LiveObjectEventRecorderTest {
 
 	private final LiveGameObjectEventRepository objectEventRepository = mock(LiveGameObjectEventRepository.class);
+	private final com.toy.nar.app.lolesports.LeagueConfigService leagueConfigService =
+			mock(com.toy.nar.app.lolesports.LeagueConfigService.class);
 	private final LiveObjectEventRecorder recorder = new LiveObjectEventRecorder(
-			objectEventRepository, mock(NotificationService.class), mock(TeamLiveEventPushService.class));
+			objectEventRepository, mock(NotificationService.class), mock(TeamLiveEventPushService.class),
+			leagueConfigService);
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Test
@@ -35,8 +38,8 @@ class LiveObjectEventRecorderTest {
 		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
 		when(pushService.isEnabled()).thenReturn(true);
 		LiveObjectEventRecorder swapRecorder = new LiveObjectEventRecorder(
-				objectEventRepository, mock(NotificationService.class), pushService);
-		ReflectionTestUtils.setField(swapRecorder, "notificationLeagues", "LCK");
+				objectEventRepository, mock(NotificationService.class), pushService, leagueConfigService);
+		when(leagueConfigService.isNotificationEnabled("LCK")).thenReturn(true);
 		when(objectEventRepository.existsByGameIdAndTeamSideAndEventTypeAndEventOrder(any(), any(), any(), any()))
 				.thenReturn(false);
 		when(objectEventRepository.save(any(LiveGameObjectEvent.class))).thenAnswer(invocation -> {
