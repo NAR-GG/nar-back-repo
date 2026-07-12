@@ -82,6 +82,8 @@ notification:
 logging:
   level:
     org.hibernate.SQL: info
+    # 애플리케이션 레이어에서 이미 실패 로그를 남기므로 netty 커넥션 WARN 중복을 막는다
+    reactor.netty.http.client.HttpClientConnect: ERROR
 
 google:
   drive:

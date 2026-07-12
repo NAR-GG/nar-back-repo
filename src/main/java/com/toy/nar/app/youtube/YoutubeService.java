@@ -146,21 +146,30 @@ public class YoutubeService {
 			.orElse(null);
 	}
 
-	public void subscribeToChannel(String channelId, String callbackUrl) {
-		WebClient client = WebClient.create(properties.getPubSubHubbubUrl());
-
-		client.post()
-			.uri("/subscribe")
-			.header("Content-Type", "application/x-www-form-urlencoded")
-			.bodyValue("hub.callback=" + callbackUrl +
-				"&hub.mode=subscribe" +
-				"&hub.topic=https://www.youtube.com/xml/feeds/videos.xml?channel_id=" + channelId)
-			.retrieve()
-			.toBodilessEntity()
-			.subscribe(
-				response -> log.info("Subscribed to channel: {}", channelId),
-				error -> log.error("Failed to subscribe to channel: {}", channelId, error)
-			);
+	/**
+	 * PubSub 구독 요청. 성공 여부를 반환한다 — 호출부가 실패를 집계해 알림으로 잇는다.
+	 * 순차 블로킹 + 타임아웃 + 재시도: 기동 직후 CPU 포화로 이벤트루프 write 가 밀리면
+	 * Google 이 유휴 커넥션을 끊어(Broken pipe) 일괄 실패하던 문제를 견디게 한다.
+	 * 실패는 스택트레이스 없이 한 줄만 남긴다(reactor 스택 ~70줄 도배 방지).
+	 */
+	public boolean subscribeToChannel(String channelId, String callbackUrl) {
+		try {
+			WebClient.create(properties.getPubSubHubbubUrl()).post()
+				.uri("/subscribe")
+				.header("Content-Type", "application/x-www-form-urlencoded")
+				.bodyValue("hub.callback=" + callbackUrl +
+					"&hub.mode=subscribe" +
+					"&hub.topic=https://www.youtube.com/xml/feeds/videos.xml?channel_id=" + channelId)
+				.retrieve()
+				.toBodilessEntity()
+				.timeout(java.time.Duration.ofSeconds(10))
+				.retryWhen(reactor.util.retry.Retry.backoff(2, java.time.Duration.ofSeconds(2)))
+				.block();
+			return true;
+		} catch (Exception e) {
+			log.warn("Failed to subscribe to channel {}: {}", channelId, e.toString());
+			return false;
+		}
 	}
 
 	public YoutubeVideoResponse searchVideoById(String videoId) {

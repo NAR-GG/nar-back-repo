@@ -457,12 +457,19 @@ public class YoutubeSyncService {
 		List<Channel> channels = channelRepository.findAll();
 		String callbackUrl = callbackBaseUrl + "/api/youtube/webhook";
 
+		int failed = 0;
 		for (Channel channel : channels) {
-			try {
-				youtubeService.subscribeToChannel(channel.getYoutubeChannelId(), callbackUrl);
-			} catch (Exception e) {
-				log.error("구독 요청 실패: {}", channel.getChannelName());
+			if (!youtubeService.subscribeToChannel(channel.getYoutubeChannelId(), callbackUrl)) {
+				failed++;
 			}
+		}
+		if (failed > 0) {
+			log.warn("[youtube-pubsub] 구독 실패 {}/{} 채널", failed, channels.size());
+		}
+		// 전체 실패만 예외로 올린다 — 새벽 4시 갱신의 recordFailure(디스코드 알림)와 연결.
+		// 일부 실패는 다음 날 갱신에서 만회되므로 경고만 남긴다.
+		if (!channels.isEmpty() && failed == channels.size()) {
+			throw new IllegalStateException("유튜브 PubSub 구독 전체 실패 (" + failed + "채널)");
 		}
 	}
 
