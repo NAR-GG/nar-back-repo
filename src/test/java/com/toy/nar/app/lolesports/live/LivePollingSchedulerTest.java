@@ -1,5 +1,6 @@
 package com.toy.nar.app.lolesports.live;
 
+import com.toy.nar.app.lolesports.LeagueConfigService;
 import com.toy.nar.app.lolesports.LeagueMatchService;
 import com.toy.nar.app.lolesports.MatchResponseWrapper;
 import com.toy.nar.app.lolesports.MatchResultDto;
@@ -45,6 +46,7 @@ class LivePollingSchedulerTest {
 				liveFrameProcessor,
 				liveGameMetadataService,
 				leagueMatchService,
+				mock(LeagueConfigService.class),
 				cacheEvictionService,
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class));
@@ -75,6 +77,8 @@ class LivePollingSchedulerTest {
 		LiveGameMetadataService liveGameMetadataService = mock(LiveGameMetadataService.class);
 		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
 		CacheEvictionService cacheEvictionService = mock(CacheEvictionService.class);
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("LCK"));
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService,
 				liveStatsClient,
@@ -83,6 +87,7 @@ class LivePollingSchedulerTest {
 				liveFrameProcessor,
 				liveGameMetadataService,
 				leagueMatchService,
+				leagueConfigService,
 				cacheEvictionService,
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class));
@@ -225,6 +230,9 @@ class LivePollingSchedulerTest {
 			TeamLiveEventPushService pushService,
 			WorldsService worldsService,
 			LeagueMatchService leagueMatchService) {
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("LCK"));
+		when(leagueConfigService.isNotificationEnabled("LCK")).thenReturn(true);
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService,
 				mock(LiveStatsClient.class),
@@ -233,12 +241,12 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class),
 				liveGameMetadataServiceMock(),
 				leagueMatchService,
+				leagueConfigService,
 				mock(CacheEvictionService.class),
 				mock(NotificationService.class),
 				pushService);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		ReflectionTestUtils.setField(scheduler, "maxConsecutiveFailures", 6);
-		ReflectionTestUtils.setField(scheduler, "notificationLeagues", "LCK");
 		return scheduler;
 	}
 
@@ -256,6 +264,7 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class),
 				mock(LiveGameMetadataService.class),
 				mock(LeagueMatchService.class),
+				mock(LeagueConfigService.class),
 				mock(CacheEvictionService.class),
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class));

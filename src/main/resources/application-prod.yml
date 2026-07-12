@@ -127,7 +127,7 @@ lolesports:
   sync:
     cron: ${LOL_SYNC_CRON:0 0/30 * * * *}
     team-metadata-cron: ${LOL_TEAM_METADATA_CRON:0 15 4 * * *}
-    active-leagues: ${LOL_ACTIVE_LEAGUES:LCK,LPL,LEC,LCS,LCP,CBLOL,MSI,WORLDS,FIRST_STAND}
+    # active-leagues(env LOL_ACTIVE_LEAGUES) 폐기 — 동기화 대상은 league_config 테이블(백오피스 리그 설정)이 결정.
   live:
     enabled: ${LOL_LIVE_ENABLED:false}
     # 디스커버리 대상 리그를 active+오늘경기 리그로 좁혔으므로(보통 0~2개) 10초로 단축.

@@ -44,6 +44,7 @@ public class LivePollingScheduler {
 	private final LiveFrameProcessor liveFrameProcessor;
 	private final LiveGameMetadataService liveGameMetadataService;
 	private final LeagueMatchService leagueMatchService;
+	private final com.toy.nar.app.lolesports.LeagueConfigService leagueConfigService;
 	private final CacheEvictionService cacheEvictionService;
 	private final NotificationService notificationService;
 	private final com.toy.nar.app.mobile.push.TeamLiveEventPushService teamLiveEventPushService;
@@ -72,10 +73,6 @@ public class LivePollingScheduler {
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.notification.enabled:false}")
 	private boolean liveNotificationEnabled;
 
-	// 디스코드 알림을 보낼 리그(쉼표 구분). 기본 LCK 만. 그 외 리그는 데이터 수집만 하고 알림은 보내지 않는다.
-	@org.springframework.beans.factory.annotation.Value("${lolesports.live.notification.leagues:LCK}")
-	private String notificationLeagues;
-
 	@Scheduled(fixedDelayString = "${lolesports.live.discovery-interval-ms:60000}")
 	public void discoverLiveGames() {
 		Map<String, ActiveLiveGame> activeGames = liveStateStore.getActiveGames();
@@ -96,6 +93,10 @@ public class LivePollingScheduler {
 		}
 		leaguesToPoll.addAll(
 				leagueMatchService.findLeaguesWithMatchesBetween(nowUtc.minusDays(1), nowUtc.plusDays(1)));
+
+		// 백오피스 리그 설정(live_enabled=false)이면 진행 중 게임 포함 수집 자체를 중단한다.
+		Set<String> liveEnabledLeagues = new HashSet<>(leagueConfigService.liveLeagues());
+		leaguesToPoll.removeIf(league -> !liveEnabledLeagues.contains(league.toUpperCase()));
 
 		for (String league : leaguesToPoll) {
 			try {
@@ -317,17 +318,9 @@ public class LivePollingScheduler {
 		return LocalDateTime.ofInstant(Instant.ofEpochSecond(flooredSeconds), ZoneOffset.UTC).format(START_TIME_FORMATTER);
 	}
 
-	/** 알림 대상 리그인지 (notificationLeagues 설정, 기본 LCK). 그 외 리그는 디스코드 알림 안 보냄. */
+	/** 알림 대상 리그인지 (백오피스 리그 설정 notification_enabled). 그 외 리그는 데이터 수집만 하고 알림은 보내지 않는다. */
 	private boolean isNotifiableLeague(String league) {
-		if (league == null || league.isBlank()) {
-			return false;
-		}
-		for (String allowed : notificationLeagues.split(",")) {
-			if (allowed.trim().equalsIgnoreCase(league.trim())) {
-				return true;
-			}
-		}
-		return false;
+		return leagueConfigService.isNotificationEnabled(league);
 	}
 
 	private Instant nextWindowStart(Instant latestFrameTimestamp) {
