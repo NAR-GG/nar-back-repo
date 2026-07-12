@@ -131,9 +131,14 @@ jobs:
             echo "Pulling app image: ${APP_IMAGE}"
             docker pull "${APP_IMAGE}"
 
+            # awslogs: CloudWatch /nar/app 로 전송 (보존 30일). docker 20.10+ dual logging
+            # 캐시 덕에 docker logs·Dozzle 도 그대로 동작한다. EC2 롤: NAR-CloudWatch-Role
             docker run -d --name "${NEW_NAME}" -p 127.0.0.1:${NEW_PORT}:8080 \
               -m 768m \
-              --log-opt max-size=10m --log-opt max-file=5 \
+              --log-driver=awslogs \
+              --log-opt awslogs-region=ap-northeast-2 \
+              --log-opt awslogs-group=/nar/app \
+              --log-opt awslogs-create-group=true \
               -e SPRING_PROFILES_ACTIVE="prod" \
               -e DISCORD_WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}" \
               -e DB_URL="${{ secrets.DB_URL }}" \
