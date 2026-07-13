@@ -1,5 +1,6 @@
 package com.toy.nar.api.auth;
 
+import com.toy.nar.api.auth.dto.AppleMobileLoginRequest;
 import com.toy.nar.api.auth.dto.GoogleMobileLoginRequest;
 import com.toy.nar.api.auth.dto.KakaoMobileLoginRequest;
 import com.toy.nar.api.auth.dto.MemberResponse;
@@ -9,6 +10,7 @@ import com.toy.nar.api.auth.dto.OnboardingPlayerOptionResponse;
 import com.toy.nar.api.auth.dto.OnboardingRequest;
 import com.toy.nar.api.auth.dto.OnboardingTeamOptionResponse;
 import com.toy.nar.api.auth.dto.TokenResponse;
+import com.toy.nar.app.auth.AppleUserClient;
 import com.toy.nar.app.auth.AuthTokens;
 import com.toy.nar.app.auth.GoogleUserClient;
 import com.toy.nar.app.auth.JwtTokenProvider;
@@ -95,6 +97,7 @@ public class AuthController {
     private final KakaoUserClient kakaoUserClient;
     private final GoogleUserClient googleUserClient;
     private final NaverUserClient naverUserClient;
+    private final AppleUserClient appleUserClient;
     private final SocialLoginService socialLoginService;
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -137,6 +140,26 @@ public class AuthController {
     public ResponseEntity<TokenResponse> loginWithGoogleIdToken(
             @Valid @RequestBody GoogleMobileLoginRequest request) {
         SocialAccountInfo accountInfo = googleUserClient.fetchUser(request.idToken());
+        AuthTokens tokens = socialLoginService.login(accountInfo);
+        return ResponseEntity.ok(new TokenResponse(
+                tokens.accessToken(),
+                tokens.refreshToken(),
+                tokens.isOnboarded()
+        ));
+    }
+
+    @Operation(
+            summary = "모바일 Apple 로그인",
+            description = "Sign in with Apple에서 발급받은 identity token을 검증하고 서비스 JWT를 발급합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "모바일 Apple 로그인 성공"),
+            @ApiResponse(responseCode = "401", description = "유효하지 않은 Apple identity token")
+    })
+    @PostMapping("/mobile/apple")
+    public ResponseEntity<TokenResponse> loginWithAppleIdentityToken(
+            @Valid @RequestBody AppleMobileLoginRequest request) {
+        SocialAccountInfo accountInfo = appleUserClient.fetchUser(request.idToken());
         AuthTokens tokens = socialLoginService.login(accountInfo);
         return ResponseEntity.ok(new TokenResponse(
                 tokens.accessToken(),
