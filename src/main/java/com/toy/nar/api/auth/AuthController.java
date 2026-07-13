@@ -27,6 +27,7 @@ import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.RefreshToken;
 import com.toy.nar.domain.member.repository.MemberRepository;
+import com.toy.nar.domain.member.repository.MemberSocialRepository;
 import com.toy.nar.domain.member.repository.RefreshTokenRepository;
 import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
@@ -100,6 +101,7 @@ public class AuthController {
     private final AppleUserClient appleUserClient;
     private final SocialLoginService socialLoginService;
     private final MemberRepository memberRepository;
+    private final MemberSocialRepository memberSocialRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final TeamRepository teamRepository;
     private final PlayerRepository playerRepository;
@@ -331,6 +333,29 @@ public class AuthController {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"));
         return ResponseEntity.ok(MemberResponse.from(member));
+    }
+
+    @Operation(
+            summary = "회원 탈퇴",
+            description = "현재 로그인한 사용자의 계정과 모든 관련 데이터(소셜 연동, 기기, 구독, 알림, 평점)를 삭제합니다. "
+                    + "소셜 연동만 앱에서 지우고 나머지는 DB FK ON DELETE CASCADE로 함께 삭제된다."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "회원 탈퇴 성공"),
+            @ApiResponse(responseCode = "404", description = "회원을 찾을 수 없음")
+    })
+    @DeleteMapping("/me")
+    @Transactional
+    public ResponseEntity<Void> withdraw(@AuthenticationPrincipal Long memberId) {
+        if (memberId == null) {
+            throw new ResponseStatusException(UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"));
+        memberSocialRepository.deleteByMemberId(memberId);
+        memberRepository.delete(member);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(

@@ -11,6 +11,7 @@ import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
+import com.toy.nar.domain.member.repository.MemberSocialRepository;
 import com.toy.nar.domain.member.repository.RefreshTokenRepository;
 import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
@@ -52,6 +53,7 @@ class AuthControllerOnboardingNotificationTest {
 				mock(com.toy.nar.app.auth.AppleUserClient.class),
 				socialLoginService,
 				memberRepository,
+				mock(MemberSocialRepository.class),
 				refreshTokenRepository,
 				teamRepository,
 				playerRepository,
@@ -170,6 +172,29 @@ class AuthControllerOnboardingNotificationTest {
 		verify(context.playerRepository).findOnboardingPlayers("LCK", 2026, 1L);
 	}
 
+	@Test
+	void withdrawDeletesSocialLinksAndMember() {
+		TestContext context = context();
+		Member member = member(7L);
+		when(context.memberRepository.findById(7L)).thenReturn(Optional.of(member));
+
+		var response = context.controller.withdraw(7L);
+
+		assertThat(response.getStatusCode().value()).isEqualTo(204);
+		verify(context.memberSocialRepository).deleteByMemberId(7L);
+		verify(context.memberRepository).delete(member);
+	}
+
+	@Test
+	void withdrawRejectsUnknownMember() {
+		TestContext context = context();
+		when(context.memberRepository.findById(99L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> context.controller.withdraw(99L))
+				.isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+				.hasMessageContaining("회원을 찾을 수 없습니다");
+	}
+
 	private TestContext context() {
 		JwtTokenProvider jwtTokenProvider = mock(JwtTokenProvider.class);
 		KakaoUserClient kakaoUserClient = mock(KakaoUserClient.class);
@@ -182,6 +207,7 @@ class AuthControllerOnboardingNotificationTest {
 		MobileTeamNotificationService notificationService = mock(MobileTeamNotificationService.class);
 		com.toy.nar.app.auth.profile.ProfileService profileService =
 				mock(com.toy.nar.app.auth.profile.ProfileService.class);
+		MemberSocialRepository memberSocialRepository = mock(MemberSocialRepository.class);
 		AuthController controller = new AuthController(
 				jwtTokenProvider,
 				kakaoUserClient,
@@ -190,6 +216,7 @@ class AuthControllerOnboardingNotificationTest {
 				mock(com.toy.nar.app.auth.AppleUserClient.class),
 				socialLoginService,
 				memberRepository,
+				memberSocialRepository,
 				refreshTokenRepository,
 				teamRepository,
 				playerRepository,
@@ -198,6 +225,7 @@ class AuthControllerOnboardingNotificationTest {
 				profileService,
 				mock(CloudinarySignatureService.class));
 		return new TestContext(
+				memberSocialRepository,
 				controller,
 				memberRepository,
 				teamRepository,
@@ -224,6 +252,7 @@ class AuthControllerOnboardingNotificationTest {
 	}
 
 	private record TestContext(
+			MemberSocialRepository memberSocialRepository,
 			AuthController controller,
 			MemberRepository memberRepository,
 			TeamRepository teamRepository,
