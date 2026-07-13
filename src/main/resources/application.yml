@@ -72,3 +72,7 @@ oauth:
       # Google 로그인 idToken 검증 시 허용할 aud(클라이언트 ID) 목록. 쉼표 구분.
       # 웹/iOS 클라이언트 ID가 다르면 둘 다 넣는다. 비워두면 aud 검증을 건너뛴다.
       client-ids: ${GOOGLE_MOBILE_CLIENT_IDS:12814317442-egra6e1lni0dmepp793sj5389qpsf1r0.apps.googleusercontent.com}
+  apple:
+    mobile:
+      # Apple identity token 검증 시 허용할 aud(앱 번들 ID) 목록. 쉼표 구분. 비워두면 aud 검증을 건너뛴다.
+      bundle-ids: ${APPLE_MOBILE_BUNDLE_IDS:com.nar.wardingapp}
