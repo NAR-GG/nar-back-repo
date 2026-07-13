@@ -8,4 +8,6 @@ import java.util.Optional;
 
 public interface MemberSocialRepository extends JpaRepository<MemberSocial, Long> {
     Optional<MemberSocial> findByProviderAndProviderId(OAuthProvider provider, String providerId);
+
+    void deleteByMemberId(Long memberId);
 }
