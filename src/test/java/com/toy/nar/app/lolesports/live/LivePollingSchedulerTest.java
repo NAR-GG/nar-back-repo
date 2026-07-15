@@ -240,6 +240,72 @@ class LivePollingSchedulerTest {
 	}
 
 	@Test
+	void upstreamUnstartedButLiveFeedFlipsMatchToInProgress() {
+		// EWC 등 업스트림이 라이브 중에도 unstarted 로 방치하는 대회: 시작 시각이 지난 unstarted 경기의
+		// livestats 피드가 in_game 이면 state 를 inProgress 로 올리고 라이브로 추적해야 한다.
+		WorldsService worldsService = mock(WorldsService.class);
+		LiveStatsClient liveStatsClient = mock(LiveStatsClient.class);
+		LiveStateStore liveStateStore = new LiveStateStore();
+		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("EWC"));
+		when(leagueMatchService.findLeaguesWithMatchesBetween(
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(List.of("EWC"));
+		LivePollingScheduler scheduler = new LivePollingScheduler(
+				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
+				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
+				mock(TeamLiveEventPushService.class));
+		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
+		MatchResultDto ewcUnstarted = MatchResultDto.builder()
+				.matchId("ewc-match-1").leagueName("EWC").state("unstarted")
+				.matchDate(Instant.now().toString()).gameIds(List.of("ewc-game-1")).build();
+		when(worldsService.getWorldsMatches(null, "EWC")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of(ewcUnstarted)).build());
+		when(liveStatsClient.getWindow("ewc-game-1", null)).thenReturn(windowWithGameState("in_game"));
+
+		scheduler.discoverLiveGames();
+
+		assertThat(ewcUnstarted.getState()).isEqualTo("inProgress");
+		verify(leagueMatchService).syncRealtimeMatchStatus(ewcUnstarted, "EWC");
+		assertThat(liveStateStore.getActiveGames()).containsKey("ewc-game-1");
+	}
+
+	@Test
+	void upstreamUnstartedWithFinishedFeedStaysUnstarted() {
+		// 피드 마지막 프레임이 finished(직전 세트 종료 잔상)면 라이브로 오판하면 안 된다.
+		WorldsService worldsService = mock(WorldsService.class);
+		LiveStatsClient liveStatsClient = mock(LiveStatsClient.class);
+		LiveStateStore liveStateStore = new LiveStateStore();
+		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("EWC"));
+		when(leagueMatchService.findLeaguesWithMatchesBetween(
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(List.of("EWC"));
+		LivePollingScheduler scheduler = new LivePollingScheduler(
+				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
+				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
+				mock(TeamLiveEventPushService.class));
+		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
+		MatchResultDto ewcUnstarted = MatchResultDto.builder()
+				.matchId("ewc-match-1").leagueName("EWC").state("unstarted")
+				.matchDate(Instant.now().toString()).gameIds(List.of("ewc-game-1")).build();
+		when(worldsService.getWorldsMatches(null, "EWC")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of(ewcUnstarted)).build());
+		when(liveStatsClient.getWindow("ewc-game-1", null)).thenReturn(windowWithGameState("finished"));
+
+		scheduler.discoverLiveGames();
+
+		assertThat(ewcUnstarted.getState()).isEqualTo("unstarted");
+		verify(leagueMatchService, never()).syncRealtimeMatchStatus(
+				org.mockito.ArgumentMatchers.any(), anyString());
+		assertThat(liveStateStore.getActiveGames()).doesNotContainKey("ewc-game-1");
+	}
+
+	@Test
 	void setStartFiresOnFirstFrameNotOnDiscovery() {
 		// 디스커버리 등장 = 픽밴 시작(업스트림이 픽밴 때 inProgress 로 뒤집음)이므로
 		// 그 시점에 쏘면 "이전 세트 종료 몇 분 뒤" 오탐. 첫 프레임 도착 때 1회만 쏴야 한다.
