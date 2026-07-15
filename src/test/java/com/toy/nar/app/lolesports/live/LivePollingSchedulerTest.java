@@ -263,7 +263,7 @@ class LivePollingSchedulerTest {
 				.matchDate(Instant.now().toString()).gameIds(List.of("ewc-game-1")).build();
 		when(worldsService.getWorldsMatches(null, "EWC")).thenReturn(MatchResponseWrapper.builder()
 				.matches(List.of(ewcUnstarted)).build());
-		when(liveStatsClient.getWindow("ewc-game-1", null)).thenReturn(windowWithGameState("in_game"));
+		when(liveStatsClient.getWindow(eq("ewc-game-1"), anyString())).thenReturn(windowWithGameState("in_game"));
 
 		scheduler.discoverLiveGames();
 
@@ -295,7 +295,7 @@ class LivePollingSchedulerTest {
 				.matchDate(Instant.now().toString()).gameIds(List.of("ewc-game-1")).build();
 		when(worldsService.getWorldsMatches(null, "EWC")).thenReturn(MatchResponseWrapper.builder()
 				.matches(List.of(ewcUnstarted)).build());
-		when(liveStatsClient.getWindow("ewc-game-1", null)).thenReturn(windowWithGameState("finished"));
+		when(liveStatsClient.getWindow(eq("ewc-game-1"), anyString())).thenReturn(windowWithGameState("finished"));
 
 		scheduler.discoverLiveGames();
 
