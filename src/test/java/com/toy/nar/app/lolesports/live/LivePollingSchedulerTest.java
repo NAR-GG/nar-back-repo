@@ -273,6 +273,43 @@ class LivePollingSchedulerTest {
 	}
 
 	@Test
+	void alreadyTrackedUnstartedMatchStaysInProgressNotRevertedByRawState() {
+		// 회귀: 라이브로 추적 중(activeMatchIds)인 EWC 경기라도 Riot state 가 unstarted 인 한
+		// 매 사이클 피드로 재판정해 inProgress 로 유지해야 한다. 안 그러면 syncRealtimeMatchStatus 가
+		// 원본 unstarted 로 DB 를 되돌린다(=schedule 은 unstarted, live/games 만 라이브인 증상).
+		WorldsService worldsService = mock(WorldsService.class);
+		LiveStatsClient liveStatsClient = mock(LiveStatsClient.class);
+		LiveStateStore liveStateStore = new LiveStateStore();
+		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("EWC"));
+		when(leagueMatchService.findLeaguesWithMatchesBetween(
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(List.of("EWC"));
+		LivePollingScheduler scheduler = new LivePollingScheduler(
+				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
+				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
+				mock(TeamLiveEventPushService.class));
+		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
+		// 이미 추적 중인 상태로 시작
+		liveStateStore.getActiveGames().put("ewc-game-1", new ActiveLiveGame(
+				"ewc-game-1", "ewc-match-1", "EWC", "GEN", "KC",
+				LocalDateTime.now(ZoneOffset.UTC), 0, 1, "100", "200"));
+		MatchResultDto ewcUnstarted = MatchResultDto.builder()
+				.matchId("ewc-match-1").leagueName("EWC").state("unstarted")
+				.matchDate(Instant.now().toString()).gameIds(List.of("ewc-game-1")).build();
+		when(worldsService.getWorldsMatches(null, "EWC")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of(ewcUnstarted)).build());
+		when(liveStatsClient.getWindow(eq("ewc-game-1"), anyString())).thenReturn(windowWithGameState("in_game"));
+
+		scheduler.discoverLiveGames();
+
+		assertThat(ewcUnstarted.getState()).isEqualTo("inProgress");
+		verify(leagueMatchService).syncRealtimeMatchStatus(ewcUnstarted, "EWC");
+	}
+
+	@Test
 	void upstreamUnstartedWithFinishedFeedStaysUnstarted() {
 		// 피드 마지막 프레임이 finished(직전 세트 종료 잔상)면 라이브로 오판하면 안 된다.
 		WorldsService worldsService = mock(WorldsService.class);
