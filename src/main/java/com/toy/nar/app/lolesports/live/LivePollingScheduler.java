@@ -109,19 +109,23 @@ public class LivePollingScheduler {
 			try {
 				MatchResponseWrapper response = worldsService.getWorldsMatches(null, league);
 				for (MatchResultDto match : response.getMatches()) {
+					// 업스트림(lolesports)이 EWC 등 일부 대회는 라이브 중에도 경기 state 를 unstarted 로 방치한다.
+					// 스케줄 state 로 못 잡으므로, 시작 시각이 지난 unstarted 경기는 매 사이클 livestats 피드를 직접 찔러
+					// 진행 중 게임을 찾는다. 피드가 라이브면 state 를 inProgress 로 올린다.
+					// 매 사이클 재판정해야 한다 — 이미 추적 중(activeMatchIds)이어도 여기서 다시 올리지 않으면
+					// 아래 syncRealtimeMatchStatus 가 Riot 원본 unstarted 로 DB 를 되돌린다.
+					List<String> feedLiveGameIds = List.of();
+					if ("unstarted".equalsIgnoreCase(match.getState())) {
+						feedLiveGameIds = liveGameIdsFromFeed(match);
+						if (!feedLiveGameIds.isEmpty()) {
+							match.setState("inProgress");
+						}
+					}
+
 					boolean activeOrRecentlyActive = "inProgress".equalsIgnoreCase(match.getState())
 							|| activeMatchIds.contains(match.getMatchId());
-
-					// 업스트림(lolesports)이 EWC 등 일부 대회는 라이브 중에도 경기 state 를 unstarted 로 방치한다.
-					// 스케줄 state 로 못 잡으므로, 시작 시각이 지난 unstarted 경기는 livestats 피드를 직접 찔러
-					// 진행 중 게임을 찾는다. 피드가 라이브면 state 를 inProgress 로 올려 이후 경로를 정상 진입시킨다.
-					List<String> feedLiveGameIds = List.of();
 					if (!activeOrRecentlyActive) {
-						feedLiveGameIds = liveGameIdsFromFeed(match);
-						if (feedLiveGameIds.isEmpty()) {
-							continue;
-						}
-						match.setState("inProgress");
+						continue;
 					}
 					scheduleCacheDirty |= leagueMatchService.syncRealtimeMatchStatus(match, league);
 
