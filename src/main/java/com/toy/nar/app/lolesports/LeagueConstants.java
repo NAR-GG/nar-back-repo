@@ -50,7 +50,9 @@ public final class LeagueConstants {
             "LCS", "https://www.twitch.tv/lcs",
             "WORLDS", "https://www.twitch.tv/riotgames",
             "MSI", "https://www.twitch.tv/riotgames",
-            "FIRST_STAND", "https://www.twitch.tv/riotgames");
+            "FIRST_STAND", "https://www.twitch.tv/riotgames",
+            // EWC 2026 한국어 중계는 치지직 독점. 아래는 검증된 영어 공식 Twitch 채널 — 치지직 EWC 채널 ID 확보 시 교체.
+            "EWC", "https://www.twitch.tv/ewclol2026");
 
     /**
      * 스트림 URL이 없는 리그의 기본 폴백 URL
@@ -95,6 +97,11 @@ public final class LeagueConstants {
             "chzzk", "치지직", "LPL 한국어 중계",
             "https://chzzk.naver.com/live/92b762ef6fac0cc8c68bc080868ad582");
 
+    /** EWC 2026 영어 공식 Twitch. 한국어는 치지직 독점이나 채널 ID 미확보 — 확보 시 치지직 링크를 앞에 추가. */
+    private static final StreamLink TWITCH_EWC = new StreamLink(
+            "twitch", "Twitch", "EWC 공식 · 영어",
+            "https://www.twitch.tv/ewclol2026");
+
     /**
      * 리그별 중계 채널 목록. 한국어 중계가 복수인 리그(LCK·국제전)는 치지직/SOOP 둘 다 내려주고,
      * 그 외 리그는 기존 단일 링크를 유지한다.
@@ -106,7 +113,8 @@ public final class LeagueConstants {
             "FIRST_STAND", List.of(CHZZK_LCK, SOOP_AFLOL),
             "LPL", List.of(CHZZK_LPL),
             "LEC", List.of(new StreamLink("twitch", "Twitch", "LEC 공식", "https://www.twitch.tv/lec")),
-            "LCS", List.of(new StreamLink("twitch", "Twitch", "LCS 공식", "https://www.twitch.tv/lcs")));
+            "LCS", List.of(new StreamLink("twitch", "Twitch", "LCS 공식", "https://www.twitch.tv/lcs")),
+            "EWC", List.of(TWITCH_EWC));
 
     /**
      * 리그의 중계 채널 목록 반환. 매핑이 없으면 SOOP 단일 링크로 폴백.

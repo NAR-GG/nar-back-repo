@@ -459,7 +459,8 @@ public class WorldsService {
 	}
 
 	private String normalizeLeagueSlug(String leagueSlug) {
-		return leagueSlug == null || leagueSlug.isBlank() ? "LCK" : leagueSlug.trim().toUpperCase();
+		// fromApiSlug 로 슬러그 변형(EWC: ewc_lol)까지 내부 리그명으로 보정 — 그래야 LEAGUE_IDS 해석이 실패하지 않는다.
+		return leagueSlug == null || leagueSlug.isBlank() ? "LCK" : LeagueConstants.fromApiSlug(leagueSlug);
 	}
 
 	private List<String> extractInProgressGameIds(JsonNode games) {
