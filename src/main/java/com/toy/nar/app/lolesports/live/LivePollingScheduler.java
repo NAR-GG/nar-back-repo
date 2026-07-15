@@ -231,7 +231,8 @@ public class LivePollingScheduler {
 				continue;
 			}
 			try {
-				JsonNode window = liveStatsClient.getWindow(gameId, null);
+				// startingTime 은 반드시 유효한 값이어야 한다 — null 이면 빈 쿼리파라미터로 나가 피드가 거부한다.
+				JsonNode window = liveStatsClient.getWindow(gameId, computeStartingTime(gameId));
 				if (hasFrames(window) && !isFrameFinished(window)) {
 					live.add(gameId);
 				}
