@@ -111,15 +111,27 @@ public class LivePollingScheduler {
 				for (MatchResultDto match : response.getMatches()) {
 					boolean activeOrRecentlyActive = "inProgress".equalsIgnoreCase(match.getState())
 							|| activeMatchIds.contains(match.getMatchId());
+
+					// 업스트림(lolesports)이 EWC 등 일부 대회는 라이브 중에도 경기 state 를 unstarted 로 방치한다.
+					// 스케줄 state 로 못 잡으므로, 시작 시각이 지난 unstarted 경기는 livestats 피드를 직접 찔러
+					// 진행 중 게임을 찾는다. 피드가 라이브면 state 를 inProgress 로 올려 이후 경로를 정상 진입시킨다.
+					List<String> feedLiveGameIds = List.of();
 					if (!activeOrRecentlyActive) {
-						continue;
+						feedLiveGameIds = liveGameIdsFromFeed(match);
+						if (feedLiveGameIds.isEmpty()) {
+							continue;
+						}
+						match.setState("inProgress");
 					}
 					scheduleCacheDirty |= leagueMatchService.syncRealtimeMatchStatus(match, league);
 
-					if (match.getLiveGameIds() == null) {
+					List<String> liveGameIds = !feedLiveGameIds.isEmpty()
+							? feedLiveGameIds
+							: match.getLiveGameIds();
+					if (liveGameIds == null) {
 						continue;
 					}
-					for (String gameId : match.getLiveGameIds()) {
+					for (String gameId : liveGameIds) {
 						if (gameId == null || gameId.isBlank()) {
 							continue;
 						}
@@ -193,6 +205,56 @@ public class LivePollingScheduler {
 			frameFinishedGameIds.remove(gameId);
 			startNotifiedGameIds.remove(gameId);
 		});
+	}
+
+	/** livestats 피드로 라이브를 직접 판정할 시작 시각 창(분). 방송/피드 오차를 흡수한다. */
+	private static final long FEED_PROBE_LEAD_MINUTES = 5L;
+	private static final long FEED_PROBE_TRAIL_HOURS = 6L;
+
+	/**
+	 * 업스트림 state 가 unstarted 인 경기를 livestats 피드로 재판정한다.
+	 * 시작 시각 창 안(−5분 ~ +6시간)의 경기에 한해 게임 id 를 순회하며 window 를 찔러,
+	 * 최근 프레임이 있고 finished 가 아닌(=in_game) 게임 id 목록을 돌려준다.
+	 * 창 밖이거나 게임 id 가 없거나 피드가 비면 빈 목록 — 기존 inProgress 경로에는 영향 없다.
+	 */
+	private List<String> liveGameIdsFromFeed(MatchResultDto match) {
+		if (!"unstarted".equalsIgnoreCase(match.getState()) || !withinFeedProbeWindow(match.getMatchDate())) {
+			return List.of();
+		}
+		List<String> gameIds = match.getGameIds();
+		if (gameIds == null || gameIds.isEmpty()) {
+			return List.of();
+		}
+		List<String> live = new ArrayList<>();
+		for (String gameId : gameIds) {
+			if (gameId == null || gameId.isBlank()) {
+				continue;
+			}
+			try {
+				JsonNode window = liveStatsClient.getWindow(gameId, null);
+				if (hasFrames(window) && !isFrameFinished(window)) {
+					live.add(gameId);
+				}
+			} catch (Exception e) {
+				log.debug("livestats 라이브 프로브 실패 gameId={}: {}", gameId, e.getMessage());
+			}
+		}
+		return live;
+	}
+
+	/** matchDate(ISO instant)가 지금 기준 시작 시각 창 안인지. 파싱 실패 시 false. */
+	private boolean withinFeedProbeWindow(String matchDate) {
+		if (matchDate == null || matchDate.isBlank()) {
+			return false;
+		}
+		try {
+			Instant start = Instant.parse(matchDate);
+			Instant now = Instant.now();
+			return !now.isBefore(start.minus(Duration.ofMinutes(FEED_PROBE_LEAD_MINUTES)))
+					&& !now.isAfter(start.plus(Duration.ofHours(FEED_PROBE_TRAIL_HOURS)));
+		} catch (Exception e) {
+			return false;
+		}
 	}
 
 	/** window 응답에 프레임이 하나라도 있는지. 픽밴/로딩 중엔 프레임이 없다. */
