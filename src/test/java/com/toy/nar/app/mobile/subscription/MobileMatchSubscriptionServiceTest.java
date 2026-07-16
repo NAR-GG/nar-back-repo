@@ -45,7 +45,7 @@ class MobileMatchSubscriptionServiceTest {
 		when(memberRepository.findById(7L)).thenReturn(
 				Optional.of(Member.builder().name("nar").tag("0001").build()));
 
-		service.subscribe(7L, "m1");
+		service.subscribe(7L, "m1", true, true, true);
 
 		verify(subscriptionRepository).save(any(MemberMatchSubscription.class));
 	}
@@ -55,7 +55,7 @@ class MobileMatchSubscriptionServiceTest {
 		when(leagueMatchRepository.existsById("m1")).thenReturn(true);
 		when(subscriptionRepository.existsByMemberIdAndMatchId(7L, "m1")).thenReturn(true);
 
-		service.subscribe(7L, "m1");
+		service.subscribe(7L, "m1", true, true, true);
 
 		verify(subscriptionRepository, never()).save(any());
 	}
@@ -64,7 +64,7 @@ class MobileMatchSubscriptionServiceTest {
 	void subscribeRejectsUnknownMatch() {
 		when(leagueMatchRepository.existsById("nope")).thenReturn(false);
 
-		assertThatThrownBy(() -> service.subscribe(7L, "nope"))
+		assertThatThrownBy(() -> service.subscribe(7L, "nope", true, true, true))
 				.isInstanceOf(CustomException.class);
 		verify(subscriptionRepository, never()).save(any());
 	}
