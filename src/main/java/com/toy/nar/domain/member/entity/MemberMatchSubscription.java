@@ -20,7 +20,8 @@ import java.util.Objects;
 
 /**
  * 특정 경기 예약 알림 구독. 팀 구독과 별개로, 유저가 개별 경기를 구독하면
- * 해당 경기의 세트 시작/종료/라이브 이벤트를 받는다(토글 없이 3종 전부).
+ * 해당 경기의 세트 시작/종료/라이브 이벤트를 받는다. 팀 구독과 동일하게
+ * 종류별 토글(set_start/set_end/live_event)을 가진다.
  * match_id 는 league_match.id (외부 경기 식별자, VARCHAR).
  */
 @Entity
@@ -44,12 +45,26 @@ public class MemberMatchSubscription {
 	@Column(name = "match_id", nullable = false, length = 50)
 	private String matchId;
 
+	@Column(name = "set_start_enabled", nullable = false)
+	private boolean setStartEnabled = true;
+
+	@Column(name = "set_end_enabled", nullable = false)
+	private boolean setEndEnabled = true;
+
+	@Column(name = "live_event_enabled", nullable = false)
+	private boolean liveEventEnabled = true;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
-	public MemberMatchSubscription(Member member, String matchId) {
+	public MemberMatchSubscription(
+			Member member, String matchId,
+			boolean setStartEnabled, boolean setEndEnabled, boolean liveEventEnabled) {
 		this.member = Objects.requireNonNull(member);
 		this.matchId = Objects.requireNonNull(matchId);
+		this.setStartEnabled = setStartEnabled;
+		this.setEndEnabled = setEndEnabled;
+		this.liveEventEnabled = liveEventEnabled;
 	}
 
 	@PrePersist

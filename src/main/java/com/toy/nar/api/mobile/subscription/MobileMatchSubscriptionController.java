@@ -41,7 +41,10 @@ public class MobileMatchSubscriptionController {
 	public ResponseEntity<Void> subscribe(
 			@AuthenticationPrincipal Long memberId,
 			@Valid @RequestBody MatchSubscribeRequest request) {
-		subscriptionService.subscribe(memberId, request.matchId());
+		subscriptionService.subscribe(memberId, request.matchId(),
+				request.setStartEnabledOrDefault(),
+				request.setEndEnabledOrDefault(),
+				request.liveEventEnabledOrDefault());
 		return ResponseEntity.noContent().build();
 	}
 
