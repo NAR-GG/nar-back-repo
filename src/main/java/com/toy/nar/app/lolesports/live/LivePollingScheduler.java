@@ -129,8 +129,15 @@ public class LivePollingScheduler {
 						}
 					}
 
+					// 업스트림 completed flip 이 stale 창(3분)을 넘겨 도착하면 추적이 이미 끝나
+					// activeMatchIds 로는 못 잡는다(EWC 상습 — 그러면 30분 cron 까지 inProgress 방치).
+					// 최근 경기(시작 −5분 ~ +6시간) completed 는 추적 여부와 무관하게 sync 한다.
+					// upsert 가 무변경 skip 이라 이미 completed 인 매치는 write 가 발생하지 않는다.
+					boolean recentlyCompleted = "completed".equalsIgnoreCase(match.getState())
+							&& withinFeedProbeWindow(match.getMatchDate());
 					boolean activeOrRecentlyActive = "inProgress".equalsIgnoreCase(match.getState())
-							|| activeMatchIds.contains(match.getMatchId());
+							|| activeMatchIds.contains(match.getMatchId())
+							|| recentlyCompleted;
 					if (!activeOrRecentlyActive) {
 						continue;
 					}
