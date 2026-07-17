@@ -116,9 +116,16 @@ public class LivePollingScheduler {
 					// 아래 syncRealtimeMatchStatus 가 Riot 원본 unstarted 로 DB 를 되돌린다.
 					List<String> feedLiveGameIds = List.of();
 					if ("unstarted".equalsIgnoreCase(match.getState())) {
-						feedLiveGameIds = liveGameIdsFromFeed(match);
+						FeedProbe probe = probeFeed(match);
+						feedLiveGameIds = probe.liveGameIds();
 						if (!feedLiveGameIds.isEmpty()) {
 							match.setState("inProgress");
+						} else if (probe.sawFinished()) {
+							// 세트 사이/경기 종료 직후: 피드는 finished 잔상인데 업스트림 state 는 여전히 unstarted.
+							// 여기서 sync 하면 matchId 가 activeMatchIds 에 남아 있는 동안(stale 3분 창)
+							// Riot 원본 unstarted 가 DB 의 inProgress 를 되돌린다. 이 사이클은 건너뛰고
+							// 업스트림 completed flip(또는 30분 cron)에 맡긴다.
+							continue;
 						}
 					}
 
@@ -215,21 +222,28 @@ public class LivePollingScheduler {
 	private static final long FEED_PROBE_LEAD_MINUTES = 5L;
 	private static final long FEED_PROBE_TRAIL_HOURS = 6L;
 
+	/** unstarted 재판정 프로브 결과: 라이브 게임 id 목록 + finished 잔상 관측 여부. */
+	private record FeedProbe(List<String> liveGameIds, boolean sawFinished) {
+		static final FeedProbe EMPTY = new FeedProbe(List.of(), false);
+	}
+
 	/**
 	 * 업스트림 state 가 unstarted 인 경기를 livestats 피드로 재판정한다.
 	 * 시작 시각 창 안(−5분 ~ +6시간)의 경기에 한해 게임 id 를 순회하며 window 를 찔러,
-	 * 최근 프레임이 있고 finished 가 아닌(=in_game) 게임 id 목록을 돌려준다.
-	 * 창 밖이거나 게임 id 가 없거나 피드가 비면 빈 목록 — 기존 inProgress 경로에는 영향 없다.
+	 * 최근 프레임이 있고 finished 가 아닌(=in_game) 게임 id 목록과 finished 관측 여부를 돌려준다.
+	 * finished 관측은 "시작 전"이 아니라 "세트 사이/종료 직후" 신호라 unstarted sync 차단에 쓴다.
+	 * 창 밖이거나 게임 id 가 없거나 피드가 비면 EMPTY — 기존 inProgress 경로에는 영향 없다.
 	 */
-	private List<String> liveGameIdsFromFeed(MatchResultDto match) {
+	private FeedProbe probeFeed(MatchResultDto match) {
 		if (!"unstarted".equalsIgnoreCase(match.getState()) || !withinFeedProbeWindow(match.getMatchDate())) {
-			return List.of();
+			return FeedProbe.EMPTY;
 		}
 		List<String> gameIds = match.getGameIds();
 		if (gameIds == null || gameIds.isEmpty()) {
-			return List.of();
+			return FeedProbe.EMPTY;
 		}
 		List<String> live = new ArrayList<>();
+		boolean sawFinished = false;
 		for (String gameId : gameIds) {
 			if (gameId == null || gameId.isBlank()) {
 				continue;
@@ -237,14 +251,19 @@ public class LivePollingScheduler {
 			try {
 				// startingTime 은 반드시 유효한 값이어야 한다 — null 이면 빈 쿼리파라미터로 나가 피드가 거부한다.
 				JsonNode window = liveStatsClient.getWindow(gameId, computeStartingTime(gameId));
-				if (hasFrames(window) && !isFrameFinished(window)) {
+				if (!hasFrames(window)) {
+					continue;
+				}
+				if (isFrameFinished(window)) {
+					sawFinished = true;
+				} else {
 					live.add(gameId);
 				}
 			} catch (Exception e) {
 				log.debug("livestats 라이브 프로브 실패 gameId={}: {}", gameId, e.getMessage());
 			}
 		}
-		return live;
+		return new FeedProbe(live, sawFinished);
 	}
 
 	/** matchDate(ISO instant)가 지금 기준 시작 시각 창 안인지. 파싱 실패 시 false. */

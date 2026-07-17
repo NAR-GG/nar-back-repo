@@ -343,6 +343,45 @@ class LivePollingSchedulerTest {
 	}
 
 	@Test
+	void trackedMatchWithFinishedFeedDoesNotRevertToUnstarted() {
+		// 경기 종료 직후: 프로브가 finished 잔상을 보면 inProgress 승격이 끊기는데,
+		// matchId 는 아직 activeMatchIds(stale 3분 창)에 있어 Riot 원본 unstarted 가
+		// syncRealtimeMatchStatus 로 그대로 들어가 DB 를 inProgress → unstarted 로 되돌렸다.
+		// finished 를 봤으면 이 사이클 sync 를 건너뛰어 DB state 를 유지해야 한다.
+		WorldsService worldsService = mock(WorldsService.class);
+		LiveStatsClient liveStatsClient = mock(LiveStatsClient.class);
+		LiveStateStore liveStateStore = new LiveStateStore();
+		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("EWC"));
+		when(leagueMatchService.findLeaguesWithMatchesBetween(
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(List.of("EWC"));
+		LivePollingScheduler scheduler = new LivePollingScheduler(
+				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
+				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
+				mock(TeamLiveEventPushService.class));
+		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
+		// 마지막 세트를 라이브로 추적하던 중이었음
+		liveStateStore.getActiveGames().put("ewc-game-1", new ActiveLiveGame(
+				"ewc-game-1", "ewc-match-1", "EWC", "GEN", "KC",
+				LocalDateTime.now(ZoneOffset.UTC), 0, 3, "100", "200"));
+		MatchResultDto ewcUnstarted = MatchResultDto.builder()
+				.matchId("ewc-match-1").leagueName("EWC").state("unstarted")
+				.matchDate(Instant.now().toString()).gameIds(List.of("ewc-game-1")).build();
+		when(worldsService.getWorldsMatches(null, "EWC")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of(ewcUnstarted)).build());
+		when(liveStatsClient.getWindow(eq("ewc-game-1"), anyString())).thenReturn(windowWithGameState("finished"));
+
+		scheduler.discoverLiveGames();
+
+		assertThat(ewcUnstarted.getState()).isEqualTo("unstarted");
+		verify(leagueMatchService, never()).syncRealtimeMatchStatus(
+				org.mockito.ArgumentMatchers.any(), anyString());
+	}
+
+	@Test
 	void setStartFiresOnFirstFrameNotOnDiscovery() {
 		// 디스커버리 등장 = 픽밴 시작(업스트림이 픽밴 때 inProgress 로 뒤집음)이므로
 		// 그 시점에 쏘면 "이전 세트 종료 몇 분 뒤" 오탐. 첫 프레임 도착 때 1회만 쏴야 한다.
