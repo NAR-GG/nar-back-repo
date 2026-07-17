@@ -1,6 +1,7 @@
 package com.toy.nar.domain.participant.repository;
 
 import com.toy.nar.domain.participant.entity.Player;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,18 +15,32 @@ import java.util.Set;
 public interface PlayerRepository extends JpaRepository<Player, Long> {
 	Optional<Player> findByName(String name);
 
+	// 백오피스 수정 응답이 트랜잭션 밖(OSIV off)에서 currentTeam을 직렬화하므로 함께 로딩한다.
+	@EntityGraph(attributePaths = {"currentTeam"})
+	Optional<Player> findWithCurrentTeamById(Long id);
+
 	// 백오피스 검색: 선수명·실명 부분일치 + 리그 필터. q/league 가 null 이면 각 조건 무시.
-	// 리그는 출전 기록(GameParticipant→Game→League) 기준 EXISTS 로 판정(전 시즌 통합).
+	// 리그는 현재 소속팀(current_team)의 LeagueTeam 등록 기준 — 팀 검색과 동일 기준.
+	// (과거 출전 이력 EXISTS는 참가기록 16만행을 페이지마다 semijoin 스캔해서 느렸음. 무소속 선수는 리그 필터에서 제외됨.)
+	// currentTeam은 목록 응답에 팀명을 실어야 해서 EntityGraph로 함께 로딩(N+1/LAZY 예외 방지).
+	@EntityGraph(attributePaths = {"currentTeam"})
 	@Query("""
 			SELECT p FROM Player p
 			WHERE (:q IS NULL
 			       OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
 			       OR LOWER(p.realName) LIKE LOWER(CONCAT('%', :q, '%')))
 			  AND (:league IS NULL
-			       OR EXISTS (SELECT 1 FROM GameParticipant gp
-			                  WHERE gp.player = p AND gp.game.league.leagueName = :league))
+			       OR EXISTS (SELECT 1 FROM LeagueTeam lt
+			                  WHERE lt.team = p.currentTeam AND lt.league.leagueName = :league))
 			""")
 	Page<Player> searchForBackoffice(@Param("q") String q, @Param("league") String league, Pageable pageable);
+
+	// 해당 리그 출전 이력 여부. 백오피스 선수 수정의 "LCK만 허용" 서버 검증에 사용.
+	@Query("""
+			SELECT COUNT(gp) > 0 FROM GameParticipant gp
+			WHERE gp.player.id = :playerId AND gp.game.league.leagueName = :leagueName
+			""")
+	boolean hasLeagueParticipation(@Param("playerId") Long playerId, @Param("leagueName") String leagueName);
 
 	Optional<Player> findByPlayerOriginId(String playerOriginId);
 
