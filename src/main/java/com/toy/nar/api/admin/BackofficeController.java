@@ -4,6 +4,7 @@ import com.toy.nar.app.lolesports.LeagueConfigService;
 import com.toy.nar.app.lolesports.repository.LeagueConfig;
 import com.toy.nar.app.member.service.MemberDeleteService;
 import com.toy.nar.app.participant.service.PlayerAdminService;
+import com.toy.nar.app.riot.RiotApiException;
 import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
@@ -14,6 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -154,6 +156,17 @@ public class BackofficeController {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, String> onInvalidArgument(IllegalArgumentException e) {
         return Map.of("message", e.getMessage());
+    }
+
+    // Riot 실검증 실패: 계정 없음(404)은 어드민 입력 오류(400), 그 외(키 미설정/장애)는 502.
+    @ExceptionHandler(RiotApiException.class)
+    public ResponseEntity<Map<String, String>> onRiotApiError(RiotApiException e) {
+        if (e.getStatusCode() == 404) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "존재하지 않는 Riot ID입니다. 이름#태그를 확인해 주세요"));
+        }
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(Map.of("message", "Riot API 오류로 저장하지 못했습니다. 잠시 후 다시 시도해 주세요"));
     }
 
     public record MemberRow(Long id, String name, String email,

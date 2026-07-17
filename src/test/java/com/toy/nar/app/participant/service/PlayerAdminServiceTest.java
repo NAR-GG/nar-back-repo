@@ -2,6 +2,10 @@ package com.toy.nar.app.participant.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -16,6 +20,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toy.nar.api.admin.BackofficeController;
+import com.toy.nar.app.riot.PlayerRiotAccountSyncService;
+import com.toy.nar.app.riot.RiotApiException;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
@@ -30,6 +36,8 @@ class PlayerAdminServiceTest {
 	private TeamRepository teamRepository;
 	@Mock
 	private ObjectMapper objectMapper;
+	@Mock
+	private PlayerRiotAccountSyncService playerRiotAccountSyncService;
 	@InjectMocks
 	private PlayerAdminService playerAdminService;
 
@@ -81,7 +89,7 @@ class PlayerAdminServiceTest {
 		Player player = Player.builder().name("Faker").build();
 		when(playerRepository.findWithCurrentTeamById(1L)).thenReturn(Optional.of(player));
 		when(playerRepository.hasLeagueParticipation(1L, "LCK")).thenReturn(true);
-		when(objectMapper.writeValueAsString(org.mockito.ArgumentMatchers.any()))
+		when(objectMapper.writeValueAsString(any()))
 				.thenReturn("[{\"region\":\"KR\",\"riotId\":\"Hide on bush#KR1\",\"tier\":null}]");
 
 		Player updated = playerAdminService.update(1L, null, null, null, null,
@@ -89,6 +97,7 @@ class PlayerAdminServiceTest {
 
 		assertThat(updated.getGameAccounts()).contains("Hide on bush#KR1");
 		assertThat(updated.isGameAccountsLocked()).isTrue();
+		verify(playerRiotAccountSyncService).syncPlayerAccountNow(player);
 	}
 
 	@Test
@@ -101,5 +110,49 @@ class PlayerAdminServiceTest {
 		assertThatThrownBy(() -> playerAdminService.update(1L, null, null, null, null,
 				List.of(new BackofficeController.GameAccountEntry("KR", "NoTagLine", null))))
 				.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	@DisplayName("gameAccounts 수정 시 syncPlayerAccountNow 호출됨")
+	void callsSyncOnGameAccountsUpdate() throws Exception {
+		Player player = Player.builder().name("Faker").build();
+		when(playerRepository.findWithCurrentTeamById(1L)).thenReturn(Optional.of(player));
+		when(playerRepository.hasLeagueParticipation(1L, "LCK")).thenReturn(true);
+		when(objectMapper.writeValueAsString(any()))
+				.thenReturn("[{\"region\":\"KR\",\"riotId\":\"Hide on bush#KR1\",\"tier\":null}]");
+
+		playerAdminService.update(1L, null, null, null, null,
+				List.of(new BackofficeController.GameAccountEntry("KR", "Hide on bush#KR1", null)));
+
+		verify(playerRiotAccountSyncService).syncPlayerAccountNow(player);
+	}
+
+	@Test
+	@DisplayName("syncPlayerAccountNow가 RiotApiException 던지면 update가 그대로 전파")
+	void propagatesRiotApiException() throws Exception {
+		Player player = Player.builder().name("Faker").build();
+		when(playerRepository.findWithCurrentTeamById(1L)).thenReturn(Optional.of(player));
+		when(playerRepository.hasLeagueParticipation(1L, "LCK")).thenReturn(true);
+		when(objectMapper.writeValueAsString(any()))
+				.thenReturn("[{\"region\":\"KR\",\"riotId\":\"Ghost#KR1\",\"tier\":null}]");
+		doThrow(new RiotApiException("계정 없음", 404))
+				.when(playerRiotAccountSyncService).syncPlayerAccountNow(any());
+
+		assertThatThrownBy(() -> playerAdminService.update(1L, null, null, null, null,
+				List.of(new BackofficeController.GameAccountEntry("KR", "Ghost#KR1", null))))
+				.isInstanceOf(RiotApiException.class);
+	}
+
+	@Test
+	@DisplayName("unlockGameAccounts=true 경로에서는 syncPlayerAccountNow 호출 안 됨")
+	void doesNotSyncOnUnlock() throws Exception {
+		Player player = Player.builder().name("Faker").build();
+		player.overrideGameAccounts("[{\"region\":\"KR\",\"riotId\":\"Hide on bush#KR1\"}]");
+		when(playerRepository.findWithCurrentTeamById(1L)).thenReturn(Optional.of(player));
+		when(playerRepository.hasLeagueParticipation(1L, "LCK")).thenReturn(true);
+
+		playerAdminService.update(1L, null, null, null, true, null);
+
+		verify(playerRiotAccountSyncService, never()).syncPlayerAccountNow(any());
 	}
 }

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toy.nar.api.admin.BackofficeController;
+import com.toy.nar.app.riot.PlayerRiotAccountSyncService;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
@@ -28,6 +29,7 @@ public class PlayerAdminService {
 	private final PlayerRepository playerRepository;
 	private final TeamRepository teamRepository;
 	private final ObjectMapper objectMapper;
+	private final PlayerRiotAccountSyncService playerRiotAccountSyncService;
 
 	@Transactional
 	public Player update(Long playerId, String imageUrl, Boolean unlockImage, Long currentTeamId,
@@ -46,6 +48,8 @@ public class PlayerAdminService {
 			player.unlockGameAccounts();
 		} else if (gameAccounts != null) {
 			player.overrideGameAccounts(serializeGameAccounts(gameAccounts));
+			// Riot 실존 검증 + puuid 즉시 반영. 실패 시 예외 전파 → 트랜잭션 롤백(계정 저장 안 됨).
+			playerRiotAccountSyncService.syncPlayerAccountNow(player);
 		}
 		if (currentTeamId != null) {
 			Team team = teamRepository.findById(currentTeamId)
