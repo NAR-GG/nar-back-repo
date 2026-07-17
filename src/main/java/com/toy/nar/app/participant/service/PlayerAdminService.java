@@ -27,7 +27,7 @@ public class PlayerAdminService {
 
 	@Transactional
 	public Player update(Long playerId, String imageUrl, Boolean unlockImage, Long currentTeamId) {
-		Player player = playerRepository.findById(playerId)
+		Player player = playerRepository.findWithCurrentTeamById(playerId)
 				.orElseThrow(() -> new NoSuchElementException("선수를 찾을 수 없습니다: " + playerId));
 		if (!playerRepository.hasLeagueParticipation(playerId, EDITABLE_LEAGUE)) {
 			throw new IllegalStateException("LCK 출전 이력이 있는 선수만 수정할 수 있습니다");

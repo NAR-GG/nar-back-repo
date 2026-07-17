@@ -15,6 +15,10 @@ import java.util.Set;
 public interface PlayerRepository extends JpaRepository<Player, Long> {
 	Optional<Player> findByName(String name);
 
+	// 백오피스 수정 응답이 트랜잭션 밖(OSIV off)에서 currentTeam을 직렬화하므로 함께 로딩한다.
+	@EntityGraph(attributePaths = {"currentTeam"})
+	Optional<Player> findWithCurrentTeamById(Long id);
+
 	// 백오피스 검색: 선수명·실명 부분일치 + 리그 필터. q/league 가 null 이면 각 조건 무시.
 	// 리그는 출전 기록(GameParticipant→Game→League) 기준 EXISTS 로 판정(전 시즌 통합).
 	// currentTeam은 목록 응답에 팀명을 실어야 해서 EntityGraph로 함께 로딩(N+1/LAZY 예외 방지).

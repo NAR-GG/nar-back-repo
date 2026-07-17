@@ -32,7 +32,7 @@ class PlayerAdminServiceTest {
 	@DisplayName("LCK 출전 이력 없는 선수는 수정 거부")
 	void rejectsNonLckPlayer() {
 		Player player = Player.builder().name("lplOnly").build();
-		when(playerRepository.findById(1L)).thenReturn(Optional.of(player));
+		when(playerRepository.findWithCurrentTeamById(1L)).thenReturn(Optional.of(player));
 		when(playerRepository.hasLeagueParticipation(1L, "LCK")).thenReturn(false);
 
 		assertThatThrownBy(() -> playerAdminService.update(1L, "img.png", null, null))
@@ -45,7 +45,7 @@ class PlayerAdminServiceTest {
 	void updatesImageAndTeam() {
 		Player player = Player.builder().name("Faker").build();
 		Team team = Team.builder().name("Gen.G").build();
-		when(playerRepository.findById(1L)).thenReturn(Optional.of(player));
+		when(playerRepository.findWithCurrentTeamById(1L)).thenReturn(Optional.of(player));
 		when(playerRepository.hasLeagueParticipation(1L, "LCK")).thenReturn(true);
 		when(teamRepository.findById(2L)).thenReturn(Optional.of(team));
 
@@ -61,7 +61,7 @@ class PlayerAdminServiceTest {
 	void unlocksImage() {
 		Player player = Player.builder().name("Faker").build();
 		player.overrideImage("manual.png");
-		when(playerRepository.findById(1L)).thenReturn(Optional.of(player));
+		when(playerRepository.findWithCurrentTeamById(1L)).thenReturn(Optional.of(player));
 		when(playerRepository.hasLeagueParticipation(1L, "LCK")).thenReturn(true);
 
 		Player updated = playerAdminService.update(1L, null, true, null);

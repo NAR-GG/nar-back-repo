@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
+import org.hibernate.Hibernate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -72,6 +73,23 @@ class PlayerRepositoryLckParticipationTest {
 	void hasLeagueParticipation() {
 		assertThat(playerRepository.hasLeagueParticipation(fakerId, "LCK")).isTrue();
 		assertThat(playerRepository.hasLeagueParticipation(lplOnlyId, "LCK")).isFalse();
+	}
+
+	@Test
+	@DisplayName("findWithCurrentTeamById는 currentTeam을 즉시 로딩한다(OSIV off 직렬화 대비)")
+	void findWithCurrentTeamById_initializesCurrentTeam() {
+		// 픽스처: faker 선수에 currentTeam(T1, id=10) 세팅
+		exec("UPDATE players SET current_team_id = 10 WHERE player_id = 1");
+		em.flush();
+		em.clear();
+
+		// EntityGraph 조회
+		com.toy.nar.domain.participant.entity.Player found =
+				playerRepository.findWithCurrentTeamById(fakerId).orElseThrow();
+
+		// 세션 경계 밖에서도 currentTeam이 초기화돼 있어야 한다(OSIV off 대비)
+		assertThat(Hibernate.isInitialized(found.getCurrentTeam())).isTrue();
+		assertThat(found.getCurrentTeam().getName()).isEqualTo("T1");
 	}
 
 	// ── 시딩 헬퍼 (네이티브 SQL) ─────────────────────────────────
