@@ -117,7 +117,7 @@ public class TeamLiveEventPushService {
 			long eventOrder,
 			MobilePushMessage message) {
 		try {
-			List<MemberDevice> devices = deviceRepository.findActiveDevicesBySubscribedMatchId(matchId);
+			List<MemberDevice> devices = deviceRepository.findActiveDevicesBySubscribedMatchId(matchId, eventType);
 			Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
 					.collect(Collectors.groupingBy(
 							device -> device.getMember().getId(),

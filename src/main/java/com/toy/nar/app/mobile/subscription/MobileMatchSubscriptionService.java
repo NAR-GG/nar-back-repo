@@ -32,7 +32,8 @@ public class MobileMatchSubscriptionService {
 	}
 
 	@Transactional
-	public void subscribe(Long memberId, String matchId) {
+	public void subscribe(Long memberId, String matchId,
+			boolean setStartEnabled, boolean setEndEnabled, boolean liveEventEnabled) {
 		if (matchId == null || matchId.isBlank()) {
 			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
 		}
@@ -45,7 +46,8 @@ public class MobileMatchSubscriptionService {
 		}
 		Member member = memberRepository.findById(memberId)
 				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
-		subscriptionRepository.save(new MemberMatchSubscription(member, matchId));
+		subscriptionRepository.save(new MemberMatchSubscription(
+				member, matchId, setStartEnabled, setEndEnabled, liveEventEnabled));
 	}
 
 	@Transactional

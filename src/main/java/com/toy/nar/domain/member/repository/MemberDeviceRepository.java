@@ -59,8 +59,8 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 			@Param("eventType") String eventType);
 
 	/**
-	 * 특정 경기를 예약 구독한 회원들의 활성 기기 목록. 팀 구독과 달리 토글이 없어
-	 * 세트 시작/종료/라이브 이벤트를 구분하지 않고 구독 여부만 본다.
+	 * 특정 경기를 예약 구독하고 해당 이벤트 토글(SET_START/SET_END/LIVE_EVENT)이 켜진
+	 * 회원들의 활성 기기 목록. 팀 구독(findActiveDevicesBySubscribedTeamId)과 동일한 패턴이다.
 	 */
 	@EntityGraph(attributePaths = "member")
 	@Query("""
@@ -72,9 +72,16 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 				  FROM MemberMatchSubscription subscription
 				  WHERE subscription.member = device.member
 				    AND subscription.matchId = :matchId
+				    AND (
+				        (:eventType = 'SET_START' AND subscription.setStartEnabled = true)
+				        OR (:eventType = 'SET_END' AND subscription.setEndEnabled = true)
+				        OR (:eventType = 'LIVE_EVENT' AND subscription.liveEventEnabled = true)
+				    )
 			  )
 			""")
-	List<MemberDevice> findActiveDevicesBySubscribedMatchId(@Param("matchId") String matchId);
+	List<MemberDevice> findActiveDevicesBySubscribedMatchId(
+			@Param("matchId") String matchId,
+			@Param("eventType") String eventType);
 
 	@Modifying(clearAutomatically = true)
 	@Transactional
