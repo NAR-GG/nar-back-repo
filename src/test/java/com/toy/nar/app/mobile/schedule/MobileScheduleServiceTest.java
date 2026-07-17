@@ -313,6 +313,47 @@ class MobileScheduleServiceTest {
 	}
 
 	@Test
+	void getMatchGamesMarksFrameFinishedGameAsEndedDespiteStoreResidue() {
+		// 세트 종료 후 stale 3분 동안 게임이 store 에 남아 "LIVE" 잔상으로 표시되던 문제:
+		// 프레임 finished 로 확정된 게임은 store 잔상과 무관하게 ENDED 로 내려야
+		// SET_END 푸시(프레임 신호)와 상세 화면이 같은 시점에 종료로 보인다.
+		when(leagueMatchRepository.findById("match-1"))
+				.thenReturn(Optional.of(match("match-1", "EWC", LocalDateTime.of(2026, 7, 17, 13, 30), "DK", "BLG", "inProgress")));
+		when(leagueMatchGameRepository.findMappedGameRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new MappedRow("match-1", 1, "game-1", null)));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>(java.util.Map.of(
+				"game-1", new com.toy.nar.app.lolesports.live.ActiveLiveGame(
+						"game-1", "match-1", "EWC", "DK", "BLG", LocalDateTime.of(2026, 7, 17, 13, 50), 0))));
+		when(liveStateStore.isFinished("game-1")).thenReturn(true);
+		when(minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart("match-1"))
+				.thenReturn(List.of("game-1"));
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games()).singleElement()
+				.extracting(MobileScheduleListResponse.MobileGameSummary::status)
+				.isEqualTo("ENDED");
+	}
+
+	@Test
+	void getMatchGamesKeepsLiveStatusWhileFrameNotFinished() {
+		when(leagueMatchRepository.findById("match-1"))
+				.thenReturn(Optional.of(match("match-1", "EWC", LocalDateTime.of(2026, 7, 17, 13, 30), "DK", "BLG", "inProgress")));
+		when(leagueMatchGameRepository.findMappedGameRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new MappedRow("match-1", 1, "game-1", null)));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>(java.util.Map.of(
+				"game-1", new com.toy.nar.app.lolesports.live.ActiveLiveGame(
+						"game-1", "match-1", "EWC", "DK", "BLG", LocalDateTime.of(2026, 7, 17, 13, 50), 0))));
+		when(liveStateStore.isFinished("game-1")).thenReturn(false);
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games()).singleElement()
+				.extracting(MobileScheduleListResponse.MobileGameSummary::status)
+				.isEqualTo("LIVE");
+	}
+
+	@Test
 	void getMatchGamesWithUnknownMatchThrowsDataNotFound() {
 		when(leagueMatchRepository.findById("missing")).thenReturn(Optional.empty());
 

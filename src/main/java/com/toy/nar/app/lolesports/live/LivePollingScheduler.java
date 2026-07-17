@@ -399,14 +399,18 @@ public class LivePollingScheduler {
 
 				// 세트 종료 1차 판정: 프레임 gameState=finished (실제 종료 후 수 초 내 반영).
 				// finished 프레임은 timestamp 가 멈춰 aggregator 의 stale 필터에 걸리므로 여기 raw 응답에서 본다.
-				if (isFrameFinished(window)
-						&& frameFinishedGameIds.add(activeGame.gameId())
-						&& teamLiveEventPushService.isEnabled()
-						&& isNotifiableLeague(activeGame.leagueName())
-						&& setEndNotifiedGameIds.add(activeGame.gameId())) {
-					log.info("[live-notify] set-end(frame) gameId={} matchId={} set={}",
-							activeGame.gameId(), activeGame.matchId(), activeGame.setNumber());
-					fireSetEndNotification(activeGame);
+				if (isFrameFinished(window)) {
+					// store 에 마킹해야 세트 상태(LIVE/ENDED)가 stale 3분 잔상 동안 LIVE 로 남지 않는다.
+					// 푸시 게이트(isEnabled/리그)와 무관하게 마킹한다.
+					liveStateStore.markFinished(activeGame.gameId());
+					if (frameFinishedGameIds.add(activeGame.gameId())
+							&& teamLiveEventPushService.isEnabled()
+							&& isNotifiableLeague(activeGame.leagueName())
+							&& setEndNotifiedGameIds.add(activeGame.gameId())) {
+						log.info("[live-notify] set-end(frame) gameId={} matchId={} set={}",
+								activeGame.gameId(), activeGame.matchId(), activeGame.setNumber());
+						fireSetEndNotification(activeGame);
+					}
 				}
 
 				liveFrameProcessor.process(activeGame, window, details);
