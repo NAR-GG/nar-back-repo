@@ -2,28 +2,38 @@ package com.toy.nar.api.admin;
 
 import com.toy.nar.app.lolesports.LeagueConfigService;
 import com.toy.nar.app.lolesports.repository.LeagueConfig;
+import com.toy.nar.app.member.service.MemberDeleteService;
+import com.toy.nar.app.participant.service.PlayerAdminService;
 import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
+import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.participant.repository.TeamRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
 
 /**
  * 백오피스 API. {@code /api/admin/**} 는 SecurityConfig 에서 ROLE_ADMIN 으로 보호된다.
  * 조회 응답은 Spring {@link Page} 형식({@code content}, {@code totalElements}) 그대로 — FE 데이터프로바이더가 흡수한다.
- * 쓰기는 리그 설정 토글(PUT /league-configs/{leagueName})만 존재.
+ * 쓰기: 리그 설정 토글, LCK 선수 수정(PUT /players/{id}), 회원/선수/팀 삭제(DELETE).
  */
 @RestController
 @RequestMapping("/api/admin")
@@ -35,6 +45,8 @@ public class BackofficeController {
     private final TeamRepository teamRepository;
     private final LeagueRepository leagueRepository;
     private final LeagueConfigService leagueConfigService;
+    private final PlayerAdminService playerAdminService;
+    private final MemberDeleteService memberDeleteService;
 
     @GetMapping("/members")
     public Page<MemberRow> members(@RequestParam(required = false) String q, Pageable pageable) {
@@ -48,8 +60,7 @@ public class BackofficeController {
                                    @RequestParam(required = false) String league,
                                    Pageable pageable) {
         return playerRepository.searchForBackoffice(blankToNull(q), blankToNull(league), pageable)
-                .map(p -> new PlayerRow(p.getId(), p.getName(), p.getRealName(),
-                        p.getRole(), p.getAge()));
+                .map(PlayerRow::from);
     }
 
     @GetMapping("/teams")
@@ -88,11 +99,70 @@ public class BackofficeController {
                 leagueName, request.liveEnabled(), request.notificationEnabled(), request.syncEnabled()));
     }
 
+    // LCK 선수 한정 수정(이미지 = 수동 잠금 동반, 소속팀 변경). 서버에서 LCK 출전 이력 검증.
+    @PutMapping("/players/{id}")
+    public PlayerRow updatePlayer(@PathVariable Long id, @RequestBody PlayerUpdateRequest request) {
+        return PlayerRow.from(playerAdminService.update(
+                id, request.imageUrl(), request.unlockImage(), request.currentTeamId()));
+    }
+
+    @DeleteMapping("/members/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteMember(@PathVariable Long id) {
+        memberDeleteService.delete(id);
+    }
+
+    // 선수/팀은 경기 기록(game_participants) FK가 걸리면 삭제 불가 → DataIntegrityViolation → 409.
+    @DeleteMapping("/players/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deletePlayer(@PathVariable Long id) {
+        if (!playerRepository.existsById(id)) {
+            throw new NoSuchElementException("선수를 찾을 수 없습니다: " + id);
+        }
+        playerRepository.deleteById(id);
+    }
+
+    @DeleteMapping("/teams/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteTeam(@PathVariable Long id) {
+        if (!teamRepository.existsById(id)) {
+            throw new NoSuchElementException("팀을 찾을 수 없습니다: " + id);
+        }
+        teamRepository.deleteById(id);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, String> onConflict() {
+        return Map.of("message", "경기 기록 등 연관 데이터가 있어 삭제할 수 없습니다");
+    }
+
+    @ExceptionHandler(NoSuchElementException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, String> onNotFound(NoSuchElementException e) {
+        return Map.of("message", e.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> onBadRequest(IllegalStateException e) {
+        return Map.of("message", e.getMessage());
+    }
+
     public record MemberRow(Long id, String name, String email,
                             String favoriteLeagueName, LocalDateTime createdAt) {}
 
-    public record PlayerRow(Long id, String name, String realName,
-                            String role, Integer age) {}
+    public record PlayerRow(Long id, String name, String realName, String role, Integer age,
+                            String imageUrl, Long currentTeamId, String currentTeamName, boolean imageLocked) {
+        static PlayerRow from(Player p) {
+            var team = p.getCurrentTeam();
+            return new PlayerRow(p.getId(), p.getName(), p.getRealName(), p.getRole(), p.getAge(),
+                    p.getImageUrl(), team != null ? team.getId() : null,
+                    team != null ? team.getName() : null, p.isImageLocked());
+        }
+    }
+
+    public record PlayerUpdateRequest(String imageUrl, Boolean unlockImage, Long currentTeamId) {}
 
     public record TeamRow(Long id, String name, String code) {}
 
