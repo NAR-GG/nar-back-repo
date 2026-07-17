@@ -20,7 +20,8 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 	Optional<Player> findWithCurrentTeamById(Long id);
 
 	// 백오피스 검색: 선수명·실명 부분일치 + 리그 필터. q/league 가 null 이면 각 조건 무시.
-	// 리그는 출전 기록(GameParticipant→Game→League) 기준 EXISTS 로 판정(전 시즌 통합).
+	// 리그는 현재 소속팀(current_team)의 LeagueTeam 등록 기준 — 팀 검색과 동일 기준.
+	// (과거 출전 이력 EXISTS는 참가기록 16만행을 페이지마다 semijoin 스캔해서 느렸음. 무소속 선수는 리그 필터에서 제외됨.)
 	// currentTeam은 목록 응답에 팀명을 실어야 해서 EntityGraph로 함께 로딩(N+1/LAZY 예외 방지).
 	@EntityGraph(attributePaths = {"currentTeam"})
 	@Query("""
@@ -29,8 +30,8 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 			       OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
 			       OR LOWER(p.realName) LIKE LOWER(CONCAT('%', :q, '%')))
 			  AND (:league IS NULL
-			       OR EXISTS (SELECT 1 FROM GameParticipant gp
-			                  WHERE gp.player = p AND gp.game.league.leagueName = :league))
+			       OR EXISTS (SELECT 1 FROM LeagueTeam lt
+			                  WHERE lt.team = p.currentTeam AND lt.league.leagueName = :league))
 			""")
 	Page<Player> searchForBackoffice(@Param("q") String q, @Param("league") String league, Pageable pageable);
 
