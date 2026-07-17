@@ -33,4 +33,21 @@ class PlayerImageLockTest {
 		assertThat(player.getImageUrl()).isEqualTo("sync.png");
 		assertThat(player.isImageLocked()).isFalse();
 	}
+
+	@Test
+	@DisplayName("overrideGameAccounts는 계정을 바꾸고 잠근다; 이후 updateProfile(크롤러)은 gameAccounts만 보존한다")
+	void overrideGameAccounts_locksAgainstCrawler() {
+		Player player = Player.builder().name("Faker").build();
+
+		player.overrideGameAccounts("[{\"region\":\"KR\",\"riotId\":\"Hide on bush#KR1\",\"tier\":null}]");
+		assertThat(player.isGameAccountsLocked()).isTrue();
+
+		player.updateProfile("이상혁", "1996-05-07", 30, "MID", "[{\"riotId\":\"stale#OLD\"}]");
+		assertThat(player.getGameAccounts()).contains("Hide on bush#KR1"); // 계정은 보존
+		assertThat(player.getRealName()).isEqualTo("이상혁"); // 나머지 프로필은 갱신
+
+		player.unlockGameAccounts();
+		player.updateProfile("이상혁", "1996-05-07", 30, "MID", "[{\"riotId\":\"new#SYNC\"}]");
+		assertThat(player.getGameAccounts()).contains("new#SYNC");
+	}
 }

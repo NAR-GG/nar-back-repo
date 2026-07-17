@@ -1,10 +1,13 @@
 package com.toy.nar.app.participant.service;
 
+import java.util.List;
 import java.util.NoSuchElementException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toy.nar.api.admin.BackofficeController;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
@@ -24,9 +27,11 @@ public class PlayerAdminService {
 
 	private final PlayerRepository playerRepository;
 	private final TeamRepository teamRepository;
+	private final ObjectMapper objectMapper;
 
 	@Transactional
-	public Player update(Long playerId, String imageUrl, Boolean unlockImage, Long currentTeamId) {
+	public Player update(Long playerId, String imageUrl, Boolean unlockImage, Long currentTeamId,
+			Boolean unlockGameAccounts, List<BackofficeController.GameAccountEntry> gameAccounts) {
 		Player player = playerRepository.findWithCurrentTeamById(playerId)
 				.orElseThrow(() -> new NoSuchElementException("선수를 찾을 수 없습니다: " + playerId));
 		if (!playerRepository.hasLeagueParticipation(playerId, EDITABLE_LEAGUE)) {
@@ -37,11 +42,33 @@ public class PlayerAdminService {
 		} else if (imageUrl != null && !imageUrl.isBlank()) {
 			player.overrideImage(imageUrl.trim());
 		}
+		if (Boolean.TRUE.equals(unlockGameAccounts)) {
+			player.unlockGameAccounts();
+		} else if (gameAccounts != null) {
+			player.overrideGameAccounts(serializeGameAccounts(gameAccounts));
+		}
 		if (currentTeamId != null) {
 			Team team = teamRepository.findById(currentTeamId)
 					.orElseThrow(() -> new NoSuchElementException("팀을 찾을 수 없습니다: " + currentTeamId));
 			player.changeCurrentTeam(team);
 		}
 		return player;
+	}
+
+	// 크론 파서(RiotIdParser)가 읽는 형식 유지: [{"region","riotId","tier"}], riotId는 반드시 gameName#tagLine.
+	private String serializeGameAccounts(List<BackofficeController.GameAccountEntry> accounts) {
+		for (var acc : accounts) {
+			if (acc.region() == null || acc.region().isBlank()) {
+				throw new IllegalArgumentException("region은 비울 수 없습니다");
+			}
+			if (acc.riotId() == null || !acc.riotId().matches("^.+#.+$")) {
+				throw new IllegalArgumentException("riotId는 '이름#태그' 형식이어야 합니다: " + acc.riotId());
+			}
+		}
+		try {
+			return objectMapper.writeValueAsString(accounts);
+		} catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+			throw new IllegalArgumentException("계정 정보 직렬화 실패", e);
+		}
 	}
 }

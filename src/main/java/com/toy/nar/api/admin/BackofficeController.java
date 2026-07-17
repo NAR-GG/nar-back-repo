@@ -99,11 +99,12 @@ public class BackofficeController {
                 leagueName, request.liveEnabled(), request.notificationEnabled(), request.syncEnabled()));
     }
 
-    // LCK 선수 한정 수정(이미지 = 수동 잠금 동반, 소속팀 변경). 서버에서 LCK 출전 이력 검증.
+    // LCK 선수 한정 수정(이미지 = 수동 잠금 동반, 소속팀 변경, 솔랭 계정 수동 잠금). 서버에서 LCK 출전 이력 검증.
     @PutMapping("/players/{id}")
     public PlayerRow updatePlayer(@PathVariable Long id, @RequestBody PlayerUpdateRequest request) {
         return PlayerRow.from(playerAdminService.update(
-                id, request.imageUrl(), request.unlockImage(), request.currentTeamId()));
+                id, request.imageUrl(), request.unlockImage(), request.currentTeamId(),
+                request.unlockGameAccounts(), request.gameAccounts()));
     }
 
     @DeleteMapping("/members/{id}")
@@ -149,20 +150,31 @@ public class BackofficeController {
         return Map.of("message", e.getMessage());
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> onInvalidArgument(IllegalArgumentException e) {
+        return Map.of("message", e.getMessage());
+    }
+
     public record MemberRow(Long id, String name, String email,
                             String favoriteLeagueName, LocalDateTime createdAt) {}
 
     public record PlayerRow(Long id, String name, String realName, String role, Integer age,
-                            String imageUrl, Long currentTeamId, String currentTeamName, boolean imageLocked) {
+                            String imageUrl, Long currentTeamId, String currentTeamName, boolean imageLocked,
+                            String gameAccounts, boolean gameAccountsLocked) {
         static PlayerRow from(Player p) {
             var team = p.getCurrentTeam();
             return new PlayerRow(p.getId(), p.getName(), p.getRealName(), p.getRole(), p.getAge(),
                     p.getImageUrl(), team != null ? team.getId() : null,
-                    team != null ? team.getName() : null, p.isImageLocked());
+                    team != null ? team.getName() : null, p.isImageLocked(),
+                    p.getGameAccounts(), p.isGameAccountsLocked());
         }
     }
 
-    public record PlayerUpdateRequest(String imageUrl, Boolean unlockImage, Long currentTeamId) {}
+    public record GameAccountEntry(String region, String riotId, String tier) {}
+
+    public record PlayerUpdateRequest(String imageUrl, Boolean unlockImage, Long currentTeamId,
+                                      Boolean unlockGameAccounts, List<GameAccountEntry> gameAccounts) {}
 
     public record TeamRow(Long id, String name, String code) {}
 

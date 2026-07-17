@@ -64,6 +64,10 @@ public class Player {
 	@Column(name = "image_locked", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT FALSE")
 	private boolean imageLocked;
 
+	// true면 프로필 크롤러가 game_accounts를 덮어쓰지 못한다(updateProfile에서 보존).
+	@Column(name = "game_accounts_locked", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT FALSE")
+	private boolean gameAccountsLocked;
+
 	@Builder
 	public Player(String name, String imageUrl) {
 		this.name = Objects.requireNonNull(name, "Player name must not be null");
@@ -92,6 +96,16 @@ public class Player {
 		this.imageLocked = false;
 	}
 
+	// 백오피스 수동 수정: 계정 교체 + 크롤러 잠금.
+	public void overrideGameAccounts(String gameAccountsJson) {
+		this.gameAccounts = gameAccountsJson;
+		this.gameAccountsLocked = true;
+	}
+
+	public void unlockGameAccounts() {
+		this.gameAccountsLocked = false;
+	}
+
 	public void changeCurrentTeam(Team team) {
 		this.currentTeam = team;
 	}
@@ -102,6 +116,8 @@ public class Player {
 		this.birthDate = birthDate;
 		this.age = age;
 		this.role = role;
-		this.gameAccounts = gameAccounts;
+		if (!gameAccountsLocked) {
+			this.gameAccounts = gameAccounts;
+		}
 	}
 }
