@@ -51,8 +51,9 @@ public final class LeagueConstants {
             "WORLDS", "https://www.twitch.tv/riotgames",
             "MSI", "https://www.twitch.tv/riotgames",
             "FIRST_STAND", "https://www.twitch.tv/riotgames",
-            // EWC 2026 한국어 중계는 치지직 독점. 아래는 검증된 영어 공식 Twitch 채널 — 치지직 EWC 채널 ID 확보 시 교체.
-            "EWC", "https://www.twitch.tv/ewclol2026");
+            // EWC 2026 한국어 중계는 치지직 독점. "EWC 공식 채널B"가 LoL 담당(2026-07-18 라이브 방제로 검증).
+            // 대회 측 편성이 바뀌면 공식 채널 A~F 중 LoL 방제를 트는 채널로 교체 필요.
+            "EWC", "https://chzzk.naver.com/live/2b753bd5325fc34bba16d66659c67aa2");
 
     /**
      * 스트림 URL이 없는 리그의 기본 폴백 URL
@@ -97,7 +98,12 @@ public final class LeagueConstants {
             "chzzk", "치지직", "LPL 한국어 중계",
             "https://chzzk.naver.com/live/92b762ef6fac0cc8c68bc080868ad582");
 
-    /** EWC 2026 영어 공식 Twitch. 한국어는 치지직 독점이나 채널 ID 미확보 — 확보 시 치지직 링크를 앞에 추가. */
+    /** EWC 2026 한국어 공식 치지직 — "EWC 공식 채널B"가 LoL 담당(2026-07-18 라이브 방제로 검증). 편성 변경 시 A~F 중 LoL 채널로 교체. */
+    private static final StreamLink CHZZK_EWC = new StreamLink(
+            "chzzk", "치지직", "EWC 공식 · 한국어",
+            "https://chzzk.naver.com/live/2b753bd5325fc34bba16d66659c67aa2");
+
+    /** EWC 2026 영어 공식 Twitch. */
     private static final StreamLink TWITCH_EWC = new StreamLink(
             "twitch", "Twitch", "EWC 공식 · 영어",
             "https://www.twitch.tv/ewclol2026");
@@ -114,7 +120,7 @@ public final class LeagueConstants {
             "LPL", List.of(CHZZK_LPL),
             "LEC", List.of(new StreamLink("twitch", "Twitch", "LEC 공식", "https://www.twitch.tv/lec")),
             "LCS", List.of(new StreamLink("twitch", "Twitch", "LCS 공식", "https://www.twitch.tv/lcs")),
-            "EWC", List.of(TWITCH_EWC));
+            "EWC", List.of(CHZZK_EWC, TWITCH_EWC));
 
     /**
      * 리그의 중계 채널 목록 반환. 매핑이 없으면 SOOP 단일 링크로 폴백.
