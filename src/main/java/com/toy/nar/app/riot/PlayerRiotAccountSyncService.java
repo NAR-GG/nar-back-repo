@@ -110,6 +110,13 @@ public class PlayerRiotAccountSyncService {
 		});
 	}
 
+	// 백오피스 수동 수정 직후 단일 선수 즉시 동기화(실존 검증 겸용).
+	// KR 주계정이 없으면 검증할 게 없어 조용히 통과. 존재하지 않는 Riot ID면 RiotApiException(404) 전파.
+	public void syncPlayerAccountNow(Player player) {
+		riotApiClient.assertConfigured();
+		extractPrimaryKrAccount(player).ifPresent(candidate -> syncSinglePlayerAccount(player, candidate));
+	}
+
 	private Optional<PrimaryAccountCandidate> extractPrimaryKrAccount(Player player) {
 		if (player.getGameAccounts() == null || player.getGameAccounts().isBlank()) {
 			return Optional.empty();

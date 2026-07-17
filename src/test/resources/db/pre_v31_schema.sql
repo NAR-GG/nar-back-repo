@@ -17,8 +17,10 @@ CREATE TABLE champions (
     champion_id BIGINT AUTO_INCREMENT PRIMARY KEY
 );
 
+-- actual_game_start_time: 프로드에는 엔티티 시절부터 존재. V54 소속팀 백필이 참조한다.
 CREATE TABLE games (
-    game_id BIGINT AUTO_INCREMENT PRIMARY KEY
+    game_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    actual_game_start_time DATETIME
 );
 
 CREATE TABLE league_match (
@@ -34,9 +36,12 @@ CREATE TABLE game_team_stat (
     team_id BIGINT
 );
 
+-- player_id/game_id: 프로드에는 엔티티 시절부터 존재. V54 소속팀 백필이 참조한다.
 CREATE TABLE game_participants (
     participant_game_id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    team_id BIGINT
+    team_id BIGINT,
+    player_id BIGINT,
+    game_id BIGINT
 );
 
 CREATE TABLE league_teams (
