@@ -118,6 +118,34 @@ class LivePollingSchedulerTest {
 	}
 
 	@Test
+	void frameFinishedMarksGameFinishedInStore() {
+		// 프레임 finished 는 세트 상태(LIVE/ENDED) 표시의 1차 신호다. store 에 마킹해야
+		// 모바일 세트 목록이 stale 3분 잔상 동안 LIVE 로 남지 않는다. 푸시 게이트와 무관하게 마킹.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(false); // 푸시 꺼져 있어도
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+
+		scheduler.pollActiveGames();
+
+		assertThat(liveStateStore.isFinished("game-1")).isTrue();
+	}
+
+	@Test
+	void removeGameClearsFinishedMark() {
+		LiveStateStore liveStateStore = new LiveStateStore();
+		liveStateStore.markFinished("game-1");
+		assertThat(liveStateStore.isFinished("game-1")).isTrue();
+
+		liveStateStore.removeGame("game-1");
+
+		assertThat(liveStateStore.isFinished("game-1")).isFalse();
+	}
+
+	@Test
 	void firesSetEndImmediatelyWhenFrameGameStateFinished() {
 		LiveStateStore liveStateStore = new LiveStateStore();
 		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);

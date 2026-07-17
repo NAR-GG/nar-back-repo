@@ -202,10 +202,13 @@ public class MobileScheduleService {
 		// 세트별 다시보기 VOD URL (setNumber == gameOrder 기준). 없으면 빈 맵.
 		Map<Integer, String> vodMap = parseVodMap(match.getMatchDetailsJson());
 		// 상태 판정용 집합: 현재 라이브(스토어) / 라이브 데이터 수집됨(영속 스냅샷, 종료 후에도 유지).
+		// 프레임 finished 로 종료 확정된 게임은 stale 확정(3분)까지 store 에 남는 잔상이므로
+		// LIVE 에서 제외한다 — SET_END 푸시와 세트 상태가 같은 신호(프레임)를 보게 된다.
 		java.util.Set<String> liveGameIds = liveStateStore.getActiveGames().values().stream()
 				.filter(live -> match.getId().equals(live.matchId()))
 				.map(ActiveLiveGame::gameId)
 				.filter(gameId -> gameId != null && !gameId.isBlank())
+				.filter(gameId -> !liveStateStore.isFinished(gameId))
 				.collect(Collectors.toCollection(java.util.LinkedHashSet::new));
 		List<String> recordedGameIds = minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart(match.getId());
 		java.util.Set<String> recordedSet = new java.util.LinkedHashSet<>(recordedGameIds);
