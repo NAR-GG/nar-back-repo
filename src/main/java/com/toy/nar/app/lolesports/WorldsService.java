@@ -27,6 +27,7 @@ public class WorldsService {
 	private final WebClient webClient;
 	@Qualifier("applicationTaskExecutor")
 	private final Executor applicationTaskExecutor;
+	private final com.toy.nar.app.lolesports.stream.ChzzkLiveChannelResolver chzzkLiveChannelResolver;
 
 	private static final java.util.Map<String, String> LEAGUE_IDS = LeagueConstants.LEAGUE_IDS;
 
@@ -190,7 +191,12 @@ public class WorldsService {
 			String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
 			if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
 				String leagueSlug = LeagueConstants.fromApiSlug(event.path("league").path("slug").asText(""));
-				liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
+				// 동시 진행 리그(EWC A~F, LCK 동시 편성)는 방제 매칭으로 이 경기를 트는 채널을 찾고,
+				// 못 찾으면 기존 리그 기본 링크로 폴백한다.
+				liveStreamUrl = chzzkLiveChannelResolver.resolve(leagueSlug,
+								teamA.path("code").asText(null), teamA.path("name").asText(null),
+								teamB.path("code").asText(null), teamB.path("name").asText(null))
+						.orElseGet(() -> LeagueConstants.getLiveStreamUrl(leagueSlug));
 			}
 			return MatchResultDto.builder()
 					.matchId(eventId)
@@ -346,10 +352,13 @@ public class WorldsService {
 		}
 
 		String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
-		// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
+		// inProgress 상태인데 라이브 스트림 URL이 없으면: 방제 매칭 → 리그별 기본값 순으로 폴백
 		if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
 			String leagueSlug = LeagueConstants.fromApiSlug(event.path("league").path("slug").asText(""));
-			liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
+			liveStreamUrl = chzzkLiveChannelResolver.resolve(leagueSlug,
+							teamA.path("code").asText(null), teamA.path("name").asText(null),
+							teamB.path("code").asText(null), teamB.path("name").asText(null))
+					.orElseGet(() -> LeagueConstants.getLiveStreamUrl(leagueSlug));
 		}
 		return MatchResultDto.builder()
 				.matchId(eventId)
@@ -433,10 +442,13 @@ public class WorldsService {
 		}
 
 		String liveStreamUrl = findBestLiveStreamUrl(event.path("streams"));
-		// inProgress 상태인데 라이브 스트림 URL이 없으면 리그별 기본값 사용
+		// inProgress 상태인데 라이브 스트림 URL이 없으면: 방제 매칭 → 리그별 기본값 순으로 폴백
 		if ((liveStreamUrl == null || liveStreamUrl.isEmpty()) && "inProgress".equalsIgnoreCase(finalState)) {
 			String leagueSlug = LeagueConstants.fromApiSlug(event.path("league").path("slug").asText(""));
-			liveStreamUrl = LeagueConstants.getLiveStreamUrl(leagueSlug);
+			liveStreamUrl = chzzkLiveChannelResolver.resolve(leagueSlug,
+							teamA.path("code").asText(null), teamA.path("name").asText(null),
+							teamB.path("code").asText(null), teamB.path("name").asText(null))
+					.orElseGet(() -> LeagueConstants.getLiveStreamUrl(leagueSlug));
 		}
 		return MatchResultDto.builder()
 				.matchId(eventId)
