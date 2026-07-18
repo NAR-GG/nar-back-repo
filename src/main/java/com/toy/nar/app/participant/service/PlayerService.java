@@ -1,6 +1,7 @@
 package com.toy.nar.app.participant.service;
 
 import com.toy.nar.app.participant.dto.PlayerImageSyncResult;
+import com.toy.nar.app.player.LolesportsPlayerImageClient;
 import com.toy.nar.app.player.PlayerProfileCrawlerService;
 import com.toy.nar.app.player.PlayerProfileDto;
 import com.toy.nar.app.player.PlayerProfileSyncResult;
@@ -13,10 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -25,6 +25,7 @@ public class PlayerService {
 
 	private final PlayerRepository playerRepository;
 	private final PlayerProfileCrawlerService playerProfileCrawlerService;
+	private final LolesportsPlayerImageClient lolesportsPlayerImageClient;
 	private final ObjectMapper objectMapper;
 
 	@Transactional
@@ -53,36 +54,32 @@ public class PlayerService {
 		return players.size();
 	}
 
+	/**
+	 * LCK 선수 이미지를 LoL Esports getTeams API의 공식 프로필 사진으로 동기화.
+	 * API에 이미지가 없는 선수는 기존 이미지를 유지하고 실패 목록으로 보고한다.
+	 */
 	@Transactional
 	public PlayerImageSyncResult syncLckPlayerImages() {
 		List<Player> players = playerRepository.findPlayersByLeagueName("LCK");
-		List<String> failedPlayers = Collections.synchronizedList(new ArrayList<>());
+		Map<String, String> imagesByName = lolesportsPlayerImageClient.fetchPlayerImages();
+		List<String> failedPlayers = new ArrayList<>();
+		int successCount = 0;
 
-		// 1. 유효한 이미지 URL 매핑 정보 수집 (병렬)
-		Map<Player, String> validImages = players.parallelStream()
-				.map(player -> {
-					String name = player.getName();
-					String encodedName = name.replace(" ", "%20");
-					String imageUrl = "https://images.epromatch.com/lol/player/" + encodedName + ".png";
-
-					if (isImageAvailable(imageUrl)) {
-						return new java.util.AbstractMap.SimpleEntry<>(player, imageUrl);
-					} else {
-						failedPlayers.add(name);
-						return null;
-					}
-				})
-				.filter(java.util.Objects::nonNull)
-				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-		// 2. DB 업데이트 (순차)
-		validImages.forEach(Player::setImageUrl);
+		for (Player player : players) {
+			String imageUrl = imagesByName.get(player.getName().trim().toLowerCase(Locale.ROOT));
+			if (imageUrl != null) {
+				player.setImageUrl(imageUrl);
+				successCount++;
+			} else {
+				failedPlayers.add(player.getName());
+			}
+		}
 
 		return PlayerImageSyncResult.builder()
 				.totalTarget(players.size())
-				.successCount(validImages.size())
+				.successCount(successCount)
 				.failCount(failedPlayers.size())
-				.failedPlayerNames(new ArrayList<>(failedPlayers))
+				.failedPlayerNames(failedPlayers)
 				.build();
 	}
 
@@ -138,22 +135,6 @@ public class PlayerService {
 		} catch (Exception e) {
 			log.warn("Failed to convert gameAccounts to JSON", e);
 			return null;
-		}
-	}
-
-	private boolean isImageAvailable(String urlString) {
-		try {
-			java.net.URL url = new java.net.URL(urlString);
-			java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
-			connection.setRequestMethod("HEAD");
-			connection.setConnectTimeout(1000);
-			connection.setReadTimeout(1000);
-			connection.setRequestProperty("User-Agent", "Mozilla/5.0");
-
-			int responseCode = connection.getResponseCode();
-			return (responseCode == 200);
-		} catch (Exception e) {
-			return false;
 		}
 	}
 }
