@@ -48,6 +48,8 @@ public class LivePollingScheduler {
 	private final CacheEvictionService cacheEvictionService;
 	private final NotificationService notificationService;
 	private final com.toy.nar.app.mobile.push.TeamLiveEventPushService teamLiveEventPushService;
+	@org.springframework.beans.factory.annotation.Qualifier("applicationTaskExecutor")
+	private final java.util.concurrent.Executor applicationTaskExecutor;
 
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.stale-threshold-ms:180000}")
 	private long staleThresholdMs;
@@ -349,21 +351,26 @@ public class LivePollingScheduler {
 		return index < 0 ? null : index + 1;
 	}
 
-	/** [FCM #21] SET_END 푸시. 매치 단위 프레이밍이라 매치 기준 esportsTeamId 로 양 팀 구독자에게 발송(dedup 1회). */
+	/**
+	 * [FCM #21] SET_END 푸시. 매치 단위 프레이밍이라 매치 기준 esportsTeamId 로 양 팀 구독자에게 발송(dedup 1회).
+	 * 스코어 라인이 업스트림 재시도(수 초 sleep)를 할 수 있어 폴링 스레드가 아니라 executor 에서 보낸다.
+	 */
 	private void fireSetEndNotification(ActiveLiveGame activeGame) {
-		try {
-			teamLiveEventPushService.notifyMatchEvent(
-					com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_END,
-					activeGame.matchId(),
-					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
-					activeGame.blueEsportsTeamId(),
-					activeGame.redEsportsTeamId(),
-					activeGame.blueTeamName(),
-					activeGame.redTeamName());
-		} catch (Exception e) {
-			log.warn("[live-notify] set-end FCM failed gameId={} matchId={}: {}",
-					activeGame.gameId(), activeGame.matchId(), e.getMessage());
-		}
+		applicationTaskExecutor.execute(() -> {
+			try {
+				teamLiveEventPushService.notifyMatchEvent(
+						com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_END,
+						activeGame.matchId(),
+						activeGame.setNumber() != null ? activeGame.setNumber() : 0,
+						activeGame.blueEsportsTeamId(),
+						activeGame.redEsportsTeamId(),
+						activeGame.blueTeamName(),
+						activeGame.redTeamName());
+			} catch (Exception e) {
+				log.warn("[live-notify] set-end FCM failed gameId={} matchId={}: {}",
+						activeGame.gameId(), activeGame.matchId(), e.getMessage());
+			}
+		});
 	}
 
 	private Set<String> activeMatchIds(Map<String, ActiveLiveGame> activeGames) {

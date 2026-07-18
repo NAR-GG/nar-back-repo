@@ -51,9 +51,17 @@ public class TeamLiveEventPushService {
 	private final LeagueMatchRepository leagueMatchRepository;
 	private final MobilePushGateway pushGateway;
 	private final MemberNotificationService notificationService;
+	private final com.toy.nar.app.lolesports.WorldsService worldsService;
 
 	@Value("${live.notification.fcm.enabled:false}")
 	private boolean fcmNotificationEnabled;
+
+	/** SET_END 스코어가 방금 끝난 세트를 반영할 때까지의 업스트림 재조회 횟수/간격. */
+	@Value("${live.notification.set-end-score.retry-attempts:3}")
+	private int scoreRetryAttempts;
+
+	@Value("${live.notification.set-end-score.retry-delay-ms:4000}")
+	private long scoreRetryDelayMs;
 
 	public boolean isEnabled() {
 		return fcmNotificationEnabled;
@@ -73,9 +81,10 @@ public class TeamLiveEventPushService {
 		if (!isReady() || matchId == null || matchId.isBlank()) {
 			return;
 		}
-		// SET_END 는 매치 스코어를 함께 보여준다. 같은 폴링 사이클에서 스코어 sync 가
-		// 발송보다 먼저 실행되므로 대부분 최신이지만, 합계가 0이면(미동기화) 생략한다.
-		String matchScoreLine = TYPE_SET_END.equals(eventType) ? buildMatchScoreLine(matchId) : null;
+		// SET_END 는 매치 스코어를 함께 보여준다. 세트 N 종료 시점의 스코어 합은 반드시 N —
+		// DB 가 아직 이번 세트를 반영 못 했으면(업스트림 지연·EWC unstarted 방치) 업스트림을
+		// 직접 재조회하고, 그래도 stale 이면 틀린 스코어 대신 생략한다.
+		String matchScoreLine = TYPE_SET_END.equals(eventType) ? buildMatchScoreLine(matchId, setNumber) : null;
 		notifyTeamSide(eventType, matchId, setNumber, NO_EVENT_ORDER,
 				blueEsportsTeamId, blueTeamName, redTeamName, true, matchScoreLine);
 		notifyTeamSide(eventType, matchId, setNumber, NO_EVENT_ORDER,
@@ -132,24 +141,56 @@ public class TeamLiveEventPushService {
 		}
 	}
 
-	/** 발송 직전 DB 매치 스코어로 "T1 1 vs 2 HLE" 라인을 만든다. 스코어가 아직 0:0 이면 null. */
-	private String buildMatchScoreLine(String matchId) {
+	/**
+	 * 발송 직전 매치 스코어로 "T1 1 vs 2 HLE" 라인을 만든다.
+	 *
+	 * <p>세트 {@code endedSetNumber} 종료 푸시라면 스코어 합이 정확히 그 세트 수여야 한다.
+	 * DB(60초 디스커버리 sync)가 방금 끝난 세트를 아직 반영 못 했으면 getEventDetails 를
+	 * 짧게 재시도하며 직접 조회하고, 그래도 합이 모자라면 stale 스코어를 보여주는 대신 null 을
+	 * 돌려 스코어 없이 발송한다. 세트 번호를 모르면(0 이하) 기존처럼 합>0 인 DB 값을 쓴다.</p>
+	 */
+	String buildMatchScoreLine(String matchId, int endedSetNumber) {
 		try {
-			return leagueMatchRepository.findById(matchId)
-					.map(match -> {
-						Integer blueScore = match.getBlueScore();
-						Integer redScore = match.getRedScore();
-						if (blueScore == null || redScore == null || blueScore + redScore <= 0) {
-							return null;
-						}
-						return matchup(match.getBlueTeamName(), match.getRedTeamName())
-								.replace(" vs ", " " + blueScore + " vs " + redScore + " ");
-					})
-					.orElse(null);
+			var match = leagueMatchRepository.findById(matchId).orElse(null);
+			if (match == null) {
+				return null;
+			}
+			Integer blueScore = match.getBlueScore();
+			Integer redScore = match.getRedScore();
+			int dbSum = (blueScore == null ? 0 : blueScore) + (redScore == null ? 0 : redScore);
+
+			if (endedSetNumber <= 0) {
+				return dbSum > 0 ? scoreLine(match.getBlueTeamName(), blueScore, redScore, match.getRedTeamName()) : null;
+			}
+			if (dbSum >= endedSetNumber) {
+				return scoreLine(match.getBlueTeamName(), blueScore, redScore, match.getRedTeamName());
+			}
+
+			// DB stale — 업스트림이 방금 끝난 세트를 반영할 때까지 짧게 재시도.
+			for (int attempt = 0; attempt < scoreRetryAttempts; attempt++) {
+				if (attempt > 0 && scoreRetryDelayMs > 0) {
+					Thread.sleep(scoreRetryDelayMs);
+				}
+				int[] wins = worldsService.fetchMatchGameWins(matchId);
+				if (wins != null && wins[0] + wins[1] >= endedSetNumber) {
+					return scoreLine(match.getBlueTeamName(), wins[0], wins[1], match.getRedTeamName());
+				}
+			}
+			log.warn("Set-end score still stale after retries. matchId={} endedSet={} dbScore={}:{}",
+					matchId, endedSetNumber, blueScore, redScore);
+			return null;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return null;
 		} catch (Exception e) {
 			log.warn("Failed to load match score for set-end push matchId={}", matchId, e);
 			return null;
 		}
+	}
+
+	private String scoreLine(String blueTeamName, Integer blueScore, Integer redScore, String redTeamName) {
+		return matchup(blueTeamName, redTeamName)
+				.replace(" vs ", " " + blueScore + " vs " + redScore + " ");
 	}
 
 	/**
