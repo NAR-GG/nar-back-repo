@@ -37,21 +37,21 @@ class TeamRepositorySearchTest {
 		teamRepository.save(Team.builder().name("T1").code("T1").build());
 
 		// null → 전체
-		assertThat(teamRepository.searchForBackoffice(null, null, PageRequest.of(0, 10)).getTotalElements())
+		assertThat(teamRepository.searchForBackoffice(null, PageRequest.of(0, 10)).getTotalElements())
 				.isEqualTo(3);
 
 		// 팀명 부분일치(소문자 입력도 매칭)
-		List<String> byName = teamRepository.searchForBackoffice("gen", null, PageRequest.of(0, 10))
+		List<String> byName = teamRepository.searchForBackoffice("gen", PageRequest.of(0, 10))
 				.map(Team::getName).getContent();
 		assertThat(byName).containsExactly("Gen.G");
 
 		// 코드 부분일치
-		List<String> byCode = teamRepository.searchForBackoffice("dk", null, PageRequest.of(0, 10))
+		List<String> byCode = teamRepository.searchForBackoffice("dk", PageRequest.of(0, 10))
 				.map(Team::getName).getContent();
 		assertThat(byCode).containsExactly("Dplus KIA");
 
 		// 매칭 없음
-		Page<Team> none = teamRepository.searchForBackoffice("zzz", null, PageRequest.of(0, 10));
+		Page<Team> none = teamRepository.searchForBackoffice("zzz", PageRequest.of(0, 10));
 		assertThat(none.getTotalElements()).isZero();
 	}
 
@@ -84,17 +84,17 @@ class TeamRepositorySearchTest {
 		em.clear();
 
 		// LCK 출전 팀만
-		List<String> lckTeams = teamRepository.searchForBackoffice(null, "LCK", PageRequest.of(0, 10))
+		List<String> lckTeams = teamRepository.searchForBackofficeInLeague(null, "LCK", PageRequest.of(0, 10))
 				.map(Team::getName).getContent();
 		assertThat(lckTeams).containsExactlyInAnyOrder("Gen.G", "T1");
 
 		// LCK + q 결합
-		List<String> lckGen = teamRepository.searchForBackoffice("gen", "LCK", PageRequest.of(0, 10))
+		List<String> lckGen = teamRepository.searchForBackofficeInLeague("gen", "LCK", PageRequest.of(0, 10))
 				.map(Team::getName).getContent();
 		assertThat(lckGen).containsExactly("Gen.G");
 
 		// 출전 팀 없는 리그
-		assertThat(teamRepository.searchForBackoffice(null, "LEC", PageRequest.of(0, 10)).getTotalElements())
+		assertThat(teamRepository.searchForBackofficeInLeague(null, "LEC", PageRequest.of(0, 10)).getTotalElements())
 				.isZero();
 	}
 
