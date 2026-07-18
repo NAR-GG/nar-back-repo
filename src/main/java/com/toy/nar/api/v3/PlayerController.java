@@ -43,7 +43,7 @@ public class PlayerController {
 		return ResponseEntity.ok("Player image updated successfully.");
 	}
 
-	@Operation(summary = "LCK 선수 이미지 URL 일괄 동기화", description = "LCK 선수들의 이미지 URL을 확인하고 유효한 경우 업데이트하며, 실패한 선수 목록을 반환합니다.")
+	@Operation(summary = "LCK 선수 이미지 URL 일괄 동기화", description = "LoL Esports getTeams API의 공식 프로필 사진으로 LCK 선수 이미지를 동기화하고, 매칭 실패한 선수 목록을 반환합니다.")
 	@PostMapping("/sync-images")
 	public ResponseEntity<PlayerImageSyncResult> syncLckPlayerImages() {
 		PlayerImageSyncResult result = playerService.syncLckPlayerImages();
