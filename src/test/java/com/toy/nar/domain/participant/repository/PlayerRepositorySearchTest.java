@@ -55,21 +55,21 @@ class PlayerRepositorySearchTest {
 	@Test
 	@DisplayName("league를 주면 그 리그 출전 기록이 있는 선수만 나온다")
 	void searchForBackoffice_filtersByParticipationLeague() {
-		List<String> lckPlayers = playerRepository.searchForBackoffice(null, "LCK", PageRequest.of(0, 10))
+		List<String> lckPlayers = playerRepository.searchForBackofficeInLeague(null, "LCK", PageRequest.of(0, 10))
 				.map(Player::getName).getContent();
 		assertThat(lckPlayers).containsExactly("Chovy");
 
 		// league 없으면 전체(출전 기록 없는 선수 포함)
-		assertThat(playerRepository.searchForBackoffice(null, null, PageRequest.of(0, 10)).getTotalElements())
+		assertThat(playerRepository.searchForBackoffice(null, PageRequest.of(0, 10)).getTotalElements())
 				.isEqualTo(3);
 
 		// q 결합
-		List<String> lckCho = playerRepository.searchForBackoffice("cho", "LCK", PageRequest.of(0, 10))
+		List<String> lckCho = playerRepository.searchForBackofficeInLeague("cho", "LCK", PageRequest.of(0, 10))
 				.map(Player::getName).getContent();
 		assertThat(lckCho).containsExactly("Chovy");
 
 		// LPL만 뛴 선수는 LCK 필터에 안 걸린다
-		List<String> lpl = playerRepository.searchForBackoffice(null, "LPL", PageRequest.of(0, 10))
+		List<String> lpl = playerRepository.searchForBackofficeInLeague(null, "LPL", PageRequest.of(0, 10))
 				.map(Player::getName).getContent();
 		assertThat(lpl).containsExactly("Xiaohu");
 	}

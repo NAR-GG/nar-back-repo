@@ -61,16 +61,23 @@ public class BackofficeController {
     public Page<PlayerRow> players(@RequestParam(required = false) String q,
                                    @RequestParam(required = false) String league,
                                    Pageable pageable) {
-        return playerRepository.searchForBackoffice(blankToNull(q), blankToNull(league), pageable)
-                .map(PlayerRow::from);
+        // 리그 유무로 쿼리 분리 — "(:league IS NULL OR EXISTS)" 단일 쿼리는 semijoin이 막혀 1.7초/쿼리.
+        String leagueParam = blankToNull(league);
+        Page<com.toy.nar.domain.participant.entity.Player> page = (leagueParam == null)
+                ? playerRepository.searchForBackoffice(blankToNull(q), pageable)
+                : playerRepository.searchForBackofficeInLeague(blankToNull(q), leagueParam, pageable);
+        return page.map(PlayerRow::from);
     }
 
     @GetMapping("/teams")
     public Page<TeamRow> teams(@RequestParam(required = false) String q,
                                @RequestParam(required = false) String league,
                                Pageable pageable) {
-        return teamRepository.searchForBackoffice(blankToNull(q), blankToNull(league), pageable)
-                .map(t -> new TeamRow(t.getId(), t.getName(), t.getCode()));
+        String leagueParam = blankToNull(league);
+        Page<com.toy.nar.domain.participant.entity.Team> page = (leagueParam == null)
+                ? teamRepository.searchForBackoffice(blankToNull(q), pageable)
+                : teamRepository.searchForBackofficeInLeague(blankToNull(q), leagueParam, pageable);
+        return page.map(t -> new TeamRow(t.getId(), t.getName(), t.getCode()));
     }
 
     // 리그 필터 옵션. 실제 데이터에 존재하는 리그명(전 시즌) distinct.

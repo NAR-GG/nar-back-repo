@@ -19,10 +19,7 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 	@EntityGraph(attributePaths = {"currentTeam"})
 	Optional<Player> findWithCurrentTeamById(Long id);
 
-	// 백오피스 검색: 선수명·실명 부분일치 + 리그 필터. q/league 가 null 이면 각 조건 무시.
-	// 리그는 출전 기록(GameParticipant→Game→League) 기준 EXISTS(전 시즌 통합).
-	// ⚠️ league_teams 기준으로 바꾸지 말 것: 해당 테이블은 오염돼 있음(LCK에 462팀 등록돼 필터가 전체 통과).
-	//    데이터 정리 전까지 출전 기록이 유일하게 신뢰 가능한 리그 판정.
+	// 백오피스 검색(리그 필터 없음): 선수명·실명 부분일치. q 가 null 이면 전체.
 	// currentTeam은 목록 응답에 팀명을 실어야 해서 EntityGraph로 함께 로딩(N+1/LAZY 예외 방지).
 	@EntityGraph(attributePaths = {"currentTeam"})
 	@Query("""
@@ -30,11 +27,24 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 			WHERE (:q IS NULL
 			       OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
 			       OR LOWER(p.realName) LIKE LOWER(CONCAT('%', :q, '%')))
-			  AND (:league IS NULL
-			       OR EXISTS (SELECT 1 FROM GameParticipant gp
-			                  WHERE gp.player = p AND gp.game.league.leagueName = :league))
 			""")
-	Page<Player> searchForBackoffice(@Param("q") String q, @Param("league") String league, Pageable pageable);
+	Page<Player> searchForBackoffice(@Param("q") String q, Pageable pageable);
+
+	// 백오피스 검색(리그 필터): 출전 기록(GameParticipant→Game→League) 기준 EXISTS(전 시즌 통합).
+	// ⚠️ 리그 없는 검색과 합쳐서 "(:league IS NULL OR EXISTS …)" 한 방 쿼리로 만들지 말 것:
+	//    EXISTS가 OR 안에 들어가면 MySQL이 semijoin 변환을 못 해 선수마다 상관 서브쿼리가 돌아
+	//    쿼리당 1.7초(참가기록 14.7만행 순회)가 걸렸다. 순수 AND 조건이면 93ms.
+	// ⚠️ league_teams 기준으로 바꾸지 말 것: 오염돼 있음(LCK에 462팀 등록 → 필터 전체 통과).
+	@EntityGraph(attributePaths = {"currentTeam"})
+	@Query("""
+			SELECT p FROM Player p
+			WHERE (:q IS NULL
+			       OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
+			       OR LOWER(p.realName) LIKE LOWER(CONCAT('%', :q, '%')))
+			  AND EXISTS (SELECT 1 FROM GameParticipant gp
+			              WHERE gp.player = p AND gp.game.league.leagueName = :league)
+			""")
+	Page<Player> searchForBackofficeInLeague(@Param("q") String q, @Param("league") String league, Pageable pageable);
 
 	// 해당 리그 출전 이력 여부. 백오피스 선수 수정의 "LCK만 허용" 서버 검증에 사용.
 	@Query("""
