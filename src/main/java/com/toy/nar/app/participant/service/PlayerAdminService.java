@@ -59,6 +59,32 @@ public class PlayerAdminService {
 		return player;
 	}
 
+	// 솔랭 전용 선수 등록: LCK 출전 이력 없이도 생성 가능(update 경로와 달리 참여 검증 안 함).
+	// Riot 404 등 예외는 트랜잭션 롤백 → Player 삽입도 취소된다.
+	@Transactional
+	public Player createSoloRankPlayer(String name, String imageUrl, String riotId) {
+		if (name == null || name.isBlank()) {
+			throw new IllegalArgumentException("선수명은 비울 수 없습니다");
+		}
+		// 중복 검사와 insert 모두 동일한 정규화 값을 사용해 UNIQUE 제약 회피 오탐을 방지한다.
+		String trimmedName = name.trim();
+		if (riotId == null || !riotId.matches("^.+#.+$")) {
+			throw new IllegalArgumentException("riotId는 '이름#태그' 형식이어야 합니다: " + riotId);
+		}
+		if (playerRepository.findByName(trimmedName).isPresent()) {
+			throw new IllegalStateException("이미 존재하는 선수입니다: " + trimmedName);
+		}
+		Player player = playerRepository.save(Player.builder()
+				.name(trimmedName)
+				.imageUrl(imageUrl == null || imageUrl.isBlank() ? null : imageUrl.trim())
+				.build());
+		// serializeGameAccounts 재사용: Jackson ObjectMapper가 이스케이프를 보장한다.
+		player.overrideGameAccounts(serializeGameAccounts(List.of(
+				new BackofficeController.GameAccountEntry("KR", riotId, null))));
+		playerRiotAccountSyncService.resolveAndSaveInCurrentTransaction(player, riotId);
+		return player;
+	}
+
 	// 크론 파서(RiotIdParser)가 읽는 형식 유지: [{"region","riotId","tier"}], riotId는 반드시 gameName#tagLine.
 	private String serializeGameAccounts(List<BackofficeController.GameAccountEntry> accounts) {
 		for (var acc : accounts) {

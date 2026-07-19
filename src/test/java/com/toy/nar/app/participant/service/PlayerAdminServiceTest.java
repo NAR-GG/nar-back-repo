@@ -155,4 +155,50 @@ class PlayerAdminServiceTest {
 
 		verify(playerRiotAccountSyncService, never()).syncPlayerAccountNow(any());
 	}
+
+	@Test
+	@DisplayName("솔랭 전용 선수 생성: Player 저장 + 계정 해석 호출")
+	void createsSoloRankPlayer() throws Exception {
+		when(playerRepository.findByName("Deft")).thenReturn(java.util.Optional.empty());
+		when(playerRepository.save(any(Player.class))).thenAnswer(inv -> inv.getArgument(0));
+		when(objectMapper.writeValueAsString(any()))
+				.thenReturn("[{\"region\":\"KR\",\"riotId\":\"Deft#8366\",\"tier\":null}]");
+
+		Player created = playerAdminService.createSoloRankPlayer("Deft", null, "Deft#8366");
+
+		assertThat(created.getName()).isEqualTo("Deft");
+		assertThat(created.getGameAccounts()).contains("Deft#8366");
+		assertThat(created.isGameAccountsLocked()).isTrue();
+		verify(playerRiotAccountSyncService).resolveAndSaveInCurrentTransaction(created, "Deft#8366");
+	}
+
+	@Test
+	@DisplayName("중복 이름이면 IllegalStateException")
+	void rejectsDuplicateName() {
+		when(playerRepository.findByName("Deft")).thenReturn(java.util.Optional.of(new Player("Deft", null)));
+
+		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft", null, "Deft#8366"))
+				.isInstanceOf(IllegalStateException.class);
+		verify(playerRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("riotId 형식 오류면 IllegalArgumentException")
+	void rejectsInvalidSoloRankRiotId() {
+		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft", null, "NoHashTag"))
+				.isInstanceOf(IllegalArgumentException.class);
+		verify(playerRiotAccountSyncService, never()).resolveAndSaveInCurrentTransaction(any(), any());
+	}
+
+	@Test
+	@DisplayName("뒤 공백 포함 이름이 trim 후 기존 선수명과 충돌하면 IllegalStateException")
+	void rejectsDuplicateNameWithTrailingSpace() {
+		// "Deft " 입력 → trim 후 "Deft" 로 중복 검사 → 기존 선수 존재 → IllegalStateException
+		when(playerRepository.findByName("Deft")).thenReturn(java.util.Optional.of(new Player("Deft", null)));
+
+		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft ", null, "Deft#8366"))
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("Deft");
+		verify(playerRepository, never()).save(any());
+	}
 }

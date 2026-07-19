@@ -53,6 +53,9 @@ public class MobilePlayerSubscriptionService {
 						option -> option,
 						(existing, ignored) -> existing,
 						LinkedHashMap::new));
+		// LCK 옵션이 없는(은퇴/비출전) 구독 선수는 계정 기준 옵션으로 보완한다.
+		playerRepository.findSoloRankPlayerOptionsByPlayerIds(playerIds)
+				.forEach(option -> playerOptions.putIfAbsent(option.getPlayerId(), option));
 
 		return subscriptions.stream()
 				.map(subscription -> playerOptions.get(subscription.getPlayer().getId()))
@@ -130,8 +133,11 @@ public class MobilePlayerSubscriptionService {
 	private PlayerRepository.LckPlayerOption requireLckPlayer(Long playerId) {
 		return playerRepository.findLckPlayerOption(LEAGUE_NAME, CURRENT_SEASON_YEAR, playerId).stream()
 				.findFirst()
+				.or(() -> playerRepository
+						.findSoloRankPlayerOptionsByPlayerIds(Set.of(playerId)).stream()
+						.findFirst())
 				.orElseThrow(() -> new ResponseStatusException(
 						HttpStatus.BAD_REQUEST,
-						"현재 LCK 소속 선수가 아닙니다."));
+						"구독 가능한 선수가 아닙니다."));
 	}
 }

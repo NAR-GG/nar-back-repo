@@ -64,6 +64,23 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 		"WHERE l.leagueName = :leagueName")
 	List<Player> findPlayersByLeagueName(@Param("leagueName") String leagueName);
 
+	// 솔랭 계정 sync 대상: 해당 리그 출전자 ∪ 유효 계정(enabled·primaryAccount·KR) 보유자(비출전 은퇴 선수 포함).
+	// OR-EXISTS라 semijoin이 안 되지만, 하루 1회 배치이고 대상 수가 적어 성능 영향 없다.
+	// ⚠️ 계정 서브쿼리에 자격 조건(enabled=true, primaryAccount=true, platform='KR') 필수.
+	//    조건 없으면 비활성(enabled=false) 계정 보유자도 포함되어
+	//    sync가 extractPrimaryKrAccount로 재해석 후 enabled=true 로 되돌리는 버그 발생.
+	@Query("""
+			SELECT DISTINCT p FROM Player p
+			WHERE EXISTS (SELECT 1 FROM GameParticipant gp
+			              WHERE gp.player = p AND gp.game.league.leagueName = :leagueName)
+			   OR EXISTS (SELECT 1 FROM PlayerRiotAccount pra
+			              WHERE pra.player = p
+			                AND pra.enabled = true
+			                AND pra.primaryAccount = true
+			                AND pra.platform = 'KR')
+			""")
+	List<Player> findSoloRankSyncTargets(@Param("leagueName") String leagueName);
+
 	@Query("""
 			SELECT DISTINCT p
 			FROM GameParticipant gp
@@ -117,6 +134,30 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 						JOIN teams t ON gp.team_id = t.team_id
 						WHERE l.league_name = :leagueName
 						  AND l.season_year = :year
+						UNION ALL
+						SELECT
+							p.player_id AS playerId,
+							p.player_name AS playerName,
+							p.image_url AS playerImageUrl,
+							p.role AS role,
+							NULL AS teamId,
+							NULL AS teamCode,
+							NULL AS teamName,
+							NULL AS teamImageUrl,
+							1 AS rn
+						FROM players p
+						JOIN player_riot_account pra ON pra.player_id = p.player_id
+						WHERE pra.enabled = true
+						  AND pra.primary_account = true
+						  AND pra.platform = 'KR'
+						  AND NOT EXISTS (
+							  SELECT 1 FROM game_participants gp2
+							  JOIN games g2 ON gp2.game_id = g2.game_id
+							  JOIN leagues l2 ON g2.league_id = l2.league_id
+							  WHERE gp2.player_id = p.player_id
+							    AND l2.league_name = :leagueName
+							    AND l2.season_year = :year
+						  )
 					) ranked
 					WHERE ranked.rn = 1
 					  AND (:teamId IS NULL OR ranked.teamId = :teamId)
@@ -134,6 +175,7 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 					SELECT COUNT(*)
 					FROM (
 						SELECT
+							p.player_id AS playerId,
 							p.player_name AS playerName,
 							t.team_id AS teamId,
 							ROW_NUMBER() OVER (
@@ -147,6 +189,25 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 						JOIN teams t ON gp.team_id = t.team_id
 						WHERE l.league_name = :leagueName
 						  AND l.season_year = :year
+						UNION ALL
+						SELECT
+							p.player_id AS playerId,
+							p.player_name AS playerName,
+							NULL AS teamId,
+							1 AS rn
+						FROM players p
+						JOIN player_riot_account pra ON pra.player_id = p.player_id
+						WHERE pra.enabled = true
+						  AND pra.primary_account = true
+						  AND pra.platform = 'KR'
+						  AND NOT EXISTS (
+							  SELECT 1 FROM game_participants gp2
+							  JOIN games g2 ON gp2.game_id = g2.game_id
+							  JOIN leagues l2 ON g2.league_id = l2.league_id
+							  WHERE gp2.player_id = p.player_id
+							    AND l2.league_name = :leagueName
+							    AND l2.season_year = :year
+						  )
 					) ranked
 					WHERE ranked.rn = 1
 					  AND (:teamId IS NULL OR ranked.teamId = :teamId)
@@ -227,6 +288,25 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 			@Param("leagueName") String leagueName,
 			@Param("year") int year,
 			@Param("playerIds") Set<Long> playerIds);
+
+	// 솔랭 전용 선수(계정 보유, 팀 없음)를 LckPlayerOption으로 투영. 구독 표시/검증 병합용.
+	@Query(value = """
+			SELECT p.player_id AS playerId,
+			       p.player_name AS playerName,
+			       p.image_url AS playerImageUrl,
+			       p.role AS role,
+			       NULL AS teamId,
+			       NULL AS teamCode,
+			       NULL AS teamName,
+			       NULL AS teamImageUrl
+			FROM players p
+			JOIN player_riot_account pra ON pra.player_id = p.player_id
+			WHERE pra.enabled = true
+			  AND pra.primary_account = true
+			  AND pra.platform = 'KR'
+			  AND p.player_id IN (:playerIds)
+			""", nativeQuery = true)
+	List<LckPlayerOption> findSoloRankPlayerOptionsByPlayerIds(@Param("playerIds") Set<Long> playerIds);
 
 	interface LckPlayerOption {
 		Long getPlayerId();

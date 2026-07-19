@@ -9,6 +9,7 @@ import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -131,10 +132,11 @@ class MobilePlayerSubscriptionServiceTest {
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
 		when(playerRepository.findById(99L)).thenReturn(Optional.of(player));
 		when(playerRepository.findLckPlayerOption("LCK", 2026, 99L)).thenReturn(List.of());
+		when(playerRepository.findSoloRankPlayerOptionsByPlayerIds(Set.of(99L))).thenReturn(List.of());
 
 		assertThatThrownBy(() -> service.subscribe(7L, 99L))
 				.isInstanceOf(ResponseStatusException.class)
-				.hasMessageContaining("LCK");
+				.hasMessageContaining("구독 가능한");
 
 		verify(subscriptionRepository, never()).save(any());
 	}
@@ -159,6 +161,63 @@ class MobilePlayerSubscriptionServiceTest {
 		assertThatThrownBy(() -> service.getSubscriptions(null))
 				.isInstanceOf(ResponseStatusException.class)
 				.hasMessageContaining("로그인");
+	}
+
+	@Test
+	@DisplayName("솔랭 전용 구독 선수(2026 LCK 미출전)도 getSubscriptions에 표시된다")
+	void showsSoloRankOnlySubscription() {
+		Member member = member(7L);
+		Player deft = player(9L, "Deft");
+		MemberFavoritePlayer sub = MemberFavoritePlayer.builder().member(member).player(deft).build();
+		PlayerRepository.LckPlayerOption soloOption = option(9L, "Deft", null, null, null);
+
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(subscriptionRepository.findAllByMember_Id(7L)).thenReturn(List.of(sub));
+		when(playerRepository.findLckPlayerOptionsByPlayerIds("LCK", 2026, Set.of(9L)))
+				.thenReturn(List.of());
+		when(playerRepository.findSoloRankPlayerOptionsByPlayerIds(Set.of(9L)))
+				.thenReturn(List.of(soloOption));
+
+		List<PlayerSubscriptionResponse> response = service.getSubscriptions(7L);
+
+		assertThat(response).extracting(PlayerSubscriptionResponse::playerName).containsExactly("Deft");
+	}
+
+	@Test
+	@DisplayName("subscribe: LCK 옵션 없어도 솔랭 전용 옵션이 있으면 구독 성공")
+	void subscribesSoloRankOnlyPlayer() {
+		Member member = member(7L);
+		Player deft = player(9L, "Deft");
+		PlayerRepository.LckPlayerOption soloOption = option(9L, "Deft", null, null, null);
+
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(playerRepository.findById(9L)).thenReturn(Optional.of(deft));
+		when(playerRepository.findLckPlayerOption("LCK", 2026, 9L)).thenReturn(List.of());
+		when(playerRepository.findSoloRankPlayerOptionsByPlayerIds(Set.of(9L)))
+				.thenReturn(List.of(soloOption));
+		when(subscriptionRepository.findByMember_IdAndPlayer_Id(7L, 9L)).thenReturn(Optional.empty());
+		when(subscriptionRepository.save(any(MemberFavoritePlayer.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		PlayerSubscriptionResponse response = service.subscribe(7L, 9L);
+
+		assertThat(response.playerName()).isEqualTo("Deft");
+		verify(subscriptionRepository).save(any(MemberFavoritePlayer.class));
+	}
+
+	@Test
+	@DisplayName("subscribe: LCK·솔랭 둘 다 아니면 400")
+	void rejectsNonEligiblePlayer() {
+		Member member = member(7L);
+		Player nobody = player(9L, "Nobody");
+
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(playerRepository.findById(9L)).thenReturn(Optional.of(nobody));
+		when(playerRepository.findLckPlayerOption("LCK", 2026, 9L)).thenReturn(List.of());
+		when(playerRepository.findSoloRankPlayerOptionsByPlayerIds(Set.of(9L))).thenReturn(List.of());
+
+		assertThatThrownBy(() -> service.subscribe(7L, 9L))
+				.isInstanceOf(ResponseStatusException.class);
 	}
 
 	private Member member(Long id) {
@@ -187,7 +246,7 @@ class MobilePlayerSubscriptionServiceTest {
 		when(option.getTeamId()).thenReturn(teamId);
 		when(option.getTeamCode()).thenReturn(teamCode);
 		when(option.getTeamName()).thenReturn(teamName);
-		when(option.getTeamImageUrl()).thenReturn(teamCode.toLowerCase() + ".png");
+		when(option.getTeamImageUrl()).thenReturn(teamCode == null ? null : teamCode.toLowerCase() + ".png");
 		return option;
 	}
 }

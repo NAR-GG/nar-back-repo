@@ -39,7 +39,7 @@ public class PlayerRiotAccountSyncService {
 	public PlayerRiotAccountSyncResult syncPrimaryAccounts() {
 		riotApiClient.assertConfigured();
 
-		List<Player> players = playerRepository.findPlayersByLeagueName(riotMonitorProperties.getTargetLeague());
+		List<Player> players = playerRepository.findSoloRankSyncTargets(riotMonitorProperties.getTargetLeague());
 		List<String> skippedPlayers = new ArrayList<>();
 		List<String> failedPlayers = new ArrayList<>();
 		int syncedCount = 0;
@@ -76,38 +76,47 @@ public class PlayerRiotAccountSyncService {
 	private void syncSinglePlayerAccount(Player player, PrimaryAccountCandidate candidate) {
 		TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
 		transactionTemplate.setPropagationBehavior(PROPAGATION_REQUIRES_NEW);
-		transactionTemplate.executeWithoutResult(status -> {
-			RiotIdParser.ParsedRiotId parsedRiotId = RiotIdParser.parse(candidate.riotId())
-					.orElseThrow(() -> new IllegalArgumentException("Invalid Riot ID: " + candidate.riotId()));
+		transactionTemplate.executeWithoutResult(status -> resolveAndPersist(player, candidate.riotId()));
+	}
 
-			RiotAccountResolveResponse accountResponse = riotApiClient.resolveAccountByRiotId(
-					parsedRiotId.gameName(),
-					parsedRiotId.tagLine());
+	// 현재 트랜잭션에 참여해 Riot ID를 검증·해석하고 PlayerRiotAccount를 저장한다.
+	// 신규 선수 등록처럼 player가 아직 커밋 전인 경우 REQUIRES_NEW를 쓰면 FK가 안 보이므로 이 경로를 쓴다.
+	public void resolveAndSaveInCurrentTransaction(Player player, String riotId) {
+		riotApiClient.assertConfigured();
+		resolveAndPersist(player, riotId);
+	}
 
-			PlayerRiotAccount playerRiotAccount = playerRiotAccountRepository.findByPlayerId(player.getId())
-					.orElseGet(() -> PlayerRiotAccount.builder()
-							.player(player)
-							.riotId(parsedRiotId.normalizedRiotId())
-							.gameName(accountResponse.gameName())
-							.tagLine(accountResponse.tagLine())
-							.platform(KR_PLATFORM)
-							.puuid(accountResponse.puuid())
-							.summonerId("")
-							.primaryAccount(true)
-							.enabled(true)
-							.liveStatus(PlayerRiotAccountLiveStatus.OFFLINE)
-							.build());
+	private void resolveAndPersist(Player player, String riotId) {
+		RiotIdParser.ParsedRiotId parsedRiotId = RiotIdParser.parse(riotId)
+				.orElseThrow(() -> new IllegalArgumentException("Invalid Riot ID: " + riotId));
 
-			playerRiotAccount.updateResolvedAccount(
-					parsedRiotId.normalizedRiotId(),
-					accountResponse.gameName(),
-					accountResponse.tagLine(),
-					KR_PLATFORM,
-					accountResponse.puuid());
-			playerRiotAccount.markPrimaryAccount(true);
-			playerRiotAccount.setEnabled(true);
-			playerRiotAccountRepository.saveAndFlush(playerRiotAccount);
-		});
+		RiotAccountResolveResponse accountResponse = riotApiClient.resolveAccountByRiotId(
+				parsedRiotId.gameName(),
+				parsedRiotId.tagLine());
+
+		PlayerRiotAccount playerRiotAccount = playerRiotAccountRepository.findByPlayerId(player.getId())
+				.orElseGet(() -> PlayerRiotAccount.builder()
+						.player(player)
+						.riotId(parsedRiotId.normalizedRiotId())
+						.gameName(accountResponse.gameName())
+						.tagLine(accountResponse.tagLine())
+						.platform(KR_PLATFORM)
+						.puuid(accountResponse.puuid())
+						.summonerId("")
+						.primaryAccount(true)
+						.enabled(true)
+						.liveStatus(PlayerRiotAccountLiveStatus.OFFLINE)
+						.build());
+
+		playerRiotAccount.updateResolvedAccount(
+				parsedRiotId.normalizedRiotId(),
+				accountResponse.gameName(),
+				accountResponse.tagLine(),
+				KR_PLATFORM,
+				accountResponse.puuid());
+		playerRiotAccount.markPrimaryAccount(true);
+		playerRiotAccount.setEnabled(true);
+		playerRiotAccountRepository.saveAndFlush(playerRiotAccount);
 	}
 
 	// 백오피스 수동 수정 직후 단일 선수 즉시 동기화(실존 검증 겸용).
