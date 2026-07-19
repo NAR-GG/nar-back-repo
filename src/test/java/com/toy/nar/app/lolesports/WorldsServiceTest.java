@@ -44,7 +44,15 @@ class WorldsServiceTest {
 
     @BeforeEach
     void setUp() {
-        worldsService = new WorldsService(webClient, Runnable::run);
+        // 방제 매칭은 항상 미스 → 기존 정적 링크 폴백 경로로 동작 (리졸버 자체는 전용 테스트에서 검증)
+        com.toy.nar.app.lolesports.stream.ChzzkLiveChannelResolver resolver =
+                new com.toy.nar.app.lolesports.stream.ChzzkLiveChannelResolver(null) {
+                    @Override
+                    protected String fetchLiveTitle(String channelId) {
+                        return null;
+                    }
+                };
+        worldsService = new WorldsService(webClient, Runnable::run, resolver);
     }
 
     @Test
