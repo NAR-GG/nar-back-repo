@@ -39,7 +39,7 @@ public class PlayerRiotAccountSyncService {
 	public PlayerRiotAccountSyncResult syncPrimaryAccounts() {
 		riotApiClient.assertConfigured();
 
-		List<Player> players = playerRepository.findPlayersByLeagueName(riotMonitorProperties.getTargetLeague());
+		List<Player> players = playerRepository.findSoloRankSyncTargets(riotMonitorProperties.getTargetLeague());
 		List<String> skippedPlayers = new ArrayList<>();
 		List<String> failedPlayers = new ArrayList<>();
 		int syncedCount = 0;

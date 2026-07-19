@@ -58,7 +58,7 @@ class PlayerRiotAccountSyncServiceTest {
 		player.updateProfile(null, null, null, null,
 				"[{\"region\":\"KR\",\"riotId\":\"Peyz#KR11 Unranked\"}]");
 
-		when(playerRepository.findPlayersByLeagueName("LCK")).thenReturn(List.of(player));
+		when(playerRepository.findSoloRankSyncTargets("LCK")).thenReturn(List.of(player));
 		when(playerRiotAccountRepository.findByPlayerId(any())).thenReturn(Optional.empty());
 		when(riotApiClient.resolveAccountByRiotId("Peyz", "KR11"))
 				.thenReturn(new RiotAccountResolveResponse("puuid-1", "Peyz", "KR11"));
@@ -85,7 +85,7 @@ class PlayerRiotAccountSyncServiceTest {
 				.isInstanceOf(RiotApiException.class)
 				.hasMessageContaining("RIOT_API_ENABLED=true")
 				.hasMessageContaining("RIOT_API_KEY");
-		verify(playerRepository, never()).findPlayersByLeagueName(any());
+		verify(playerRepository, never()).findSoloRankSyncTargets(any());
 	}
 
 	private static final class NoOpTransactionManager implements PlatformTransactionManager {
