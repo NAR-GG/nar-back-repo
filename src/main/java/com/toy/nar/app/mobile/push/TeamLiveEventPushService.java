@@ -52,15 +52,19 @@ public class TeamLiveEventPushService {
 	private final MobilePushGateway pushGateway;
 	private final MemberNotificationService notificationService;
 	private final com.toy.nar.app.lolesports.WorldsService worldsService;
+	private final com.toy.nar.app.lolesports.NaverEsportsScoreClient naverEsportsScoreClient;
 
 	@Value("${live.notification.fcm.enabled:false}")
 	private boolean fcmNotificationEnabled;
 
-	/** SET_END 스코어가 방금 끝난 세트를 반영할 때까지의 업스트림 재조회 횟수/간격. */
-	@Value("${live.notification.set-end-score.retry-attempts:3}")
+	/**
+	 * SET_END 스코어가 방금 끝난 세트를 반영할 때까지의 업스트림 재조회 횟수/간격.
+	 * 네이버는 세트 종료 후 ~1분 내 반영(실측)이라 10초 × 6회면 거의 항상 잡는다.
+	 */
+	@Value("${live.notification.set-end-score.retry-attempts:6}")
 	private int scoreRetryAttempts;
 
-	@Value("${live.notification.set-end-score.retry-delay-ms:4000}")
+	@Value("${live.notification.set-end-score.retry-delay-ms:10000}")
 	private long scoreRetryDelayMs;
 
 	public boolean isEnabled() {
@@ -167,9 +171,15 @@ public class TeamLiveEventPushService {
 			}
 
 			// DB stale — 업스트림이 방금 끝난 세트를 반영할 때까지 짧게 재시도.
+			// 네이버가 Riot gameWins 보다 항상 빨라(실측 46초~5분+ 선행) 시도마다 네이버 먼저 본다.
 			for (int attempt = 0; attempt < scoreRetryAttempts; attempt++) {
 				if (attempt > 0 && scoreRetryDelayMs > 0) {
 					Thread.sleep(scoreRetryDelayMs);
+				}
+				int[] naver = naverEsportsScoreClient.fetchScore(
+						match.getBlueTeamCode(), match.getRedTeamCode(), match.getMatchDate());
+				if (naver != null && naver[0] + naver[1] >= endedSetNumber) {
+					return scoreLine(match.getBlueTeamName(), naver[0], naver[1], match.getRedTeamName());
 				}
 				int[] wins = worldsService.fetchMatchGameWins(matchId);
 				if (wins != null && wins[0] + wins[1] >= endedSetNumber) {

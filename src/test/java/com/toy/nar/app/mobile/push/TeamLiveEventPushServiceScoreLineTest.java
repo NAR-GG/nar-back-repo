@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.push;
 
+import com.toy.nar.app.lolesports.NaverEsportsScoreClient;
 import com.toy.nar.app.lolesports.WorldsService;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
@@ -43,6 +44,8 @@ class TeamLiveEventPushServiceScoreLineTest {
 	private MemberNotificationService notificationService;
 	@Mock
 	private WorldsService worldsService;
+	@Mock
+	private NaverEsportsScoreClient naverEsportsScoreClient;
 
 	private TeamLiveEventPushService service;
 
@@ -50,7 +53,8 @@ class TeamLiveEventPushServiceScoreLineTest {
 	void setUp() {
 		service = new TeamLiveEventPushService(
 				deviceRepository, deliveryRepository, teamExternalIdentityRepository,
-				leagueMatchRepository, pushGateway, notificationService, worldsService);
+				leagueMatchRepository, pushGateway, notificationService, worldsService,
+				naverEsportsScoreClient);
 		// 테스트에서 재시도 대기 없이 즉시 진행
 		ReflectionTestUtils.setField(service, "scoreRetryAttempts", 3);
 		ReflectionTestUtils.setField(service, "scoreRetryDelayMs", 0L);
@@ -60,11 +64,40 @@ class TeamLiveEventPushServiceScoreLineTest {
 		return LeagueMatch.builder()
 				.id("m1")
 				.leagueName("EWC")
+				.blueTeamCode("KC")
 				.blueTeamName("Karmine Corp")
+				.redTeamCode("T1")
 				.redTeamName("T1")
 				.blueScore(blueScore)
 				.redScore(redScore)
+				.matchDate(java.time.LocalDateTime.of(2026, 7, 18, 11, 30))
 				.build();
+	}
+
+	@Test
+	void DB가_stale이면_네이버_스코어를_먼저_쓴다() {
+		when(leagueMatchRepository.findById("m1")).thenReturn(Optional.of(match(0, 1)));
+		when(naverEsportsScoreClient.fetchScore(org.mockito.ArgumentMatchers.eq("KC"),
+				org.mockito.ArgumentMatchers.eq("T1"), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(new int[] { 0, 2 });
+
+		String line = service.buildMatchScoreLine("m1", 2);
+
+		assertThat(line).isEqualTo("Karmine Corp 0 vs 2 T1");
+		verify(worldsService, never()).fetchMatchGameWins("m1");
+	}
+
+	@Test
+	void 네이버_스코어가_stale이면_쓰지_않고_Riot으로_넘어간다() {
+		when(leagueMatchRepository.findById("m1")).thenReturn(Optional.of(match(0, 1)));
+		when(naverEsportsScoreClient.fetchScore(org.mockito.ArgumentMatchers.eq("KC"),
+				org.mockito.ArgumentMatchers.eq("T1"), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(new int[] { 0, 1 });
+		when(worldsService.fetchMatchGameWins("m1")).thenReturn(new int[] { 0, 2 });
+
+		String line = service.buildMatchScoreLine("m1", 2);
+
+		assertThat(line).isEqualTo("Karmine Corp 0 vs 2 T1");
 	}
 
 	@Test
