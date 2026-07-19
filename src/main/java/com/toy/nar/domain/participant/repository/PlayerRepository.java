@@ -64,13 +64,20 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 		"WHERE l.leagueName = :leagueName")
 	List<Player> findPlayersByLeagueName(@Param("leagueName") String leagueName);
 
-	// 솔랭 계정 sync 대상: 해당 리그 출전자 ∪ PlayerRiotAccount 보유자(비출전 은퇴 선수 포함).
+	// 솔랭 계정 sync 대상: 해당 리그 출전자 ∪ 유효 계정(enabled·primaryAccount·KR) 보유자(비출전 은퇴 선수 포함).
 	// OR-EXISTS라 semijoin이 안 되지만, 하루 1회 배치이고 대상 수가 적어 성능 영향 없다.
+	// ⚠️ 계정 서브쿼리에 자격 조건(enabled=true, primaryAccount=true, platform='KR') 필수.
+	//    조건 없으면 비활성(enabled=false) 계정 보유자도 포함되어
+	//    sync가 extractPrimaryKrAccount로 재해석 후 enabled=true 로 되돌리는 버그 발생.
 	@Query("""
 			SELECT DISTINCT p FROM Player p
 			WHERE EXISTS (SELECT 1 FROM GameParticipant gp
 			              WHERE gp.player = p AND gp.game.league.leagueName = :leagueName)
-			   OR EXISTS (SELECT 1 FROM PlayerRiotAccount pra WHERE pra.player = p)
+			   OR EXISTS (SELECT 1 FROM PlayerRiotAccount pra
+			              WHERE pra.player = p
+			                AND pra.enabled = true
+			                AND pra.primaryAccount = true
+			                AND pra.platform = 'KR')
 			""")
 	List<Player> findSoloRankSyncTargets(@Param("leagueName") String leagueName);
 
