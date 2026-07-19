@@ -174,7 +174,7 @@ jobs:
               -e FIREBASE_MESSAGING_ENABLED="true" \
               -e LIVE_NOTIFICATION_FCM_ENABLED="true" \
               -e GOOGLE_APPLICATION_CREDENTIALS="/run/secrets/firebase-service-account.json" \
-              -e JAVA_TOOL_OPTIONS="-javaagent:/whatap/${WHATAP_JAR} --add-opens=java.base/java.lang=ALL-UNNAMED -Dwhatap.oname=${NEW_NAME}" \
+              -e JAVA_TOOL_OPTIONS="-Xmx512m -javaagent:/whatap/${WHATAP_JAR} --add-opens=java.base/java.lang=ALL-UNNAMED -Dwhatap.oname=${NEW_NAME}" \
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
               -v /opt/whatap:/whatap \
               "${APP_IMAGE}"
