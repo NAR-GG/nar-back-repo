@@ -70,6 +70,7 @@ public class LeagueMatchService {
 	private final ObjectMapper objectMapper;
 	private final TransactionTemplate transactionTemplate;
 	private final GameRepository gameRepository;
+	private final NaverEsportsScoreClient naverEsportsScoreClient;
 
 	// [Scheduler용] 특정 리그의 최신 경기를 가져와 DB에 저장 (1페이지)
 	public void syncMatches(String leagueSlug) {
@@ -93,6 +94,9 @@ public class LeagueMatchService {
 		String leagueSlug = match.getLeagueName() == null || match.getLeagueName().isBlank()
 				? fallbackLeagueSlug
 				: match.getLeagueName();
+		if ("inProgress".equalsIgnoreCase(match.getState())) {
+			overlayNaverScoreIfAhead(match);
+		}
 		MatchSyncUpsertResult result = upsertLeagueMatches(leagueSlug, List.of(match));
 		boolean changed = result.insertedMatches() > 0 || result.updatedMatches() > 0;
 		if (changed) {
@@ -103,6 +107,41 @@ public class LeagueMatchService {
 					match.getRedTeam() == null ? null : match.getRedTeam().getWins());
 		}
 		return changed;
+	}
+
+	/**
+	 * 라이브 중 Riot gameWins 는 다음 세트 픽밴에야 뒤집혀 몇 분간 stale 이다. 네이버 e스포츠는
+	 * 세트 종료 직후 반영되므로, 진행 중 경기의 스코어 합이 네이버에서 더 앞서면 그 값으로 덮어쓴다.
+	 * 리스트·상세·모바일이 모두 이 DB 스코어를 읽으므로 표시 지연이 함께 줄어든다.
+	 * 네이버 매칭 검증(팀코드·gameCode=lol·시작시각±6h)과 킬스위치는 클라이언트가 담당 — null 이면 Riot 유지.
+	 * ponytail: 상한 없음. 네이버 wrong-high 는 completed flip 때 Riot 최종값이 덮어써 self-heal.
+	 * false-high 관측되면 네이버 maxMatchCount 가드 추가.
+	 */
+	private void overlayNaverScoreIfAhead(MatchResultDto match) {
+		if (match.getBlueTeam() == null || match.getRedTeam() == null || match.getMatchDate() == null) {
+			return;
+		}
+		LocalDateTime matchDateUtc;
+		try {
+			matchDateUtc = LocalDateTime.parse(match.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
+		} catch (Exception e) {
+			return;
+		}
+		int[] naver = naverEsportsScoreClient.fetchScore(
+				match.getBlueTeam().getCode(), match.getRedTeam().getCode(), matchDateUtc);
+		int[] ahead = pickAheadScore(naver, match.getBlueTeam().getWins(), match.getRedTeam().getWins());
+		if (ahead != null) {
+			match.getBlueTeam().setWins(ahead[0]);
+			match.getRedTeam().setWins(ahead[1]);
+		}
+	}
+
+	/** 네이버 스코어 합이 Riot 보다 앞서면 [blue, red] 반환, 아니면(같거나 뒤짐·null) null → Riot 유지. */
+	static int[] pickAheadScore(int[] naver, int riotBlue, int riotRed) {
+		if (naver == null) {
+			return null;
+		}
+		return naver[0] + naver[1] > riotBlue + riotRed ? naver : null;
 	}
 
 	public void syncMatches(String leagueSlug, boolean includeTeamMetadataSync) {

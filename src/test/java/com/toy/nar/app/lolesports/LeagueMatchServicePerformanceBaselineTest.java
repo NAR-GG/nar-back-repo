@@ -72,7 +72,8 @@ class LeagueMatchServicePerformanceBaselineTest {
                 null,
                 new ObjectMapper(),
                 null,
-                gameRepository);
+                gameRepository,
+                null);
         sessionFactory = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class);
         sessionFactory.getStatistics().setStatisticsEnabled(true);
     }
