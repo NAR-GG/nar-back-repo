@@ -289,6 +289,25 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 			@Param("year") int year,
 			@Param("playerIds") Set<Long> playerIds);
 
+	// 솔랭 전용 선수(계정 보유, 팀 없음)를 LckPlayerOption으로 투영. 구독 표시/검증 병합용.
+	@Query(value = """
+			SELECT p.player_id AS playerId,
+			       p.player_name AS playerName,
+			       p.image_url AS playerImageUrl,
+			       p.role AS role,
+			       NULL AS teamId,
+			       NULL AS teamCode,
+			       NULL AS teamName,
+			       NULL AS teamImageUrl
+			FROM players p
+			JOIN player_riot_account pra ON pra.player_id = p.player_id
+			WHERE pra.enabled = true
+			  AND pra.primary_account = true
+			  AND pra.platform = 'KR'
+			  AND p.player_id IN (:playerIds)
+			""", nativeQuery = true)
+	List<LckPlayerOption> findSoloRankPlayerOptionsByPlayerIds(@Param("playerIds") Set<Long> playerIds);
+
 	interface LckPlayerOption {
 		Long getPlayerId();
 
