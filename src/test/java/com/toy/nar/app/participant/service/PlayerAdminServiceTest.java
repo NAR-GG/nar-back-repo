@@ -155,4 +155,36 @@ class PlayerAdminServiceTest {
 
 		verify(playerRiotAccountSyncService, never()).syncPlayerAccountNow(any());
 	}
+
+	@Test
+	@DisplayName("솔랭 전용 선수 생성: Player 저장 + 계정 해석 호출")
+	void createsSoloRankPlayer() {
+		when(playerRepository.findByName("Deft")).thenReturn(java.util.Optional.empty());
+		when(playerRepository.save(any(Player.class))).thenAnswer(inv -> inv.getArgument(0));
+
+		Player created = playerAdminService.createSoloRankPlayer("Deft", null, "Deft#8366");
+
+		assertThat(created.getName()).isEqualTo("Deft");
+		assertThat(created.getGameAccounts()).contains("Deft#8366");
+		assertThat(created.isGameAccountsLocked()).isTrue();
+		verify(playerRiotAccountSyncService).resolveAndSaveInCurrentTransaction(created, "Deft#8366");
+	}
+
+	@Test
+	@DisplayName("중복 이름이면 IllegalStateException")
+	void rejectsDuplicateName() {
+		when(playerRepository.findByName("Deft")).thenReturn(java.util.Optional.of(new Player("Deft", null)));
+
+		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft", null, "Deft#8366"))
+				.isInstanceOf(IllegalStateException.class);
+		verify(playerRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("riotId 형식 오류면 IllegalArgumentException")
+	void rejectsInvalidSoloRankRiotId() {
+		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft", null, "NoHashTag"))
+				.isInstanceOf(IllegalArgumentException.class);
+		verify(playerRiotAccountSyncService, never()).resolveAndSaveInCurrentTransaction(any(), any());
+	}
 }

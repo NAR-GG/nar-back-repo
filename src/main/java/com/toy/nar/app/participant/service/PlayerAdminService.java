@@ -59,6 +59,36 @@ public class PlayerAdminService {
 		return player;
 	}
 
+	// 솔랭 전용 선수 등록: LCK 출전 이력 없이도 생성 가능(update 경로와 달리 참여 검증 안 함).
+	// Riot 404 등 예외는 트랜잭션 롤백 → Player 삽입도 취소된다.
+	@Transactional
+	public Player createSoloRankPlayer(String name, String imageUrl, String riotId) {
+		if (name == null || name.isBlank()) {
+			throw new IllegalArgumentException("선수명은 비울 수 없습니다");
+		}
+		if (riotId == null || !riotId.matches("^.+#.+$")) {
+			throw new IllegalArgumentException("riotId는 '이름#태그' 형식이어야 합니다: " + riotId);
+		}
+		if (playerRepository.findByName(name).isPresent()) {
+			throw new IllegalStateException("이미 존재하는 선수입니다: " + name);
+		}
+		Player player = playerRepository.save(Player.builder()
+				.name(name.trim())
+				.imageUrl(imageUrl == null || imageUrl.isBlank() ? null : imageUrl.trim())
+				.build());
+		// 크론 파서(RiotIdParser)가 읽는 형식: [{"region":"KR","riotId":"...","tier":null}]
+		// objectMapper 없이 직접 구성 — 등록 경로에서 riotId는 이미 형식 검증됨.
+		player.overrideGameAccounts(buildSingleKrAccountJson(riotId));
+		playerRiotAccountSyncService.resolveAndSaveInCurrentTransaction(player, riotId);
+		return player;
+	}
+
+	// KR 단일 계정 JSON을 objectMapper 없이 구성 — 솔랭 전용 선수 등록 전용.
+	// riotId는 이미 #-포함 형식으로 검증된 값만 들어온다.
+	private String buildSingleKrAccountJson(String riotId) {
+		return "[{\"region\":\"KR\",\"riotId\":\"" + riotId + "\",\"tier\":null}]";
+	}
+
 	// 크론 파서(RiotIdParser)가 읽는 형식 유지: [{"region","riotId","tier"}], riotId는 반드시 gameName#tagLine.
 	private String serializeGameAccounts(List<BackofficeController.GameAccountEntry> accounts) {
 		for (var acc : accounts) {

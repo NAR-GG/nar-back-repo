@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -116,6 +117,14 @@ public class BackofficeController {
                 request.unlockGameAccounts(), request.gameAccounts()));
     }
 
+    // 솔랭 전용 선수 등록(은퇴/비현역). LCK 출전 이력 없이 이름+riotId로 생성.
+    @PostMapping("/players/solo-rank")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PlayerRow createSoloRankPlayer(@RequestBody SoloRankPlayerCreateRequest request) {
+        return PlayerRow.from(playerAdminService.createSoloRankPlayer(
+                request.name(), request.imageUrl(), request.riotId()));
+    }
+
     @DeleteMapping("/members/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteMember(@PathVariable Long id) {
@@ -195,6 +204,8 @@ public class BackofficeController {
 
     public record PlayerUpdateRequest(String imageUrl, Boolean unlockImage, Long currentTeamId,
                                       Boolean unlockGameAccounts, List<GameAccountEntry> gameAccounts) {}
+
+    public record SoloRankPlayerCreateRequest(String name, String imageUrl, String riotId) {}
 
     public record TeamRow(Long id, String name, String code) {}
 
