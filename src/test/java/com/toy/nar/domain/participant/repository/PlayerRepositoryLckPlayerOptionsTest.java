@@ -85,6 +85,14 @@ class PlayerRepositoryLckPlayerOptionsTest {
 		exec(gp(7, 7, 5, T1));   // Twin @T1 (동일 시각, 높은 game_id) → T1
 		exec(gp(8, 8, 6, GEN));  // GenStar @GEN
 
+		// 솔랭 전용: LCK 미출전 + KR 주계정 enabled → 목록에 팀 없이 노출돼야 한다.
+		exec(player(9, "Deft", "Bot"));
+		exec("INSERT INTO player_riot_account"
+				+ " (id, player_id, riot_id, game_name, tag_line, platform, puuid, primary_account, enabled,"
+				+ " live_status, created_at, updated_at)"
+				+ " VALUES (99, 9, 'Deft#8366', 'Deft', '8366', 'KR', 'puuid-deft', true, true,"
+				+ " 'OFFLINE', '2026-01-01 00:00:00', '2026-01-01 00:00:00')");
+
 		em.flush();
 		em.clear();
 	}
@@ -95,10 +103,11 @@ class PlayerRepositoryLckPlayerOptionsTest {
 		Page<LckPlayerOption> page = playerRepository.findLckPlayerOptions(
 				LCK, YEAR, null, null, PageRequest.of(0, 50));
 
-		// Faker, Mover, Twin, GenStar = 4명 (OldGuy=2025, Other=LPL 제외)
-		assertThat(page.getTotalElements()).isEqualTo(4);
+		// Faker, Mover, Twin, GenStar, Deft = 5명 (OldGuy=2025, Other=LPL 제외)
+		// Deft는 계정 보유 비출전 선수로 팀 없이 포함된다.
+		assertThat(page.getTotalElements()).isEqualTo(5);
 		assertThat(page.getContent()).extracting(LckPlayerOption::getPlayerName)
-				.containsExactlyInAnyOrder("Faker", "Mover", "Twin", "GenStar")
+				.containsExactlyInAnyOrder("Faker", "Mover", "Twin", "GenStar", "Deft")
 				.doesNotHaveDuplicates();
 	}
 
@@ -139,6 +148,30 @@ class PlayerRepositoryLckPlayerOptionsTest {
 	}
 
 	@Test
+	@DisplayName("솔랭 전용 선수(계정 보유, LCK 미출전)도 팀 없이 목록에 포함된다")
+	void includesSoloRankOnlyPlayer() {
+		Page<LckPlayerOption> page = playerRepository.findLckPlayerOptions(
+				LCK, YEAR, null, null, PageRequest.of(0, 50));
+
+		LckPlayerOption deft = page.getContent().stream()
+				.filter(o -> "Deft".equals(o.getPlayerName()))
+				.findFirst()
+				.orElseThrow();
+		assertThat(deft.getTeamId()).isNull();
+		assertThat(deft.getTeamName()).isNull();
+	}
+
+	@Test
+	@DisplayName("teamId 필터가 있으면 팀 없는 솔랭 전용 선수는 제외된다")
+	void excludesSoloRankOnlyPlayerWhenTeamFilterSet() {
+		Page<LckPlayerOption> page = playerRepository.findLckPlayerOptions(
+				LCK, YEAR, T1, null, PageRequest.of(0, 50));
+
+		assertThat(page.getContent()).extracting(LckPlayerOption::getPlayerName)
+				.doesNotContain("Deft");
+	}
+
+	@Test
 	@DisplayName("이름 검색은 부분 일치(대소문자 무시)로 동작한다")
 	void filtersByNameQuery() {
 		Page<LckPlayerOption> page = playerRepository.findLckPlayerOptions(
@@ -148,15 +181,15 @@ class PlayerRepositoryLckPlayerOptionsTest {
 	}
 
 	@Test
-	@DisplayName("페이지네이션: size=2, page0 은 포지션순 2건 + 전체 4건/2페이지")
+	@DisplayName("페이지네이션: size=2, page0 은 포지션순 2건 + 전체 5건/3페이지")
 	void paginates() {
 		Page<LckPlayerOption> page0 = playerRepository.findLckPlayerOptions(
 				LCK, YEAR, null, null, PageRequest.of(0, 2));
 
-		assertThat(page0.getTotalElements()).isEqualTo(4);
-		assertThat(page0.getTotalPages()).isEqualTo(2);
-		// 포지션순(탑→정글→미드→바텀→서폿), 동일 포지션 내 이름순:
-		// Mover(Top), Faker(Mid), GenStar(Mid), Twin(Support)
+		// Deft(Bot→ELSE=6) 추가로 총 5명. 포지션순: Mover(Top), Faker(Mid), GenStar(Mid), Twin(Support), Deft(Bot)
+		assertThat(page0.getTotalElements()).isEqualTo(5);
+		assertThat(page0.getTotalPages()).isEqualTo(3);
+		// page0: Mover(Top=1), Faker(Mid=3)
 		assertThat(page0.getContent()).extracting(LckPlayerOption::getPlayerName)
 				.containsExactly("Mover", "Faker");
 	}

@@ -134,6 +134,30 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 						JOIN teams t ON gp.team_id = t.team_id
 						WHERE l.league_name = :leagueName
 						  AND l.season_year = :year
+						UNION ALL
+						SELECT
+							p.player_id AS playerId,
+							p.player_name AS playerName,
+							p.image_url AS playerImageUrl,
+							p.role AS role,
+							NULL AS teamId,
+							NULL AS teamCode,
+							NULL AS teamName,
+							NULL AS teamImageUrl,
+							1 AS rn
+						FROM players p
+						JOIN player_riot_account pra ON pra.player_id = p.player_id
+						WHERE pra.enabled = true
+						  AND pra.primary_account = true
+						  AND pra.platform = 'KR'
+						  AND NOT EXISTS (
+							  SELECT 1 FROM game_participants gp2
+							  JOIN games g2 ON gp2.game_id = g2.game_id
+							  JOIN leagues l2 ON g2.league_id = l2.league_id
+							  WHERE gp2.player_id = p.player_id
+							    AND l2.league_name = :leagueName
+							    AND l2.season_year = :year
+						  )
 					) ranked
 					WHERE ranked.rn = 1
 					  AND (:teamId IS NULL OR ranked.teamId = :teamId)
@@ -151,6 +175,7 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 					SELECT COUNT(*)
 					FROM (
 						SELECT
+							p.player_id AS playerId,
 							p.player_name AS playerName,
 							t.team_id AS teamId,
 							ROW_NUMBER() OVER (
@@ -164,6 +189,25 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 						JOIN teams t ON gp.team_id = t.team_id
 						WHERE l.league_name = :leagueName
 						  AND l.season_year = :year
+						UNION ALL
+						SELECT
+							p.player_id AS playerId,
+							p.player_name AS playerName,
+							NULL AS teamId,
+							1 AS rn
+						FROM players p
+						JOIN player_riot_account pra ON pra.player_id = p.player_id
+						WHERE pra.enabled = true
+						  AND pra.primary_account = true
+						  AND pra.platform = 'KR'
+						  AND NOT EXISTS (
+							  SELECT 1 FROM game_participants gp2
+							  JOIN games g2 ON gp2.game_id = g2.game_id
+							  JOIN leagues l2 ON g2.league_id = l2.league_id
+							  WHERE gp2.player_id = p.player_id
+							    AND l2.league_name = :leagueName
+							    AND l2.season_year = :year
+						  )
 					) ranked
 					WHERE ranked.rn = 1
 					  AND (:teamId IS NULL OR ranked.teamId = :teamId)
