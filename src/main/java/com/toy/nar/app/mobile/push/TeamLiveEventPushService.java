@@ -166,24 +166,33 @@ public class TeamLiveEventPushService {
 			if (endedSetNumber <= 0) {
 				return dbSum > 0 ? scoreLine(match.getBlueTeamName(), blueScore, redScore, match.getRedTeamName()) : null;
 			}
-			if (dbSum >= endedSetNumber) {
-				return scoreLine(match.getBlueTeamName(), blueScore, redScore, match.getRedTeamName());
+			String dbLine = lineIfFresh(new int[] { blueScore == null ? 0 : blueScore, redScore == null ? 0 : redScore },
+					match, endedSetNumber);
+			if (dbLine != null) {
+				return dbLine;
 			}
 
 			// DB stale — 업스트림이 방금 끝난 세트를 반영할 때까지 짧게 재시도.
 			// 네이버가 Riot gameWins 보다 항상 빨라(실측 46초~5분+ 선행) 시도마다 네이버 먼저 본다.
+			// 단 네이버가 null(미커버 리그·매칭 실패·장애)이면 이후 시도에선 건너뛴다 —
+			// 그날 목록에 없는 매치는 10초 뒤에도 없고, 시도마다 3초 타임아웃만 쌓인다.
+			boolean naverUsable = true;
 			for (int attempt = 0; attempt < scoreRetryAttempts; attempt++) {
 				if (attempt > 0 && scoreRetryDelayMs > 0) {
 					Thread.sleep(scoreRetryDelayMs);
 				}
-				int[] naver = naverEsportsScoreClient.fetchScore(
-						match.getBlueTeamCode(), match.getRedTeamCode(), match.getMatchDate());
-				if (naver != null && naver[0] + naver[1] >= endedSetNumber) {
-					return scoreLine(match.getBlueTeamName(), naver[0], naver[1], match.getRedTeamName());
+				if (naverUsable) {
+					int[] naver = naverEsportsScoreClient.fetchScore(
+							match.getBlueTeamCode(), match.getRedTeamCode(), match.getMatchDate());
+					naverUsable = naver != null;
+					String line = lineIfFresh(naver, match, endedSetNumber);
+					if (line != null) {
+						return line;
+					}
 				}
-				int[] wins = worldsService.fetchMatchGameWins(matchId);
-				if (wins != null && wins[0] + wins[1] >= endedSetNumber) {
-					return scoreLine(match.getBlueTeamName(), wins[0], wins[1], match.getRedTeamName());
+				String line = lineIfFresh(worldsService.fetchMatchGameWins(matchId), match, endedSetNumber);
+				if (line != null) {
+					return line;
 				}
 			}
 			log.warn("Set-end score still stale after retries. matchId={} endedSet={} dbScore={}:{}",
@@ -196,6 +205,14 @@ public class TeamLiveEventPushService {
 			log.warn("Failed to load match score for set-end push matchId={}", matchId, e);
 			return null;
 		}
+	}
+
+	/** 스코어 합이 방금 끝난 세트 수 이상(=신선)일 때만 스코어 라인, 아니면 null. */
+	private String lineIfFresh(int[] score, com.toy.nar.app.lolesports.repository.LeagueMatch match, int endedSetNumber) {
+		if (score == null || score[0] + score[1] < endedSetNumber) {
+			return null;
+		}
+		return scoreLine(match.getBlueTeamName(), score[0], score[1], match.getRedTeamName());
 	}
 
 	private String scoreLine(String blueTeamName, Integer blueScore, Integer redScore, String redTeamName) {

@@ -19,6 +19,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -85,6 +86,22 @@ class TeamLiveEventPushServiceScoreLineTest {
 
 		assertThat(line).isEqualTo("Karmine Corp 0 vs 2 T1");
 		verify(worldsService, never()).fetchMatchGameWins("m1");
+	}
+
+	@Test
+	void 네이버가_null이면_이후_시도에서_네이버를_다시_호출하지_않는다() {
+		// 미커버 리그·매칭 실패 — 그날 목록에 없는 매치는 재시도해도 없다
+		when(leagueMatchRepository.findById("m1")).thenReturn(Optional.of(match(0, 1)));
+		when(naverEsportsScoreClient.fetchScore(org.mockito.ArgumentMatchers.any(),
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(null);
+		when(worldsService.fetchMatchGameWins("m1")).thenReturn(new int[] { 0, 1 });
+
+		service.buildMatchScoreLine("m1", 2);
+
+		verify(naverEsportsScoreClient, times(1)).fetchScore(org.mockito.ArgumentMatchers.any(),
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+		verify(worldsService, times(3)).fetchMatchGameWins("m1");
 	}
 
 	@Test
