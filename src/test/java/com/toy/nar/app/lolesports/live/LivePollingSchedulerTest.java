@@ -49,7 +49,8 @@ class LivePollingSchedulerTest {
 				mock(LeagueConfigService.class),
 				cacheEvictionService,
 				mock(NotificationService.class),
-				mock(TeamLiveEventPushService.class));
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "maxConsecutiveFailures", 2);
 		liveStateStore.getActiveGames().put("game-1", new ActiveLiveGame(
 				"game-1",
@@ -90,7 +91,8 @@ class LivePollingSchedulerTest {
 				leagueConfigService,
 				cacheEvictionService,
 				mock(NotificationService.class),
-				mock(TeamLiveEventPushService.class));
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		ActiveLiveGame activeGame = new ActiveLiveGame(
 				"game-1",
@@ -284,7 +286,8 @@ class LivePollingSchedulerTest {
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
-				mock(TeamLiveEventPushService.class));
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto ewcUnstarted = MatchResultDto.builder()
 				.matchId("ewc-match-1").leagueName("EWC").state("unstarted")
@@ -318,7 +321,8 @@ class LivePollingSchedulerTest {
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
-				mock(TeamLiveEventPushService.class));
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		// 이미 추적 중인 상태로 시작
 		liveStateStore.getActiveGames().put("ewc-game-1", new ActiveLiveGame(
@@ -353,7 +357,8 @@ class LivePollingSchedulerTest {
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
-				mock(TeamLiveEventPushService.class));
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto ewcUnstarted = MatchResultDto.builder()
 				.matchId("ewc-match-1").leagueName("EWC").state("unstarted")
@@ -389,7 +394,8 @@ class LivePollingSchedulerTest {
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
-				mock(TeamLiveEventPushService.class));
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		// 마지막 세트를 라이브로 추적하던 중이었음
 		liveStateStore.getActiveGames().put("ewc-game-1", new ActiveLiveGame(
@@ -427,7 +433,8 @@ class LivePollingSchedulerTest {
 				worldsService, mock(LiveStatsClient.class), mock(LiveObjectEventRecorder.class), liveStateStore,
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
-				mock(TeamLiveEventPushService.class));
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto completed = MatchResultDto.builder()
 				.matchId("ewc-match-1").leagueName("EWC").state("completed")
@@ -455,7 +462,8 @@ class LivePollingSchedulerTest {
 				worldsService, mock(LiveStatsClient.class), mock(LiveObjectEventRecorder.class), liveStateStore,
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
-				mock(TeamLiveEventPushService.class));
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto oldCompleted = MatchResultDto.builder()
 				.matchId("ewc-match-old").leagueName("EWC").state("completed")
@@ -584,7 +592,8 @@ class LivePollingSchedulerTest {
 				leagueConfigService,
 				mock(CacheEvictionService.class),
 				mock(NotificationService.class),
-				pushService);
+				pushService,
+				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		ReflectionTestUtils.setField(scheduler, "maxConsecutiveFailures", 6);
 		return scheduler;
@@ -607,7 +616,8 @@ class LivePollingSchedulerTest {
 				mock(LeagueConfigService.class),
 				mock(CacheEvictionService.class),
 				mock(NotificationService.class),
-				mock(TeamLiveEventPushService.class));
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
 
 		Instant nextWindow = ReflectionTestUtils.invokeMethod(
 				scheduler,

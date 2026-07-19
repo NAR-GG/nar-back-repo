@@ -660,6 +660,25 @@ public class WorldsService {
 				.block();
 	}
 
+	/**
+	 * 매치의 현재 게임 스코어 [팀A wins, 팀B wins]. 조회 실패 시 null.
+	 * teams 순서는 getEventDetails 응답 순서 — convertToEntity 의 blue/red 와 같은 기준이다.
+	 */
+	public int[] fetchMatchGameWins(String matchId) {
+		JsonNode root = callApi("/persisted/gw/getEventDetails", "id", matchId);
+		if (root == null) {
+			return null;
+		}
+		JsonNode teams = root.path("data").path("event").path("match").path("teams");
+		if (teams.size() < 2) {
+			return null;
+		}
+		return new int[] {
+				teams.get(0).path("result").path("gameWins").asInt(0),
+				teams.get(1).path("result").path("gameWins").asInt(0)
+		};
+	}
+
 	private JsonNode callApi(String path, String queryParam, String queryValue) {
 		try {
 			return webClient.get()
