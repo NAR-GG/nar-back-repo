@@ -189,4 +189,16 @@ class PlayerAdminServiceTest {
 				.isInstanceOf(IllegalArgumentException.class);
 		verify(playerRiotAccountSyncService, never()).resolveAndSaveInCurrentTransaction(any(), any());
 	}
+
+	@Test
+	@DisplayName("뒤 공백 포함 이름이 trim 후 기존 선수명과 충돌하면 IllegalStateException")
+	void rejectsDuplicateNameWithTrailingSpace() {
+		// "Deft " 입력 → trim 후 "Deft" 로 중복 검사 → 기존 선수 존재 → IllegalStateException
+		when(playerRepository.findByName("Deft")).thenReturn(java.util.Optional.of(new Player("Deft", null)));
+
+		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft ", null, "Deft#8366"))
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("Deft");
+		verify(playerRepository, never()).save(any());
+	}
 }

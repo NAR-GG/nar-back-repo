@@ -9,6 +9,7 @@ import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -163,7 +164,7 @@ class MobilePlayerSubscriptionServiceTest {
 	}
 
 	@Test
-	@org.junit.jupiter.api.DisplayName("솔랭 전용 구독 선수(2026 LCK 미출전)도 getSubscriptions에 표시된다")
+	@DisplayName("솔랭 전용 구독 선수(2026 LCK 미출전)도 getSubscriptions에 표시된다")
 	void showsSoloRankOnlySubscription() {
 		Member member = member(7L);
 		Player deft = player(9L, "Deft");
@@ -183,7 +184,7 @@ class MobilePlayerSubscriptionServiceTest {
 	}
 
 	@Test
-	@org.junit.jupiter.api.DisplayName("subscribe: LCK 옵션 없어도 솔랭 전용 옵션이 있으면 구독 성공")
+	@DisplayName("subscribe: LCK 옵션 없어도 솔랭 전용 옵션이 있으면 구독 성공")
 	void subscribesSoloRankOnlyPlayer() {
 		Member member = member(7L);
 		Player deft = player(9L, "Deft");
@@ -205,7 +206,7 @@ class MobilePlayerSubscriptionServiceTest {
 	}
 
 	@Test
-	@org.junit.jupiter.api.DisplayName("subscribe: LCK·솔랭 둘 다 아니면 400")
+	@DisplayName("subscribe: LCK·솔랭 둘 다 아니면 400")
 	void rejectsNonEligiblePlayer() {
 		Member member = member(7L);
 		Player nobody = player(9L, "Nobody");

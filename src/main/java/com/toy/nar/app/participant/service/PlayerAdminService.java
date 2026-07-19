@@ -66,14 +66,16 @@ public class PlayerAdminService {
 		if (name == null || name.isBlank()) {
 			throw new IllegalArgumentException("선수명은 비울 수 없습니다");
 		}
+		// 중복 검사와 insert 모두 동일한 정규화 값을 사용해 UNIQUE 제약 회피 오탐을 방지한다.
+		String trimmedName = name.trim();
 		if (riotId == null || !riotId.matches("^.+#.+$")) {
 			throw new IllegalArgumentException("riotId는 '이름#태그' 형식이어야 합니다: " + riotId);
 		}
-		if (playerRepository.findByName(name).isPresent()) {
-			throw new IllegalStateException("이미 존재하는 선수입니다: " + name);
+		if (playerRepository.findByName(trimmedName).isPresent()) {
+			throw new IllegalStateException("이미 존재하는 선수입니다: " + trimmedName);
 		}
 		Player player = playerRepository.save(Player.builder()
-				.name(name.trim())
+				.name(trimmedName)
 				.imageUrl(imageUrl == null || imageUrl.isBlank() ? null : imageUrl.trim())
 				.build());
 		// serializeGameAccounts 재사용: Jackson ObjectMapper가 이스케이프를 보장한다.
