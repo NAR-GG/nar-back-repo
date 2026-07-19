@@ -131,6 +131,10 @@ jobs:
             echo "Pulling app image: ${APP_IMAGE}"
             docker pull "${APP_IMAGE}"
 
+            # WhaTap Java APM — 에이전트·whatap.conf는 호스트 /opt/whatap 에 사전 설치.
+            # 최신 jar 자동 선택하므로 에이전트 업데이트는 tar만 다시 풀면 된다.
+            WHATAP_JAR=$(basename "$(ls /opt/whatap/whatap.agent-*.jar | sort -V | tail -1)")
+
             # awslogs: CloudWatch /nar/app 로 전송 (보존 30일). docker 20.10+ dual logging
             # 캐시 덕에 docker logs·Dozzle 도 그대로 동작한다. EC2 롤: NAR-CloudWatch-Role
             docker run -d --name "${NEW_NAME}" -p 127.0.0.1:${NEW_PORT}:8080 \
@@ -170,7 +174,9 @@ jobs:
               -e FIREBASE_MESSAGING_ENABLED="true" \
               -e LIVE_NOTIFICATION_FCM_ENABLED="true" \
               -e GOOGLE_APPLICATION_CREDENTIALS="/run/secrets/firebase-service-account.json" \
+              -e JAVA_TOOL_OPTIONS="-javaagent:/whatap/${WHATAP_JAR} --add-opens=java.base/java.lang=ALL-UNNAMED -Dwhatap.oname=${NEW_NAME}" \
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
+              -v /opt/whatap:/whatap \
               "${APP_IMAGE}"
 
             # micro+swap 환경은 기동이 느릴 수 있어 상한 120초(60회 x 2초)
