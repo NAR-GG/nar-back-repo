@@ -158,9 +158,11 @@ class PlayerAdminServiceTest {
 
 	@Test
 	@DisplayName("솔랭 전용 선수 생성: Player 저장 + 계정 해석 호출")
-	void createsSoloRankPlayer() {
+	void createsSoloRankPlayer() throws Exception {
 		when(playerRepository.findByName("Deft")).thenReturn(java.util.Optional.empty());
 		when(playerRepository.save(any(Player.class))).thenAnswer(inv -> inv.getArgument(0));
+		when(objectMapper.writeValueAsString(any()))
+				.thenReturn("[{\"region\":\"KR\",\"riotId\":\"Deft#8366\",\"tier\":null}]");
 
 		Player created = playerAdminService.createSoloRankPlayer("Deft", null, "Deft#8366");
 

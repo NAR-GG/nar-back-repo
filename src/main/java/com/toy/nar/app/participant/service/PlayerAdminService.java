@@ -76,17 +76,11 @@ public class PlayerAdminService {
 				.name(name.trim())
 				.imageUrl(imageUrl == null || imageUrl.isBlank() ? null : imageUrl.trim())
 				.build());
-		// 크론 파서(RiotIdParser)가 읽는 형식: [{"region":"KR","riotId":"...","tier":null}]
-		// objectMapper 없이 직접 구성 — 등록 경로에서 riotId는 이미 형식 검증됨.
-		player.overrideGameAccounts(buildSingleKrAccountJson(riotId));
+		// serializeGameAccounts 재사용: Jackson ObjectMapper가 이스케이프를 보장한다.
+		player.overrideGameAccounts(serializeGameAccounts(List.of(
+				new BackofficeController.GameAccountEntry("KR", riotId, null))));
 		playerRiotAccountSyncService.resolveAndSaveInCurrentTransaction(player, riotId);
 		return player;
-	}
-
-	// KR 단일 계정 JSON을 objectMapper 없이 구성 — 솔랭 전용 선수 등록 전용.
-	// riotId는 이미 #-포함 형식으로 검증된 값만 들어온다.
-	private String buildSingleKrAccountJson(String riotId) {
-		return "[{\"region\":\"KR\",\"riotId\":\"" + riotId + "\",\"tier\":null}]";
 	}
 
 	// 크론 파서(RiotIdParser)가 읽는 형식 유지: [{"region","riotId","tier"}], riotId는 반드시 gameName#tagLine.
