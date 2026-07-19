@@ -58,6 +58,11 @@ live:
   notification:
     fcm:
       enabled: ${LIVE_NOTIFICATION_FCM_ENABLED:false}
+    set-end-score:
+      # 세트 종료 푸시 스코어 재조회 창. 네이버 반영이 꼬리 케이스에서 60초를 넘겨
+      # 스코어 누락 발송되던 문제로 창을 ~110초로 넓힘(12회×10초). 그만큼 알림은 늦어진다.
+      retry-attempts: ${LIVE_SET_END_SCORE_RETRY_ATTEMPTS:12}
+      retry-delay-ms: ${LIVE_SET_END_SCORE_RETRY_DELAY_MS:10000}
 
 # 프로필 이미지 저장(Cloudinary 서명 업로드). 시크릿은 코드/깃에 박지 않고 env로 주입.
 cloudinary:
