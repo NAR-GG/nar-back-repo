@@ -77,6 +77,19 @@ public class LeagueMatch {
 		this.lastUpdated = lastUpdated;
 	}
 
+	/**
+	 * 보조 소스(gol.gg 등)로 세트 스코어·상태만 보정한다. lolesports 가 커버하지 않는 리그
+	 * (KeSPA=Disney+ 독점)에서 종료-후 결과를 채우는 용도. 팀·일정 등 나머지 필드는 건드리지 않는다.
+	 */
+	public void applyExternalScore(Integer blueScore, Integer redScore, String state, LocalDateTime lastUpdated) {
+		this.blueScore = blueScore;
+		this.redScore = redScore;
+		if (state != null) {
+			this.state = state;
+		}
+		this.lastUpdated = lastUpdated;
+	}
+
 	public void applySeason(Integer seasonYear, String seasonSplit) {
 		this.seasonYear = seasonYear;
 		this.seasonSplit = seasonSplit;
