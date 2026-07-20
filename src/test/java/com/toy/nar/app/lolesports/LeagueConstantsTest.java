@@ -24,4 +24,11 @@ class LeagueConstantsTest {
 		assertThat(LeagueConstants.getLiveStreamUrl("EWC")).isNotEqualTo(LeagueConstants.DEFAULT_STREAM_URL);
 		assertThat(LeagueConstants.getStreamLinks("EWC")).isNotEmpty();
 	}
+
+	@Test
+	void KeSPA는_스트림_링크가_없고_SOOP_폴백도_안_한다() {
+		// KeSPA Cup 은 Disney+ 독점 — 앱에 노출할 대체 채널이 없다. SOOP 폴백도 금지.
+		assertThat(LeagueConstants.getStreamLinks("KESPA")).isEmpty();
+		assertThat(LeagueConstants.getLiveStreamUrl("KESPA")).isNull();
+	}
 }

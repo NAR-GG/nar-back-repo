@@ -43,8 +43,14 @@ docker-compose.yml
 /src/main/resources/application.yml
 /src/main/resources/application-dev.yml
 /src/main/resources/application-test.yml
-/src/main/resources/application-*.yml.DS_Store
+/src/main/resources/application-*.yml
 src/main/build/
+
+# macOS / 에디터
+.DS_Store
+
+# Claude Code 워크트리 (로컬 전용)
+.claude/worktrees/
 
 # 애플리케이션 로그
 logs/

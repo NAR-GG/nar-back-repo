@@ -17,13 +17,13 @@ public final class LeagueConstants {
      * 동기화 및 API 대상 리그 목록
      */
     public static final List<String> TARGET_LEAGUES = List.of(
-            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC");
+            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA");
 
     /**
      * 일정 조회 시 허용되는 리그 목록 (TARGET_LEAGUES + 추가 리그)
      */
     public static final Set<String> ALLOWED_LEAGUES = Set.of(
-            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC");
+            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA");
 
     /**
      * lolesports API의 리그 ID 매핑
@@ -38,7 +38,8 @@ public final class LeagueConstants {
             Map.entry("FIRST_STAND", "113464388705111224"),
             Map.entry("WORLDS", "98767975604431411"),
             Map.entry("MSI", "98767991325878492"),
-            Map.entry("EWC", "116838530616006090"));
+            Map.entry("EWC", "116838530616006090"),
+            Map.entry("KESPA", "116929044967296666"));
 
     /**
      * 리그별 기본 라이브 스트림 URL
@@ -61,11 +62,23 @@ public final class LeagueConstants {
     public static final String DEFAULT_STREAM_URL = "https://play.sooplive.co.kr/aflol";
 
     /**
-     * lolesports API 리그 slug → 내부 리그명. slug이 리그 코드와 다른 리그(EWC: ewc_lol)만 보정한다.
+     * 스트림 링크를 의도적으로 제공하지 않는 리그. SOOP 기본 폴백도 적용하지 않는다.
+     * KeSPA Cup 은 Disney+ 글로벌 독점이라 앱에서 링크를 노출할 대체 채널이 없다.
+     */
+    private static final Set<String> NO_STREAM_LEAGUES = Set.of("KESPA");
+
+    /**
+     * lolesports API 리그 slug → 내부 리그명. slug이 리그 코드와 다른 리그(EWC: ewc_lol, KESPA: kespa_cup)만 보정한다.
      */
     public static String fromApiSlug(String slug) {
         String upper = slug == null ? "" : slug.trim().toUpperCase();
-        return "EWC_LOL".equals(upper) ? "EWC" : upper;
+        if ("EWC_LOL".equals(upper)) {
+            return "EWC";
+        }
+        if ("KESPA_CUP".equals(upper)) {
+            return "KESPA";
+        }
+        return upper;
     }
 
     /**
@@ -75,7 +88,11 @@ public final class LeagueConstants {
         if (leagueName == null) {
             return DEFAULT_STREAM_URL;
         }
-        return LIVE_STREAM_URLS.getOrDefault(leagueName.toUpperCase(), DEFAULT_STREAM_URL);
+        String upper = leagueName.toUpperCase();
+        if (NO_STREAM_LEAGUES.contains(upper)) {
+            return null;
+        }
+        return LIVE_STREAM_URLS.getOrDefault(upper, DEFAULT_STREAM_URL);
     }
 
     /**
@@ -120,6 +137,7 @@ public final class LeagueConstants {
             "LPL", List.of(CHZZK_LPL),
             "LEC", List.of(new StreamLink("twitch", "Twitch", "LEC 공식", "https://www.twitch.tv/lec")),
             "LCS", List.of(new StreamLink("twitch", "Twitch", "LCS 공식", "https://www.twitch.tv/lcs")),
+            // KeSPA Cup(Disney+ 독점)은 링크를 별도로 두지 않고 기본 폴백에 맡긴다.
             "EWC", List.of(CHZZK_EWC, TWITCH_EWC));
 
     /**
@@ -129,6 +147,10 @@ public final class LeagueConstants {
         if (leagueName == null) {
             return List.of(SOOP_AFLOL);
         }
-        return STREAM_LINKS.getOrDefault(leagueName.toUpperCase(), List.of(SOOP_AFLOL));
+        String upper = leagueName.toUpperCase();
+        if (NO_STREAM_LEAGUES.contains(upper)) {
+            return List.of();
+        }
+        return STREAM_LINKS.getOrDefault(upper, List.of(SOOP_AFLOL));
     }
 }

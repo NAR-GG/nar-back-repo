@@ -450,8 +450,10 @@ public class MobileScheduleService {
 
 	private String liveStreamUrl(LeagueMatch match) {
 		// 하위호환: 구버전 앱이 쓰는 단일 링크. streamLinks 의 첫 번째(대표 채널)와 동일하게 유지한다.
+		// 링크 없는 리그(KeSPA=Disney+ 독점)는 빈 목록이라 null 을 내려 링크를 노출하지 않는다.
 		if ("inProgress".equalsIgnoreCase(match.getState())) {
-			return LeagueConstants.getStreamLinks(match.getLeagueName()).get(0).url();
+			List<LeagueConstants.StreamLink> links = LeagueConstants.getStreamLinks(match.getLeagueName());
+			return links.isEmpty() ? null : links.get(0).url();
 		}
 		return null;
 	}
