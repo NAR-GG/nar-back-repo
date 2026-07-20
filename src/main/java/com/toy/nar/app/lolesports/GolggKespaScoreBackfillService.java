@@ -3,6 +3,7 @@ package com.toy.nar.app.lolesports;
 import com.toy.nar.app.lolesports.GolggKespaScoreClient.GameRow;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
+import com.toy.nar.app.mobile.push.TeamLiveEventPushService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
@@ -37,6 +38,8 @@ public class GolggKespaScoreBackfillService {
 
 	private final GolggKespaScoreClient golggKespaScoreClient;
 	private final LeagueMatchRepository leagueMatchRepository;
+	private final LeagueConfigService leagueConfigService;
+	private final TeamLiveEventPushService teamLiveEventPushService;
 
 	@Transactional
 	public int backfill() {
@@ -51,6 +54,8 @@ public class GolggKespaScoreBackfillService {
 				.findByLeagueNameOrderByMatchDateDesc(KESPA, Pageable.unpaged());
 		LocalDateTime now = LocalDateTime.now();
 		int updated = 0;
+		// 이번 실행에 새로 completed 로 뒤집힌 매치 — 알림 발송 대상.
+		List<LeagueMatch> newlyCompleted = new java.util.ArrayList<>();
 		for (LeagueMatch m : matches) {
 			if (m.getMatchDate() == null || m.getBlueTeamCode() == null || m.getRedTeamCode() == null) {
 				continue;
@@ -71,11 +76,39 @@ public class GolggKespaScoreBackfillService {
 					&& "completed".equalsIgnoreCase(m.getState())) {
 				continue; // 이미 최신
 			}
+			boolean wasCompleted = "completed".equalsIgnoreCase(m.getState());
 			m.applyExternalScore(blue, red, "completed", now);
 			updated++;
+			if (!wasCompleted) {
+				newlyCompleted.add(m);
+			}
 		}
 		log.info("gol.gg KeSPA 스코어 백필 완료: {}건 업데이트 (gol.gg 게임 {}개)", updated, rows.size());
+		notifyNewlyCompleted(newlyCompleted);
 		return updated;
+	}
+
+	/**
+	 * 새로 종료된 KeSPA 매치를 팀·매치 구독자에게 SET_END 알림으로 보낸다. 리그 알림 토글(KESPA)이
+	 * 켜져 있을 때만. dedup 은 TeamLiveEventPushService 의 발송 원장이 담당해 재폴링 시 중복되지 않는다.
+	 * ponytail: 알림을 백필 트랜잭션 안에서 보냄 — 폴당 매치 수가 적어 무해. 볼륨 커지면 tx 밖으로 분리.
+	 */
+	private void notifyNewlyCompleted(List<LeagueMatch> newlyCompleted) {
+		if (newlyCompleted.isEmpty() || !leagueConfigService.isNotificationEnabled(KESPA)) {
+			return;
+		}
+		for (LeagueMatch m : newlyCompleted) {
+			int sets = (m.getBlueScore() == null ? 0 : m.getBlueScore())
+					+ (m.getRedScore() == null ? 0 : m.getRedScore());
+			teamLiveEventPushService.notifyMatchEvent(
+					TeamLiveEventPushService.TYPE_SET_END,
+					m.getId(),
+					sets, // 세트 수 = 스코어 합. buildMatchScoreLine 이 DB 스코어를 그대로 쓴다.
+					m.getBlueExternalTeamId(),
+					m.getRedExternalTeamId(),
+					m.getBlueTeamName(),
+					m.getRedTeamName());
+		}
 	}
 
 	/** (정렬 팀코드쌍 @ KST일) → {팀코드: 세트승수}. 게임마다 승자에 +1. */

@@ -37,8 +37,8 @@ public class GolggKespaScoreScheduler {
 	@Value("${lolesports.kespa.golgg-enabled:true}")
 	private boolean enabled;
 
-	/** 기본 10분 간격. 진행중 매치가 있을 때만 실제 스크랩. */
-	@Scheduled(fixedDelayString = "${lolesports.kespa.golgg-poll-ms:600000}")
+	/** 기본 5분 간격. 진행중 매치가 있을 때만 실제 스크랩. */
+	@Scheduled(fixedDelayString = "${lolesports.kespa.golgg-poll-ms:300000}")
 	public void poll() {
 		if (!enabled) {
 			return;
