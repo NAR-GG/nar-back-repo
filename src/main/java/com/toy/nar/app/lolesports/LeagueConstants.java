@@ -17,13 +17,13 @@ public final class LeagueConstants {
      * 동기화 및 API 대상 리그 목록
      */
     public static final List<String> TARGET_LEAGUES = List.of(
-            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC");
+            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA");
 
     /**
      * 일정 조회 시 허용되는 리그 목록 (TARGET_LEAGUES + 추가 리그)
      */
     public static final Set<String> ALLOWED_LEAGUES = Set.of(
-            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC");
+            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA");
 
     /**
      * lolesports API의 리그 ID 매핑
@@ -38,7 +38,8 @@ public final class LeagueConstants {
             Map.entry("FIRST_STAND", "113464388705111224"),
             Map.entry("WORLDS", "98767975604431411"),
             Map.entry("MSI", "98767991325878492"),
-            Map.entry("EWC", "116838530616006090"));
+            Map.entry("EWC", "116838530616006090"),
+            Map.entry("KESPA", "116929044967296666"));
 
     /**
      * 리그별 기본 라이브 스트림 URL
@@ -61,11 +62,17 @@ public final class LeagueConstants {
     public static final String DEFAULT_STREAM_URL = "https://play.sooplive.co.kr/aflol";
 
     /**
-     * lolesports API 리그 slug → 내부 리그명. slug이 리그 코드와 다른 리그(EWC: ewc_lol)만 보정한다.
+     * lolesports API 리그 slug → 내부 리그명. slug이 리그 코드와 다른 리그(EWC: ewc_lol, KESPA: kespa_cup)만 보정한다.
      */
     public static String fromApiSlug(String slug) {
         String upper = slug == null ? "" : slug.trim().toUpperCase();
-        return "EWC_LOL".equals(upper) ? "EWC" : upper;
+        if ("EWC_LOL".equals(upper)) {
+            return "EWC";
+        }
+        if ("KESPA_CUP".equals(upper)) {
+            return "KESPA";
+        }
+        return upper;
     }
 
     /**
@@ -120,7 +127,9 @@ public final class LeagueConstants {
             "LPL", List.of(CHZZK_LPL),
             "LEC", List.of(new StreamLink("twitch", "Twitch", "LEC 공식", "https://www.twitch.tv/lec")),
             "LCS", List.of(new StreamLink("twitch", "Twitch", "LCS 공식", "https://www.twitch.tv/lcs")),
-            "EWC", List.of(CHZZK_EWC, TWITCH_EWC));
+            "EWC", List.of(CHZZK_EWC, TWITCH_EWC),
+            // KESPA컵은 LCK 국내 중계권 그대로 사용. 대회 편성이 바뀌면 교체 필요.
+            "KESPA", List.of(CHZZK_LCK, SOOP_AFLOL));
 
     /**
      * 리그의 중계 채널 목록 반환. 매핑이 없으면 SOOP 단일 링크로 폴백.

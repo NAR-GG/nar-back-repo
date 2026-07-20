@@ -333,6 +333,11 @@ public class KakaoScheduleSkillService {
 		aliases.put("esports world cup", "EWC");
 		aliases.put("이스포츠 월드컵", "EWC");
 		aliases.put("이스포츠월드컵", "EWC");
+		aliases.put("kespa", "KESPA");
+		aliases.put("kespa cup", "KESPA");
+		aliases.put("케스파", "KESPA");
+		aliases.put("케스파컵", "KESPA");
+		aliases.put("케스파 컵", "KESPA");
 		return aliases;
 	}
 
