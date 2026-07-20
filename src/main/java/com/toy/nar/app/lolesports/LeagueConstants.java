@@ -62,6 +62,12 @@ public final class LeagueConstants {
     public static final String DEFAULT_STREAM_URL = "https://play.sooplive.co.kr/aflol";
 
     /**
+     * 스트림 링크를 의도적으로 제공하지 않는 리그. SOOP 기본 폴백도 적용하지 않는다.
+     * KeSPA Cup 은 Disney+ 글로벌 독점이라 앱에서 링크를 노출할 대체 채널이 없다.
+     */
+    private static final Set<String> NO_STREAM_LEAGUES = Set.of("KESPA");
+
+    /**
      * lolesports API 리그 slug → 내부 리그명. slug이 리그 코드와 다른 리그(EWC: ewc_lol, KESPA: kespa_cup)만 보정한다.
      */
     public static String fromApiSlug(String slug) {
@@ -82,7 +88,11 @@ public final class LeagueConstants {
         if (leagueName == null) {
             return DEFAULT_STREAM_URL;
         }
-        return LIVE_STREAM_URLS.getOrDefault(leagueName.toUpperCase(), DEFAULT_STREAM_URL);
+        String upper = leagueName.toUpperCase();
+        if (NO_STREAM_LEAGUES.contains(upper)) {
+            return null;
+        }
+        return LIVE_STREAM_URLS.getOrDefault(upper, DEFAULT_STREAM_URL);
     }
 
     /**
@@ -127,9 +137,8 @@ public final class LeagueConstants {
             "LPL", List.of(CHZZK_LPL),
             "LEC", List.of(new StreamLink("twitch", "Twitch", "LEC 공식", "https://www.twitch.tv/lec")),
             "LCS", List.of(new StreamLink("twitch", "Twitch", "LCS 공식", "https://www.twitch.tv/lcs")),
-            "EWC", List.of(CHZZK_EWC, TWITCH_EWC),
-            // KESPA컵은 LCK 국내 중계권 그대로 사용. 대회 편성이 바뀌면 교체 필요.
-            "KESPA", List.of(CHZZK_LCK, SOOP_AFLOL));
+            // KeSPA Cup(Disney+ 독점)은 링크를 별도로 두지 않고 기본 폴백에 맡긴다.
+            "EWC", List.of(CHZZK_EWC, TWITCH_EWC));
 
     /**
      * 리그의 중계 채널 목록 반환. 매핑이 없으면 SOOP 단일 링크로 폴백.
@@ -138,6 +147,10 @@ public final class LeagueConstants {
         if (leagueName == null) {
             return List.of(SOOP_AFLOL);
         }
-        return STREAM_LINKS.getOrDefault(leagueName.toUpperCase(), List.of(SOOP_AFLOL));
+        String upper = leagueName.toUpperCase();
+        if (NO_STREAM_LEAGUES.contains(upper)) {
+            return List.of();
+        }
+        return STREAM_LINKS.getOrDefault(upper, List.of(SOOP_AFLOL));
     }
 }
