@@ -42,15 +42,20 @@ public class GolggKespaScoreClient {
 
 	/**
 	 * gol.gg 팀 풀네임(소문자) → 우리 lolesports 팀 코드. 이름에 이 토큰이 포함되면 매핑한다.
-	 * KeSPA Cup 2026 참가 6팀 기준(2026-07-20 gol.gg 매치리스트로 검증).
+	 * KeSPA Cup 2026 참가 10팀 전체(lolesports getSchedule 팀 코드 기준). 각 토큰은 팀명에서
+	 * 고유하게 구분되는 부분만 골랐다(예: Kiwoom DRX→kiwoom, Gen.G Esports→gen.g).
 	 */
-	private static final Map<String, String> NAME_TOKEN_TO_CODE = Map.of(
-			"kiwoom", "KRX",
-			"rolster", "KT",
-			"nongshim", "NS",
-			"fearx", "BFX",
-			"brion", "BRO",
-			"soopers", "DNS");
+	private static final Map<String, String> NAME_TOKEN_TO_CODE = Map.ofEntries(
+			Map.entry("kiwoom", "KRX"),
+			Map.entry("rolster", "KT"),
+			Map.entry("nongshim", "NS"),
+			Map.entry("fearx", "BFX"),
+			Map.entry("brion", "BRO"),
+			Map.entry("soopers", "DNS"),
+			Map.entry("t1", "T1"),
+			Map.entry("gen.g", "GEN"),
+			Map.entry("hanwha", "HLE"),
+			Map.entry("dplus", "DK"));
 
 	@Value("${lolesports.kespa.golgg-enabled:true}")
 	private boolean enabled;

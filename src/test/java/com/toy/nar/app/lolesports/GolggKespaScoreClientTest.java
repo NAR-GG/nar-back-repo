@@ -57,7 +57,12 @@ class GolggKespaScoreClientTest {
 	void 알_수_없는_팀명은_null() {
 		assertThat(GolggKespaScoreClient.toCode("Kiwoom DRX")).isEqualTo("KRX");
 		assertThat(GolggKespaScoreClient.toCode("DN SOOPers")).isEqualTo("DNS");
-		assertThat(GolggKespaScoreClient.toCode("T1")).isNull();
+		// 10팀 전체 커버 — DAY2 합류 팀 포함.
+		assertThat(GolggKespaScoreClient.toCode("T1")).isEqualTo("T1");
+		assertThat(GolggKespaScoreClient.toCode("Gen.G Esports")).isEqualTo("GEN");
+		assertThat(GolggKespaScoreClient.toCode("Hanwha Life Esports")).isEqualTo("HLE");
+		assertThat(GolggKespaScoreClient.toCode("Dplus KIA")).isEqualTo("DK");
+		assertThat(GolggKespaScoreClient.toCode("Unknown Team")).isNull();
 		assertThat(GolggKespaScoreClient.toCode(null)).isNull();
 	}
 }
