@@ -66,7 +66,6 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
-          no-cache: true
 
   deploy:
     runs-on: ubuntu-latest
@@ -102,14 +101,11 @@ jobs:
             df -h
             docker system df || true
 
-            echo "Cleaning up unused Docker resources..."
+            # 이미지/빌더 prune 은 배포 성공 후로 미룬다(하단 백그라운드 정리).
+            # pull 전에 이미지를 지우면 temurin 베이스(~450MB)까지 매번 재다운로드되므로,
+            # 기존 이미지를 남겨 베이스 레이어를 공유하고 바뀐 앱 레이어만 받게 한다.
+            echo "Cleaning up stopped containers..."
             docker container prune -f || true
-            docker image prune -af || true
-            docker builder prune -af || true
-
-            echo "Checking disk usage after cleanup..."
-            df -h
-            docker system df || true
 
             # 1. 메인 Spring Boot 앱 blue/green 배포
             # nginx upstream(/etc/nginx/conf.d/nar-upstream.conf)이 가리키는 포트의 반대편에
@@ -197,28 +193,48 @@ jobs:
               sleep 2
             done
 
+            # JIT 워밍업 — nginx 전환 전 배포 스크립트가 hot-path 첫 타를 맞아
+            # 배포 직후 첫 실유저의 콜드스타트(t3.micro 기준 수 초)를 없앤다.
+            # DUMMY gameId·인증 실패라도 디스패치·필터·JPA·직렬화 경로는 데워진다. 실패는 무시.
+            echo "Warming up hot endpoints on port ${NEW_PORT}..."
+            for ep in champions events ratings; do
+              curl -fsS "http://localhost:${NEW_PORT}/api/mobile/live/games/DUMMY/${ep}" -o /dev/null 2>&1 || true
+            done
+
             echo "Switching nginx upstream to ${NEW_PORT}..."
             printf 'upstream nar_backend {\n    server 127.0.0.1:%s;\n}\n' "${NEW_PORT}" \
               | sudo tee "${UPSTREAM_CONF}" > /dev/null
             sudo nginx -t && sudo nginx -s reload
 
-            # Spring graceful shutdown 유예 30초보다 길게 대기 (SIGKILL 방지)
-            echo "Stopping old container..."
-            docker stop -t 35 "${OLD_NAME}" 2>/dev/null || true
-            docker rm "${OLD_NAME}" 2>/dev/null || true
-            # 구 배포 방식(nar-gg-container) 잔재 정리 — 최초 전환 이후엔 no-op
-            docker stop -t 35 nar-gg-container 2>/dev/null || true
-            docker rm nar-gg-container 2>/dev/null || true
+            # 구 컨테이너 정리 + 이미지/빌더 prune 을 백그라운드로 넘긴다.
+            # nginx 는 이미 전환됐으므로 graceful stop 35초와 prune 은 사용자 트래픽과 무관 —
+            # 배포 워크플로가 여기서 대기할 이유가 없다. nohup 으로 SSH 세션 종료와 분리.
+            echo "Cleaning up old container & images in background..."
+            nohup bash -c "
+              docker stop -t 35 '${OLD_NAME}' 2>/dev/null || true
+              docker rm '${OLD_NAME}' 2>/dev/null || true
+              docker stop -t 35 nar-gg-container 2>/dev/null || true
+              docker rm nar-gg-container 2>/dev/null || true
+              docker image prune -af || true
+              docker builder prune -af || true
+            " >/dev/null 2>&1 &
 
-            # 2. Dozzle 배포
-            echo "Deploying Dozzle..."
+            # 2. Dozzle — --restart always 라 상시 떠 있으므로 이미지가 갱신됐을 때만 재생성한다.
+            echo "Ensuring Dozzle is up to date..."
             docker pull amir20/dozzle:latest
-            docker stop dozzle || true
-            docker rm dozzle || true
-            docker run -d --name dozzle --restart always \
-              -v /var/run/docker.sock:/var/run/docker.sock:ro \
-              -p 127.0.0.1:8082:8080 \
-              -e DOZZLE_BASE=/dozzle \
-              amir20/dozzle:latest
-            
+            RUNNING_DOZZLE=$(docker inspect -f '{{.Image}}' dozzle 2>/dev/null || echo none)
+            LATEST_DOZZLE=$(docker inspect -f '{{.Id}}' amir20/dozzle:latest 2>/dev/null || echo latest)
+            if [ "${RUNNING_DOZZLE}" != "${LATEST_DOZZLE}" ]; then
+              echo "Dozzle image changed — recreating..."
+              docker stop dozzle || true
+              docker rm dozzle || true
+              docker run -d --name dozzle --restart always \
+                -v /var/run/docker.sock:/var/run/docker.sock:ro \
+                -p 127.0.0.1:8082:8080 \
+                -e DOZZLE_BASE=/dozzle \
+                amir20/dozzle:latest
+            else
+              echo "Dozzle already on latest image — skipping recreate."
+            fi
+
             echo "Deployment successful!"
