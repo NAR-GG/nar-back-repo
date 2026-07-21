@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
 
 @Tag(name = "Mobile. 경기 일정", description = "모바일 앱 경기일정/경기리스트 전용 API")
 @RestController
@@ -39,10 +40,10 @@ public class MobileScheduleController {
 	public ResponseEntity<MobileScheduleCalendarResponse> getCalendar(
 			@Parameter(description = "조회 월", example = "2026-04")
 			@RequestParam("month") @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
-			@Parameter(description = "리그 (전체는 ALL)", example = "LCK")
-			@RequestParam(defaultValue = "LCK") String league,
-			@Parameter(description = "팀 ID", example = "1")
-			@RequestParam(required = false) Long teamId) {
+			@Parameter(description = "리그 (전체는 ALL). 복수 지정 가능: league=LCK&league=LEC", example = "LCK")
+			@RequestParam(defaultValue = "LCK") List<String> league,
+			@Parameter(description = "팀 ID. 복수 지정 가능: teamId=1&teamId=3", example = "1")
+			@RequestParam(required = false) List<Long> teamId) {
 		return ResponseEntity.ok(mobileScheduleService.getCalendar(month, league, teamId));
 	}
 
@@ -51,10 +52,10 @@ public class MobileScheduleController {
 	public ResponseEntity<MobileScheduleListResponse> getDailySchedules(
 			@Parameter(description = "조회 일자", example = "2026-04-01")
 			@RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-			@Parameter(description = "리그 (전체는 ALL)", example = "LCK")
-			@RequestParam(defaultValue = "LCK") String league,
-			@Parameter(description = "팀 ID", example = "1")
-			@RequestParam(required = false) Long teamId) {
+			@Parameter(description = "리그 (전체는 ALL). 복수 지정 가능: league=LCK&league=KESPA", example = "LCK")
+			@RequestParam(defaultValue = "LCK") List<String> league,
+			@Parameter(description = "팀 ID. 복수 지정 가능: teamId=1&teamId=5", example = "1")
+			@RequestParam(required = false) List<Long> teamId) {
 		return ResponseEntity.ok(mobileScheduleService.getDailySchedules(date, league, teamId));
 	}
 }

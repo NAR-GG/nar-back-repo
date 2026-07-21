@@ -88,15 +88,15 @@ public class MobileScheduleService {
 		return new MobileScheduleFilterResponse(DEFAULT_LEAGUE, leagues, teams, seasons);
 	}
 
-	public MobileScheduleCalendarResponse getCalendar(YearMonth month, String league, Long teamId) {
+	public MobileScheduleCalendarResponse getCalendar(YearMonth month, List<String> league, List<Long> teamId) {
 		if (month == null) {
 			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
 		}
-		String normalizedLeague = normalizeLeague(league);
-		TeamFilter teamFilter = resolveTeamFilter(teamId);
+		List<String> normalizedLeagues = normalizeLeagues(league);
+		TeamFilters teamFilters = resolveTeamFilters(teamId);
 		LocalDateTime startUtc = toUtc(month.atDay(1).atStartOfDay());
 		LocalDateTime endUtc = toUtc(month.plusMonths(1).atDay(1).atStartOfDay());
-		List<LeagueMatch> matches = findMatches(normalizedLeague, teamFilter, startUtc, endUtc);
+		List<LeagueMatch> matches = findMatches(normalizedLeagues, teamFilters, startUtc, endUtc);
 
 		Map<String, MobileScheduleCalendarResponse.DateSummary> summaries = new LinkedHashMap<>();
 		for (LeagueMatch match : matches) {
@@ -119,26 +119,26 @@ public class MobileScheduleService {
 
 		return new MobileScheduleCalendarResponse(
 				month.toString(),
-				normalizedLeague,
-				teamId,
+				echoLeague(normalizedLeagues),
+				echoTeamId(teamId),
 				new ArrayList<>(summaries.values()));
 	}
 
-	public MobileScheduleListResponse getDailySchedules(LocalDate date, String league, Long teamId) {
+	public MobileScheduleListResponse getDailySchedules(LocalDate date, List<String> league, List<Long> teamId) {
 		if (date == null) {
 			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
 		}
-		String normalizedLeague = normalizeLeague(league);
-		TeamFilter teamFilter = resolveTeamFilter(teamId);
+		List<String> normalizedLeagues = normalizeLeagues(league);
+		TeamFilters teamFilters = resolveTeamFilters(teamId);
 		LocalDateTime startUtc = toUtc(date.atStartOfDay());
 		LocalDateTime endUtc = toUtc(date.plusDays(1).atStartOfDay());
-		List<LeagueMatch> found = findMatches(normalizedLeague, teamFilter, startUtc, endUtc);
+		List<LeagueMatch> found = findMatches(normalizedLeagues, teamFilters, startUtc, endUtc);
 		Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId = loadGames(found);
 		List<MobileScheduleListResponse.MobileMatchSummary> matches = found.stream()
 				.map(match -> toMatchSummary(match, gamesByMatchId))
 				.toList();
 
-		return new MobileScheduleListResponse(date.toString(), normalizedLeague, teamId, matches);
+		return new MobileScheduleListResponse(date.toString(), echoLeague(normalizedLeagues), echoTeamId(teamId), matches);
 	}
 
 	public MobileMatchPageResponse getMatchPage(
@@ -246,18 +246,18 @@ public class MobileScheduleService {
 	}
 
 	private List<LeagueMatch> findMatches(
-			String league,
-			TeamFilter teamFilter,
+			List<String> leagues,
+			TeamFilters teamFilters,
 			LocalDateTime startUtc,
 			LocalDateTime endUtc) {
-		String leagueParam = leagueParam(league);
-		if (teamFilter == null) {
-			return leagueMatchRepository.findMobileMatchesInRange(leagueParam, startUtc, endUtc);
+		List<String> leagueParams = leagueParams(leagues);
+		if (teamFilters == null) {
+			return leagueMatchRepository.findMobileMatchesInRange(leagueParams, startUtc, endUtc);
 		}
 		return leagueMatchRepository.findMobileTeamMatchesInRange(
-				leagueParam,
-				teamFilter.name(),
-				teamFilter.code(),
+				leagueParams,
+				teamFilters.names(),
+				teamFilters.codes(),
 				startUtc,
 				endUtc);
 	}
@@ -504,6 +504,47 @@ public class MobileScheduleService {
 		return new TeamFilter(team.getName(), team.getCode());
 	}
 
+	/** 복수 팀 필터. teamId 미전송이면 null(팀 조건 없음). 이름·코드는 소문자로 정규화해 IN 비교에 쓴다. */
+	private TeamFilters resolveTeamFilters(List<Long> teamIds) {
+		if (teamIds == null || teamIds.isEmpty()) {
+			return null;
+		}
+		List<String> names = new ArrayList<>();
+		List<String> codes = new ArrayList<>();
+		for (Long teamId : teamIds) {
+			Team team = teamRepository.findById(teamId)
+					.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
+			names.add(team.getName().toLowerCase(Locale.ROOT));
+			if (team.getCode() != null && !team.getCode().isBlank()) {
+				codes.add(team.getCode().toLowerCase(Locale.ROOT));
+			}
+		}
+		return new TeamFilters(names, codes.isEmpty() ? null : codes);
+	}
+
+	/** 리스트 리그 정규화. 비었으면 기본 리그. 각 원소는 단일 정규화(검증·대문자·ALL 처리)를 재사용한다. */
+	private List<String> normalizeLeagues(List<String> leagues) {
+		if (leagues == null || leagues.isEmpty()) {
+			return List.of(DEFAULT_LEAGUE);
+		}
+		return leagues.stream().map(this::normalizeLeague).distinct().toList();
+	}
+
+	/** 리포지토리 필터용 리그 목록. ALL 이 하나라도 있으면 null 을 반환해 리그 조건을 걷는다. */
+	private List<String> leagueParams(List<String> normalizedLeagues) {
+		return normalizedLeagues.contains(ALL_LEAGUES) ? null : normalizedLeagues;
+	}
+
+	/** 응답 에코용 리그 값(하위호환: 단일 String 필드). 첫 리그만 반영한다. */
+	private String echoLeague(List<String> normalizedLeagues) {
+		return normalizedLeagues.get(0);
+	}
+
+	/** 응답 에코용 팀 값(하위호환: 단일 Long 필드). 첫 팀만 반영한다. */
+	private Long echoTeamId(List<Long> teamIds) {
+		return teamIds == null || teamIds.isEmpty() ? null : teamIds.get(0);
+	}
+
 	private String normalizeLeague(String league) {
 		String normalized = league == null || league.isBlank()
 				? DEFAULT_LEAGUE
@@ -523,6 +564,9 @@ public class MobileScheduleService {
 	}
 
 	private record TeamFilter(String name, String code) {
+	}
+
+	private record TeamFilters(List<String> names, List<String> codes) {
 	}
 
 	private record MatchCursor(LocalDateTime matchDate, String matchId) {

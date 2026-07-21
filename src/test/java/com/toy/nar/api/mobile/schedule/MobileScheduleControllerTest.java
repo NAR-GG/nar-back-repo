@@ -56,7 +56,7 @@ class MobileScheduleControllerTest {
 
 	@Test
 	void getCalendarReturnsMobileCalendarShape() throws Exception {
-		when(mobileScheduleService.getCalendar(YearMonth.of(2026, 4), "LCK", 1L))
+		when(mobileScheduleService.getCalendar(YearMonth.of(2026, 4), List.of("LCK"), List.of(1L)))
 				.thenReturn(new MobileScheduleCalendarResponse(
 						"2026-04",
 						"LCK",
@@ -90,7 +90,7 @@ class MobileScheduleControllerTest {
 
 	@Test
 	void getDailySchedulesReturnsMobileListShape() throws Exception {
-		when(mobileScheduleService.getDailySchedules(LocalDate.of(2026, 4, 1), "LCK", null))
+		when(mobileScheduleService.getDailySchedules(LocalDate.of(2026, 4, 1), List.of("LCK"), null))
 				.thenReturn(new MobileScheduleListResponse(
 						"2026-04-01",
 						"LCK",
