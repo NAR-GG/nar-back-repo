@@ -49,6 +49,9 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build -x test
 
+      - name: Set up QEMU  # arm64(t4g) 크로스 빌드용 에뮬레이터
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -63,6 +66,8 @@ jobs:
         with:
           context: .
           push: true
+          # amd64(t3)·arm64(t4g) 둘 다 빌드 — 인스턴스 아키텍처 무관하게 실행 + 롤백 안전.
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
