@@ -338,4 +338,64 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 
 		String getTeamImageUrl();
 	}
+
+	// 백오피스 구독 탭: 구독 가능한 선수(솔랭 계정 보유 ∪ LCK 2026 출전) + 구독자 수. 인기순(구독자 수 desc) 정렬.
+	// platform 무관(KR/EUW1/NA1 모두) — 해외 이적 솔랭 선수도 포함.
+	@Query(value = """
+			SELECT p.player_id AS playerId,
+			       p.player_name AS playerName,
+			       p.image_url AS imageUrl,
+			       p.role AS role,
+			       t.team_id AS teamId,
+			       t.team_name AS teamName,
+			       pra.riot_id AS riotId,
+			       pra.platform AS platform,
+			       COUNT(mfp.id) AS subscriberCount
+			FROM players p
+			LEFT JOIN teams t ON t.team_id = p.current_team_id
+			LEFT JOIN player_riot_account pra
+			       ON pra.player_id = p.player_id AND pra.enabled = true AND pra.primary_account = true
+			LEFT JOIN member_favorite_player mfp ON mfp.player_id = p.player_id
+			WHERE (:q IS NULL OR LOWER(p.player_name) LIKE LOWER(CONCAT('%', :q, '%')))
+			  AND (pra.player_id IS NOT NULL OR EXISTS (
+			        SELECT 1 FROM game_participants gp
+			        JOIN games g ON g.game_id = gp.game_id
+			        JOIN leagues l ON l.league_id = g.league_id
+			        WHERE gp.player_id = p.player_id AND l.league_name = 'LCK' AND l.season_year = 2026))
+			GROUP BY p.player_id, p.player_name, p.image_url, p.role, t.team_id, t.team_name, pra.riot_id, pra.platform
+			ORDER BY subscriberCount DESC, p.player_name ASC
+			""",
+			countQuery = """
+			SELECT COUNT(*) FROM players p
+			LEFT JOIN player_riot_account pra
+			       ON pra.player_id = p.player_id AND pra.enabled = true AND pra.primary_account = true
+			WHERE (:q IS NULL OR LOWER(p.player_name) LIKE LOWER(CONCAT('%', :q, '%')))
+			  AND (pra.player_id IS NOT NULL OR EXISTS (
+			        SELECT 1 FROM game_participants gp
+			        JOIN games g ON g.game_id = gp.game_id
+			        JOIN leagues l ON l.league_id = g.league_id
+			        WHERE gp.player_id = p.player_id AND l.league_name = 'LCK' AND l.season_year = 2026))
+			""",
+			nativeQuery = true)
+	Page<SubscribablePlayerView> findSubscribablePlayers(@Param("q") String q, Pageable pageable);
+
+	interface SubscribablePlayerView {
+		Long getPlayerId();
+
+		String getPlayerName();
+
+		String getImageUrl();
+
+		String getRole();
+
+		Long getTeamId();
+
+		String getTeamName();
+
+		String getRiotId();
+
+		String getPlatform();
+
+		long getSubscriberCount();
+	}
 }
