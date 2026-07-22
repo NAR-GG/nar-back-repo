@@ -6,6 +6,7 @@ import com.toy.nar.app.member.service.MemberDeleteService;
 import com.toy.nar.app.participant.service.PlayerAdminService;
 import com.toy.nar.app.riot.RiotApiException;
 import com.toy.nar.domain.game.repository.LeagueRepository;
+import com.toy.nar.domain.member.repository.MemberFavoritePlayerRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
@@ -13,6 +14,7 @@ import com.toy.nar.domain.participant.repository.TeamRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +52,7 @@ public class BackofficeController {
     private final LeagueConfigService leagueConfigService;
     private final PlayerAdminService playerAdminService;
     private final MemberDeleteService memberDeleteService;
+    private final MemberFavoritePlayerRepository memberFavoritePlayerRepository;
 
     @GetMapping("/members")
     public Page<MemberRow> members(@RequestParam(required = false) String q, Pageable pageable) {
@@ -85,6 +88,26 @@ public class BackofficeController {
     @GetMapping("/leagues")
     public List<String> leagues() {
         return leagueRepository.findAllDistinctLeagueNames();
+    }
+
+    // 구독 탭 — 구독 가능한 선수 목록(구독자 수 desc). q로 선수명 검색.
+    // 정렬은 쿼리에 고정(인기순)이라 클라이언트 sort는 무시(page/size만 사용).
+    @GetMapping("/subscriptions/players")
+    public Page<SubscribablePlayerRow> subscribablePlayers(@RequestParam(required = false) String q,
+                                                           Pageable pageable) {
+        Pageable pageOnly = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        return playerRepository.findSubscribablePlayers(blankToNull(q), pageOnly)
+                .map(v -> new SubscribablePlayerRow(v.getPlayerId(), v.getPlayerName(), v.getImageUrl(),
+                        v.getRole(), v.getTeamId(), v.getTeamName(), v.getRiotId(), v.getPlatform(),
+                        v.getSubscriberCount()));
+    }
+
+    // 구독 탭 — 특정 선수를 구독한 회원 목록(최근순).
+    @GetMapping("/subscriptions/players/{playerId}/subscribers")
+    public Page<SubscriberRow> playerSubscribers(@PathVariable Long playerId, Pageable pageable) {
+        return memberFavoritePlayerRepository.findSubscribersByPlayerId(playerId, pageable)
+                .map(v -> new SubscriberRow(v.getMemberId(), v.getName() + "#" + v.getTag(),
+                        v.getEmail(), v.getSubscribedAt()));
     }
 
     // 빈 문자열/공백은 null 로 정규화 → 검색 쿼리의 ":q IS NULL" 분기가 전체 조회로 동작.
@@ -194,6 +217,14 @@ public class BackofficeController {
 
     public record MemberRow(Long id, String name, String email,
                             String favoriteLeagueName, LocalDateTime createdAt) {}
+
+    // 구독 탭 — 구독 가능 선수 행(구독자 수 포함). id 필드는 FE 데이터그리드 rowKey 용.
+    public record SubscribablePlayerRow(Long id, String playerName, String imageUrl, String role,
+                                        Long teamId, String teamName, String riotId, String platform,
+                                        long subscriberCount) {}
+
+    // 구독 탭 — 구독자 행. id 필드는 FE rowKey 용(memberId).
+    public record SubscriberRow(Long id, String nickname, String email, LocalDateTime subscribedAt) {}
 
     public record PlayerRow(Long id, String name, String realName, String role, Integer age,
                             String imageUrl, Long currentTeamId, String currentTeamName, boolean imageLocked,
