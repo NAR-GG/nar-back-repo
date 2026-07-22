@@ -40,7 +40,6 @@ public class PlayerSoloRankMonitorService {
 	private final PlayerRiotAccountRepository playerRiotAccountRepository;
 	private final ChampionDataService championDataService;
 	private final RiotApiClient riotApiClient;
-	private final RiotMonitorProperties riotMonitorProperties;
 	private final NotificationService notificationService;
 	private final PlayerSoloRankPushService playerSoloRankPushService;
 	private final SchedulerAlertService schedulerAlertService;
@@ -50,8 +49,7 @@ public class PlayerSoloRankMonitorService {
 	public PlayerSoloRankMonitorResult pollTrackedAccounts() {
 		long startedAt = System.currentTimeMillis();
 		riotApiClient.assertConfigured();
-		List<PlayerRiotAccount> trackedAccounts = playerRiotAccountRepository.findTrackedAccountsByPlatform(
-				riotMonitorProperties.getPlatform().toUpperCase());
+		List<PlayerRiotAccount> trackedAccounts = playerRiotAccountRepository.findAllTrackedAccounts();
 
 		int checkedCount = 0;
 		int noRecentMatchCount = 0;
@@ -64,7 +62,8 @@ public class PlayerSoloRankMonitorService {
 		for (PlayerRiotAccount account : trackedAccounts) {
 			LocalDateTime checkedAt = LocalDateTime.now();
 			try {
-				Optional<RiotCurrentGameResponse> currentGameOptional = riotApiClient.getActiveGameByPuuid(account.getPuuid());
+				Optional<RiotCurrentGameResponse> currentGameOptional = riotApiClient.getActiveGameByPuuid(
+						account.getPuuid(), account.getPlatform());
 				checkedCount++;
 
 				if (currentGameOptional.isEmpty()) {
@@ -121,7 +120,7 @@ public class PlayerSoloRankMonitorService {
 								champion == null ? null : champion.getChampionNameKr(),
 								champion == null ? null : champion.getImageUrl(),
 								queueDisplayName,
-								buildOpggUrl(account.getGameName(), account.getTagLine()));
+								buildOpggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 					}
 					account.markAlertSent(currentGameId);
 					alertsSentCount++;
@@ -158,10 +157,10 @@ public class PlayerSoloRankMonitorService {
 	}
 
 	@Transactional(readOnly = true)
-	public PlayerRiotAlertCheckResult checkAndSendAlertByPuuid(String puuid) {
+	public PlayerRiotAlertCheckResult checkAndSendAlertByPuuid(String puuid, String platform) {
 		riotApiClient.assertConfigured();
 
-		Optional<RiotCurrentGameResponse> currentGameOptional = riotApiClient.getActiveGameByPuuid(puuid);
+		Optional<RiotCurrentGameResponse> currentGameOptional = riotApiClient.getActiveGameByPuuid(puuid, platform);
 		if (currentGameOptional.isEmpty()) {
 			return new PlayerRiotAlertCheckResult(
 					puuid,
@@ -215,13 +214,13 @@ public class PlayerSoloRankMonitorService {
 				"ALERT_SENT");
 	}
 
-	/** OP.GG 소환사 페이지 URL (디스코드 알림과 동일 포맷). 정보 부족 시 빈 문자열. */
-	private String buildOpggUrl(String gameName, String tagLine) {
+	/** OP.GG 소환사 페이지 URL (디스코드 알림과 동일 포맷). 계정 플랫폼별 지역 코드 사용. 정보 부족 시 빈 문자열. */
+	private String buildOpggUrl(String gameName, String tagLine, String platform) {
 		if (gameName == null || gameName.isBlank() || tagLine == null || tagLine.isBlank()) {
 			return "";
 		}
 		String path = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
-		return "https://www.op.gg/summoners/kr/" + path;
+		return "https://www.op.gg/summoners/" + RiotPlatform.opggRegion(platform) + "/" + path;
 	}
 
 	private boolean isRankedSolo(RiotCurrentGameResponse currentGame) {

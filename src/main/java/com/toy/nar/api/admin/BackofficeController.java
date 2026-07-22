@@ -122,7 +122,14 @@ public class BackofficeController {
     @ResponseStatus(HttpStatus.CREATED)
     public PlayerRow createSoloRankPlayer(@RequestBody SoloRankPlayerCreateRequest request) {
         return PlayerRow.from(playerAdminService.createSoloRankPlayer(
-                request.name(), request.imageUrl(), request.riotId()));
+                request.name(), request.imageUrl(), request.riotId(), request.region()));
+    }
+
+    // 기존 선수(비-LCK 포함)에 솔랭 계정 부착/교체. 해외 이적 선수 KR→EUW 교체도 이 경로.
+    @PostMapping("/players/{id}/solo-rank-account")
+    public PlayerRow attachSoloRankAccount(@PathVariable Long id, @RequestBody SoloRankAccountRequest request) {
+        return PlayerRow.from(playerAdminService.attachSoloRankAccount(
+                id, request.riotId(), request.region(), request.imageUrl()));
     }
 
     @DeleteMapping("/members/{id}")
@@ -205,7 +212,11 @@ public class BackofficeController {
     public record PlayerUpdateRequest(String imageUrl, Boolean unlockImage, Long currentTeamId,
                                       Boolean unlockGameAccounts, List<GameAccountEntry> gameAccounts) {}
 
-    public record SoloRankPlayerCreateRequest(String name, String imageUrl, String riotId) {}
+    // region 미지정 시 KR. 해외 선수는 EUW/NA 등 지정(또는 EUW1/NA1 플랫폼 값).
+    public record SoloRankPlayerCreateRequest(String name, String imageUrl, String riotId, String region) {}
+
+    // 기존 선수 id에 솔랭 계정 부착. region 미지정 시 KR. imageUrl 있으면 함께 세팅.
+    public record SoloRankAccountRequest(String riotId, String region, String imageUrl) {}
 
     public record TeamRow(Long id, String name, String code) {}
 

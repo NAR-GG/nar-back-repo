@@ -46,7 +46,7 @@ public class PlayerRiotAccountSyncService {
 
 		for (Player player : players) {
 			try {
-				Optional<PrimaryAccountCandidate> candidateOptional = extractPrimaryKrAccount(player);
+				Optional<PrimaryAccountCandidate> candidateOptional = extractPrimaryAccount(player);
 				if (candidateOptional.isEmpty()) {
 					skippedPlayers.add(player.getName());
 					continue;
@@ -76,17 +76,18 @@ public class PlayerRiotAccountSyncService {
 	private void syncSinglePlayerAccount(Player player, PrimaryAccountCandidate candidate) {
 		TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
 		transactionTemplate.setPropagationBehavior(PROPAGATION_REQUIRES_NEW);
-		transactionTemplate.executeWithoutResult(status -> resolveAndPersist(player, candidate.riotId()));
+		transactionTemplate.executeWithoutResult(status -> resolveAndPersist(player, candidate.riotId(), candidate.platform()));
 	}
 
 	// 현재 트랜잭션에 참여해 Riot ID를 검증·해석하고 PlayerRiotAccount를 저장한다.
 	// 신규 선수 등록처럼 player가 아직 커밋 전인 경우 REQUIRES_NEW를 쓰면 FK가 안 보이므로 이 경로를 쓴다.
-	public void resolveAndSaveInCurrentTransaction(Player player, String riotId) {
+	public void resolveAndSaveInCurrentTransaction(Player player, String riotId, String platform) {
 		riotApiClient.assertConfigured();
-		resolveAndPersist(player, riotId);
+		resolveAndPersist(player, riotId, platform);
 	}
 
-	private void resolveAndPersist(Player player, String riotId) {
+	private void resolveAndPersist(Player player, String riotId, String platform) {
+		String normalizedPlatform = RiotPlatform.toPlatform(platform);
 		RiotIdParser.ParsedRiotId parsedRiotId = RiotIdParser.parse(riotId)
 				.orElseThrow(() -> new IllegalArgumentException("Invalid Riot ID: " + riotId));
 
@@ -100,7 +101,7 @@ public class PlayerRiotAccountSyncService {
 						.riotId(parsedRiotId.normalizedRiotId())
 						.gameName(accountResponse.gameName())
 						.tagLine(accountResponse.tagLine())
-						.platform(KR_PLATFORM)
+						.platform(normalizedPlatform)
 						.puuid(accountResponse.puuid())
 						.summonerId("")
 						.primaryAccount(true)
@@ -112,7 +113,7 @@ public class PlayerRiotAccountSyncService {
 				parsedRiotId.normalizedRiotId(),
 				accountResponse.gameName(),
 				accountResponse.tagLine(),
-				KR_PLATFORM,
+				normalizedPlatform,
 				accountResponse.puuid());
 		playerRiotAccount.markPrimaryAccount(true);
 		playerRiotAccount.setEnabled(true);
@@ -123,10 +124,11 @@ public class PlayerRiotAccountSyncService {
 	// KR 주계정이 없으면 검증할 게 없어 조용히 통과. 존재하지 않는 Riot ID면 RiotApiException(404) 전파.
 	public void syncPlayerAccountNow(Player player) {
 		riotApiClient.assertConfigured();
-		extractPrimaryKrAccount(player).ifPresent(candidate -> syncSinglePlayerAccount(player, candidate));
+		extractPrimaryAccount(player).ifPresent(candidate -> syncSinglePlayerAccount(player, candidate));
 	}
 
-	private Optional<PrimaryAccountCandidate> extractPrimaryKrAccount(Player player) {
+	// KR 계정을 최우선으로 고르되, 없으면 첫 유효 지역 계정(해외 선수 EUW/NA 등)을 그 플랫폼으로 추적한다.
+	private Optional<PrimaryAccountCandidate> extractPrimaryAccount(Player player) {
 		if (player.getGameAccounts() == null || player.getGameAccounts().isBlank()) {
 			return Optional.empty();
 		}
@@ -140,20 +142,27 @@ public class PlayerRiotAccountSyncService {
 				return Optional.empty();
 			}
 
+			String fallbackRegion = null;
+			String fallbackRiotId = null;
 			for (Map<String, Object> account : accounts) {
 				String region = toText(account.get("region"));
 				String riotId = toText(account.get("riotId"));
-				if (KR_PLATFORM.equalsIgnoreCase(region) && riotId != null) {
-					return Optional.of(new PrimaryAccountCandidate(region.toUpperCase(), riotId));
+				if (riotId == null) {
+					continue;
+				}
+				if (KR_PLATFORM.equalsIgnoreCase(region)) {
+					return Optional.of(new PrimaryAccountCandidate(KR_PLATFORM, riotId));
+				}
+				if (fallbackRiotId == null) {
+					fallbackRegion = region;
+					fallbackRiotId = riotId;
 				}
 			}
 
-			if (accounts.size() == 1) {
-				String riotId = toText(accounts.get(0).get("riotId"));
-				if (riotId != null) {
-					log.info("Using single game account without region metadata for player={}", player.getName());
-					return Optional.of(new PrimaryAccountCandidate(KR_PLATFORM, riotId));
-				}
+			if (fallbackRiotId != null) {
+				String platform = RiotPlatform.toPlatform(fallbackRegion);
+				log.info("No KR account; tracking player={} on platform={}", player.getName(), platform);
+				return Optional.of(new PrimaryAccountCandidate(platform, fallbackRiotId));
 			}
 			return Optional.empty();
 		} catch (Exception e) {
@@ -166,6 +175,6 @@ public class PlayerRiotAccountSyncService {
 		return value == null ? null : value.toString().trim();
 	}
 
-	private record PrimaryAccountCandidate(String region, String riotId) {
+	private record PrimaryAccountCandidate(String platform, String riotId) {
 	}
 }

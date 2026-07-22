@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toy.nar.api.admin.BackofficeController;
 import com.toy.nar.app.riot.PlayerRiotAccountSyncService;
+import com.toy.nar.app.riot.RiotPlatform;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
@@ -62,7 +63,7 @@ public class PlayerAdminService {
 	// 솔랭 전용 선수 등록: LCK 출전 이력 없이도 생성 가능(update 경로와 달리 참여 검증 안 함).
 	// Riot 404 등 예외는 트랜잭션 롤백 → Player 삽입도 취소된다.
 	@Transactional
-	public Player createSoloRankPlayer(String name, String imageUrl, String riotId) {
+	public Player createSoloRankPlayer(String name, String imageUrl, String riotId, String region) {
 		if (name == null || name.isBlank()) {
 			throw new IllegalArgumentException("선수명은 비울 수 없습니다");
 		}
@@ -74,14 +75,38 @@ public class PlayerAdminService {
 		if (playerRepository.findByName(trimmedName).isPresent()) {
 			throw new IllegalStateException("이미 존재하는 선수입니다: " + trimmedName);
 		}
+		// region 미지정 시 KR. 해외 선수는 EUW/NA 등 지정 → 현재 게임 폴링이 해당 플랫폼으로 라우팅된다.
+		String resolvedRegion = region == null || region.isBlank() ? "KR" : region.trim().toUpperCase();
 		Player player = playerRepository.save(Player.builder()
 				.name(trimmedName)
 				.imageUrl(imageUrl == null || imageUrl.isBlank() ? null : imageUrl.trim())
 				.build());
 		// serializeGameAccounts 재사용: Jackson ObjectMapper가 이스케이프를 보장한다.
 		player.overrideGameAccounts(serializeGameAccounts(List.of(
-				new BackofficeController.GameAccountEntry("KR", riotId, null))));
-		playerRiotAccountSyncService.resolveAndSaveInCurrentTransaction(player, riotId);
+				new BackofficeController.GameAccountEntry(resolvedRegion, riotId, null))));
+		playerRiotAccountSyncService.resolveAndSaveInCurrentTransaction(
+				player, riotId, RiotPlatform.toPlatform(resolvedRegion));
+		return player;
+	}
+
+	// 기존 선수(비-LCK 포함)에 솔랭 계정 부착/교체. create와 달리 Player를 새로 만들지 않고 LCK 게이트도 없다.
+	// 이미 계정이 있으면 riotId/platform을 교체(예: 해외 이적 선수 KR→EUW). Riot 404면 트랜잭션 롤백.
+	@Transactional
+	public Player attachSoloRankAccount(Long playerId, String riotId, String region, String imageUrl) {
+		// currentTeam을 함께 로딩(PlayerRow.from이 트랜잭션 밖에서 팀을 읽으므로 지연로딩 예외 방지).
+		Player player = playerRepository.findWithCurrentTeamById(playerId)
+				.orElseThrow(() -> new NoSuchElementException("선수를 찾을 수 없습니다: " + playerId));
+		if (riotId == null || !riotId.matches("^.+#.+$")) {
+			throw new IllegalArgumentException("riotId는 '이름#태그' 형식이어야 합니다: " + riotId);
+		}
+		String resolvedRegion = region == null || region.isBlank() ? "KR" : region.trim().toUpperCase();
+		player.overrideGameAccounts(serializeGameAccounts(List.of(
+				new BackofficeController.GameAccountEntry(resolvedRegion, riotId, null))));
+		if (imageUrl != null && !imageUrl.isBlank()) {
+			player.setImageUrl(imageUrl.trim());
+		}
+		playerRiotAccountSyncService.resolveAndSaveInCurrentTransaction(
+				player, riotId, RiotPlatform.toPlatform(resolvedRegion));
 		return player;
 	}
 

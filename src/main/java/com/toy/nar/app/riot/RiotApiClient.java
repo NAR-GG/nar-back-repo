@@ -66,9 +66,9 @@ public class RiotApiClient {
 		return getRequired(uri, RiotMatchResponse.class, "Riot match fetch failed");
 	}
 
-	public Optional<RiotCurrentGameResponse> getActiveGameByPuuid(String puuid) {
+	public Optional<RiotCurrentGameResponse> getActiveGameByPuuid(String puuid, String platform) {
 		ensureConfigured();
-		URI uri = URI.create(riotApiProperties.getKrBaseUrl()
+		URI uri = URI.create(RiotPlatform.apiHost(platform)
 				+ "/lol/spectator/v5/active-games/by-summoner/"
 				+ encodePathSegment(puuid));
 		return getOptional(uri, RiotCurrentGameResponse.class, "Failed to fetch current game by puuid");
