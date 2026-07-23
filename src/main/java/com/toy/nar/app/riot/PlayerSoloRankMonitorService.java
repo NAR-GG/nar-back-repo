@@ -40,6 +40,7 @@ public class PlayerSoloRankMonitorService {
 	private final PlayerRiotAccountRepository playerRiotAccountRepository;
 	private final ChampionDataService championDataService;
 	private final RiotApiClient riotApiClient;
+	private final RiotMonitorProperties riotMonitorProperties;
 	private final NotificationService notificationService;
 	private final PlayerSoloRankPushService playerSoloRankPushService;
 	private final SchedulerAlertService schedulerAlertService;
@@ -59,9 +60,15 @@ public class PlayerSoloRankMonitorService {
 		int alertsSentCount = 0;
 			int failedCount = 0;
 
+		// 초당 호출 상한(버스트 429 방지). 호출 시작 간 최소 간격을 둔다.
+		int maxPerSec = riotMonitorProperties.getMaxRequestsPerSecond();
+		long minIntervalMs = maxPerSec > 0 ? 1000L / maxPerSec : 0;
+		long lastCallAt = 0;
+
 		for (PlayerRiotAccount account : trackedAccounts) {
 			LocalDateTime checkedAt = LocalDateTime.now();
 			try {
+				lastCallAt = throttle(lastCallAt, minIntervalMs);
 				Optional<RiotCurrentGameResponse> currentGameOptional = riotApiClient.getActiveGameByPuuid(
 						account.getPuuid(), account.getPlatform());
 				checkedCount++;
@@ -129,17 +136,18 @@ public class PlayerSoloRankMonitorService {
 				failedCount++;
 				log.warn("Riot live poll failed for player={}", account.getPlayer().getName(), e);
 				if (e.isRateLimited()) {
+					// 429면 이번 사이클 중단(계속 때리면 429 폭주). 남은 계정은 다음 사이클에서 재시도.
 					schedulerAlertService.recordWarning(
 							JOB_KEY,
 							JOB_NAME,
-							"Riot API rate limit reached while polling KR ranked solo monitor");
-				} else {
-					schedulerAlertService.recordFailure(
-							JOB_KEY,
-							JOB_NAME,
-							e,
-							"player=" + account.getPlayer().getName());
+							"Riot API rate limit reached — 폴 사이클 조기 중단(다음 주기 재시도)");
+					break;
 				}
+				schedulerAlertService.recordFailure(
+						JOB_KEY,
+						JOB_NAME,
+						e,
+						"player=" + account.getPlayer().getName());
 			}
 		}
 
@@ -212,6 +220,22 @@ public class PlayerSoloRankMonitorService {
 				championName,
 				championIconUrl,
 				"ALERT_SENT");
+	}
+
+	// 호출 시작 간 최소 간격을 유지(초당 상한). 반환값(현재 시각)을 다음 호출의 lastCallAt으로 넘긴다.
+	private long throttle(long lastCallAt, long minIntervalMs) {
+		if (minIntervalMs <= 0 || lastCallAt == 0) {
+			return System.currentTimeMillis();
+		}
+		long wait = minIntervalMs - (System.currentTimeMillis() - lastCallAt);
+		if (wait > 0) {
+			try {
+				Thread.sleep(wait);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		}
+		return System.currentTimeMillis();
 	}
 
 	/** OP.GG 소환사 페이지 URL (디스코드 알림과 동일 포맷). 계정 플랫폼별 지역 코드 사용. 정보 부족 시 빈 문자열. */
