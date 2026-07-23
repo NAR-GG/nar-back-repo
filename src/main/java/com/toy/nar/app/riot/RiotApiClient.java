@@ -22,6 +22,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class RiotApiClient {
 
+	private static final int MAX_RIOT_RETRIES = 2;
+
 	private final WebClient webClient;
 	private final RiotApiProperties riotApiProperties;
 
@@ -83,52 +85,88 @@ public class RiotApiClient {
 	}
 
 	private <T> T getRequired(URI uri, Class<T> responseType, String errorMessage) {
-		try {
-			T response = webClient.get()
-					.uri(uri)
-					.header(HttpHeaders.ACCEPT, "application/json")
-					.header("X-Riot-Token", riotApiProperties.getKey())
-					.retrieve()
-					.bodyToMono(responseType)
-					.block(Duration.ofMillis(riotApiProperties.getRequestTimeoutMs()));
-			if (response == null) {
-				throw new RiotApiException(errorMessage + ": empty response", 500);
+		int attempt = 0;
+		while (true) {
+			try {
+				T response = webClient.get()
+						.uri(uri)
+						.header(HttpHeaders.ACCEPT, "application/json")
+						.header("X-Riot-Token", riotApiProperties.getKey())
+						.retrieve()
+						.bodyToMono(responseType)
+						.block(Duration.ofMillis(riotApiProperties.getRequestTimeoutMs()));
+				if (response == null) {
+					throw new RiotApiException(errorMessage + ": empty response", 500);
+				}
+				return response;
+			} catch (WebClientResponseException e) {
+				if (e.getStatusCode().value() == 429 && attempt < MAX_RIOT_RETRIES) {
+					attempt++;
+					sleepForRetryAfter(e);
+					continue;
+				}
+				throw new RiotApiException(errorMessage + ": " + e.getResponseBodyAsString(), e.getStatusCode().value(), e);
+			} catch (RiotApiException e) {
+				throw e;
+			} catch (Exception e) {
+				throw new RiotApiException(errorMessage, 500, e);
 			}
-			return response;
-		} catch (WebClientResponseException e) {
-			throw new RiotApiException(errorMessage + ": " + e.getResponseBodyAsString(), e.getStatusCode().value(), e);
-		} catch (RiotApiException e) {
-			throw e;
-		} catch (Exception e) {
-			throw new RiotApiException(errorMessage, 500, e);
 		}
 	}
 
 	private <T> Optional<T> getOptional(URI uri, Class<T> responseType, String errorMessage) {
+		int attempt = 0;
+		while (true) {
+			try {
+				Optional<T> response = webClient.get()
+						.uri(uri)
+						.header(HttpHeaders.ACCEPT, "application/json")
+						.header("X-Riot-Token", riotApiProperties.getKey())
+						.exchangeToMono(clientResponse -> {
+							HttpStatusCode statusCode = clientResponse.statusCode();
+							if (statusCode.is2xxSuccessful()) {
+								return clientResponse.bodyToMono(responseType)
+										.map(Optional::<T>of);
+							}
+							if (statusCode.value() == 404) {
+								return Mono.just(Optional.<T>empty());
+							}
+							return clientResponse.createException().flatMap(Mono::error);
+						})
+						.block(Duration.ofMillis(riotApiProperties.getRequestTimeoutMs()));
+				return response == null ? Optional.empty() : response;
+			} catch (WebClientResponseException e) {
+				// 429(server rate limit)는 Riot 공유·확률적 한도라 낮은 rate에도 간헐 발생 → Retry-After 만큼 쉬고 재시도.
+				if (e.getStatusCode().value() == 429 && attempt < MAX_RIOT_RETRIES) {
+					attempt++;
+					sleepForRetryAfter(e);
+					continue;
+				}
+				throw new RiotApiException(errorMessage + ": " + e.getResponseBodyAsString(), e.getStatusCode().value(), e);
+			} catch (RiotApiException e) {
+				throw e;
+			} catch (Exception e) {
+				throw new RiotApiException(errorMessage, 500, e);
+			}
+		}
+	}
+
+	// 429 재시도 대기. Retry-After 헤더(초) 우선, 없으면 1초. 0.5~3초로 클램프.
+	private void sleepForRetryAfter(WebClientResponseException e) {
+		long ms = 1000L;
+		String retryAfter = e.getHeaders().getFirst("Retry-After");
+		if (retryAfter != null) {
+			try {
+				ms = Long.parseLong(retryAfter.trim()) * 1000L;
+			} catch (NumberFormatException ignored) {
+				// 헤더 파싱 실패 시 기본 1초
+			}
+		}
+		ms = Math.min(Math.max(ms, 500L), 3000L);
 		try {
-			Optional<T> response = webClient.get()
-					.uri(uri)
-					.header(HttpHeaders.ACCEPT, "application/json")
-					.header("X-Riot-Token", riotApiProperties.getKey())
-					.exchangeToMono(clientResponse -> {
-						HttpStatusCode statusCode = clientResponse.statusCode();
-						if (statusCode.is2xxSuccessful()) {
-							return clientResponse.bodyToMono(responseType)
-									.map(Optional::<T>of);
-						}
-						if (statusCode.value() == 404) {
-							return Mono.just(Optional.<T>empty());
-						}
-						return clientResponse.createException().flatMap(Mono::error);
-					})
-					.block(Duration.ofMillis(riotApiProperties.getRequestTimeoutMs()));
-			return response == null ? Optional.empty() : response;
-		} catch (WebClientResponseException e) {
-			throw new RiotApiException(errorMessage + ": " + e.getResponseBodyAsString(), e.getStatusCode().value(), e);
-		} catch (RiotApiException e) {
-			throw e;
-		} catch (Exception e) {
-			throw new RiotApiException(errorMessage, 500, e);
+			Thread.sleep(ms);
+		} catch (InterruptedException ie) {
+			Thread.currentThread().interrupt();
 		}
 	}
 
