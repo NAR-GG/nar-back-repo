@@ -115,7 +115,7 @@ riot:
     initial-delay-ms: ${RIOT_MONITOR_INITIAL_DELAY_MS:15000}
     target-league: ${RIOT_MONITOR_TARGET_LEAGUE:LCK}
     platform: ${RIOT_MONITOR_PLATFORM:KR}
-    max-requests-per-second: ${RIOT_MONITOR_MAX_RPS:40}
+    max-requests-per-second: ${RIOT_MONITOR_MAX_RPS:20}
 
 player:
   profile-sync:
