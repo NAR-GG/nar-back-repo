@@ -57,10 +57,13 @@ class PlayerSoloRankMonitorServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		RiotMonitorProperties riotMonitorProperties = new RiotMonitorProperties();
+		riotMonitorProperties.setMaxRequestsPerSecond(0); // 테스트에선 페이싱(sleep) 비활성
 		playerSoloRankMonitorService = new PlayerSoloRankMonitorService(
 				playerRiotAccountRepository,
 				championDataService,
 				riotApiClient,
+				riotMonitorProperties,
 				notificationService,
 				playerSoloRankPushService,
 				schedulerAlertService,
@@ -325,5 +328,32 @@ class PlayerSoloRankMonitorServiceTest {
 				org.mockito.ArgumentMatchers.any(),
 				org.mockito.ArgumentMatchers.any());
 		verify(soloRankGameHistoryRecorder, never()).record(any(), anyString(), any(), any());
+	}
+
+	@Test
+	void skipsRateLimitedAccountButContinuesRest() {
+		PlayerRiotAccount first = PlayerRiotAccount.builder()
+				.player(Player.builder().name("First").build())
+				.riotId("A#KR1").gameName("A").tagLine("KR1").platform("KR").puuid("puuidA")
+				.primaryAccount(true).enabled(true).liveStatus(PlayerRiotAccountLiveStatus.OFFLINE)
+				.build();
+		PlayerRiotAccount second = PlayerRiotAccount.builder()
+				.player(Player.builder().name("Second").build())
+				.riotId("B#KR1").gameName("B").tagLine("KR1").platform("KR").puuid("puuidB")
+				.primaryAccount(true).enabled(true).liveStatus(PlayerRiotAccountLiveStatus.OFFLINE)
+				.build();
+
+		when(playerRiotAccountRepository.findAllTrackedAccounts()).thenReturn(List.of(first, second));
+		when(riotApiClient.getActiveGameByPuuid("puuidA", "KR"))
+				.thenThrow(new RiotApiException("rate limit", 429));
+		when(riotApiClient.getActiveGameByPuuid("puuidB", "KR")).thenReturn(Optional.empty());
+
+		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
+
+		// 429는 해당 계정만 스킵 — 두 번째 계정은 계속 폴링됨(사이클 중단 안 함)
+		verify(riotApiClient).getActiveGameByPuuid("puuidA", "KR");
+		verify(riotApiClient).getActiveGameByPuuid("puuidB", "KR");
+		verify(schedulerAlertService).recordWarning(anyString(), anyString(), anyString());
+		assertThat(result.failedCount()).isEqualTo(1);
 	}
 }
