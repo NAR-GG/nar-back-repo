@@ -331,7 +331,7 @@ class PlayerSoloRankMonitorServiceTest {
 	}
 
 	@Test
-	void stopsCycleOnRateLimitAndSkipsRemaining() {
+	void skipsRateLimitedAccountButContinuesRest() {
 		PlayerRiotAccount first = PlayerRiotAccount.builder()
 				.player(Player.builder().name("First").build())
 				.riotId("A#KR1").gameName("A").tagLine("KR1").platform("KR").puuid("puuidA")
@@ -346,12 +346,13 @@ class PlayerSoloRankMonitorServiceTest {
 		when(playerRiotAccountRepository.findAllTrackedAccounts()).thenReturn(List.of(first, second));
 		when(riotApiClient.getActiveGameByPuuid("puuidA", "KR"))
 				.thenThrow(new RiotApiException("rate limit", 429));
+		when(riotApiClient.getActiveGameByPuuid("puuidB", "KR")).thenReturn(Optional.empty());
 
 		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
 
-		// 429 → 사이클 중단: 두 번째 계정은 폴링하지 않음
+		// 429는 해당 계정만 스킵 — 두 번째 계정은 계속 폴링됨(사이클 중단 안 함)
 		verify(riotApiClient).getActiveGameByPuuid("puuidA", "KR");
-		verify(riotApiClient, never()).getActiveGameByPuuid("puuidB", "KR");
+		verify(riotApiClient).getActiveGameByPuuid("puuidB", "KR");
 		verify(schedulerAlertService).recordWarning(anyString(), anyString(), anyString());
 		assertThat(result.failedCount()).isEqualTo(1);
 	}

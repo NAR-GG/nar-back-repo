@@ -136,18 +136,19 @@ public class PlayerSoloRankMonitorService {
 				failedCount++;
 				log.warn("Riot live poll failed for player={}", account.getPlayer().getName(), e);
 				if (e.isRateLimited()) {
-					// 429면 이번 사이클 중단(계속 때리면 429 폭주). 남은 계정은 다음 사이클에서 재시도.
+					// 429는 해당 계정만 스킵하고 다음 계정 계속(사이클 전체 중단 금지 — 뒤 계정 누락 방지).
+					// 근본 방지는 위 throttle(초당 상한)로 버스트를 없애는 것.
 					schedulerAlertService.recordWarning(
 							JOB_KEY,
 							JOB_NAME,
-							"Riot API rate limit reached — 폴 사이클 조기 중단(다음 주기 재시도)");
-					break;
+							"Riot API rate limit reached (해당 계정 스킵, 다음 주기 재시도)");
+				} else {
+					schedulerAlertService.recordFailure(
+							JOB_KEY,
+							JOB_NAME,
+							e,
+							"player=" + account.getPlayer().getName());
 				}
-				schedulerAlertService.recordFailure(
-						JOB_KEY,
-						JOB_NAME,
-						e,
-						"player=" + account.getPlayer().getName());
 			}
 		}
 
