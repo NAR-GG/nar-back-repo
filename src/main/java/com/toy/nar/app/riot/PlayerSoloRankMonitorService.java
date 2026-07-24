@@ -36,6 +36,8 @@ public class PlayerSoloRankMonitorService {
 	private static final int ARENA_RANKED_QUEUE_ID = 1710;
 	private static final String JOB_KEY = "PLAYER_RANKED_SOLO_MONITOR";
 	private static final String JOB_NAME = "선수 솔랭 감시";
+	// 한 사이클에 429가 이 수 이상이면 systemic으로 보고 경고. 미만이면 간헐로 간주(로그만).
+	private static final int RATE_LIMIT_ALERT_THRESHOLD = 10;
 
 	private final PlayerRiotAccountRepository playerRiotAccountRepository;
 	private final ChampionDataService championDataService;
@@ -59,6 +61,7 @@ public class PlayerSoloRankMonitorService {
 		int rankedSoloCount = 0;
 		int alertsSentCount = 0;
 			int failedCount = 0;
+		int rateLimitedCount = 0;
 
 		// 초당 호출 상한(버스트 429 방지). 호출 시작 간 최소 간격을 둔다.
 		int maxPerSec = riotMonitorProperties.getMaxRequestsPerSecond();
@@ -134,15 +137,15 @@ public class PlayerSoloRankMonitorService {
 				}
 			} catch (RiotApiException e) {
 				failedCount++;
-				log.warn("Riot live poll failed for player={}", account.getPlayer().getName(), e);
 				if (e.isRateLimited()) {
-					// 429는 해당 계정만 스킵하고 다음 계정 계속(사이클 전체 중단 금지 — 뒤 계정 누락 방지).
-					// 근본 방지는 위 throttle(초당 상한)로 버스트를 없애는 것.
-					schedulerAlertService.recordWarning(
-							JOB_KEY,
-							JOB_NAME,
-							"Riot API rate limit reached (해당 계정 스킵, 다음 주기 재시도)");
+					// 429(server rate limit)는 Riot 공유·확률적 한도(Retry-After 20초 관측)라 낮은 rate에도 간헐 발생.
+					// 해당 계정만 스킵 → 다음 60초 주기에 재시도(솔랭 게임 20~35분이라 감지엔 무해).
+					// 개별 429는 알림하지 않고 로그만 — 예상된 일시 현상. 사이클 종합이 systemic일 때만 경고(아래).
+					rateLimitedCount++;
+					log.warn("Riot live poll rate limited (429) for player={}, skipping this cycle",
+							account.getPlayer().getName());
 				} else {
+					log.warn("Riot live poll failed for player={}", account.getPlayer().getName(), e);
 					schedulerAlertService.recordFailure(
 							JOB_KEY,
 							JOB_NAME,
@@ -150,6 +153,15 @@ public class PlayerSoloRankMonitorService {
 							"player=" + account.getPlayer().getName());
 				}
 			}
+		}
+
+		// 429가 다수(systemic)일 때만 경고 — 간헐 1~2건은 정상(다음 주기 자동 복구)이라 노이즈로 알리지 않는다.
+		if (rateLimitedCount >= RATE_LIMIT_ALERT_THRESHOLD) {
+			schedulerAlertService.recordWarning(
+					JOB_KEY,
+					JOB_NAME,
+					"Riot API rate limit: " + rateLimitedCount + "/" + trackedAccounts.size()
+							+ " 계정 429 (systemic — 폴 주기·상한 점검 필요)");
 		}
 
 		long elapsed = System.currentTimeMillis() - startedAt;

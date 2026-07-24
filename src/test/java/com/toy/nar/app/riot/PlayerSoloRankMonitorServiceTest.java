@@ -353,7 +353,8 @@ class PlayerSoloRankMonitorServiceTest {
 		// 429는 해당 계정만 스킵 — 두 번째 계정은 계속 폴링됨(사이클 중단 안 함)
 		verify(riotApiClient).getActiveGameByPuuid("puuidA", "KR");
 		verify(riotApiClient).getActiveGameByPuuid("puuidB", "KR");
-		verify(schedulerAlertService).recordWarning(anyString(), anyString(), anyString());
+		// 간헐 429(1건 < 임계)는 Discord 경고 안 함 — 로그만
+		verify(schedulerAlertService, never()).recordWarning(anyString(), anyString(), anyString());
 		assertThat(result.failedCount()).isEqualTo(1);
 	}
 }
