@@ -73,4 +73,29 @@ public final class RiotPlatform {
 	public static String opggRegion(String platform) {
 		return PLATFORM_TO_OPGG.getOrDefault(toPlatform(platform), "kr");
 	}
+
+	// 플랫폼 라우팅 값 → match-v5 등 지역(regional) 라우팅 그룹.
+	private static final Map<String, String> PLATFORM_TO_REGIONAL = Map.ofEntries(
+			Map.entry("KR", "asia"),
+			Map.entry("JP1", "asia"),
+			Map.entry("NA1", "americas"),
+			Map.entry("BR1", "americas"),
+			Map.entry("LA1", "americas"),
+			Map.entry("LA2", "americas"),
+			Map.entry("EUW1", "europe"),
+			Map.entry("EUN1", "europe"),
+			Map.entry("TR1", "europe"),
+			Map.entry("RU", "europe"),
+			Map.entry("OC1", "sea"),
+			Map.entry("VN2", "sea"),
+			Map.entry("TW2", "sea"),
+			Map.entry("SG2", "sea"),
+			Map.entry("TH2", "sea"),
+			Map.entry("PH2", "sea"));
+
+	/** 지역(regional) API 호스트. match-v5용. 예: KR → https://asia.api.riotgames.com */
+	public static String regionalHost(String platform) {
+		String regional = PLATFORM_TO_REGIONAL.getOrDefault(toPlatform(platform), "asia");
+		return "https://" + regional + ".api.riotgames.com";
+	}
 }
