@@ -58,6 +58,27 @@ public class RiotApiClient {
 		return Arrays.asList(response);
 	}
 
+	/** 최근 솔로 랭크(queue=420) 매치 ID 목록. match-v5는 스트리머 모드 필터 대상이 아니다. */
+	public List<String> getRecentSoloRankMatchIdsByPuuid(String puuid, int count, String platform) {
+		ensureConfigured();
+		URI uri = URI.create(RiotPlatform.regionalHost(platform)
+				+ "/lol/match/v5/matches/by-puuid/"
+				+ encodePathSegment(puuid)
+				+ "/ids?queue=420&start=0&count="
+				+ count);
+		String[] response = getRequired(uri, String[].class, "Riot solo rank match list fetch failed");
+		return Arrays.asList(response);
+	}
+
+	/** 매치 상세(플랫폼별 지역 라우팅). 완료 매치 폴백 감지용. */
+	public RiotMatchResponse getMatch(String matchId, String platform) {
+		ensureConfigured();
+		URI uri = URI.create(RiotPlatform.regionalHost(platform)
+				+ "/lol/match/v5/matches/"
+				+ encodePathSegment(matchId));
+		return getRequired(uri, RiotMatchResponse.class, "Riot match fetch failed");
+	}
+
 	public RiotMatchResponse getMatch(String matchId) {
 		ensureConfigured();
 		URI uri = URI.create(riotApiProperties.getRegionalBaseUrl()

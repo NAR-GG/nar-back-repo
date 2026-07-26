@@ -26,21 +26,34 @@ public class SoloRankGameHistoryRecorder {
 
 	private final PlayerSoloRankGameRepository repository;
 
+	/** 이미 적재된 게임인지 확인. 폴백 경로에서 매치 상세 조회 전 선필터로 쓴다. */
+	@Transactional(readOnly = true)
+	public boolean exists(Long playerId, String gameId) {
+		if (playerId == null || gameId == null || gameId.isBlank()) {
+			return false;
+		}
+		return repository.existsByPlayer_IdAndGameId(playerId, gameId);
+	}
+
+	/** @return 신규 적재 여부. 이미 존재·실패 시 false — 폴백 경로의 알림 중복 방지 게이트로 쓴다. */
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
-	public void record(Player player, String gameId, Champion champion, LocalDateTime detectedAt) {
+	public boolean record(Player player, String gameId, Champion champion, LocalDateTime detectedAt) {
 		if (player == null || player.getId() == null || gameId == null || gameId.isBlank()) {
-			return;
+			return false;
 		}
 		try {
 			if (repository.existsByPlayer_IdAndGameId(player.getId(), gameId)) {
-				return;
+				return false;
 			}
 			repository.save(new PlayerSoloRankGame(player, gameId, champion, detectedAt));
+			return true;
 		} catch (DataIntegrityViolationException e) {
 			// 동시 폴링으로 인한 (player, gameId) 중복 — 무시.
+			return false;
 		} catch (Exception e) {
 			log.warn("Failed to record solo rank game history playerId={} gameId={}",
 					player.getId(), gameId, e);
+			return false;
 		}
 	}
 }

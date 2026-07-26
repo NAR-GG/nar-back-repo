@@ -116,6 +116,13 @@ riot:
     target-league: ${RIOT_MONITOR_TARGET_LEAGUE:LCK}
     platform: ${RIOT_MONITOR_PLATFORM:KR}
     max-requests-per-second: ${RIOT_MONITOR_MAX_RPS:10}
+  # 스트리머 모드 계정용 완료 매치(match-v5) 폴백 감지. spectator 필터 우회.
+  match-fallback:
+    enabled: ${RIOT_MATCH_FALLBACK_ENABLED:false}
+    poll-interval-ms: ${RIOT_MATCH_FALLBACK_POLL_INTERVAL_MS:300000}
+    initial-delay-ms: ${RIOT_MATCH_FALLBACK_INITIAL_DELAY_MS:45000}
+    fetch-count: ${RIOT_MATCH_FALLBACK_FETCH_COUNT:5}
+    alert-freshness-minutes: ${RIOT_MATCH_FALLBACK_ALERT_FRESHNESS_MINUTES:60}
 
 player:
   profile-sync:
