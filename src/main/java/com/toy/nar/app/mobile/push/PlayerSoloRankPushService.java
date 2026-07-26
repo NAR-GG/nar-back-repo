@@ -1,6 +1,7 @@
 package com.toy.nar.app.mobile.push;
 
 import com.toy.nar.app.mobile.notification.MemberNotificationService;
+import com.toy.nar.common.util.KoreanParticle;
 import com.toy.nar.domain.member.entity.MemberDevice;
 import com.toy.nar.domain.member.entity.MemberNotificationType;
 import com.toy.nar.domain.member.repository.MemberDeviceRepository;
@@ -40,10 +41,12 @@ public class PlayerSoloRankPushService {
 		if (player == null || player.getId() == null || gameId == null || !pushGateway.isAvailable()) {
 			return;
 		}
+		String normalizedChampion = normalizeChampionName(championName);
 		MobilePushMessage message = buildMessage(
 				player, gameId, championName, championImageUrl, queueDisplayName, opggUrl,
 				player.getName() + " 선수가 솔랭을 시작했어요",
-				normalizeChampionName(championName) + "로 " + normalizeQueue(queueDisplayName) + " 플레이 중");
+				normalizedChampion + KoreanParticle.ro(normalizedChampion) + " "
+						+ normalizeQueue(queueDisplayName) + " 플레이 중");
 		dispatch(player, gameId, message);
 	}
 

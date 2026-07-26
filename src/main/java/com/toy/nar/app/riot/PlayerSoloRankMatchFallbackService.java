@@ -6,6 +6,7 @@ import com.toy.nar.app.mobile.push.PlayerSoloRankPushService;
 import com.toy.nar.app.monitor.SchedulerAlertService;
 import com.toy.nar.app.riot.dto.PlayerSoloRankMatchFallbackResult;
 import com.toy.nar.app.riot.dto.RiotMatchResponse;
+import com.toy.nar.common.util.KoreanParticle;
 import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
@@ -145,7 +146,7 @@ public class PlayerSoloRankMatchFallbackService {
 				buildOpggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 	}
 
-	/** 예: "멜로 승리 · 4/2/8" — 정보 없으면 단계적으로 축약. */
+	/** 예: "멜로 승리 · 4/2/8", "가렌으로 패배 · 1/5/9" — 정보 없으면 단계적으로 축약. */
 	private String buildResultLine(String championName, RiotMatchResponse.Participant tracked) {
 		String champion = championName == null || championName.isBlank() ? "솔로 랭크" : championName;
 		if (tracked == null) {
@@ -153,7 +154,7 @@ public class PlayerSoloRankMatchFallbackService {
 		}
 		StringBuilder line = new StringBuilder(champion);
 		if (tracked.win() != null) {
-			line.append("로 ").append(tracked.win() ? "승리" : "패배");
+			line.append(KoreanParticle.ro(champion)).append(" ").append(tracked.win() ? "승리" : "패배");
 		} else {
 			line.append(" 경기 종료");
 		}
