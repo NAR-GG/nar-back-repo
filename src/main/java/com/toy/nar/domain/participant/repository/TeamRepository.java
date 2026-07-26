@@ -73,4 +73,44 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 			              WHERE gp.team = t AND gp.game.league.leagueName = :league)
 			""")
 	Page<Team> searchForBackofficeInLeague(@Param("q") String q, @Param("league") String league, Pageable pageable);
+
+	// 백오피스 구독 탭: 구독 가능한 팀(LCK 카탈로그 코드) + 구독자 수. 인기순(구독자 수 desc) 정렬.
+	// q 는 팀명·코드 부분일치. 팀 수가 카탈로그 크기(~10)라 성능 고려 불필요.
+	@Query(value = """
+			SELECT t.team_id AS teamId,
+			       t.team_name AS teamName,
+			       t.team_code AS teamCode,
+			       t.team_image_url AS imageUrl,
+			       COUNT(mtns.id) AS subscriberCount
+			FROM teams t
+			LEFT JOIN member_team_notification_subscription mtns ON mtns.team_id = t.team_id
+			WHERE UPPER(t.team_code) IN (:codes)
+			  AND (:q IS NULL
+			       OR LOWER(t.team_name) LIKE LOWER(CONCAT('%', :q, '%'))
+			       OR LOWER(t.team_code) LIKE LOWER(CONCAT('%', :q, '%')))
+			GROUP BY t.team_id, t.team_name, t.team_code, t.team_image_url
+			ORDER BY subscriberCount DESC, t.team_name ASC
+			""",
+			countQuery = """
+			SELECT COUNT(*) FROM teams t
+			WHERE UPPER(t.team_code) IN (:codes)
+			  AND (:q IS NULL
+			       OR LOWER(t.team_name) LIKE LOWER(CONCAT('%', :q, '%'))
+			       OR LOWER(t.team_code) LIKE LOWER(CONCAT('%', :q, '%')))
+			""",
+			nativeQuery = true)
+	Page<SubscribableTeamView> findSubscribableTeams(@Param("codes") Collection<String> codes,
+			@Param("q") String q, Pageable pageable);
+
+	interface SubscribableTeamView {
+		Long getTeamId();
+
+		String getTeamName();
+
+		String getTeamCode();
+
+		String getImageUrl();
+
+		long getSubscriberCount();
+	}
 }
