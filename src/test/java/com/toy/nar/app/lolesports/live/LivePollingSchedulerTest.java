@@ -448,6 +448,85 @@ class LivePollingSchedulerTest {
 	}
 
 	@Test
+	void finishedFeedWithNaverResultFlipsMatchToCompletedOnce() {
+		// 업스트림 flip 은 실측 17분+ 늦게 온다(2026-07-27 KESPA T1 vs DNS: 종료 21:40, flip 21:57).
+		// 프레임 finished + 네이버 RESULT 면 그 구간을 기다리지 않고 completed 를 확정해야 한다.
+		// 확정 후엔 flip 이 올 때까지 매 사이클(10초) 네이버를 다시 찌르지 않는다.
+		WorldsService worldsService = mock(WorldsService.class);
+		LiveStatsClient liveStatsClient = mock(LiveStatsClient.class);
+		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		CacheEvictionService cacheEvictionService = mock(CacheEvictionService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("KESPA"));
+		when(leagueMatchService.findLeaguesWithMatchesBetween(
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(List.of("KESPA"));
+		when(leagueMatchService.syncCompletedMatchFromNaver(
+				org.mockito.ArgumentMatchers.any(), anyString())).thenReturn(true);
+		LivePollingScheduler scheduler = new LivePollingScheduler(
+				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), new LiveStateStore(),
+				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
+				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
+		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
+		MatchResultDto kespaUnstarted = MatchResultDto.builder()
+				.matchId("kespa-match-1").leagueName("KESPA").state("unstarted")
+				.matchDate(Instant.now().minusSeconds(3600).toString())
+				.gameIds(List.of("kespa-game-1")).build();
+		when(worldsService.getWorldsMatches(null, "KESPA")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of(kespaUnstarted)).build());
+		when(liveStatsClient.getWindow(eq("kespa-game-1"), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+
+		scheduler.discoverLiveGames();
+		scheduler.discoverLiveGames();
+
+		verify(leagueMatchService, times(1)).syncCompletedMatchFromNaver(kespaUnstarted, "KESPA");
+		verify(cacheEvictionService, times(1)).evictScheduleCaches();
+		// 업스트림 원본 unstarted 를 그대로 쓰는 경로는 여전히 막혀 있어야 한다(DB 되돌림 방지).
+		verify(leagueMatchService, never()).syncRealtimeMatchStatus(
+				org.mockito.ArgumentMatchers.any(), anyString());
+	}
+
+	@Test
+	void finishedFeedWithoutNaverResultRetriesNextCycle() {
+		// 세트 사이(네이버가 아직 RESULT 아님)면 확정하지 않고, 다음 사이클에 다시 시도해야 한다.
+		WorldsService worldsService = mock(WorldsService.class);
+		LiveStatsClient liveStatsClient = mock(LiveStatsClient.class);
+		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		CacheEvictionService cacheEvictionService = mock(CacheEvictionService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("KESPA"));
+		when(leagueMatchService.findLeaguesWithMatchesBetween(
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(List.of("KESPA"));
+		when(leagueMatchService.syncCompletedMatchFromNaver(
+				org.mockito.ArgumentMatchers.any(), anyString())).thenReturn(false);
+		LivePollingScheduler scheduler = new LivePollingScheduler(
+				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), new LiveStateStore(),
+				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
+				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
+				mock(TeamLiveEventPushService.class),
+				Runnable::run);
+		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
+		MatchResultDto kespaUnstarted = MatchResultDto.builder()
+				.matchId("kespa-match-1").leagueName("KESPA").state("unstarted")
+				.matchDate(Instant.now().minusSeconds(3600).toString())
+				.gameIds(List.of("kespa-game-1")).build();
+		when(worldsService.getWorldsMatches(null, "KESPA")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of(kespaUnstarted)).build());
+		when(liveStatsClient.getWindow(eq("kespa-game-1"), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+
+		scheduler.discoverLiveGames();
+		scheduler.discoverLiveGames();
+
+		verify(leagueMatchService, times(2)).syncCompletedMatchFromNaver(kespaUnstarted, "KESPA");
+		verify(cacheEvictionService, never()).evictScheduleCaches();
+	}
+
+	@Test
 	void staleCompletedMatchIsNotSynced() {
 		// 과거(창 밖) completed 매치까지 매 사이클 sync 하면 페이지 전체가 대상이 된다 — 창 밖은 스킵 유지.
 		WorldsService worldsService = mock(WorldsService.class);

@@ -37,11 +37,24 @@ public class NaverEsportsScoreClient {
 	/** 같은 팀 쌍이 하루 2경기(더블헤더 등)일 때 오매칭을 막는 시작 시각 허용 오차. */
 	private static final long START_TIME_TOLERANCE_MS = Duration.ofHours(6).toMillis();
 
+	/** 네이버 매치 조회 결과. finished 는 matchStatus=RESULT(매치 종료 확정). */
+	public record Result(int[] score, boolean finished) {
+	}
+
 	/**
 	 * 팀 코드(블루/레드)와 경기 시작 시각(UTC)으로 네이버 세트 스코어 [blue, red] 조회.
 	 * 미커버 리그·매칭 실패·API 오류 모두 null.
 	 */
 	public int[] fetchScore(String blueTeamCode, String redTeamCode, LocalDateTime matchDateUtc) {
+		Result result = fetchResult(blueTeamCode, redTeamCode, matchDateUtc);
+		return result == null ? null : result.score();
+	}
+
+	/**
+	 * 스코어와 함께 매치 종료 여부(matchStatus=RESULT)까지 돌려준다. 업스트림 lolesports 가
+	 * 종료를 늦게 반영하는 구간(실측 17분+)에서 종료 확정용으로 쓴다.
+	 */
+	public Result fetchResult(String blueTeamCode, String redTeamCode, LocalDateTime matchDateUtc) {
 		if (!enabled || blueTeamCode == null || redTeamCode == null || matchDateUtc == null) {
 			return null;
 		}
@@ -62,12 +75,12 @@ public class NaverEsportsScoreClient {
 					.timeout(Duration.ofSeconds(3))
 					.block();
 			long startEpochMs = matchDateUtc.toInstant(ZoneOffset.UTC).toEpochMilli();
-			int[] score = extractScore(root, blueTeamCode, redTeamCode, startEpochMs);
-			if (score == null) {
+			Result result = extractResult(root, blueTeamCode, redTeamCode, startEpochMs);
+			if (result == null) {
 				// 미커버 리그·약칭 불일치는 조용히 폴백되면 원인을 못 찾는다 — 흔적을 남긴다.
 				log.info("Naver esports match not found. blue={} red={} day={}", blueTeamCode, redTeamCode, day);
 			}
-			return score;
+			return result;
 		} catch (Exception e) {
 			log.warn("Naver esports score fetch failed. blue={} red={}: {}",
 					blueTeamCode, redTeamCode, e.getMessage());
@@ -75,23 +88,30 @@ public class NaverEsportsScoreClient {
 		}
 	}
 
+	/** {@link #extractResult} 의 스코어만. */
+	static int[] extractScore(JsonNode root, String blueTeamCode, String redTeamCode, long matchStartEpochMs) {
+		Result result = extractResult(root, blueTeamCode, redTeamCode, matchStartEpochMs);
+		return result == null ? null : result.score();
+	}
+
 	/**
 	 * day 응답에서 LoL 종목 + 팀 약칭 쌍 + 시작 시각 근접(±6시간)으로 경기를 찾아
-	 * [blue, red] 스코어 반환. 같은 팀 쌍이 여러 경기면 시작 시각이 가장 가까운 경기를 쓴다.
+	 * [blue, red] 스코어 + 종료 여부 반환. 같은 팀 쌍이 여러 경기면 시작 시각이 가장 가까운 경기를 쓴다.
 	 * 네이버 home/away 순서가 우리 blue/red 와 다르면 스왑한다. 시작 전 경기는 무시.
 	 */
-	static int[] extractScore(JsonNode root, String blueTeamCode, String redTeamCode, long matchStartEpochMs) {
+	static Result extractResult(JsonNode root, String blueTeamCode, String redTeamCode, long matchStartEpochMs) {
 		if (root == null) {
 			return null;
 		}
-		int[] best = null;
+		Result best = null;
 		long bestGap = Long.MAX_VALUE;
 		for (JsonNode match : root.path("content").path("matches")) {
 			// 네이버 day 응답은 전 종목 포함 — 같은 조직이 타 종목에서 같은 날 붙으면 오매칭된다.
 			if (!"lol".equalsIgnoreCase(match.path("gameCode").asText())) {
 				continue;
 			}
-			if ("BEFORE".equalsIgnoreCase(match.path("matchStatus").asText())) {
+			String matchStatus = match.path("matchStatus").asText();
+			if ("BEFORE".equalsIgnoreCase(matchStatus)) {
 				continue;
 			}
 			String home = match.path("homeTeam").path("nameEngAcronym").asText("");
@@ -111,7 +131,7 @@ public class NaverEsportsScoreClient {
 			}
 			long gap = Math.abs(match.path("startDate").asLong(Long.MIN_VALUE) - matchStartEpochMs);
 			if (gap <= START_TIME_TOLERANCE_MS && gap < bestGap) {
-				best = score;
+				best = new Result(score, "RESULT".equalsIgnoreCase(matchStatus));
 				bestGap = gap;
 			}
 		}
