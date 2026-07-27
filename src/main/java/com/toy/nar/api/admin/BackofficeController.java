@@ -1,6 +1,8 @@
 package com.toy.nar.api.admin;
 
 import com.toy.nar.app.lolesports.LeagueConfigService;
+import com.toy.nar.app.lolesports.repository.LeagueMatch;
+import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.lolesports.repository.LeagueConfig;
 import com.toy.nar.app.member.service.MemberDeleteService;
 import com.toy.nar.app.participant.service.PlayerAdminService;
@@ -13,6 +15,8 @@ import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.participant.repository.TeamRepository;
+import com.toy.nar.domain.rating.entity.LivePlayerRating;
+import com.toy.nar.domain.rating.repository.LivePlayerRatingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -33,9 +37,13 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 백오피스 API. {@code /api/admin/**} 는 SecurityConfig 에서 ROLE_ADMIN 으로 보호된다.
@@ -54,6 +62,8 @@ public class BackofficeController {
     private final LeagueConfigService leagueConfigService;
     private final PlayerAdminService playerAdminService;
     private final MemberDeleteService memberDeleteService;
+    private final LivePlayerRatingRepository livePlayerRatingRepository;
+    private final LeagueMatchRepository leagueMatchRepository;
     private final MemberFavoritePlayerRepository memberFavoritePlayerRepository;
     private final MemberTeamNotificationSubscriptionRepository teamSubscriptionRepository;
 
@@ -142,6 +152,34 @@ public class BackofficeController {
     // 빈 문자열/공백은 null 로 정규화 → 검색 쿼리의 ":q IS NULL" 분기가 전체 조회로 동작.
     private static String blankToNull(String q) {
         return (q == null || q.isBlank()) ? null : q.trim();
+    }
+
+    // 회원이 모바일에서 작성한 선수 리뷰(별점 + 한줄평). 부적절한 한줄평 삭제용.
+    // 경기 정보(리그·팀·일시)는 rating.matchId = league_match.id 로 페이지 단위 배치 조회해 붙인다.
+    // field(player|member|comment|all)+q 로 검색. field 없이 q만 오면 전체 대상(all).
+    @GetMapping("/ratings")
+    public Page<RatingRow> ratings(@RequestParam(required = false) String q,
+                                   @RequestParam(required = false) String field,
+                                   @RequestParam(required = false) Integer rating,
+                                   Pageable pageable) {
+        String fieldParam = blankToNull(field);
+        Page<LivePlayerRating> page = livePlayerRatingRepository.searchForBackoffice(
+                blankToNull(q), fieldParam == null ? "all" : fieldParam, rating, pageable);
+        Set<String> matchIds = page.getContent().stream()
+                .map(LivePlayerRating::getMatchId)
+                .collect(Collectors.toSet());
+        Map<String, LeagueMatch> matches = leagueMatchRepository.findAllById(matchIds).stream()
+                .collect(Collectors.toMap(LeagueMatch::getId, m -> m));
+        return page.map(r -> RatingRow.from(r, matches.get(r.getMatchId())));
+    }
+
+    @DeleteMapping("/ratings/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteRating(@PathVariable Long id) {
+        if (!livePlayerRatingRepository.existsById(id)) {
+            throw new NoSuchElementException("리뷰를 찾을 수 없습니다: " + id);
+        }
+        livePlayerRatingRepository.deleteById(id);
     }
 
     @GetMapping("/cron-jobs")
@@ -286,6 +324,33 @@ public class BackofficeController {
     public record SoloRankAccountRequest(String riotId, String region, String imageUrl) {}
 
     public record TeamRow(Long id, String name, String code) {}
+
+    /**
+     * @param matchDate 경기 일시. league_match 는 UTC 로 저장하므로 모바일 응답과 동일하게 KST 로 변환해 내린다.
+     *                  매치 정보를 못 찾으면(동기화 전/삭제) 경기 관련 필드는 null.
+     */
+    public record RatingRow(Long id, String matchId, String leagueName, String matchTitle,
+                            String blueTeamCode, String redTeamCode, LocalDateTime matchDate,
+                            String playerName, String championName, String role,
+                            String memberNickname, Integer rating, String comment,
+                            LocalDateTime createdAt) {
+        static RatingRow from(LivePlayerRating r, LeagueMatch match) {
+            return new RatingRow(r.getId(), r.getMatchId(),
+                    match != null ? match.getLeagueName() : null,
+                    match != null ? match.getMatchTitle() : null,
+                    match != null ? match.getBlueTeamCode() : null,
+                    match != null ? match.getRedTeamCode() : null,
+                    match != null ? toKst(match.getMatchDate()) : null,
+                    r.getPlayerName(), r.getChampionName(), r.getRole(),
+                    r.getMember().getNickname(), r.getRating(), r.getComment(),
+                    r.getCreatedAt());
+        }
+
+        private static LocalDateTime toKst(LocalDateTime utc) {
+            return utc == null ? null
+                    : utc.atZone(ZoneOffset.UTC).withZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDateTime();
+        }
+    }
 
     public record LeagueConfigRow(String leagueName, boolean liveEnabled,
                                   boolean notificationEnabled, boolean syncEnabled) {
