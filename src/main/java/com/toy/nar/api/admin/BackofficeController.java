@@ -13,6 +13,8 @@ import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.participant.repository.TeamRepository;
+import com.toy.nar.domain.rating.entity.LivePlayerRating;
+import com.toy.nar.domain.rating.repository.LivePlayerRatingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -54,6 +56,7 @@ public class BackofficeController {
     private final LeagueConfigService leagueConfigService;
     private final PlayerAdminService playerAdminService;
     private final MemberDeleteService memberDeleteService;
+    private final LivePlayerRatingRepository livePlayerRatingRepository;
     private final MemberFavoritePlayerRepository memberFavoritePlayerRepository;
     private final MemberTeamNotificationSubscriptionRepository teamSubscriptionRepository;
 
@@ -142,6 +145,24 @@ public class BackofficeController {
     // 빈 문자열/공백은 null 로 정규화 → 검색 쿼리의 ":q IS NULL" 분기가 전체 조회로 동작.
     private static String blankToNull(String q) {
         return (q == null || q.isBlank()) ? null : q.trim();
+    }
+
+    // 회원이 모바일에서 작성한 선수 리뷰(별점 + 한줄평). 부적절한 한줄평 삭제용.
+    @GetMapping("/ratings")
+    public Page<RatingRow> ratings(@RequestParam(required = false) String q,
+                                   @RequestParam(required = false) Integer rating,
+                                   Pageable pageable) {
+        return livePlayerRatingRepository.searchForBackoffice(blankToNull(q), rating, pageable)
+                .map(RatingRow::from);
+    }
+
+    @DeleteMapping("/ratings/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteRating(@PathVariable Long id) {
+        if (!livePlayerRatingRepository.existsById(id)) {
+            throw new NoSuchElementException("리뷰를 찾을 수 없습니다: " + id);
+        }
+        livePlayerRatingRepository.deleteById(id);
     }
 
     @GetMapping("/cron-jobs")
@@ -286,6 +307,16 @@ public class BackofficeController {
     public record SoloRankAccountRequest(String riotId, String region, String imageUrl) {}
 
     public record TeamRow(Long id, String name, String code) {}
+
+    public record RatingRow(Long id, String matchId, String playerName, String championName,
+                            String role, String memberNickname, Integer rating, String comment,
+                            LocalDateTime createdAt) {
+        static RatingRow from(LivePlayerRating r) {
+            return new RatingRow(r.getId(), r.getMatchId(), r.getPlayerName(), r.getChampionName(),
+                    r.getRole(), r.getMember().getNickname(), r.getRating(), r.getComment(),
+                    r.getCreatedAt());
+        }
+    }
 
     public record LeagueConfigRow(String leagueName, boolean liveEnabled,
                                   boolean notificationEnabled, boolean syncEnabled) {

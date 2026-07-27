@@ -29,6 +29,27 @@ public interface LivePlayerRatingRepository extends JpaRepository<LivePlayerRati
 			String playerRef,
 			Pageable pageable);
 
+	/**
+	 * 백오피스 리뷰 목록. q = 선수명·회원명·한줄평 부분일치, rating = 별점 정확일치(둘 다 optional).
+	 * member 는 join fetch(행마다 닉네임 필요) — count 쿼리는 fetch 없이 별도 지정.
+	 */
+	@Query(value = """
+			SELECT r FROM LivePlayerRating r
+			JOIN FETCH r.member m
+			WHERE (:q IS NULL OR r.playerName LIKE %:q% OR m.name LIKE %:q% OR r.comment LIKE %:q%)
+			  AND (:rating IS NULL OR r.rating = :rating)
+			""",
+			countQuery = """
+			SELECT COUNT(r) FROM LivePlayerRating r
+			JOIN r.member m
+			WHERE (:q IS NULL OR r.playerName LIKE %:q% OR m.name LIKE %:q% OR r.comment LIKE %:q%)
+			  AND (:rating IS NULL OR r.rating = :rating)
+			""")
+	Page<LivePlayerRating> searchForBackoffice(
+			@Param("q") String q,
+			@Param("rating") Integer rating,
+			Pageable pageable);
+
 	@Query("""
 			SELECT r.playerRef AS playerRef,
 			       AVG(r.rating) AS averageRating,
