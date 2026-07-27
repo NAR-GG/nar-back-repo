@@ -56,7 +56,6 @@ public class DataAdminController {
 	// LoL Esports 서비스
 	private final com.toy.nar.app.lolesports.LeagueMatchService leagueMatchService;
 	private final CacheEvictionService cacheEvictionService;
-	private final com.toy.nar.app.lolesports.GolggKespaScoreBackfillService golggKespaScoreBackfillService;
 
 	// 라이브↔배치 reconciliation (특정 게임 강제 연결용)
 	private final LiveReconciliationService liveReconciliationService;
@@ -93,17 +92,6 @@ public class DataAdminController {
 				"includeTeamMetadata", includeTeamMetadata,
 				"elapsedMs", elapsed,
 				"message", league + " 최신 동기화가 완료되었습니다."));
-	}
-
-	@PostMapping("/sync/kespa-golgg-scores")
-	public ResponseEntity<Map<String, Object>> backfillKespaGolggScores() {
-		log.info("KeSPA gol.gg 스코어 백필 요청");
-		int updated = golggKespaScoreBackfillService.backfill();
-		cacheEvictionService.evictScheduleCaches();
-		return ResponseEntity.ok(Map.of(
-				"success", true,
-				"updated", updated,
-				"message", "KeSPA gol.gg 스코어 백필 완료: " + updated + "건"));
 	}
 
 	@PostMapping("/sync/matches/recent-backfill")
