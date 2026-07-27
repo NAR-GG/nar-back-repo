@@ -53,14 +53,12 @@ class PlayerSoloRankMonitorServiceTest {
 	@Mock
 	private SoloRankGameHistoryRecorder soloRankGameHistoryRecorder;
 
-	private RiotMonitorProperties riotMonitorProperties;
 	private PlayerSoloRankMonitorService playerSoloRankMonitorService;
 
 	@BeforeEach
 	void setUp() {
-		riotMonitorProperties = new RiotMonitorProperties();
-		riotMonitorProperties.setPlatform("KR");
-		riotMonitorProperties.setRecentMatchFetchCount(5);
+		RiotMonitorProperties riotMonitorProperties = new RiotMonitorProperties();
+		riotMonitorProperties.setMaxRequestsPerSecond(0); // 테스트에선 페이싱(sleep) 비활성
 		playerSoloRankMonitorService = new PlayerSoloRankMonitorService(
 				playerRiotAccountRepository,
 				championDataService,
@@ -91,14 +89,14 @@ class PlayerSoloRankMonitorServiceTest {
 				.lastCheckedMatchId("KR_111")
 				.build();
 
-		when(playerRiotAccountRepository.findTrackedAccountsByPlatform("KR")).thenReturn(List.of(account));
+		when(playerRiotAccountRepository.findAllTrackedAccounts()).thenReturn(List.of(account));
 		when(championDataService.findChampionByRiotKey(157))
 				.thenReturn(Optional.of(Champion.builder()
 					.championNameKr("야스오")
 					.championNameEn("Yasuo")
 					.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png")
 					.build()));
-		when(riotApiClient.getActiveGameByPuuid("puuid"))
+		when(riotApiClient.getActiveGameByPuuid("puuid", "KR"))
 				.thenReturn(Optional.of(new RiotCurrentGameResponse(
 						222L,
 						420,
@@ -149,8 +147,8 @@ class PlayerSoloRankMonitorServiceTest {
 				.lastAlertedMatchId("222")
 				.build();
 
-		when(playerRiotAccountRepository.findTrackedAccountsByPlatform("KR")).thenReturn(List.of(account));
-		when(riotApiClient.getActiveGameByPuuid("puuid"))
+		when(playerRiotAccountRepository.findAllTrackedAccounts()).thenReturn(List.of(account));
+		when(riotApiClient.getActiveGameByPuuid("puuid", "KR"))
 				.thenReturn(Optional.of(new RiotCurrentGameResponse(
 						222L,
 						420,
@@ -189,8 +187,8 @@ class PlayerSoloRankMonitorServiceTest {
 				.liveStatus(PlayerRiotAccountLiveStatus.OFFLINE)
 				.build();
 
-		when(playerRiotAccountRepository.findTrackedAccountsByPlatform("KR")).thenReturn(List.of(account));
-		when(riotApiClient.getActiveGameByPuuid("puuid"))
+		when(playerRiotAccountRepository.findAllTrackedAccounts()).thenReturn(List.of(account));
+		when(riotApiClient.getActiveGameByPuuid("puuid", "KR"))
 				.thenReturn(Optional.of(new RiotCurrentGameResponse(
 						333L,
 						420,
@@ -220,13 +218,13 @@ class PlayerSoloRankMonitorServiceTest {
 					.championNameEn("Yone")
 					.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yone.png")
 					.build()));
-		when(riotApiClient.getActiveGameByPuuid("manual-puuid"))
+		when(riotApiClient.getActiveGameByPuuid("manual-puuid", "KR"))
 				.thenReturn(Optional.of(new RiotCurrentGameResponse(
 						999L,
 						420,
 						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("manual-puuid", 777, "ManualUser#KR1")))));
 
-		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid("manual-puuid");
+		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid("manual-puuid", "KR");
 
 		assertThat(result.currentGameFound()).isTrue();
 		assertThat(result.rankedSolo()).isTrue();
@@ -253,13 +251,13 @@ class PlayerSoloRankMonitorServiceTest {
 					.championNameEn("Jhin")
 					.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Jhin.png")
 					.build()));
-		when(riotApiClient.getActiveGameByPuuid("arena-puuid"))
+		when(riotApiClient.getActiveGameByPuuid("arena-puuid", "KR"))
 				.thenReturn(Optional.of(new RiotCurrentGameResponse(
 						1234L,
 						1700,
 						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("arena-puuid", 202, "ArenaUser#KR1")))));
 
-		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid("arena-puuid");
+		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid("arena-puuid", "KR");
 
 		assertThat(result.currentGameFound()).isTrue();
 		assertThat(result.rankedSolo()).isFalse();
@@ -296,14 +294,14 @@ class PlayerSoloRankMonitorServiceTest {
 				.lastCheckedMatchId("KR_111")
 				.build();
 
-		when(playerRiotAccountRepository.findTrackedAccountsByPlatform("KR")).thenReturn(List.of(account));
+		when(playerRiotAccountRepository.findAllTrackedAccounts()).thenReturn(List.of(account));
 		when(championDataService.findChampionByRiotKey(202))
 				.thenReturn(Optional.of(Champion.builder()
 					.championNameKr("진")
 					.championNameEn("Jhin")
 					.imageUrl("https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Jhin.png")
 					.build()));
-		when(riotApiClient.getActiveGameByPuuid("puuid"))
+		when(riotApiClient.getActiveGameByPuuid("puuid", "KR"))
 				.thenReturn(Optional.of(new RiotCurrentGameResponse(
 						444L,
 						1700,
@@ -330,5 +328,33 @@ class PlayerSoloRankMonitorServiceTest {
 				org.mockito.ArgumentMatchers.any(),
 				org.mockito.ArgumentMatchers.any());
 		verify(soloRankGameHistoryRecorder, never()).record(any(), anyString(), any(), any());
+	}
+
+	@Test
+	void skipsRateLimitedAccountButContinuesRest() {
+		PlayerRiotAccount first = PlayerRiotAccount.builder()
+				.player(Player.builder().name("First").build())
+				.riotId("A#KR1").gameName("A").tagLine("KR1").platform("KR").puuid("puuidA")
+				.primaryAccount(true).enabled(true).liveStatus(PlayerRiotAccountLiveStatus.OFFLINE)
+				.build();
+		PlayerRiotAccount second = PlayerRiotAccount.builder()
+				.player(Player.builder().name("Second").build())
+				.riotId("B#KR1").gameName("B").tagLine("KR1").platform("KR").puuid("puuidB")
+				.primaryAccount(true).enabled(true).liveStatus(PlayerRiotAccountLiveStatus.OFFLINE)
+				.build();
+
+		when(playerRiotAccountRepository.findAllTrackedAccounts()).thenReturn(List.of(first, second));
+		when(riotApiClient.getActiveGameByPuuid("puuidA", "KR"))
+				.thenThrow(new RiotApiException("rate limit", 429));
+		when(riotApiClient.getActiveGameByPuuid("puuidB", "KR")).thenReturn(Optional.empty());
+
+		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
+
+		// 429는 해당 계정만 스킵 — 두 번째 계정은 계속 폴링됨(사이클 중단 안 함)
+		verify(riotApiClient).getActiveGameByPuuid("puuidA", "KR");
+		verify(riotApiClient).getActiveGameByPuuid("puuidB", "KR");
+		// 간헐 429(1건 < 임계)는 Discord 경고 안 함 — 로그만
+		verify(schedulerAlertService, never()).recordWarning(anyString(), anyString(), anyString());
+		assertThat(result.failedCount()).isEqualTo(1);
 	}
 }

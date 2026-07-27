@@ -36,6 +36,8 @@ public class PlayerSoloRankMonitorService {
 	private static final int ARENA_RANKED_QUEUE_ID = 1710;
 	private static final String JOB_KEY = "PLAYER_RANKED_SOLO_MONITOR";
 	private static final String JOB_NAME = "선수 솔랭 감시";
+	// 한 사이클에 429가 이 수 이상이면 systemic으로 보고 경고. 미만이면 간헐로 간주(로그만).
+	private static final int RATE_LIMIT_ALERT_THRESHOLD = 10;
 
 	private final PlayerRiotAccountRepository playerRiotAccountRepository;
 	private final ChampionDataService championDataService;
@@ -50,8 +52,7 @@ public class PlayerSoloRankMonitorService {
 	public PlayerSoloRankMonitorResult pollTrackedAccounts() {
 		long startedAt = System.currentTimeMillis();
 		riotApiClient.assertConfigured();
-		List<PlayerRiotAccount> trackedAccounts = playerRiotAccountRepository.findTrackedAccountsByPlatform(
-				riotMonitorProperties.getPlatform().toUpperCase());
+		List<PlayerRiotAccount> trackedAccounts = playerRiotAccountRepository.findAllTrackedAccounts();
 
 		int checkedCount = 0;
 		int noRecentMatchCount = 0;
@@ -60,11 +61,19 @@ public class PlayerSoloRankMonitorService {
 		int rankedSoloCount = 0;
 		int alertsSentCount = 0;
 			int failedCount = 0;
+		int rateLimitedCount = 0;
+
+		// 초당 호출 상한(버스트 429 방지). 호출 시작 간 최소 간격을 둔다.
+		int maxPerSec = riotMonitorProperties.getMaxRequestsPerSecond();
+		long minIntervalMs = maxPerSec > 0 ? 1000L / maxPerSec : 0;
+		long lastCallAt = 0;
 
 		for (PlayerRiotAccount account : trackedAccounts) {
 			LocalDateTime checkedAt = LocalDateTime.now();
 			try {
-				Optional<RiotCurrentGameResponse> currentGameOptional = riotApiClient.getActiveGameByPuuid(account.getPuuid());
+				lastCallAt = throttle(lastCallAt, minIntervalMs);
+				Optional<RiotCurrentGameResponse> currentGameOptional = riotApiClient.getActiveGameByPuuid(
+						account.getPuuid(), account.getPlatform());
 				checkedCount++;
 
 				if (currentGameOptional.isEmpty()) {
@@ -121,20 +130,22 @@ public class PlayerSoloRankMonitorService {
 								champion == null ? null : champion.getChampionNameKr(),
 								champion == null ? null : champion.getImageUrl(),
 								queueDisplayName,
-								buildOpggUrl(account.getGameName(), account.getTagLine()));
+								buildOpggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 					}
 					account.markAlertSent(currentGameId);
 					alertsSentCount++;
 				}
 			} catch (RiotApiException e) {
 				failedCount++;
-				log.warn("Riot live poll failed for player={}", account.getPlayer().getName(), e);
 				if (e.isRateLimited()) {
-					schedulerAlertService.recordWarning(
-							JOB_KEY,
-							JOB_NAME,
-							"Riot API rate limit reached while polling KR ranked solo monitor");
+					// 429(server rate limit)는 Riot 공유·확률적 한도(Retry-After 20초 관측)라 낮은 rate에도 간헐 발생.
+					// 해당 계정만 스킵 → 다음 60초 주기에 재시도(솔랭 게임 20~35분이라 감지엔 무해).
+					// 개별 429는 알림하지 않고 로그만 — 예상된 일시 현상. 사이클 종합이 systemic일 때만 경고(아래).
+					rateLimitedCount++;
+					log.warn("Riot live poll rate limited (429) for player={}, skipping this cycle",
+							account.getPlayer().getName());
 				} else {
+					log.warn("Riot live poll failed for player={}", account.getPlayer().getName(), e);
 					schedulerAlertService.recordFailure(
 							JOB_KEY,
 							JOB_NAME,
@@ -142,6 +153,15 @@ public class PlayerSoloRankMonitorService {
 							"player=" + account.getPlayer().getName());
 				}
 			}
+		}
+
+		// 429가 다수(systemic)일 때만 경고 — 간헐 1~2건은 정상(다음 주기 자동 복구)이라 노이즈로 알리지 않는다.
+		if (rateLimitedCount >= RATE_LIMIT_ALERT_THRESHOLD) {
+			schedulerAlertService.recordWarning(
+					JOB_KEY,
+					JOB_NAME,
+					"Riot API rate limit: " + rateLimitedCount + "/" + trackedAccounts.size()
+							+ " 계정 429 (systemic — 폴 주기·상한 점검 필요)");
 		}
 
 		long elapsed = System.currentTimeMillis() - startedAt;
@@ -158,10 +178,10 @@ public class PlayerSoloRankMonitorService {
 	}
 
 	@Transactional(readOnly = true)
-	public PlayerRiotAlertCheckResult checkAndSendAlertByPuuid(String puuid) {
+	public PlayerRiotAlertCheckResult checkAndSendAlertByPuuid(String puuid, String platform) {
 		riotApiClient.assertConfigured();
 
-		Optional<RiotCurrentGameResponse> currentGameOptional = riotApiClient.getActiveGameByPuuid(puuid);
+		Optional<RiotCurrentGameResponse> currentGameOptional = riotApiClient.getActiveGameByPuuid(puuid, platform);
 		if (currentGameOptional.isEmpty()) {
 			return new PlayerRiotAlertCheckResult(
 					puuid,
@@ -215,13 +235,29 @@ public class PlayerSoloRankMonitorService {
 				"ALERT_SENT");
 	}
 
-	/** OP.GG 소환사 페이지 URL (디스코드 알림과 동일 포맷). 정보 부족 시 빈 문자열. */
-	private String buildOpggUrl(String gameName, String tagLine) {
+	// 호출 시작 간 최소 간격을 유지(초당 상한). 반환값(현재 시각)을 다음 호출의 lastCallAt으로 넘긴다.
+	private long throttle(long lastCallAt, long minIntervalMs) {
+		if (minIntervalMs <= 0 || lastCallAt == 0) {
+			return System.currentTimeMillis();
+		}
+		long wait = minIntervalMs - (System.currentTimeMillis() - lastCallAt);
+		if (wait > 0) {
+			try {
+				Thread.sleep(wait);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		}
+		return System.currentTimeMillis();
+	}
+
+	/** OP.GG 소환사 페이지 URL (디스코드 알림과 동일 포맷). 계정 플랫폼별 지역 코드 사용. 정보 부족 시 빈 문자열. */
+	private String buildOpggUrl(String gameName, String tagLine, String platform) {
 		if (gameName == null || gameName.isBlank() || tagLine == null || tagLine.isBlank()) {
 			return "";
 		}
 		String path = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
-		return "https://www.op.gg/summoners/kr/" + path;
+		return "https://www.op.gg/summoners/" + RiotPlatform.opggRegion(platform) + "/" + path;
 	}
 
 	private boolean isRankedSolo(RiotCurrentGameResponse currentGame) {

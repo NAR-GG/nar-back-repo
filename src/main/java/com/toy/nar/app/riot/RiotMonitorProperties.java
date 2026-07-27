@@ -15,4 +15,6 @@ public class RiotMonitorProperties {
 	private String targetLeague = "LCK";
 	private String platform = "KR";
 	private int recentMatchFetchCount = 5;
+	// 폴 사이클의 Riot spectator 호출 상한(초당). 버스트로 인한 429 방지. 0 이하면 페이싱 없음.
+	private int maxRequestsPerSecond = 10;
 }

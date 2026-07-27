@@ -61,34 +61,34 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("""
 			SELECT m
 			FROM LeagueMatch m
-			WHERE (:leagueName IS NULL OR m.leagueName = :leagueName)
+			WHERE (:leagueNames IS NULL OR m.leagueName IN :leagueNames)
 			  AND m.matchDate >= :start
 			  AND m.matchDate < :end
 			ORDER BY m.matchDate ASC
 			""")
 	List<LeagueMatch> findMobileMatchesInRange(
-			@Param("leagueName") String leagueName,
+			@Param("leagueNames") List<String> leagueNames,
 			@Param("start") LocalDateTime start,
 			@Param("end") LocalDateTime end);
 
 	@Query("""
 			SELECT m
 			FROM LeagueMatch m
-			WHERE (:leagueName IS NULL OR m.leagueName = :leagueName)
+			WHERE (:leagueNames IS NULL OR m.leagueName IN :leagueNames)
 			  AND m.matchDate >= :start
 			  AND m.matchDate < :end
 			  AND (
-					LOWER(m.blueTeamName) = LOWER(:teamName)
-					OR LOWER(m.redTeamName) = LOWER(:teamName)
-					OR (:teamCode IS NOT NULL AND m.blueTeamCode IS NOT NULL AND LOWER(m.blueTeamCode) = LOWER(:teamCode))
-					OR (:teamCode IS NOT NULL AND m.redTeamCode IS NOT NULL AND LOWER(m.redTeamCode) = LOWER(:teamCode))
+					LOWER(m.blueTeamName) IN :teamNames
+					OR LOWER(m.redTeamName) IN :teamNames
+					OR (:teamCodes IS NOT NULL AND m.blueTeamCode IS NOT NULL AND LOWER(m.blueTeamCode) IN :teamCodes)
+					OR (:teamCodes IS NOT NULL AND m.redTeamCode IS NOT NULL AND LOWER(m.redTeamCode) IN :teamCodes)
 			  )
 			ORDER BY m.matchDate ASC
 			""")
 	List<LeagueMatch> findMobileTeamMatchesInRange(
-			@Param("leagueName") String leagueName,
-			@Param("teamName") String teamName,
-			@Param("teamCode") String teamCode,
+			@Param("leagueNames") List<String> leagueNames,
+			@Param("teamNames") List<String> teamNames,
+			@Param("teamCodes") List<String> teamCodes,
 			@Param("start") LocalDateTime start,
 			@Param("end") LocalDateTime end);
 

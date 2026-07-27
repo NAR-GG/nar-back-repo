@@ -49,6 +49,9 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build -x test
 
+      - name: Set up QEMU  # arm64(t4g) 크로스 빌드용 에뮬레이터
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -63,6 +66,8 @@ jobs:
         with:
           context: .
           push: true
+          # amd64(t3)·arm64(t4g) 둘 다 빌드 — 인스턴스 아키텍처 무관하게 실행 + 롤백 안전.
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
@@ -134,7 +139,8 @@ jobs:
             # awslogs: CloudWatch /nar/app 로 전송 (보존 30일). docker 20.10+ dual logging
             # 캐시 덕에 docker logs·Dozzle 도 그대로 동작한다. EC2 롤: NAR-CloudWatch-Role
             docker run -d --name "${NEW_NAME}" -p 127.0.0.1:${NEW_PORT}:8080 \
-              -m 768m \
+              --restart unless-stopped \
+              -m 1536m \
               --log-driver=awslogs \
               --log-opt awslogs-region=ap-northeast-2 \
               --log-opt awslogs-group=/nar/app \
@@ -170,7 +176,7 @@ jobs:
               -e FIREBASE_MESSAGING_ENABLED="true" \
               -e LIVE_NOTIFICATION_FCM_ENABLED="true" \
               -e GOOGLE_APPLICATION_CREDENTIALS="/run/secrets/firebase-service-account.json" \
-              -e JAVA_TOOL_OPTIONS="-Xmx512m -javaagent:/whatap/${WHATAP_JAR} --add-opens=java.base/java.lang=ALL-UNNAMED -Dwhatap.oname=${NEW_NAME}" \
+              -e JAVA_TOOL_OPTIONS="-Xmx768m -javaagent:/whatap/${WHATAP_JAR} --add-opens=java.base/java.lang=ALL-UNNAMED -Dwhatap.oname=${NEW_NAME}" \
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
               -v /opt/whatap:/whatap \
               "${APP_IMAGE}"

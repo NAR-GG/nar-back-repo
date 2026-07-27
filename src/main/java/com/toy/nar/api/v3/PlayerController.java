@@ -78,7 +78,7 @@ public class PlayerController {
 		return ResponseEntity.ok(result);
 	}
 
-	@Operation(summary = "선수 솔랭 감시 수동 실행", description = "KR 주 계정 추적 대상에 대해 spectator-v5 현재 게임 상태를 확인하고 솔랭 시작 알림을 전송합니다.")
+	@Operation(summary = "선수 솔랭 감시 수동 실행", description = "추적 대상 주 계정(KR·EUW·NA 등 플랫폼별)에 대해 spectator-v5 현재 게임 상태를 확인하고 솔랭 시작 알림을 전송합니다.")
 	@PostMapping("/riot/poll")
 	public ResponseEntity<PlayerSoloRankMonitorResult> pollTrackedPlayers() {
 		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
@@ -89,7 +89,8 @@ public class PlayerController {
 	@PostMapping("/riot/manual-alert-check")
 	public ResponseEntity<PlayerRiotAlertCheckResult> checkAndSendRiotAlert(
 			@Valid @RequestBody PlayerRiotAlertCheckRequest request) {
-		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid(request.puuid());
+		PlayerRiotAlertCheckResult result = playerSoloRankMonitorService.checkAndSendAlertByPuuid(
+				request.puuid(), request.platform());
 		return ResponseEntity.ok(result);
 	}
 
