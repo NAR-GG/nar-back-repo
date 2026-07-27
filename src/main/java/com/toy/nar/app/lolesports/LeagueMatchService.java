@@ -110,6 +110,48 @@ public class LeagueMatchService {
 	}
 
 	/**
+	 * livestats 프레임이 종료(finished)를 알리는데 업스트림 state 는 여전히 unstarted 인 구간에서,
+	 * 네이버가 매치 종료(matchStatus=RESULT)를 확인해주면 completed 로 확정한다.
+	 *
+	 * <p>업스트림 completed flip 은 실측 17분+ 늦게 온다(2026-07-27 KESPA T1 vs DNS: 종료 21:40:12,
+	 * flip 21:57:37). 그 구간을 네이버로 메꾼다. 세트 사이(네이버가 아직 RESULT 아님)면 false 를
+	 * 돌려 호출측이 기존대로 스킵하게 한다 — 업스트림 unstarted 를 그대로 쓰면 DB 가 되돌아간다.</p>
+	 *
+	 * @return DB 가 실제로 바뀌었으면 true (종료 미확정·스코어 없음·이미 최신이면 false)
+	 */
+	public boolean syncCompletedMatchFromNaver(MatchResultDto match, String fallbackLeagueSlug) {
+		if (match == null || match.getBlueTeam() == null || match.getRedTeam() == null
+				|| match.getMatchDate() == null) {
+			return false;
+		}
+		LocalDateTime matchDateUtc;
+		try {
+			matchDateUtc = LocalDateTime.parse(match.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
+		} catch (Exception e) {
+			return false;
+		}
+		NaverEsportsScoreClient.Result naver = naverEsportsScoreClient.fetchResult(
+				match.getBlueTeam().getCode(), match.getRedTeam().getCode(), matchDateUtc);
+		if (naver == null || !naver.finished() || naver.score() == null
+				|| naver.score()[0] + naver.score()[1] == 0) {
+			return false;
+		}
+		match.getBlueTeam().setWins(naver.score()[0]);
+		match.getRedTeam().setWins(naver.score()[1]);
+		match.setState("completed");
+		String leagueSlug = match.getLeagueName() == null || match.getLeagueName().isBlank()
+				? fallbackLeagueSlug
+				: match.getLeagueName();
+		MatchSyncUpsertResult result = upsertLeagueMatches(leagueSlug, List.of(match));
+		boolean changed = result.insertedMatches() > 0 || result.updatedMatches() > 0;
+		if (changed) {
+			log.info("Naver 종료 확정으로 매치 completed 반영. matchId={} score={}:{}",
+					match.getMatchId(), naver.score()[0], naver.score()[1]);
+		}
+		return changed;
+	}
+
+	/**
 	 * 라이브 중 Riot gameWins 는 다음 세트 픽밴에야 뒤집혀 몇 분간 stale 이다. 네이버 e스포츠는
 	 * 세트 종료 직후 반영되므로, 진행 중 경기의 스코어 합이 네이버에서 더 앞서면 그 값으로 덮어쓴다.
 	 * 리스트·상세·모바일이 모두 이 DB 스코어를 읽으므로 표시 지연이 함께 줄어든다.

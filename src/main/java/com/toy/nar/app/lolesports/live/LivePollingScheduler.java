@@ -70,6 +70,15 @@ public class LivePollingScheduler {
 	private final java.util.Set<String> frameFinishedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
 	/**
+	 * 네이버 종료 확정으로 이미 completed 를 쓴 matchId. 업스트림 flip 이 오기까지(실측 17분+)
+	 * 매 사이클 네이버를 다시 찌르지 않게 막는다. 확정 실패(세트 사이)면 등록하지 않아 다음 사이클에 재시도한다.
+	 * ponytail: 프로세스 생애 동안 누적된다 — 하루 수백 건이라 무해. 커지면 stale 제거 시점에 같이 비운다.
+	 * 재기동으로 이 집합이 비면 이미 completed 인 매치에 대해 flip 까지 네이버를 다시 찌른다(최대 ~17분,
+	 * 10초 주기). 콜 수가 문제되면 DB state 조회로 게이트한다.
+	 */
+	private final java.util.Set<String> naverFinalizedMatchIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+	/**
 	 * 시작 알림(디스코드+SET_START 푸시)을 이미 보낸 gameId. 업스트림 eventDetails 는
 	 * 픽밴 시작 시점에 다음 게임을 inProgress 로 뒤집으므로 디스커버리 등장은 "픽밴 시작"이지
 	 * 게임 시작이 아니다. 실제 시작 신호는 livestats 첫 프레임 도착이고, 여기서 1회로 제한한다.
@@ -124,9 +133,15 @@ public class LivePollingScheduler {
 							match.setState("inProgress");
 						} else if (probe.sawFinished()) {
 							// 세트 사이/경기 종료 직후: 피드는 finished 잔상인데 업스트림 state 는 여전히 unstarted.
-							// 여기서 sync 하면 matchId 가 activeMatchIds 에 남아 있는 동안(stale 3분 창)
-							// Riot 원본 unstarted 가 DB 의 inProgress 를 되돌린다. 이 사이클은 건너뛰고
-							// 업스트림 completed flip(또는 30분 cron)에 맡긴다.
+							// 업스트림 원본(unstarted)으로 sync 하면 DB 의 inProgress 가 되돌아가므로 쓸 수 없다.
+							// 대신 네이버가 매치 종료(RESULT)를 확인해주면 completed 를 직접 확정한다 —
+							// 업스트림 flip 은 실측 17분+ 늦게 온다(2026-07-27 KESPA T1 vs DNS).
+							// 네이버가 아직 진행 중이면(세트 사이) 기존대로 이 사이클을 건너뛴다.
+							if (!naverFinalizedMatchIds.contains(match.getMatchId())
+									&& leagueMatchService.syncCompletedMatchFromNaver(match, league)) {
+								naverFinalizedMatchIds.add(match.getMatchId());
+								scheduleCacheDirty = true;
+							}
 							continue;
 						}
 					}

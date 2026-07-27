@@ -102,6 +102,29 @@ class NaverEsportsScoreClientTest {
 	}
 
 	@Test
+	void matchStatus가_RESULT면_종료로_판정한다() throws Exception {
+		JsonNode root = day("""
+				{"gameCode":"lol","matchStatus":"RESULT","homeScore":2,"awayScore":0,"startDate":%d,
+				 "homeTeam":{"nameEngAcronym":"GEN"},"awayTeam":{"nameEngAcronym":"DK"}}
+				""".formatted(START_MS));
+
+		NaverEsportsScoreClient.Result result =
+				NaverEsportsScoreClient.extractResult(root, "GEN", "DK", START_MS);
+
+		assertThat(result.finished()).isTrue();
+		assertThat(result.score()).containsExactly(2, 0);
+	}
+
+	@Test
+	void matchStatus가_STARTED면_종료로_판정하지_않는다() throws Exception {
+		NaverEsportsScoreClient.Result result =
+				NaverEsportsScoreClient.extractResult(day(GEN_DK), "GEN", "DK", START_MS);
+
+		assertThat(result.finished()).isFalse();
+		assertThat(result.score()).containsExactly(1, 2);
+	}
+
+	@Test
 	void 응답이_null이면_null() {
 		assertThat(NaverEsportsScoreClient.extractScore(null, "GEN", "DK", START_MS)).isNull();
 	}
