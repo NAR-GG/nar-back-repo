@@ -53,36 +53,60 @@ class LivePlayerRatingSearchTest {
 	@Test
 	@DisplayName("q가 null이면 전체, 값이 있으면 선수명·회원명·한줄평 부분일치로 검색한다")
 	void searchForBackoffice_matchesPlayerOrMemberOrComment() {
-		assertThat(ratingRepository.searchForBackoffice(null, null, PageRequest.of(0, 10)).getTotalElements())
+		assertThat(ratingRepository.searchForBackoffice(null, "all", null, PageRequest.of(0, 10)).getTotalElements())
 				.isEqualTo(3);
 
 		// 선수명 부분일치
-		assertThat(names(ratingRepository.searchForBackoffice("Faker", null, PageRequest.of(0, 10)).getContent()))
+		assertThat(names(ratingRepository.searchForBackoffice("Faker", "all", null, PageRequest.of(0, 10)).getContent()))
 				.containsExactly("Faker", "Faker");
 
 		// 회원명 부분일치 — 그 회원이 쓴 리뷰 전부
-		assertThat(names(ratingRepository.searchForBackoffice("구마유시팬", null, PageRequest.of(0, 10)).getContent()))
+		assertThat(names(ratingRepository.searchForBackoffice("구마유시팬", "all", null, PageRequest.of(0, 10)).getContent()))
 				.containsExactlyInAnyOrder("Gumayusi", "Faker");
 
 		// 한줄평 부분일치
-		assertThat(names(ratingRepository.searchForBackoffice("던짐", null, PageRequest.of(0, 10)).getContent()))
+		assertThat(names(ratingRepository.searchForBackoffice("던짐", "all", null, PageRequest.of(0, 10)).getContent()))
 				.containsExactly("Gumayusi");
 
 		// 매칭 없음
-		assertThat(ratingRepository.searchForBackoffice("zzz", null, PageRequest.of(0, 10)).getTotalElements())
+		assertThat(ratingRepository.searchForBackoffice("zzz", "all", null, PageRequest.of(0, 10)).getTotalElements())
 				.isZero();
 	}
 
 	@Test
 	@DisplayName("rating을 주면 해당 별점만, q와 함께도 동작한다")
 	void searchForBackoffice_filtersByRating() {
-		assertThat(ratingRepository.searchForBackoffice(null, 5, PageRequest.of(0, 10)).getTotalElements())
+		assertThat(ratingRepository.searchForBackoffice(null, "all", 5, PageRequest.of(0, 10)).getTotalElements())
 				.isEqualTo(2);
-		assertThat(names(ratingRepository.searchForBackoffice("던짐", 2, PageRequest.of(0, 10)).getContent()))
+		assertThat(names(ratingRepository.searchForBackoffice("던짐", "all", 2, PageRequest.of(0, 10)).getContent()))
 				.containsExactly("Gumayusi");
 		// q와 rating이 서로 다른 행을 가리키면 결과 없음
-		assertThat(ratingRepository.searchForBackoffice("던짐", 5, PageRequest.of(0, 10)).getTotalElements())
+		assertThat(ratingRepository.searchForBackoffice("던짐", "all", 5, PageRequest.of(0, 10)).getTotalElements())
 				.isZero();
+	}
+
+	@Test
+	@DisplayName("field 로 검색 대상을 좁힌다 (player|member|comment)")
+	void searchForBackoffice_scopesByField() {
+		// "Faker" 는 선수명에만 있다 → member/comment 스코프면 0건
+		assertThat(ratingRepository.searchForBackoffice("Faker", "player", null, PageRequest.of(0, 10))
+				.getTotalElements()).isEqualTo(2);
+		assertThat(ratingRepository.searchForBackoffice("Faker", "member", null, PageRequest.of(0, 10))
+				.getTotalElements()).isZero();
+		assertThat(ratingRepository.searchForBackoffice("Faker", "comment", null, PageRequest.of(0, 10))
+				.getTotalElements()).isZero();
+
+		// "팬" 은 작성자 닉네임에만 있다
+		assertThat(ratingRepository.searchForBackoffice("팬", "member", null, PageRequest.of(0, 10))
+				.getTotalElements()).isEqualTo(3);
+		assertThat(ratingRepository.searchForBackoffice("팬", "player", null, PageRequest.of(0, 10))
+				.getTotalElements()).isZero();
+
+		// 한줄평 스코프 + 닉네임 태그(#) 검색
+		assertThat(names(ratingRepository.searchForBackoffice("캐리", "comment", null, PageRequest.of(0, 10))
+				.getContent())).containsExactly("Faker");
+		assertThat(ratingRepository.searchForBackoffice("#5678", "member", null, PageRequest.of(0, 10))
+				.getTotalElements()).isEqualTo(2);
 	}
 
 	private static List<String> names(List<LivePlayerRating> rows) {

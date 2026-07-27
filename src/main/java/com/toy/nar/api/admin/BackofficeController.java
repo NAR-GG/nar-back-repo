@@ -156,12 +156,15 @@ public class BackofficeController {
 
     // 회원이 모바일에서 작성한 선수 리뷰(별점 + 한줄평). 부적절한 한줄평 삭제용.
     // 경기 정보(리그·팀·일시)는 rating.matchId = league_match.id 로 페이지 단위 배치 조회해 붙인다.
+    // field(player|member|comment|all)+q 로 검색. field 없이 q만 오면 전체 대상(all).
     @GetMapping("/ratings")
     public Page<RatingRow> ratings(@RequestParam(required = false) String q,
+                                   @RequestParam(required = false) String field,
                                    @RequestParam(required = false) Integer rating,
                                    Pageable pageable) {
+        String fieldParam = blankToNull(field);
         Page<LivePlayerRating> page = livePlayerRatingRepository.searchForBackoffice(
-                blankToNull(q), rating, pageable);
+                blankToNull(q), fieldParam == null ? "all" : fieldParam, rating, pageable);
         Set<String> matchIds = page.getContent().stream()
                 .map(LivePlayerRating::getMatchId)
                 .collect(Collectors.toSet());
