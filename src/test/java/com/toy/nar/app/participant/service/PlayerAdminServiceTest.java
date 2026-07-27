@@ -164,12 +164,39 @@ class PlayerAdminServiceTest {
 		when(objectMapper.writeValueAsString(any()))
 				.thenReturn("[{\"region\":\"KR\",\"riotId\":\"Deft#8366\",\"tier\":null}]");
 
-		Player created = playerAdminService.createSoloRankPlayer("Deft", null, "Deft#8366");
+		Player created = playerAdminService.createSoloRankPlayer("Deft", null, "Deft#8366", null);
 
 		assertThat(created.getName()).isEqualTo("Deft");
 		assertThat(created.getGameAccounts()).contains("Deft#8366");
 		assertThat(created.isGameAccountsLocked()).isTrue();
-		verify(playerRiotAccountSyncService).resolveAndSaveInCurrentTransaction(created, "Deft#8366");
+		verify(playerRiotAccountSyncService).resolveAndSaveInCurrentTransaction(created, "Deft#8366", "KR");
+	}
+
+	@Test
+	@DisplayName("attach: 기존 선수에 계정 부착(LCK 게이트 없음, EUW→EUW1)")
+	void attachesSoloRankAccountToExistingPlayer() throws Exception {
+		Player player = Player.builder().name("Way").build();
+		when(playerRepository.findWithCurrentTeamById(554L)).thenReturn(Optional.of(player));
+		when(objectMapper.writeValueAsString(any()))
+				.thenReturn("[{\"region\":\"EUW\",\"riotId\":\"gromp#1508\",\"tier\":null}]");
+
+		Player result = playerAdminService.attachSoloRankAccount(554L, "gromp#1508", "EUW", "https://cdn/x.png");
+
+		assertThat(result.getGameAccounts()).contains("gromp#1508");
+		assertThat(result.getImageUrl()).isEqualTo("https://cdn/x.png");
+		verify(playerRiotAccountSyncService).resolveAndSaveInCurrentTransaction(player, "gromp#1508", "EUW1");
+		verify(playerRepository, never()).hasLeagueParticipation(any(), any());
+	}
+
+	@Test
+	@DisplayName("attach: riotId 형식 오류면 IllegalArgumentException, 계정해석 안 함")
+	void attachRejectsInvalidRiotId() {
+		Player player = Player.builder().name("Way").build();
+		when(playerRepository.findWithCurrentTeamById(554L)).thenReturn(Optional.of(player));
+
+		assertThatThrownBy(() -> playerAdminService.attachSoloRankAccount(554L, "noHash", "EUW", null))
+				.isInstanceOf(IllegalArgumentException.class);
+		verify(playerRiotAccountSyncService, never()).resolveAndSaveInCurrentTransaction(any(), any(), any());
 	}
 
 	@Test
@@ -177,7 +204,7 @@ class PlayerAdminServiceTest {
 	void rejectsDuplicateName() {
 		when(playerRepository.findByName("Deft")).thenReturn(java.util.Optional.of(new Player("Deft", null)));
 
-		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft", null, "Deft#8366"))
+		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft", null, "Deft#8366", null))
 				.isInstanceOf(IllegalStateException.class);
 		verify(playerRepository, never()).save(any());
 	}
@@ -185,9 +212,9 @@ class PlayerAdminServiceTest {
 	@Test
 	@DisplayName("riotId 형식 오류면 IllegalArgumentException")
 	void rejectsInvalidSoloRankRiotId() {
-		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft", null, "NoHashTag"))
+		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft", null, "NoHashTag", null))
 				.isInstanceOf(IllegalArgumentException.class);
-		verify(playerRiotAccountSyncService, never()).resolveAndSaveInCurrentTransaction(any(), any());
+		verify(playerRiotAccountSyncService, never()).resolveAndSaveInCurrentTransaction(any(), any(), any());
 	}
 
 	@Test
@@ -196,7 +223,7 @@ class PlayerAdminServiceTest {
 		// "Deft " 입력 → trim 후 "Deft" 로 중복 검사 → 기존 선수 존재 → IllegalStateException
 		when(playerRepository.findByName("Deft")).thenReturn(java.util.Optional.of(new Player("Deft", null)));
 
-		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft ", null, "Deft#8366"))
+		assertThatThrownBy(() -> playerAdminService.createSoloRankPlayer("Deft ", null, "Deft#8366", null))
 				.isInstanceOf(IllegalStateException.class)
 				.hasMessageContaining("Deft");
 		verify(playerRepository, never()).save(any());

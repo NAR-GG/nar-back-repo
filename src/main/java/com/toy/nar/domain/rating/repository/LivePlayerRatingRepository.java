@@ -29,6 +29,40 @@ public interface LivePlayerRatingRepository extends JpaRepository<LivePlayerRati
 			String playerRef,
 			Pageable pageable);
 
+	/**
+	 * 백오피스 리뷰 목록. field(player|member|comment|all) + q 로 검색, rating = 별점 정확일치(모두 optional).
+	 * member 는 join fetch(행마다 닉네임 필요) — count 쿼리는 fetch 없이 별도 지정.
+	 */
+	@Query(value = """
+			SELECT r FROM LivePlayerRating r
+			JOIN FETCH r.member m
+			WHERE (:q IS NULL
+			       OR (:field = 'player' AND LOWER(r.playerName) LIKE LOWER(CONCAT('%', :q, '%')))
+			       OR (:field = 'member' AND LOWER(CONCAT(m.name, '#', m.tag)) LIKE LOWER(CONCAT('%', :q, '%')))
+			       OR (:field = 'comment' AND LOWER(r.comment) LIKE LOWER(CONCAT('%', :q, '%')))
+			       OR (:field = 'all' AND (LOWER(r.playerName) LIKE LOWER(CONCAT('%', :q, '%'))
+			                               OR LOWER(CONCAT(m.name, '#', m.tag)) LIKE LOWER(CONCAT('%', :q, '%'))
+			                               OR LOWER(r.comment) LIKE LOWER(CONCAT('%', :q, '%')))))
+			  AND (:rating IS NULL OR r.rating = :rating)
+			""",
+			countQuery = """
+			SELECT COUNT(r) FROM LivePlayerRating r
+			JOIN r.member m
+			WHERE (:q IS NULL
+			       OR (:field = 'player' AND LOWER(r.playerName) LIKE LOWER(CONCAT('%', :q, '%')))
+			       OR (:field = 'member' AND LOWER(CONCAT(m.name, '#', m.tag)) LIKE LOWER(CONCAT('%', :q, '%')))
+			       OR (:field = 'comment' AND LOWER(r.comment) LIKE LOWER(CONCAT('%', :q, '%')))
+			       OR (:field = 'all' AND (LOWER(r.playerName) LIKE LOWER(CONCAT('%', :q, '%'))
+			                               OR LOWER(CONCAT(m.name, '#', m.tag)) LIKE LOWER(CONCAT('%', :q, '%'))
+			                               OR LOWER(r.comment) LIKE LOWER(CONCAT('%', :q, '%')))))
+			  AND (:rating IS NULL OR r.rating = :rating)
+			""")
+	Page<LivePlayerRating> searchForBackoffice(
+			@Param("q") String q,
+			@Param("field") String field,
+			@Param("rating") Integer rating,
+			Pageable pageable);
+
 	@Query("""
 			SELECT r.playerRef AS playerRef,
 			       AVG(r.rating) AS averageRating,

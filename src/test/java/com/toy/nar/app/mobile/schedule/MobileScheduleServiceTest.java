@@ -77,12 +77,12 @@ class MobileScheduleServiceTest {
 	void getCalendarGroupsLeagueMatchesByKstDate() {
 		LocalDateTime startUtc = LocalDateTime.of(2026, 3, 31, 15, 0);
 		LocalDateTime endUtc = LocalDateTime.of(2026, 4, 30, 15, 0);
-		when(leagueMatchRepository.findMobileMatchesInRange("LCK", startUtc, endUtc))
+		when(leagueMatchRepository.findMobileMatchesInRange(List.of("LCK"), startUtc, endUtc))
 				.thenReturn(List.of(
 						match("match-1", "LCK", LocalDateTime.of(2026, 3, 31, 15, 30), "T1", "GEN", "unstarted"),
 						match("match-2", "LCK", LocalDateTime.of(2026, 4, 1, 10, 0), "DK", "HLE", "unstarted")));
 
-		MobileScheduleCalendarResponse response = service.getCalendar(YearMonth.of(2026, 4), "lck", null);
+		MobileScheduleCalendarResponse response = service.getCalendar(YearMonth.of(2026, 4), List.of("lck"), null);
 
 		assertThat(response.month()).isEqualTo("2026-04");
 		assertThat(response.league()).isEqualTo("LCK");
@@ -104,9 +104,9 @@ class MobileScheduleServiceTest {
 		Team t1 = team(1L, "T1", "T1", "https://example.com/t1.png");
 		when(teamRepository.findById(1L)).thenReturn(Optional.of(t1));
 		when(leagueMatchRepository.findMobileTeamMatchesInRange(
-				"LCK",
-				"T1",
-				"T1",
+				List.of("LCK"),
+				List.of("t1"),
+				List.of("t1"),
 				LocalDateTime.of(2026, 3, 31, 15, 0),
 				LocalDateTime.of(2026, 4, 1, 15, 0)))
 				.thenReturn(List.of(match(
@@ -119,8 +119,8 @@ class MobileScheduleServiceTest {
 
 		MobileScheduleListResponse response = service.getDailySchedules(
 				LocalDate.of(2026, 4, 1),
-				"LCK",
-				1L);
+				List.of("LCK"),
+				List.of(1L));
 
 		assertThat(response.date()).isEqualTo("2026-04-01");
 		assertThat(response.teamId()).isEqualTo(1L);
@@ -144,7 +144,7 @@ class MobileScheduleServiceTest {
 	@Test
 	void getDailySchedulesQueriesOneKstDayAsUtcRange() {
 		when(leagueMatchRepository.findMobileMatchesInRange(
-				"LCK",
+				List.of("LCK"),
 				LocalDateTime.of(2026, 3, 31, 15, 0),
 				LocalDateTime.of(2026, 4, 1, 15, 0)))
 				.thenReturn(List.of());
@@ -154,7 +154,7 @@ class MobileScheduleServiceTest {
 		ArgumentCaptor<LocalDateTime> startCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
 		ArgumentCaptor<LocalDateTime> endCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
 		verify(leagueMatchRepository).findMobileMatchesInRange(
-				org.mockito.ArgumentMatchers.eq("LCK"),
+				org.mockito.ArgumentMatchers.eq(List.of("LCK")),
 				startCaptor.capture(),
 				endCaptor.capture());
 		assertThat(startCaptor.getValue()).isEqualTo(LocalDateTime.of(2026, 3, 31, 15, 0));
@@ -164,7 +164,7 @@ class MobileScheduleServiceTest {
 	@Test
 	void getDailySchedulesAttachesGamesPerMatch() {
 		when(leagueMatchRepository.findMobileMatchesInRange(
-				"LCK",
+				List.of("LCK"),
 				LocalDateTime.of(2026, 3, 31, 15, 0),
 				LocalDateTime.of(2026, 4, 1, 15, 0)))
 				.thenReturn(List.of(match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed")));
@@ -173,7 +173,7 @@ class MobileScheduleServiceTest {
 						new MappedRow("match-1", 1, "game-1", 100L),
 						new MappedRow("match-1", 2, "game-2", null)));
 
-		MobileScheduleListResponse response = service.getDailySchedules(LocalDate.of(2026, 4, 1), "LCK", null);
+		MobileScheduleListResponse response = service.getDailySchedules(LocalDate.of(2026, 4, 1), List.of("LCK"), null);
 
 		assertThat(response.matches()).singleElement()
 				.satisfies(match -> {
@@ -365,7 +365,7 @@ class MobileScheduleServiceTest {
 
 	@Test
 	void invalidLeagueThrowsInvalidInput() {
-		assertThatThrownBy(() -> service.getDailySchedules(LocalDate.of(2026, 4, 1), "abc", null))
+		assertThatThrownBy(() -> service.getDailySchedules(LocalDate.of(2026, 4, 1), List.of("abc"), null))
 				.isInstanceOf(CustomException.class)
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
@@ -382,7 +382,7 @@ class MobileScheduleServiceTest {
 						match("m-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed"),
 						match("m-2", "LPL", LocalDateTime.of(2026, 4, 1, 11, 0), "BLG", "JDG", "completed")));
 
-		MobileScheduleListResponse response = service.getDailySchedules(LocalDate.of(2026, 4, 1), "ALL", null);
+		MobileScheduleListResponse response = service.getDailySchedules(LocalDate.of(2026, 4, 1), List.of("ALL"), null);
 
 		assertThat(response.league()).isEqualTo("ALL");
 		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
@@ -436,7 +436,7 @@ class MobileScheduleServiceTest {
 	void unknownTeamThrowsDataNotFound() {
 		when(teamRepository.findById(999L)).thenReturn(Optional.empty());
 
-		assertThatThrownBy(() -> service.getCalendar(YearMonth.of(2026, 4), "LCK", 999L))
+		assertThatThrownBy(() -> service.getCalendar(YearMonth.of(2026, 4), List.of("LCK"), List.of(999L)))
 				.isInstanceOf(CustomException.class)
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.DATA_NOT_FOUND);

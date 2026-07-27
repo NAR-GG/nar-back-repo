@@ -1,18 +1,26 @@
 package com.toy.nar.api.admin;
 
 import com.toy.nar.app.lolesports.LeagueConfigService;
+import com.toy.nar.app.lolesports.repository.LeagueMatch;
+import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.lolesports.repository.LeagueConfig;
 import com.toy.nar.app.member.service.MemberDeleteService;
 import com.toy.nar.app.participant.service.PlayerAdminService;
 import com.toy.nar.app.riot.RiotApiException;
 import com.toy.nar.domain.game.repository.LeagueRepository;
+import com.toy.nar.domain.member.repository.MemberFavoritePlayerRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
+import com.toy.nar.domain.member.repository.MemberTeamNotificationSubscriptionRepository;
+import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.participant.repository.TeamRepository;
+import com.toy.nar.domain.rating.entity.LivePlayerRating;
+import com.toy.nar.domain.rating.repository.LivePlayerRatingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,9 +37,13 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 백오피스 API. {@code /api/admin/**} 는 SecurityConfig 에서 ROLE_ADMIN 으로 보호된다.
@@ -50,6 +62,10 @@ public class BackofficeController {
     private final LeagueConfigService leagueConfigService;
     private final PlayerAdminService playerAdminService;
     private final MemberDeleteService memberDeleteService;
+    private final LivePlayerRatingRepository livePlayerRatingRepository;
+    private final LeagueMatchRepository leagueMatchRepository;
+    private final MemberFavoritePlayerRepository memberFavoritePlayerRepository;
+    private final MemberTeamNotificationSubscriptionRepository teamSubscriptionRepository;
 
     @GetMapping("/members")
     public Page<MemberRow> members(@RequestParam(required = false) String q, Pageable pageable) {
@@ -87,9 +103,83 @@ public class BackofficeController {
         return leagueRepository.findAllDistinctLeagueNames();
     }
 
+    // 구독 탭 — 구독 가능한 선수 목록(구독자 수 desc). q로 선수명 검색.
+    // 정렬은 쿼리에 고정(인기순)이라 클라이언트 sort는 무시(page/size만 사용).
+    @GetMapping("/subscriptions/players")
+    public Page<SubscribablePlayerRow> subscribablePlayers(@RequestParam(required = false) String q,
+                                                           Pageable pageable) {
+        Pageable pageOnly = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        return playerRepository.findSubscribablePlayers(blankToNull(q), pageOnly)
+                .map(v -> new SubscribablePlayerRow(v.getPlayerId(), v.getPlayerName(), v.getImageUrl(),
+                        v.getRole(), v.getTeamId(), v.getTeamName(), v.getRiotId(), v.getPlatform(),
+                        v.getSubscriberCount()));
+    }
+
+    // 구독 탭 — 특정 선수를 구독한 회원 목록(최근순).
+    @GetMapping("/subscriptions/players/{playerId}/subscribers")
+    public Page<SubscriberRow> playerSubscribers(@PathVariable Long playerId, Pageable pageable) {
+        return memberFavoritePlayerRepository.findSubscribersByPlayerId(playerId, pageable)
+                .map(v -> new SubscriberRow(v.getMemberId(), v.getName() + "#" + v.getTag(),
+                        v.getEmail(), v.getSubscribedAt()));
+    }
+
+    // 구독 탭 — 구독 가능한 팀 목록(LCK 카탈로그, 구독자 수 desc). q로 팀명·코드 검색.
+    // 정렬은 쿼리에 고정(인기순)이라 클라이언트 sort는 무시(page/size만 사용).
+    @GetMapping("/subscriptions/teams")
+    public Page<SubscribableTeamRow> subscribableTeams(@RequestParam(required = false) String q,
+                                                       Pageable pageable) {
+        Pageable pageOnly = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        return teamRepository.findSubscribableTeams(LckTeamCatalog.TEAM_CODES, blankToNull(q), pageOnly)
+                .map(v -> new SubscribableTeamRow(v.getTeamId(), v.getTeamName(), v.getTeamCode(),
+                        v.getImageUrl(), v.getSubscriberCount()));
+    }
+
+    // 구독 탭 — 특정 팀을 구독한 회원 목록(최근순) + 알림 토글 상태.
+    // field(memberId|nickname|email)+q 로 검색. field 없이 q만 오면 닉네임 기준.
+    @GetMapping("/subscriptions/teams/{teamId}/subscribers")
+    public Page<TeamSubscriberRow> teamSubscribers(@PathVariable Long teamId,
+                                                   @RequestParam(required = false) String field,
+                                                   @RequestParam(required = false) String q,
+                                                   Pageable pageable) {
+        String fieldParam = blankToNull(field);
+        return teamSubscriptionRepository.findSubscribersByTeamId(
+                        teamId, fieldParam == null ? "nickname" : fieldParam, blankToNull(q), pageable)
+                .map(v -> new TeamSubscriberRow(v.getMemberId(), v.getName() + "#" + v.getTag(),
+                        v.getEmail(), v.getSubscribedAt(), v.getSetStartEnabled(),
+                        v.getSetEndEnabled(), v.getLiveEventEnabled()));
+    }
+
     // 빈 문자열/공백은 null 로 정규화 → 검색 쿼리의 ":q IS NULL" 분기가 전체 조회로 동작.
     private static String blankToNull(String q) {
         return (q == null || q.isBlank()) ? null : q.trim();
+    }
+
+    // 회원이 모바일에서 작성한 선수 리뷰(별점 + 한줄평). 부적절한 한줄평 삭제용.
+    // 경기 정보(리그·팀·일시)는 rating.matchId = league_match.id 로 페이지 단위 배치 조회해 붙인다.
+    // field(player|member|comment|all)+q 로 검색. field 없이 q만 오면 전체 대상(all).
+    @GetMapping("/ratings")
+    public Page<RatingRow> ratings(@RequestParam(required = false) String q,
+                                   @RequestParam(required = false) String field,
+                                   @RequestParam(required = false) Integer rating,
+                                   Pageable pageable) {
+        String fieldParam = blankToNull(field);
+        Page<LivePlayerRating> page = livePlayerRatingRepository.searchForBackoffice(
+                blankToNull(q), fieldParam == null ? "all" : fieldParam, rating, pageable);
+        Set<String> matchIds = page.getContent().stream()
+                .map(LivePlayerRating::getMatchId)
+                .collect(Collectors.toSet());
+        Map<String, LeagueMatch> matches = leagueMatchRepository.findAllById(matchIds).stream()
+                .collect(Collectors.toMap(LeagueMatch::getId, m -> m));
+        return page.map(r -> RatingRow.from(r, matches.get(r.getMatchId())));
+    }
+
+    @DeleteMapping("/ratings/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteRating(@PathVariable Long id) {
+        if (!livePlayerRatingRepository.existsById(id)) {
+            throw new NoSuchElementException("리뷰를 찾을 수 없습니다: " + id);
+        }
+        livePlayerRatingRepository.deleteById(id);
     }
 
     @GetMapping("/cron-jobs")
@@ -122,7 +212,14 @@ public class BackofficeController {
     @ResponseStatus(HttpStatus.CREATED)
     public PlayerRow createSoloRankPlayer(@RequestBody SoloRankPlayerCreateRequest request) {
         return PlayerRow.from(playerAdminService.createSoloRankPlayer(
-                request.name(), request.imageUrl(), request.riotId()));
+                request.name(), request.imageUrl(), request.riotId(), request.region()));
+    }
+
+    // 기존 선수(비-LCK 포함)에 솔랭 계정 부착/교체. 해외 이적 선수 KR→EUW 교체도 이 경로.
+    @PostMapping("/players/{id}/solo-rank-account")
+    public PlayerRow attachSoloRankAccount(@PathVariable Long id, @RequestBody SoloRankAccountRequest request) {
+        return PlayerRow.from(playerAdminService.attachSoloRankAccount(
+                id, request.riotId(), request.region(), request.imageUrl()));
     }
 
     @DeleteMapping("/members/{id}")
@@ -188,6 +285,21 @@ public class BackofficeController {
     public record MemberRow(Long id, String name, String email,
                             String favoriteLeagueName, LocalDateTime createdAt) {}
 
+    // 구독 탭 — 구독 가능 선수 행(구독자 수 포함). id 필드는 FE 데이터그리드 rowKey 용.
+    public record SubscribablePlayerRow(Long id, String playerName, String imageUrl, String role,
+                                        Long teamId, String teamName, String riotId, String platform,
+                                        long subscriberCount) {}
+
+    // 구독 탭 — 구독자 행. id 필드는 FE rowKey 용(memberId).
+    public record SubscriberRow(Long id, String nickname, String email, LocalDateTime subscribedAt) {}
+
+    public record SubscribableTeamRow(Long id, String teamName, String teamCode, String imageUrl,
+                                      long subscriberCount) {}
+
+    public record TeamSubscriberRow(Long id, String nickname, String email, LocalDateTime subscribedAt,
+                                    boolean setStartEnabled, boolean setEndEnabled,
+                                    boolean liveEventEnabled) {}
+
     public record PlayerRow(Long id, String name, String realName, String role, Integer age,
                             String imageUrl, Long currentTeamId, String currentTeamName, boolean imageLocked,
                             String gameAccounts, boolean gameAccountsLocked) {
@@ -205,9 +317,40 @@ public class BackofficeController {
     public record PlayerUpdateRequest(String imageUrl, Boolean unlockImage, Long currentTeamId,
                                       Boolean unlockGameAccounts, List<GameAccountEntry> gameAccounts) {}
 
-    public record SoloRankPlayerCreateRequest(String name, String imageUrl, String riotId) {}
+    // region 미지정 시 KR. 해외 선수는 EUW/NA 등 지정(또는 EUW1/NA1 플랫폼 값).
+    public record SoloRankPlayerCreateRequest(String name, String imageUrl, String riotId, String region) {}
+
+    // 기존 선수 id에 솔랭 계정 부착. region 미지정 시 KR. imageUrl 있으면 함께 세팅.
+    public record SoloRankAccountRequest(String riotId, String region, String imageUrl) {}
 
     public record TeamRow(Long id, String name, String code) {}
+
+    /**
+     * @param matchDate 경기 일시. league_match 는 UTC 로 저장하므로 모바일 응답과 동일하게 KST 로 변환해 내린다.
+     *                  매치 정보를 못 찾으면(동기화 전/삭제) 경기 관련 필드는 null.
+     */
+    public record RatingRow(Long id, String matchId, String leagueName, String matchTitle,
+                            String blueTeamCode, String redTeamCode, LocalDateTime matchDate,
+                            String playerName, String championName, String role,
+                            String memberNickname, Integer rating, String comment,
+                            LocalDateTime createdAt) {
+        static RatingRow from(LivePlayerRating r, LeagueMatch match) {
+            return new RatingRow(r.getId(), r.getMatchId(),
+                    match != null ? match.getLeagueName() : null,
+                    match != null ? match.getMatchTitle() : null,
+                    match != null ? match.getBlueTeamCode() : null,
+                    match != null ? match.getRedTeamCode() : null,
+                    match != null ? toKst(match.getMatchDate()) : null,
+                    r.getPlayerName(), r.getChampionName(), r.getRole(),
+                    r.getMember().getNickname(), r.getRating(), r.getComment(),
+                    r.getCreatedAt());
+        }
+
+        private static LocalDateTime toKst(LocalDateTime utc) {
+            return utc == null ? null
+                    : utc.atZone(ZoneOffset.UTC).withZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDateTime();
+        }
+    }
 
     public record LeagueConfigRow(String leagueName, boolean liveEnabled,
                                   boolean notificationEnabled, boolean syncEnabled) {
