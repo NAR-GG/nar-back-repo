@@ -121,6 +121,11 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 	 *
 	 * <p>윈도우 함수와 파생 테이블을 쓰기 위해 네이티브 쿼리로 작성했다. 컬럼 별칭은
 	 * {@link LckPlayerOption} 프로젝션 게터명과 일치시킨다.
+	 *
+	 * <p>UNION ALL 분기(해당 리그 미출전 + 계정 보유)에는 플랫폼 조건을 걸지 않는다. 예전엔
+	 * {@code platform = 'KR'}이 있어 해외 리그 선수의 NA/EUW 계정이 목록에서 빠졌다
+	 * (라이브 감지는 플랫폼 무관인데 구독 자체가 불가능한 모순). 자격은 {@code enabled}·
+	 * {@code primary_account}만으로 판단한다.
 	 */
 	@Query(
 			value = """
@@ -162,7 +167,6 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 						JOIN player_riot_account pra ON pra.player_id = p.player_id
 						WHERE pra.enabled = true
 						  AND pra.primary_account = true
-						  AND pra.platform = 'KR'
 						  AND NOT EXISTS (
 							  SELECT 1 FROM game_participants gp2
 							  JOIN games g2 ON gp2.game_id = g2.game_id
@@ -212,7 +216,6 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 						JOIN player_riot_account pra ON pra.player_id = p.player_id
 						WHERE pra.enabled = true
 						  AND pra.primary_account = true
-						  AND pra.platform = 'KR'
 						  AND NOT EXISTS (
 							  SELECT 1 FROM game_participants gp2
 							  JOIN games g2 ON gp2.game_id = g2.game_id
@@ -316,7 +319,6 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 			JOIN player_riot_account pra ON pra.player_id = p.player_id
 			WHERE pra.enabled = true
 			  AND pra.primary_account = true
-			  AND pra.platform = 'KR'
 			  AND p.player_id IN (:playerIds)
 			""", nativeQuery = true)
 	List<LckPlayerOption> findSoloRankPlayerOptionsByPlayerIds(@Param("playerIds") Set<Long> playerIds);
