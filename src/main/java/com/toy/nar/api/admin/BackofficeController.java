@@ -6,6 +6,7 @@ import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.lolesports.repository.LeagueConfig;
 import com.toy.nar.app.member.service.MemberDeleteService;
 import com.toy.nar.app.participant.service.PlayerAdminService;
+import com.toy.nar.app.participant.service.PlayerImageStorageService;
 import com.toy.nar.app.riot.RiotApiException;
 import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.domain.member.repository.MemberFavoritePlayerRepository;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -61,6 +63,7 @@ public class BackofficeController {
     private final LeagueRepository leagueRepository;
     private final LeagueConfigService leagueConfigService;
     private final PlayerAdminService playerAdminService;
+    private final PlayerImageStorageService playerImageStorageService;
     private final MemberDeleteService memberDeleteService;
     private final LivePlayerRatingRepository livePlayerRatingRepository;
     private final LeagueMatchRepository leagueMatchRepository;
@@ -205,6 +208,13 @@ public class BackofficeController {
         return PlayerRow.from(playerAdminService.update(
                 id, request.imageUrl(), request.unlockImage(), request.currentTeamId(),
                 request.unlockGameAccounts(), request.gameAccounts()));
+    }
+
+    // 선수 이미지 업로드(배포 불필요). 파일은 컨테이너 밖 디렉토리에 저장하고 DB엔 경로만 남긴다.
+    // PUT /players/{id} 와 달리 LCK 게이트가 없다 — LCK CL·LCS 선수도 이미지가 필요하다.
+    @PostMapping("/players/{id}/image")
+    public PlayerRow uploadPlayerImage(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        return PlayerRow.from(playerImageStorageService.upload(id, file));
     }
 
     // 솔랭 전용 선수 등록(은퇴/비현역). LCK 출전 이력 없이 이름+riotId로 생성.

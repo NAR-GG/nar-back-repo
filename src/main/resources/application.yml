@@ -2,6 +2,12 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
 
+  servlet:
+    multipart:
+      # 선수 이미지 업로드 상한. 기본값 1MB면 서비스단 2MB 검증에 닿기 전에 컨테이너가 막는다.
+      max-file-size: 2MB
+      max-request-size: 4MB
+
   jpa:
     properties:
       hibernate:
@@ -39,6 +45,9 @@ app:
         - "UCwvk_uRd0w-n0O1I4QRdM0g" # 롤꺾마
 
 nar:
+  images:
+    # 업로드된 선수 이미지 저장 위치. 배포는 -e IMAGES_DIR=/app/images + 호스트 볼륨 마운트.
+    dir: ${IMAGES_DIR:data/images}
   data:
     ingestion:
       jdbc:
