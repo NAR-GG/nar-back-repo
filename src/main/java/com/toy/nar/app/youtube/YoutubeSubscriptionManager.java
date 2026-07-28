@@ -2,6 +2,7 @@ package com.toy.nar.app.youtube;
 
 import com.toy.nar.app.monitor.SchedulerAlertService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
@@ -11,9 +12,15 @@ import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * 구독 갱신은 {@code @Scheduled} 외에 기동 직후 {@link ApplicationReadyEvent} 로도 돈다.
+ * 스케줄러 전역 스위치({@code app.scheduling.enabled})만으로는 기동 시점 호출을 막을 수 없어 빈 자체를 같은 조건으로 묶는다.
+ * 로컬에서는 콜백 URL이 로컬/터널 주소라 등록해도 쓸모없는 구독만 남는다.
+ */
 @Slf4j
 @Component
 @Profile("!benchmark")
+@ConditionalOnProperty(prefix = "app.scheduling", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class YoutubeSubscriptionManager {
 

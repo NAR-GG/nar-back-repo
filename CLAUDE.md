@@ -120,6 +120,16 @@ RIOT_MONITOR_ENABLED, RIOT_API_ENABLED   # feature flags for scheduling
 JWT_SECRET
 ```
 
+### 스케줄러 전역 스위치
+
+`app.scheduling.enabled` (env `APP_SCHEDULING_ENABLED`)가 모든 `@Scheduled` 등록을 좌우한다(`SchedulerConfig`).
+**prod 프로파일만 ON**이고, 로컬(`dev`)은 값이 없으므로 OFF다. 로컬 DB가 prod 데이터 사본이고
+YouTube/Riot API 키, Discord 웹훅, FCM 자격증명을 prod와 공유하기 때문에 로컬 폴링이 prod의
+API 쿼터를 태우거나 prod 채널·실유저에게 알림을 보낼 수 있다.
+
+로컬에서 스케줄 로직을 확인해야 하면 개별 잡은 백오피스 수동 트리거 API를 쓰고,
+스케줄러 자체를 검증할 때만 `app.scheduling.enabled=true`로 켠다(공유 자원 영향 확인 후).
+
 ## CI/CD
 
 GitHub Actions (`.github/workflows/deploy.yml`): Gradle build → Docker image → push to Docker Hub → SSH deploy to EC2 → health check against `/v3/api-docs`. Production logs viewable via Dozzle at `https://api.nar.kr/dozzle`.

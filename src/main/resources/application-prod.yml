@@ -98,6 +98,10 @@ app:
     url: "https://api.nar.kr"
   frontend-url: ${FRONTEND_URL:https://nar.kr}
   mobile-redirect-url: ${MOBILE_REDIRECT_URL:nar://oauth/callback}
+  scheduling:
+    # 스케줄러 전역 스위치(SchedulerConfig). prod 만 ON, 그 외 프로파일은 값이 없으므로 OFF.
+    # 로컬에서 끄는 이유: API 키·웹훅·FCM 자격증명을 prod와 공유해서 로컬 폴링이 prod 쿼터/알림에 그대로 반영된다.
+    enabled: ${APP_SCHEDULING_ENABLED:true}
 
 jwt:
   secret: ${JWT_SECRET}
