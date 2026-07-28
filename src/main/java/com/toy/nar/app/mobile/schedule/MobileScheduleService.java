@@ -324,6 +324,7 @@ public class MobileScheduleService {
 						match.getRedScore()),
 				liveStreamUrl(match),
 				streamLinks(match),
+				match.getBestOf(),
 				gamesByMatchId.getOrDefault(match.getId(), List.of()));
 	}
 

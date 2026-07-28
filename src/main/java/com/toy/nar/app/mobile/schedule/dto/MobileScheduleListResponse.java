@@ -24,6 +24,9 @@ public record MobileScheduleListResponse(
 			@Schema(description = "라이브 중계 채널 목록. 진행 중 경기에서만 채워지며, 복수면 앱이 선택 시트를 띄운다. "
 					+ "liveStreamUrl 은 하위호환용(첫 번째 링크와 동일)")
 			List<MobileStreamLink> streamLinks,
+			@Schema(description = "다전제 규격(1=단판, 3=3전 2선승, 5=5전 3선승). 같은 리그 안에서도 스테이지별로 다르다. "
+					+ "업스트림에 값이 없으면 null", example = "3", nullable = true)
+			Integer bestOf,
 			@Schema(description = "매치에 속한 세트(게임) 목록. 아직 세트가 생성되지 않은 매치는 빈 배열")
 			List<MobileGameSummary> games) {
 	}

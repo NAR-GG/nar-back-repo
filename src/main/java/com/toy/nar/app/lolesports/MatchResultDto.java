@@ -13,6 +13,7 @@ public class MatchResultDto {
 	private String matchDate; // 경기 시간
 	private String state; // 경기 상태 (completed, unstarted, inProgress)
 	private String score; // 3 : 1
+	private Integer bestOf; // 다전제 규격 (1/3/5). 업스트림 match.strategy.count. 모르면 null
 	private TeamInfo blueTeam;
 	private TeamInfo redTeam;
 	private List<SetVod> sets; // 세트별 VOD 리스트
