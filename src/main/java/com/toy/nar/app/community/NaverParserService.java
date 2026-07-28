@@ -18,6 +18,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class NaverParserService {
 
+	// Jsoup 기본 타임아웃은 30초 — 외부 사이트가 멈추면 스케줄러가 그만큼 매달린다.
+	private static final int CRAWL_TIMEOUT_MS = 5000;
+
 	private final ObjectMapper objectMapper;
 
 	public List<NaverPostDto> parseNaverPosts(String sortType) {
@@ -40,6 +43,7 @@ public class NaverParserService {
 			String jsonResponse = Jsoup.connect(url)
 				.ignoreContentType(true)
 				.userAgent("Mozilla/5.0")
+				.timeout(CRAWL_TIMEOUT_MS)
 				.execute()
 				.body();
 

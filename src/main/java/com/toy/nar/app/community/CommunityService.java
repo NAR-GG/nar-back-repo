@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -25,79 +26,85 @@ public class CommunityService {
 	private final NaverNewsService naverNewsService;
 	private final CommunityPostRepository communityPostRepository;
 	private final NewsPostRepository newsPostRepository;
+	private final TransactionTemplate transactionTemplate;
 
 	/**
 	 * 모든 커뮤니티 및 뉴스를 동기화합니다.
+	 *
+	 * 크롤링(Jsoup)은 트랜잭션 밖에서 수행하고, DB 쓰기 구간만 짧게 트랜잭션으로 감싼다.
+	 * 예전엔 이 메서드 전체가 @Transactional 이라 외부 사이트 응답이 느리면
+	 * 커넥션 1개와 community/news 테이블 락을 최대 수십 초씩 붙잡아
+	 * 10분 주기로 서비스 전체 응답이 튀었다.
 	 */
-	@Transactional
 	public void syncAll(String sortType) {
 		syncAllCommunities(sortType);
 		syncNaverNews(sortType);
 	}
 
-	@Transactional
 	public void syncAllCommunities(String sortType) {
 		syncOpgg(sortType);
 		syncInven(sortType);
 		syncNaver(sortType);
 	}
 
-	@Transactional
 	public void syncNaverNews(String sortType) {
 		naverNewsService.syncNaverNews(sortType);
 	}
 
-	@Transactional
 	public void syncOpgg(String sortType) {
 		List<OpggPostDto> posts = opggParserService.parseEsportsPosts(sortType);
-		for (OpggPostDto dto : posts) {
-			saveOrUpdate(
-				CommunityType.OPGG,
-				dto.getTitle(),
-				dto.getAuthor(),
-				dto.getPostUrl(),
-				dto.getCreatedAt(),
-				dto.getViewCount(),
-				dto.getVoteCount(),
-				dto.getCommentCount()
-			);
-		}
+		transactionTemplate.executeWithoutResult(status -> {
+			for (OpggPostDto dto : posts) {
+				saveOrUpdate(
+					CommunityType.OPGG,
+					dto.getTitle(),
+					dto.getAuthor(),
+					dto.getPostUrl(),
+					dto.getCreatedAt(),
+					dto.getViewCount(),
+					dto.getVoteCount(),
+					dto.getCommentCount()
+				);
+			}
+		});
 		log.info("Synced {} OP.GG posts ({})", posts.size(), sortType);
 	}
 
-	@Transactional
 	public void syncInven(String sortType) {
 		List<InvenPostDto> posts = invenParserService.parseInvenPosts(sortType);
-		for (InvenPostDto dto : posts) {
-			saveOrUpdate(
-				CommunityType.INVEN,
-				dto.getTitle(),
-				dto.getAuthor(),
-				dto.getPostUrl(),
-				dto.getCreatedAt(),
-				dto.getViewCount(),
-				dto.getVoteCount(),
-				dto.getCommentCount()
-			);
-		}
+		transactionTemplate.executeWithoutResult(status -> {
+			for (InvenPostDto dto : posts) {
+				saveOrUpdate(
+					CommunityType.INVEN,
+					dto.getTitle(),
+					dto.getAuthor(),
+					dto.getPostUrl(),
+					dto.getCreatedAt(),
+					dto.getViewCount(),
+					dto.getVoteCount(),
+					dto.getCommentCount()
+				);
+			}
+		});
 		log.info("Synced {} Inven posts ({})", posts.size(), sortType);
 	}
 
-	@Transactional
 	public void syncNaver(String sortType) {
 		List<NaverPostDto> posts = naverParserService.parseNaverPosts(sortType);
-		for (NaverPostDto dto : posts) {
-			saveOrUpdate(
-				CommunityType.NAVER,
-				dto.getTitle(),
-				dto.getAuthor(),
-				dto.getPostUrl(),
-				dto.getCreatedAt(),
-				dto.getViewCount(),
-				dto.getVoteCount(),
-				dto.getCommentCount()
-			);
-		}
+		transactionTemplate.executeWithoutResult(status -> {
+			for (NaverPostDto dto : posts) {
+				saveOrUpdate(
+					CommunityType.NAVER,
+					dto.getTitle(),
+					dto.getAuthor(),
+					dto.getPostUrl(),
+					dto.getCreatedAt(),
+					dto.getViewCount(),
+					dto.getVoteCount(),
+					dto.getCommentCount()
+				);
+			}
+		});
 		log.info("Synced {} Naver posts ({})", posts.size(), sortType);
 	}
 
