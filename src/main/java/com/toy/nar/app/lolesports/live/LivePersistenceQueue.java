@@ -33,6 +33,10 @@ public class LivePersistenceQueue {
 	@Value("${lolesports.live.queue.object-capacity:1200}")
 	private int objectCapacity;
 
+	/** 종료 시 남은 큐를 비우는 데 쓸 최대 시간. graceful shutdown 예산(30초) 안에 들어가야 한다. */
+	@Value("${lolesports.live.queue.drain-timeout-ms:10000}")
+	private long drainTimeoutMs;
+
 	private BlockingQueue<LiveGameState> snapshotQueue;
 	private BlockingQueue<ObjectEventTask> objectQueue;
 	private final AtomicBoolean running = new AtomicBoolean(false);
@@ -51,6 +55,57 @@ public class LivePersistenceQueue {
 	@PreDestroy
 	void stop() {
 		running.set(false);
+		drainRemaining();
+	}
+
+	/**
+	 * 종료 시 남은 큐를 마감 시한 안에서 비운다.
+	 *
+	 * 예전에는 running=false 만 세팅해 큐에 쌓인 오브젝트 태스크(최대 1200)와 스냅샷(최대 600)을
+	 * 그대로 버렸다. 오브젝트 태스크에는 LIVE_EVENT FCM 푸시가 실려 있어, 무중단 배포로 구 컨테이너가
+	 * 내려갈 때 그 알림이 통째로 유실됐다(배포 중 "알림이 한동안 안 오다가 몰아서 옴"의 원인).
+	 *
+	 * 오브젝트 태스크를 먼저 비운다 — 알림이 걸려 있어 사용자 체감에 직접 영향을 준다.
+	 */
+	void drainRemaining() {
+		long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(drainTimeoutMs);
+		int objects = 0;
+		int snapshots = 0;
+
+		while (System.nanoTime() < deadline) {
+			ObjectEventTask task = objectQueue.poll();
+			if (task != null) {
+				if (drainOne(() -> objectEventRecorder.record(task.activeGame(), task.windowResponse()))) {
+					objects++;
+				}
+				continue;
+			}
+			LiveGameState state = snapshotQueue.poll();
+			if (state != null) {
+				if (drainOne(() -> snapshotWriter.write(state))) {
+					snapshots++;
+				}
+				continue;
+			}
+			break;
+		}
+
+		int remaining = objectQueue.size() + snapshotQueue.size();
+		if (objects > 0 || snapshots > 0 || remaining > 0) {
+			log.info("Live queue drained on shutdown. objects={} snapshots={} remaining={}",
+					objects, snapshots, remaining);
+		}
+	}
+
+	/** 한 건 실패가 나머지 drain 을 막지 않게 삼킨다. */
+	private boolean drainOne(Runnable action) {
+		try {
+			action.run();
+			return true;
+		} catch (Exception e) {
+			log.warn("Live queue drain item failed: {}", e.getMessage());
+			return false;
+		}
 	}
 
 	public void enqueueSnapshot(LiveGameState state) {
