@@ -125,13 +125,22 @@ public class LivePollingScheduler {
 					// 진행 중 게임을 찾는다. 피드가 라이브면 state 를 inProgress 로 올린다.
 					// 매 사이클 재판정해야 한다 — 이미 추적 중(activeMatchIds)이어도 여기서 다시 올리지 않으면
 					// 아래 syncRealtimeMatchStatus 가 Riot 원본 unstarted 로 DB 를 되돌린다.
+					// 업스트림이 진행 중 게임을 못 알려주는 경우를 피드 실측으로 우회한다. 두 가지가 있다:
+					//  (1) state 를 unstarted 로 방치 (EWC 등)
+					//  (2) state 는 넘어갔는데 liveGameIds 가 비어서 도착 — 실측 15~16분 지연
+					//      (2026-07-27 KESPA T1 vs DNS, 2026-07-28 KESPA DNS vs BRO 3세트)
+					// (2)는 예전에 unstarted 게이트에 걸려 우회로를 못 탔고, 그 사이 세트 하나가
+					// 통째로 추적되지 않았다. 그래서 게이트를 "업스트림이 라이브 게임을 모를 때"로 넓힌다.
+					// completed 는 디스커버리 대상이 아니므로 제외해 불필요한 외부 호출을 막는다.
 					List<String> feedLiveGameIds = List.of();
-					if ("unstarted".equalsIgnoreCase(match.getState())) {
+					boolean upstreamKnowsLiveGames =
+							match.getLiveGameIds() != null && !match.getLiveGameIds().isEmpty();
+					if (!upstreamKnowsLiveGames && !"completed".equalsIgnoreCase(match.getState())) {
 						FeedProbe probe = probeFeed(match);
 						feedLiveGameIds = probe.liveGameIds();
 						if (!feedLiveGameIds.isEmpty()) {
 							match.setState("inProgress");
-						} else if (probe.sawFinished()) {
+						} else if ("unstarted".equalsIgnoreCase(match.getState()) && probe.sawFinished()) {
 							// 세트 사이/경기 종료 직후: 피드는 finished 잔상인데 업스트림 state 는 여전히 unstarted.
 							// 업스트림 원본(unstarted)으로 sync 하면 DB 의 inProgress 가 되돌아가므로 쓸 수 없다.
 							// 대신 네이버가 매치 종료(RESULT)를 확인해주면 completed 를 직접 확정한다 —
@@ -259,7 +268,8 @@ public class LivePollingScheduler {
 	 * 창 밖이거나 게임 id 가 없거나 피드가 비면 EMPTY — 기존 inProgress 경로에는 영향 없다.
 	 */
 	private FeedProbe probeFeed(MatchResultDto match) {
-		if (!"unstarted".equalsIgnoreCase(match.getState()) || !withinFeedProbeWindow(match.getMatchDate())) {
+		// state 조건은 호출부가 판단한다(unstarted 방치 + liveGameIds 지연 둘 다 대상).
+		if (!withinFeedProbeWindow(match.getMatchDate())) {
 			return FeedProbe.EMPTY;
 		}
 		List<String> gameIds = match.getGameIds();

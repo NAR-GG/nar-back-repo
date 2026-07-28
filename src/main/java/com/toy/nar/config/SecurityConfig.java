@@ -10,13 +10,18 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AnyRequestMatcher;
 
 @Configuration
 @EnableWebSecurity
@@ -70,6 +75,22 @@ public class SecurityConfig {
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
+                // API 는 인증 실패 시 401 을 준다. 기본 진입점(oauth2Login 이 등록하는
+                // LoginUrlAuthenticationEntryPoint)은 /login 으로 302 리다이렉트를 보내는데,
+                // 모바일 클라이언트는 리다이렉트를 따라가 로그인 HTML 을 200 으로 받는다.
+                // 그러면 토큰 만료가 "빈 응답"으로 보여 화면이 조용히 비고, 401 기반 토큰
+                // 리프레시도 트리거되지 않는다(마이구독 알림 목록 미갱신 원인).
+                // 브라우저 OAuth 로그인 흐름(/oauth2/**, /login/**)은 기존 302 를 유지해야 하므로
+                // /api/** 에만 401 진입점을 적용한다.
+                // 두 번째 매핑(AnyRequest → /login)은 생략하면 안 된다. 매핑이 하나뿐이면
+                // 그 진입점이 전역 기본값이 되어 웹 경로까지 401 이 나간다.
+                .exceptionHandling(exception -> exception
+                        .defaultAuthenticationEntryPointFor(
+                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
+                                PathPatternRequestMatcher.withDefaults().matcher("/api/**"))
+                        .defaultAuthenticationEntryPointFor(
+                                new LoginUrlAuthenticationEntryPoint("/login"),
+                                AnyRequestMatcher.INSTANCE))
                 .oauth2Login(oauth2 -> oauth2
                         .authorizationEndpoint(a -> a
                                 .authorizationRequestRepository(authorizationRequestRepository))
