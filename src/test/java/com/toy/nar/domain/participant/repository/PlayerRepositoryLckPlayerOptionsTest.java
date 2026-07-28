@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
+import java.util.Set;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -159,6 +161,28 @@ class PlayerRepositoryLckPlayerOptionsTest {
 				.orElseThrow();
 		assertThat(deft.getTeamId()).isNull();
 		assertThat(deft.getTeamName()).isNull();
+	}
+
+	@Test
+	@DisplayName("해외 플랫폼(NA1) 주계정 선수도 목록에 포함된다")
+	void includesNonKrPlatformSoloRankPlayer() {
+		// 해외 리그로 이적한 선수는 계정이 NA/EUW로 저장된다. 예전엔 platform='KR' 조건 때문에
+		// 라이브 감지는 되는데 구독 목록에는 안 뜨는 모순이 있었다.
+		exec(player(10, "Quad", "Mid"));
+		exec("INSERT INTO player_riot_account"
+				+ " (id, player_id, riot_id, game_name, tag_line, platform, puuid, primary_account, enabled,"
+				+ " live_status, created_at, updated_at)"
+				+ " VALUES (100, 10, 'FLY Quad#123', 'FLY Quad', '123', 'NA1', 'puuid-quad', true, true,"
+				+ " 'OFFLINE', '2026-01-01 00:00:00', '2026-01-01 00:00:00')");
+		em.flush();
+		em.clear();
+
+		Page<LckPlayerOption> page = playerRepository.findLckPlayerOptions(
+				LCK, YEAR, null, null, PageRequest.of(0, 50));
+
+		assertThat(page.getContent()).extracting(LckPlayerOption::getPlayerName).contains("Quad");
+		assertThat(playerRepository.findSoloRankPlayerOptionsByPlayerIds(Set.of(10L)))
+				.extracting(LckPlayerOption::getPlayerName).containsExactly("Quad");
 	}
 
 	@Test
