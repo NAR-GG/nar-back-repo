@@ -293,27 +293,32 @@ public class LiveObjectEventRecorder {
 			int valueAfter,
 			int opponentCurrentValue,
 			LocalDateTime frameTimestampUtc) {
-		boolean exists = objectEventRepository.existsByGameIdAndTeamSideAndEventTypeAndEventOrder(
-				activeGame.gameId(), teamSide, eventType, eventOrder);
-		if (exists) {
-			return;
+		// 이미 저장된 이벤트라도 FCM 푸시는 다시 시도한다. 저장 직후 푸시 전에 프로세스가 죽으면
+		// (배포 중 컨테이너 교체) 다음 컨테이너가 exists 로 조기 return 해 그 알림이 영구 유실됐다.
+		// 발송 멱등은 delivery 테이블(reserve/reactivateStale)이 보장하므로 이미 SENT 인 건은 다시 안 나간다.
+		// 디스코드 알림은 멱등 장치가 없으므로 신규 저장 시에만 보낸다.
+		LiveGameObjectEvent event = objectEventRepository
+				.findByGameIdAndTeamSideAndEventTypeAndEventOrder(
+						activeGame.gameId(), teamSide, eventType, eventOrder)
+				.orElse(null);
+		boolean newlySaved = event == null;
+
+		if (newlySaved) {
+			event = objectEventRepository.save(new LiveGameObjectEvent(
+					activeGame.gameId(),
+					activeGame.matchId(),
+					activeGame.leagueName(),
+					teamSide,
+					eventType,
+					eventSubType,
+					eventOrder,
+					valueAfter,
+					frameTimestampUtc));
+			log.info("[live-notify] event saved type={} team={} order={} gameId={} notify={}",
+					eventType, teamSide, eventOrder, activeGame.gameId(), eventNotificationEnabled);
 		}
 
-		LiveGameObjectEvent event = new LiveGameObjectEvent(
-				activeGame.gameId(),
-				activeGame.matchId(),
-				activeGame.leagueName(),
-				teamSide,
-				eventType,
-				eventSubType,
-				eventOrder,
-				valueAfter,
-				frameTimestampUtc);
-		event = objectEventRepository.save(event);
-		log.info("[live-notify] event saved type={} team={} order={} gameId={} notify={}",
-				eventType, teamSide, eventOrder, activeGame.gameId(), eventNotificationEnabled);
-
-		if (eventNotificationEnabled && isNotifiableLeague(activeGame.leagueName())) {
+		if (newlySaved && eventNotificationEnabled && isNotifiableLeague(activeGame.leagueName())) {
 			notificationService.sendLiveObjectEventNotification(
 					activeGame.leagueName(),
 					teamNameOf(activeGame, teamSide),
@@ -345,38 +350,40 @@ public class LiveObjectEventRecorder {
 			Integer victimId,
 			Map<Integer, ParticipantMeta> metadata,
 			LocalDateTime frameTimestampUtc) {
-		boolean exists = objectEventRepository.existsByGameIdAndTeamSideAndEventTypeAndEventOrder(
-				activeGame.gameId(), killerSide, EVENT_KILL, eventOrder);
-		if (exists) {
-			return;
-		}
-
 		ParticipantMeta killer = killerId == null ? null : metadata.get(killerId);
 		ParticipantMeta victim = victimId == null ? null : metadata.get(victimId);
 		String killerChampion = killer == null ? null : killer.champion();
 
-		// event_sub_type 은 하위호환을 위해 킬러 챔피언을 유지하고, 킬러/피해자 선수명과 피해자 챔피언을 신규 컬럼에 함께 저장한다.
-		LiveGameObjectEvent event = new LiveGameObjectEvent(
-				activeGame.gameId(),
-				activeGame.matchId(),
-				activeGame.leagueName(),
-				killerSide,
-				EVENT_KILL,
-				killerChampion,
-				eventOrder,
-				teamKillsAfter,
-				killer == null ? null : killer.summonerName(),
-				victim == null ? null : victim.champion(),
-				victim == null ? null : victim.summonerName(),
-				frameTimestampUtc);
-		event = objectEventRepository.save(event);
-		log.info("[live-notify] kill saved order={} team={} killer={} victim={} gameId={} notify={}",
-				eventOrder, killerSide,
-				killer == null ? "?" : killer.summonerName(),
-				victim == null ? "?" : victim.summonerName(),
-				activeGame.gameId(), eventNotificationEnabled);
+		// 오브젝트 이벤트와 같은 이유로, 이미 저장된 킬이라도 FCM 푸시는 다시 시도한다(saveEventIfAbsent 주석 참고).
+		LiveGameObjectEvent event = objectEventRepository
+				.findByGameIdAndTeamSideAndEventTypeAndEventOrder(
+						activeGame.gameId(), killerSide, EVENT_KILL, eventOrder)
+				.orElse(null);
+		boolean newlySaved = event == null;
 
-		if (eventNotificationEnabled && isNotifiableLeague(activeGame.leagueName())) {
+		if (newlySaved) {
+			// event_sub_type 은 하위호환을 위해 킬러 챔피언을 유지하고, 킬러/피해자 선수명과 피해자 챔피언을 신규 컬럼에 함께 저장한다.
+			event = objectEventRepository.save(new LiveGameObjectEvent(
+					activeGame.gameId(),
+					activeGame.matchId(),
+					activeGame.leagueName(),
+					killerSide,
+					EVENT_KILL,
+					killerChampion,
+					eventOrder,
+					teamKillsAfter,
+					killer == null ? null : killer.summonerName(),
+					victim == null ? null : victim.champion(),
+					victim == null ? null : victim.summonerName(),
+					frameTimestampUtc));
+			log.info("[live-notify] kill saved order={} team={} killer={} victim={} gameId={} notify={}",
+					eventOrder, killerSide,
+					killer == null ? "?" : killer.summonerName(),
+					victim == null ? "?" : victim.summonerName(),
+					activeGame.gameId(), eventNotificationEnabled);
+		}
+
+		if (newlySaved && eventNotificationEnabled && isNotifiableLeague(activeGame.leagueName())) {
 			notificationService.sendLiveKillNotification(
 					activeGame.leagueName(),
 					teamNameOf(activeGame, killerSide),

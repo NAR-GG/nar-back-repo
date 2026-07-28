@@ -1,6 +1,22 @@
+server:
+  # 무중단 배포에서 구 컨테이너는 nginx 전환 후 docker stop -t 35 로 내려간다.
+  # 그 35초 안에 진행 중인 요청과 라이브 이벤트 저장·FCM 발송을 끝내고 죽어야 알림이 유실되지 않는다.
+  shutdown: graceful
+
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  # docker stop 의 35초보다 짧게 잡아, 강제 SIGKILL 전에 정상 종료가 끝나도록 한다.
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  task:
+    execution:
+      shutdown:
+        # SET_END 푸시처럼 executor 에서 도는 알림 작업을 기다린다(스코어 재조회로 수십 초 걸릴 수 있음).
+        await-termination: true
+        await-termination-period: 25s
 
   jpa:
     properties:
