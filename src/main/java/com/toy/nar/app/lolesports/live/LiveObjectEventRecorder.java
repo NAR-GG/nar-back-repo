@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -31,6 +32,18 @@ public class LiveObjectEventRecorder {
 	private static final String EVENT_TOWER = "TOWER";
 	private static final String EVENT_INHIBITOR = "INHIBITOR";
 	private static final String EVENT_KILL = "KILL";
+
+	/*
+	 * 관측 연속성 한계값. 프레임은 정상적으로 10초 간격으로 도착하고, 한 프레임 안에서
+	 * 현실적으로 가능한 증가분은 제한적이다(에이스가 5킬, 넥서스 앞 연쇄가 타워 2개).
+	 * 이 한계를 넘는 diff 는 "그 사이 프레임을 놓쳤다"는 신호이므로 이벤트를 유도하지 않는다.
+	 */
+	private static final long MAX_FRAME_GAP_SECONDS = 60L;
+	private static final int MAX_KILL_JUMP = 5;
+	private static final int MAX_TOWER_JUMP = 2;
+	private static final int MAX_BARON_JUMP = 1;
+	private static final int MAX_INHIBITOR_JUMP = 2;
+	private static final int MAX_DRAGON_JUMP = 1;
 
 	private final LiveGameObjectEventRepository objectEventRepository;
 	private final NotificationService notificationService;
@@ -73,6 +86,20 @@ public class LiveObjectEventRecorder {
 			if (previous != null && !snapshot.frameTimestampUtc().isAfter(previous.frameTimestampUtc())) {
 				continue;
 			}
+			if (previous != null && !isContinuousObservation(previous, snapshot)) {
+				// 공백 구간의 이벤트는 복구하지 않는다. 유도하면 전부 이 프레임에서 발생한 것으로 뭉친다.
+				log.warn("[live-notify] 관측 공백 감지 — 이벤트 유도 생략, 상태만 동기화 "
+								+ "gameId={} prevFrame={} frame={} killΔ={}/{} towerΔ={}/{}",
+						activeGame.gameId(), previous.frameTimestampUtc(), snapshot.frameTimestampUtc(),
+						snapshot.blue().kills() - previous.blue().kills(),
+						snapshot.red().kills() - previous.red().kills(),
+						snapshot.blue().towers() - previous.blue().towers(),
+						snapshot.red().towers() - previous.red().towers());
+				previous = new ObservedObjectState(snapshot.frameTimestampUtc(), snapshot.blue(), snapshot.red(),
+						snapshot.blueParticipants(), snapshot.redParticipants());
+				continue;
+			}
+
 			if (previous != null) {
 				int gameTotalPrevKills = previous.blue().kills() + previous.red().kills();
 				recordObjectDiff(activeGame, "Blue", previous.blue(), snapshot.blue(), snapshot.red(),
@@ -96,6 +123,35 @@ public class LiveObjectEventRecorder {
 		}
 
 		lastObservedByGame.put(activeGame.gameId(), previous);
+	}
+
+	/**
+	 * previous → snapshot 이 "연속된 관측"인지 판정한다.
+	 *
+	 * <p>추적이 끊겼다가 재개되면(업스트림 liveGameIds 가 늦게 도착해 디스커버리가 진행 중 게임을
+	 * 놓치는 케이스 — 실측 15~16분) previous 는 끊기기 전 상태다. 그 상태와 현재 프레임을 그대로
+	 * diff 하면 공백 구간 이벤트 전부가 "이 프레임에서 발생"한 것으로 뭉치고, 뭉친 킬 델타를
+	 * 그리디 페어링하면 같은 킬이 서로 다른 event_order 로 3~4개 복제된다.
+	 * (2026-07-27 KESPA DNS vs T1: 같은 킬러·피해자 조합 3회 저장,
+	 *  2026-07-28 KESPA DNS vs BRO 3세트: 19개 이벤트가 단일 프레임에 뭉침)</p>
+	 *
+	 * <p>공백 구간 이벤트는 복구하지 않는다. 놓친 알림보다 가짜 이벤트 3배 저장과 알림 폭탄이 나쁘다.</p>
+	 */
+	private boolean isContinuousObservation(ObservedObjectState previous, FrameSnapshot snapshot) {
+		long gapSeconds = Duration.between(previous.frameTimestampUtc(), snapshot.frameTimestampUtc()).getSeconds();
+		if (gapSeconds > MAX_FRAME_GAP_SECONDS) {
+			return false;
+		}
+		return withinJumpLimit(previous.blue(), snapshot.blue())
+				&& withinJumpLimit(previous.red(), snapshot.red());
+	}
+
+	private boolean withinJumpLimit(TeamObjectState previous, TeamObjectState current) {
+		return current.kills() - previous.kills() <= MAX_KILL_JUMP
+				&& current.towers() - previous.towers() <= MAX_TOWER_JUMP
+				&& current.barons() - previous.barons() <= MAX_BARON_JUMP
+				&& current.inhibitors() - previous.inhibitors() <= MAX_INHIBITOR_JUMP
+				&& current.dragons().size() - previous.dragons().size() <= MAX_DRAGON_JUMP;
 	}
 
 	private List<FrameSnapshot> toSnapshots(JsonNode frames) {
@@ -159,10 +215,18 @@ public class LiveObjectEventRecorder {
 		List<Integer> victims = expandByDelta(victimPrevKd, victimCurKd, false);
 
 		int newKills = currentTeamKills - previousTeamKills;
+		// 같은 (킬러, 피해자) 조합이 한 프레임에서 반복되면 페어링 결과가 잘못된 것이다 —
+		// 피해자는 한 프레임에 한 번만 죽는다. order 는 소비하되 저장·발송은 건너뛴다.
+		java.util.Set<String> pairsSeen = new java.util.HashSet<>();
 		for (int i = 0; i < newKills; i++) {
 			int order = previousTeamKills + 1 + i;
 			Integer killerId = i < killers.size() ? killers.get(i) : null;
 			Integer victimId = i < victims.size() ? victims.get(i) : null;
+			if (killerId != null && victimId != null && !pairsSeen.add(killerId + ">" + victimId)) {
+				log.warn("[live-notify] 킬 페어링 중복 — 저장 생략 gameId={} team={} order={} killer={} victim={}",
+						activeGame.gameId(), killerSide, order, killerId, victimId);
+				continue;
+			}
 			// 선취점: 이 프레임 이전까지 양팀 킬 합이 0이고, 이 팀의 첫 킬일 때.
 			boolean firstBlood = gameTotalPrevKills == 0 && order == 1 && i == 0;
 			saveKillEventIfAbsent(activeGame, killerSide, order, currentTeamKills, opponentCurrentKills,
