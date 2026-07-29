@@ -67,7 +67,21 @@ class PlayerSoloRankMonitorServiceTest {
 				notificationService,
 				playerSoloRankPushService,
 				schedulerAlertService,
-				soloRankGameHistoryRecorder);
+				soloRankGameHistoryRecorder,
+				immediateTransactionTemplate());
+	}
+
+	/** 콜백을 그 자리에서 실행하는 TransactionTemplate — 계정 상태 커밋 경로를 프로덕션과 같게 태운다. */
+	@SuppressWarnings("unchecked")
+	private org.springframework.transaction.support.TransactionTemplate immediateTransactionTemplate() {
+		var template = org.mockito.Mockito.mock(
+				org.springframework.transaction.support.TransactionTemplate.class);
+		// 계정 상태 변경이 없는 테스트(manualAlertCheck 계열)도 있어 lenient 로 둔다.
+		org.mockito.Mockito.lenient().doAnswer(invocation -> {
+			invocation.getArgument(0, java.util.function.Consumer.class).accept(null);
+			return null;
+		}).when(template).executeWithoutResult(org.mockito.ArgumentMatchers.any());
+		return template;
 	}
 
 	@Test
