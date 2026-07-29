@@ -99,9 +99,17 @@ public class MemberNotificationService {
 		return notificationRepository.deleteAllByMember(memberId);
 	}
 
+	/**
+	 * 탈퇴한 회원의 토큰도 만료(최대 30분)까지는 유효하다. 예전엔 회원 존재를 확인하지 않아
+	 * 탈퇴 후에도 이 API 만 200 + 빈 목록을 돌려줘서(다른 me/** 는 404) 앱이 로그인 상태로 오인했다.
+	 * 회원이 없으면 인증 주체가 사라진 것이므로 401 로 응답해 재로그인 흐름을 타게 한다.
+	 */
 	private void requireLogin(Long memberId) {
 		if (memberId == null) {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+		}
+		if (!memberRepository.existsById(memberId)) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "탈퇴한 회원입니다. 다시 로그인해 주세요.");
 		}
 	}
 }

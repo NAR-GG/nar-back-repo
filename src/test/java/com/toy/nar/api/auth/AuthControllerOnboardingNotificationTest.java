@@ -172,28 +172,7 @@ class AuthControllerOnboardingNotificationTest {
 		verify(context.playerRepository).findOnboardingPlayers("LCK", 2026, 1L);
 	}
 
-	@Test
-	void withdrawDeletesSocialLinksAndMember() {
-		TestContext context = context();
-		Member member = member(7L);
-		when(context.memberRepository.findById(7L)).thenReturn(Optional.of(member));
-
-		var response = context.controller.withdraw(7L);
-
-		assertThat(response.getStatusCode().value()).isEqualTo(204);
-		verify(context.memberSocialRepository).deleteByMemberId(7L);
-		verify(context.memberRepository).delete(member);
-	}
-
-	@Test
-	void withdrawRejectsUnknownMember() {
-		TestContext context = context();
-		when(context.memberRepository.findById(99L)).thenReturn(Optional.empty());
-
-		assertThatThrownBy(() -> context.controller.withdraw(99L))
-				.isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
-				.hasMessageContaining("회원을 찾을 수 없습니다");
-	}
+	// 탈퇴 관련 테스트는 AuthControllerWithdrawTest 로 옮겼다(멱등 삭제로 동작이 바뀜).
 
 	private TestContext context() {
 		JwtTokenProvider jwtTokenProvider = mock(JwtTokenProvider.class);

@@ -338,12 +338,12 @@ public class AuthController {
     @Operation(
             summary = "회원 탈퇴",
             description = "현재 로그인한 사용자의 계정과 모든 관련 데이터(소셜 연동, 기기, 구독, 알림, 평점)를 삭제합니다. "
-                    + "소셜 연동만 앱에서 지우고 나머지는 DB FK ON DELETE CASCADE로 함께 삭제된다."
+                    + "소셜 연동만 앱에서 지우고 나머지는 DB FK ON DELETE CASCADE로 함께 삭제된다. "
+                    + "멱등하다 — 이미 탈퇴한 계정으로 다시 호출해도 204다."
     )
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "회원 탈퇴 성공"),
-            @ApiResponse(responseCode = "404", description = "회원을 찾을 수 없음")
+            @ApiResponse(responseCode = "204", description = "회원 탈퇴 성공(이미 탈퇴한 경우 포함)")
     })
     @DeleteMapping("/me")
     @Transactional
@@ -351,10 +351,11 @@ public class AuthController {
         if (memberId == null) {
             throw new ResponseStatusException(UNAUTHORIZED, "로그인이 필요합니다.");
         }
-        Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"));
-        memberSocialRepository.deleteByMemberId(memberId);
-        memberRepository.delete(member);
+        // 벌크 삭제 + 멱등 처리. 예전엔 조회 후 엔티티 삭제라, 응답이 늦어 사용자가 버튼을 연타하면
+        // 동시 요청이 이미 지워진 행을 지우다 500(stale state)이 나고 이후 재시도는 404가 됐다.
+        // 삭제 대상이 없으면 이미 탈퇴한 것이므로 204 로 응답한다.
+        memberSocialRepository.deleteAllByMemberId(memberId);
+        memberRepository.deleteByMemberId(memberId);
         return ResponseEntity.noContent().build();
     }
 
