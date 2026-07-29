@@ -325,34 +325,42 @@ public class LivePollingScheduler {
 	/**
 	 * 세트 시작 알림(디스코드 + SET_START 푸시). 첫 프레임 관측 시 1회.
 	 * 알림 실패가 폴링 실패로 집계되지 않게 여기서 삼킨다.
+	 *
+	 * <p>SET_END 와 마찬가지로 폴링 스레드가 아니라 executor 에서 보낸다. 디스코드 웹훅과 FCM 발송은
+	 * 외부 호출이고 DB 락 대기에도 걸린다 — 실측 2026-07-29 T1 vs KT 에서 이 발송이 락 대기 50초
+	 * (innodb_lock_wait_timeout)에 걸려 폴링 스레드를 세웠다. 폴링이 멈춘 사이 computeStartingTime 이
+	 * 라이브 엣지로 점프해(MAX_LAG_SECONDS) 그 구간 프레임을 영구히 건너뛰었고, 재개 시 19분 점프로
+	 * 관측 공백 가드에 걸려 그 구간 이벤트 알림이 전부 누락됐다.</p>
 	 */
 	private void fireSetStartNotification(ActiveLiveGame activeGame) {
 		log.info("[live-notify] set-start(frame) league={} {} vs {} gameId={} matchId={} set={}",
 				activeGame.leagueName(), activeGame.blueTeamName(), activeGame.redTeamName(),
 				activeGame.gameId(), activeGame.matchId(), activeGame.setNumber());
-		try {
-			if (liveNotificationEnabled) {
-				notificationService.sendLiveMatchNotification(
-						activeGame.leagueName(),
-						activeGame.blueTeamName(),
-						activeGame.redTeamName(),
-						activeGame.gameId(),
-						activeGame.matchId());
+		applicationTaskExecutor.execute(() -> {
+			try {
+				if (liveNotificationEnabled) {
+					notificationService.sendLiveMatchNotification(
+							activeGame.leagueName(),
+							activeGame.blueTeamName(),
+							activeGame.redTeamName(),
+							activeGame.gameId(),
+							activeGame.matchId());
+				}
+				if (teamLiveEventPushService.isEnabled()) {
+					teamLiveEventPushService.notifyMatchEvent(
+							com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_START,
+							activeGame.matchId(),
+							activeGame.setNumber() != null ? activeGame.setNumber() : 0,
+							activeGame.blueEsportsTeamId(),
+							activeGame.redEsportsTeamId(),
+							activeGame.blueTeamName(),
+							activeGame.redTeamName());
+				}
+			} catch (Exception e) {
+				log.warn("[live-notify] set-start failed gameId={} matchId={}: {}",
+						activeGame.gameId(), activeGame.matchId(), e.getMessage());
 			}
-			if (teamLiveEventPushService.isEnabled()) {
-				teamLiveEventPushService.notifyMatchEvent(
-						com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_START,
-						activeGame.matchId(),
-						activeGame.setNumber() != null ? activeGame.setNumber() : 0,
-						activeGame.blueEsportsTeamId(),
-						activeGame.redEsportsTeamId(),
-						activeGame.blueTeamName(),
-						activeGame.redTeamName());
-			}
-		} catch (Exception e) {
-			log.warn("[live-notify] set-start failed gameId={} matchId={}: {}",
-					activeGame.gameId(), activeGame.matchId(), e.getMessage());
-		}
+		});
 	}
 
 	/** window 응답의 마지막 프레임이 gameState=finished 인지. 프레임이 없으면 false. */
