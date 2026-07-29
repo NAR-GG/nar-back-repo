@@ -41,6 +41,7 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 		int successCount = 0;
 		int failureCount = 0;
 		List<String> invalidTokens = new ArrayList<>();
+		List<String> successTokens = new ArrayList<>();
 		for (int start = 0; start < tokens.size(); start += MAX_MULTICAST_TOKENS) {
 			List<String> batchTokens = tokens.subList(
 					start,
@@ -49,8 +50,10 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 			successCount += response.getSuccessCount();
 			failureCount += response.getFailureCount();
 			collectInvalidTokens(batchTokens, response.getResponses(), invalidTokens);
+			collectSuccessTokens(batchTokens, response.getResponses(), successTokens);
 		}
-		return new MobilePushResult(successCount, failureCount, List.copyOf(invalidTokens));
+		return new MobilePushResult(
+				successCount, failureCount, List.copyOf(invalidTokens), List.copyOf(successTokens));
 	}
 
 	@Override
@@ -106,6 +109,18 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 			return firebaseMessaging.sendEachForMulticast(multicastMessage);
 		} catch (FirebaseMessagingException e) {
 			throw new IllegalStateException("FCM 멀티캐스트 발송에 실패했습니다.", e);
+		}
+	}
+
+	/** 여러 구독자의 토큰을 한 번에 보낼 때, 누가 받았는지 되돌리려면 성공 토큰이 필요하다. */
+	private void collectSuccessTokens(
+			List<String> tokens,
+			List<SendResponse> responses,
+			List<String> successTokens) {
+		for (int index = 0; index < responses.size(); index++) {
+			if (responses.get(index).isSuccessful()) {
+				successTokens.add(tokens.get(index));
+			}
 		}
 	}
 
