@@ -51,7 +51,8 @@ class AuthControllerWithdrawTest {
 			mock(MobileDeviceService.class),
 			mock(MobileTeamNotificationService.class),
 			mock(ProfileService.class),
-			mock(CloudinarySignatureService.class));
+			mock(CloudinarySignatureService.class),
+				immediateTransactionTemplate());
 
 	@Test
 	@DisplayName("탈퇴 시 소셜 연동과 회원을 벌크 삭제하고 204를 반환한다")
@@ -84,4 +85,14 @@ class AuthControllerWithdrawTest {
 				.isInstanceOf(ResponseStatusException.class)
 				.hasFieldOrPropertyWithValue("statusCode", HttpStatus.UNAUTHORIZED);
 	}
-}
+
+	/** 콜백을 즉시 실행하는 TransactionTemplate — 컨트롤러의 트랜잭션 경계를 프로덕션과 같은 경로로 태운다. */
+	private static org.springframework.transaction.support.TransactionTemplate immediateTransactionTemplate() {
+		var template = mock(org.springframework.transaction.support.TransactionTemplate.class);
+		org.mockito.Mockito.lenient().when(template.execute(org.mockito.ArgumentMatchers.any()))
+				.thenAnswer(inv -> inv.getArgument(0,
+						org.springframework.transaction.support.TransactionCallback.class).doInTransaction(null));
+		return template;
+	}
+
+	}
