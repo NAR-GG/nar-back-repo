@@ -29,6 +29,9 @@ public class LiveFrameStallTracker {
 	private final long stallThresholdMs;
 	private final Map<String, Progress> progressByGame = new ConcurrentHashMap<>();
 
+	// 생성자가 둘(운영용 + 테스트용 Clock 주입)이라 @Autowired 로 스프링이 쓸 쪽을 지정해야 한다.
+	// 없으면 기본 생성자를 찾다 기동 실패한다(2026-07-30 배포 실패 실사례 — 블루그린 헬스체크가 차단).
+	@org.springframework.beans.factory.annotation.Autowired
 	public LiveFrameStallTracker(
 			@Value("${lolesports.live.frame-stall-threshold-ms:180000}") long stallThresholdMs) {
 		this(Clock.systemUTC(), stallThresholdMs);
