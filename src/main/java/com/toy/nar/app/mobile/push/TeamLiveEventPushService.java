@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -306,14 +308,25 @@ public class TeamLiveEventPushService {
 						LinkedHashMap::new,
 						Collectors.toList()));
 
+		if (devicesByMember.isEmpty()) {
+			return;
+		}
+
 		// dedup: 양 팀 구독자라도 (member, matchId, setNumber, eventType, eventOrder) 1회만 통과한다.
+		// 구독자 수만큼 왕복하지 않도록 한 번에 예약하고 발송 대상만 돌려받는다.
+		List<Long> reservedIds =
+				deliveryRepository.reserveAll(devicesByMember.keySet(), matchId, setNumber, eventType, eventOrder);
+		if (reservedIds.isEmpty()) {
+			return;
+		}
+
 		Map<Long, List<String>> tokensByMember = new LinkedHashMap<>();
-		for (Map.Entry<Long, List<MemberDevice>> entry : devicesByMember.entrySet()) {
-			if (!deliveryRepository.reserve(entry.getKey(), matchId, setNumber, eventType, eventOrder)) {
+		for (Long memberId : reservedIds) {
+			List<MemberDevice> memberDevices = devicesByMember.get(memberId);
+			if (memberDevices == null) {
 				continue;
 			}
-			tokensByMember.put(entry.getKey(),
-					entry.getValue().stream().map(MemberDevice::getFcmToken).toList());
+			tokensByMember.put(memberId, memberDevices.stream().map(MemberDevice::getFcmToken).toList());
 		}
 		if (tokensByMember.isEmpty()) {
 			return;
@@ -325,34 +338,75 @@ public class TeamLiveEventPushService {
 			result = pushGateway.send(allTokens, message);
 		} catch (Exception e) {
 			// 발송 자체가 실패하면 예약한 구독자 전원을 FAILED 로 남긴다(재예약 대상이 된다).
-			tokensByMember.keySet().forEach(memberId ->
-					markFailed(memberId, matchId, setNumber, eventType, eventOrder, truncate(e.getMessage())));
+			markFailedAll(tokensByMember.keySet(), matchId, setNumber, eventType, eventOrder,
+					truncate(e.getMessage()));
 			log.warn("Team live event multicast failed eventType={} matchId={} setNumber={} members={} tokens={}",
 					eventType, matchId, setNumber, tokensByMember.size(), allTokens.size(), e);
 			return;
 		}
 
 		Set<String> successTokens = new HashSet<>(result.successTokens());
-		for (Map.Entry<Long, List<String>> entry : tokensByMember.entrySet()) {
-			Long memberId = entry.getKey();
-			boolean delivered = entry.getValue().stream().anyMatch(successTokens::contains);
-			try {
-				if (delivered) {
-					deliveryRepository.markSent(memberId, matchId, setNumber, eventType, eventOrder);
-					recordFeed(memberId, eventType, message);
-				} else {
-					deliveryRepository.markFailed(memberId, matchId, setNumber, eventType, eventOrder,
-							"FCM 전송 성공 기기가 없습니다.");
-				}
-			} catch (Exception e) {
-				markFailed(memberId, matchId, setNumber, eventType, eventOrder, truncate(e.getMessage()));
-				log.warn("Team live event push record failed memberId={} eventType={} matchId={} setNumber={} eventOrder={}",
-						memberId, eventType, matchId, setNumber, eventOrder, e);
-			}
-		}
+		List<Long> delivered = new ArrayList<>();
+		List<Long> undelivered = new ArrayList<>();
+		tokensByMember.forEach((memberId, tokens) ->
+				(tokens.stream().anyMatch(successTokens::contains) ? delivered : undelivered).add(memberId));
+
+		markSentAll(delivered, matchId, setNumber, eventType, eventOrder);
+		markFailedAll(undelivered, matchId, setNumber, eventType, eventOrder, "FCM 전송 성공 기기가 없습니다.");
+		recordFeedAll(delivered, eventType, message);
 
 		if (!result.invalidTokens().isEmpty()) {
 			deactivateInvalidTokens(result.invalidTokens(), matchId, eventType);
+		}
+	}
+
+	/** 마감 기록 실패가 발송 흐름을 깨면 안 되므로 흡수한다(푸시는 이미 나갔다). */
+	private void markSentAll(
+			List<Long> memberIds, String matchId, int setNumber, String eventType, long eventOrder) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			deliveryRepository.markSentAll(memberIds, matchId, setNumber, eventType, eventOrder);
+		} catch (Exception e) {
+			log.warn("Failed to mark team live event pushes sent eventType={} matchId={} setNumber={} members={}",
+					eventType, matchId, setNumber, memberIds.size(), e);
+		}
+	}
+
+	private void markFailedAll(
+			Collection<Long> memberIds,
+			String matchId,
+			int setNumber,
+			String eventType,
+			long eventOrder,
+			String errorMessage) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			deliveryRepository.markFailedAll(memberIds, matchId, setNumber, eventType, eventOrder, errorMessage);
+		} catch (Exception e) {
+			log.warn("Failed to mark team live event pushes failed eventType={} matchId={} setNumber={} members={}",
+					eventType, matchId, setNumber, memberIds.size(), e);
+		}
+	}
+
+	/** 마이구독 알림 피드에 한 번에 기록한다. 피드 실패가 푸시 흐름을 깨면 안 되므로 흡수한다. */
+	private void recordFeedAll(List<Long> memberIds, String eventType, MobilePushMessage message) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			notificationService.recordAll(
+					memberIds,
+					MemberNotificationType.valueOf(eventType),
+					message.title(),
+					message.body(),
+					message.data());
+		} catch (Exception e) {
+			log.warn("Failed to record team event notification feed eventType={} members={}",
+					eventType, memberIds.size(), e);
 		}
 	}
 

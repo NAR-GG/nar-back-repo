@@ -13,7 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 멱등 키는 (member_id, match_id, set_number, event_type, event_order).
  */
 public interface MemberTeamEventPushDeliveryRepository
-		extends JpaRepository<MemberTeamEventPushDelivery, Long> {
+		extends JpaRepository<MemberTeamEventPushDelivery, Long>,
+		MemberTeamEventPushDeliveryRepositoryCustom {
 
 	/*
 	 * [중복 발송 버그 수정] 기존 reserve 는 INSERT ... ON DUPLICATE KEY UPDATE + IF 패턴으로
