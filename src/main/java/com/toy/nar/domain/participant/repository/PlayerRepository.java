@@ -81,35 +81,6 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 			""")
 	List<Player> findSoloRankSyncTargets(@Param("leagueName") String leagueName);
 
-	// 시즌 중 이적한 선수가 이적 전/후 팀 양쪽 목록에 중복으로 뜨는 것을 막기 위해
-	// 상관 서브쿼리로 선수별 "가장 최근 경기"의 참가 기록만 남긴다.
-	// 참고: findLckPlayerOption은 성능 때문에 이 상관 서브쿼리를 ROW_NUMBER()로 대체했다.
-	// 여기서는 페이징·정렬이 없고 보통 teamId로 한 팀만 조회해 스캔 범위가 작으므로 유지한다.
-	@Query("""
-			SELECT DISTINCT p
-			FROM GameParticipant gp
-			JOIN gp.player p
-			JOIN gp.team t
-			JOIN gp.game g
-			JOIN g.league l
-			WHERE l.leagueName = :leagueName
-			  AND l.seasonYear = :year
-			  AND (:teamId IS NULL OR t.id = :teamId)
-			  AND g.actualGameStartTime = (
-				  SELECT MAX(g2.actualGameStartTime)
-				  FROM GameParticipant gp2
-				  JOIN gp2.game g2
-				  JOIN g2.league l2
-				  WHERE gp2.player = p
-				    AND l2.leagueName = :leagueName
-				    AND l2.seasonYear = :year
-			  )
-			ORDER BY p.name
-			""")
-	List<Player> findOnboardingPlayers(
-			@Param("leagueName") String leagueName,
-			@Param("year") int year,
-			@Param("teamId") Long teamId);
 
 	/**
 	 * 해당 리그·시즌에서 선수별로 "가장 최근 경기"의 팀 하나로 중복 제거해 페이지로 반환한다.

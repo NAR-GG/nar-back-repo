@@ -26,6 +26,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,7 +63,8 @@ class AuthControllerOnboardingNotificationTest {
 				mobileDeviceService,
 				notificationService,
 				profileService,
-				mock(CloudinarySignatureService.class));
+				mock(CloudinarySignatureService.class),
+				immediateTransactionTemplate());
 		Member member = Member.builder().name("용맹한바론").tag("0000").email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", 7L);
 		Team team = Team.builder().name("T1").code("T1").imageUrl("t1.png").build();
@@ -126,8 +130,9 @@ class AuthControllerOnboardingNotificationTest {
 		when(context.teamRepository.findAllByCodeIn(LckTeamCatalog.TEAM_CODES)).thenReturn(List.of(team));
 		when(context.playerRepository.findAllById(java.util.Set.of(10L, 11L, 12L, 13L)))
 				.thenReturn(players);
-		when(context.playerRepository.findOnboardingPlayers("LCK", 2026, 1L))
-				.thenReturn(players);
+		var lckOpts = lckOptions(players);
+		when(context.playerRepository.findLckPlayerOptions(eq("LCK"), eq(2026), eq(1L), isNull(), any()))
+				.thenReturn(new org.springframework.data.domain.PageImpl<>(lckOpts));
 
 		var response = context.controller.onboarding(
 				7L,
@@ -148,7 +153,9 @@ class AuthControllerOnboardingNotificationTest {
 		when(context.teamRepository.findById(1L)).thenReturn(Optional.of(team));
 		when(context.teamRepository.findAllByCodeIn(LckTeamCatalog.TEAM_CODES)).thenReturn(List.of(team));
 		when(context.playerRepository.findAllById(java.util.Set.of(10L))).thenReturn(List.of(player));
-		when(context.playerRepository.findOnboardingPlayers("LCK", 2026, 1L)).thenReturn(List.of());
+		var lckOpts = lckOptions(List.of());
+		when(context.playerRepository.findLckPlayerOptions(eq("LCK"), eq(2026), eq(1L), isNull(), any()))
+				.thenReturn(new org.springframework.data.domain.PageImpl<>(lckOpts));
 
 		assertThatThrownBy(() -> context.controller.onboarding(
 				7L,
@@ -162,14 +169,51 @@ class AuthControllerOnboardingNotificationTest {
 		TestContext context = context();
 		Team t1 = team(1L, "T1", "T1");
 		when(context.teamRepository.findAllByCodeIn(LckTeamCatalog.TEAM_CODES)).thenReturn(List.of(t1));
-		when(context.playerRepository.findOnboardingPlayers("LCK", 2026, 1L)).thenReturn(List.of());
+		var lckOpts = lckOptions(List.of());
+		when(context.playerRepository.findLckPlayerOptions(eq("LCK"), eq(2026), eq(1L), isNull(), any()))
+				.thenReturn(new org.springframework.data.domain.PageImpl<>(lckOpts));
 
 		var teams = context.controller.getOnboardingTeams(2026);
 		context.controller.getOnboardingPlayers(2026, 1L);
 
 		assertThat(teams.getBody()).isNotNull();
 		assertThat(teams.getBody()).extracting("code").containsExactly("T1");
-		verify(context.playerRepository).findOnboardingPlayers("LCK", 2026, 1L);
+		verify(context.playerRepository).findLckPlayerOptions(eq("LCK"), eq(2026), eq(1L), isNull(), any());
+	}
+
+	/**
+	 * 온보딩 연타로 동시 요청이 겹치면 늦은 쪽이 즐겨찾기 유니크 제약(중복키)에 걸린다.
+	 * 실측 2026-07-31 새벽 29건 — 앞선 요청이 이미 완료된 상태이므로 500 이 아니라
+	 * 현재 상태로 200 을 돌려줘야 한다(앱이 온보딩 실패로 오인하지 않게).
+	 */
+	@Test
+	void onboardingAbsorbsConcurrentDuplicateAsSuccess() {
+		TestContext context = context();
+		Member member = member(7L);
+		Team team = team(1L, "T1", "T1");
+		Player faker = player(10L, "Faker");
+		member.completeOnboarding("LCK", team, List.of(faker)); // 앞선 요청이 이미 완료한 상태
+		when(context.memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(context.teamRepository.findById(1L)).thenReturn(Optional.of(team));
+		when(context.teamRepository.findAllByCodeIn(LckTeamCatalog.TEAM_CODES)).thenReturn(List.of(team));
+		when(context.playerRepository.findAllById(java.util.Set.of(10L))).thenReturn(List.of(faker));
+		var lckOpts = lckOptions(List.of(faker));
+		when(context.playerRepository.findLckPlayerOptions(eq("LCK"), eq(2026), eq(1L), isNull(), any()))
+				.thenReturn(new org.springframework.data.domain.PageImpl<>(lckOpts));
+		// 트랜잭션 커밋 시점의 중복키를 재현: 첫 execute 는 예외, 흡수 후 재조회 execute 는 정상 실행
+		var template = mock(org.springframework.transaction.support.TransactionTemplate.class);
+		when(template.execute(any()))
+				.thenThrow(new org.springframework.dao.DataIntegrityViolationException(
+						"Duplicate entry '7-10' for key 'uq_member_favorite_player'"))
+				.thenAnswer(inv -> inv.getArgument(0,
+						org.springframework.transaction.support.TransactionCallback.class).doInTransaction(null));
+		ReflectionTestUtils.setField(context.controller, "transactionTemplate", template);
+
+		var response = context.controller.onboarding(7L, new OnboardingRequest("LCK", 1L, List.of(10L)));
+
+		assertThat(response.getStatusCode().value()).isEqualTo(200);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().favoritePlayerIds()).containsExactly(10L);
 	}
 
 	// 탈퇴 관련 테스트는 AuthControllerWithdrawTest 로 옮겼다(멱등 삭제로 동작이 바뀜).
@@ -202,7 +246,8 @@ class AuthControllerOnboardingNotificationTest {
 				mobileDeviceService,
 				notificationService,
 				profileService,
-				mock(CloudinarySignatureService.class));
+				mock(CloudinarySignatureService.class),
+				immediateTransactionTemplate());
 		return new TestContext(
 				memberSocialRepository,
 				controller,
@@ -237,5 +282,25 @@ class AuthControllerOnboardingNotificationTest {
 			TeamRepository teamRepository,
 			PlayerRepository playerRepository,
 			MobileTeamNotificationService notificationService) {
+	}
+
+	/** 콜백을 즉시 실행하는 TransactionTemplate — 컨트롤러의 트랜잭션 경계를 프로덕션과 같은 경로로 태운다. */
+	private static org.springframework.transaction.support.TransactionTemplate immediateTransactionTemplate() {
+		var template = mock(org.springframework.transaction.support.TransactionTemplate.class);
+		org.mockito.Mockito.lenient().when(template.execute(org.mockito.ArgumentMatchers.any()))
+				.thenAnswer(inv -> inv.getArgument(0,
+						org.springframework.transaction.support.TransactionCallback.class).doInTransaction(null));
+		return template;
+	}
+
+	/** Player 목록을 LckPlayerOption 프로젝션 목록으로 바꾼다(선수 검증 스텁용). */
+	private static List<com.toy.nar.domain.participant.repository.PlayerRepository.LckPlayerOption> lckOptions(
+			List<Player> players) {
+		return players.stream().map(pl -> {
+			var opt = mock(com.toy.nar.domain.participant.repository.PlayerRepository.LckPlayerOption.class);
+			org.mockito.Mockito.lenient().when(opt.getPlayerId()).thenReturn(pl.getId());
+			org.mockito.Mockito.lenient().when(opt.getPlayerName()).thenReturn(pl.getName());
+			return (com.toy.nar.domain.participant.repository.PlayerRepository.LckPlayerOption) opt;
+		}).toList();
 	}
 }
