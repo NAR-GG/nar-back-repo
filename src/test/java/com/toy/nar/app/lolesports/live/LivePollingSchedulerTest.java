@@ -50,6 +50,8 @@ class LivePollingSchedulerTest {
 				cacheEvictionService,
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "maxConsecutiveFailures", 2);
 		liveStateStore.getActiveGames().put("game-1", new ActiveLiveGame(
@@ -92,6 +94,8 @@ class LivePollingSchedulerTest {
 				cacheEvictionService,
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		ActiveLiveGame activeGame = new ActiveLiveGame(
@@ -287,6 +291,8 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto ewcUnstarted = MatchResultDto.builder()
@@ -322,6 +328,8 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		// 이미 추적 중인 상태로 시작
@@ -358,6 +366,8 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto ewcUnstarted = MatchResultDto.builder()
@@ -395,6 +405,8 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		// 마지막 세트를 라이브로 추적하던 중이었음
@@ -434,6 +446,8 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto completed = MatchResultDto.builder()
@@ -468,6 +482,8 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto kespaUnstarted = MatchResultDto.builder()
@@ -508,6 +524,8 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto kespaUnstarted = MatchResultDto.builder()
@@ -542,6 +560,8 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		MatchResultDto oldCompleted = MatchResultDto.builder()
@@ -620,6 +640,65 @@ class LivePollingSchedulerTest {
 				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
 	}
 
+	@Test
+	void stalledFrameWithConfirmedScoreFiresSetEnd() throws InterruptedException {
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		// 스코어 합 2 = lckGame 의 setNumber(2) 도달 → 종료 확정 가능.
+		com.toy.nar.app.lolesports.repository.LeagueMatchRepository matchRepository =
+				matchRepositoryWithScore(1, 1);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService,
+				new LiveFrameStallTracker(1L), matchRepository);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		// 두 폴 모두 같은 프레임(동결) + gameState=in_game — finished 는 오지 않는다.
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("in_game"));
+
+		scheduler.pollActiveGames();
+		Thread.sleep(10); // 임계 1ms 를 넘긴다
+		scheduler.pollActiveGames();
+
+		assertThat(liveStateStore.isFinished("game-1")).isTrue();
+		verify(pushService, times(1)).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_END),
+				eq("match-1"), eq(2), eq("100"), eq("200"), eq("KT"), eq("HLE"));
+	}
+
+	@Test
+	void stalledFrameWithoutScoreDoesNotFireSetEnd() throws InterruptedException {
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		// 스코어 합 1 < setNumber(2) — 퍼즈로 피드가 얼었을 뿐일 수 있다. 절대 쏘면 안 된다.
+		com.toy.nar.app.lolesports.repository.LeagueMatchRepository matchRepository =
+				matchRepositoryWithScore(1, 0);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService,
+				new LiveFrameStallTracker(1L), matchRepository);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("in_game"));
+
+		scheduler.pollActiveGames();
+		Thread.sleep(10);
+		scheduler.pollActiveGames();
+
+		assertThat(liveStateStore.isFinished("game-1")).isFalse();
+		verify(pushService, never()).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_END),
+				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+	}
+
+	private com.toy.nar.app.lolesports.repository.LeagueMatchRepository matchRepositoryWithScore(
+			int blueScore, int redScore) {
+		var match = mock(com.toy.nar.app.lolesports.repository.LeagueMatch.class);
+		when(match.getBlueScore()).thenReturn(blueScore);
+		when(match.getRedScore()).thenReturn(redScore);
+		var repository = mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class);
+		when(repository.findById("match-1")).thenReturn(java.util.Optional.of(match));
+		return repository;
+	}
+
 	private ActiveLiveGame lckGame(String gameId) {
 		return new ActiveLiveGame(
 				gameId,
@@ -652,6 +731,35 @@ class LivePollingSchedulerTest {
 		return schedulerWith(liveStateStore, pushService, mock(WorldsService.class), mock(LeagueMatchService.class));
 	}
 
+	/** 정지 감지 테스트용 — 임계값이 짧은 tracker 와 스코어를 주는 매치 리포지토리를 주입한다. */
+	private LivePollingScheduler schedulerWith(
+			LiveStateStore liveStateStore,
+			TeamLiveEventPushService pushService,
+			LiveFrameStallTracker frameStallTracker,
+			com.toy.nar.app.lolesports.repository.LeagueMatchRepository leagueMatchRepository) {
+		LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
+		when(leagueConfigService.liveLeagues()).thenReturn(List.of("LCK"));
+		when(leagueConfigService.isNotificationEnabled("LCK")).thenReturn(true);
+		LivePollingScheduler scheduler = new LivePollingScheduler(
+				mock(WorldsService.class),
+				mock(LiveStatsClient.class),
+				mock(LiveObjectEventRecorder.class),
+				liveStateStore,
+				mock(LiveFrameProcessor.class),
+				liveGameMetadataServiceMock(),
+				mock(LeagueMatchService.class),
+				leagueConfigService,
+				mock(CacheEvictionService.class),
+				mock(NotificationService.class),
+				pushService,
+				frameStallTracker,
+				leagueMatchRepository,
+				Runnable::run);
+		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
+		ReflectionTestUtils.setField(scheduler, "maxConsecutiveFailures", 6);
+		return scheduler;
+	}
+
 	private LivePollingScheduler schedulerWith(
 			LiveStateStore liveStateStore,
 			TeamLiveEventPushService pushService,
@@ -672,6 +780,8 @@ class LivePollingSchedulerTest {
 				mock(CacheEvictionService.class),
 				mock(NotificationService.class),
 				pushService,
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 		ReflectionTestUtils.setField(scheduler, "staleThresholdMs", 180000L);
 		ReflectionTestUtils.setField(scheduler, "maxConsecutiveFailures", 6);
@@ -696,6 +806,8 @@ class LivePollingSchedulerTest {
 				mock(CacheEvictionService.class),
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				new LiveFrameStallTracker(180_000L),
+				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
 
 		Instant nextWindow = ReflectionTestUtils.invokeMethod(
