@@ -54,6 +54,8 @@ public class MobileScheduleService {
 			"DNS", "BFX", "NS", "BRO", "KRX"
 	);
 	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
+	/** 세트 상태 — 종료(라이브 데이터 보유). 승리 팀은 이 상태에서만 노출한다. */
+	private static final String STATUS_ENDED = "ENDED";
 	private static final String CURSOR_DELIMITER = "|";
 	private static final int DEFAULT_PAGE_SIZE = 20;
 	private static final int MAX_PAGE_SIZE = 50;
@@ -216,15 +218,21 @@ public class MobileScheduleService {
 		List<MobileScheduleListResponse.MobileGameSummary> games = new ArrayList<>();
 		java.util.Set<String> knownGameIds = new java.util.LinkedHashSet<>();
 		int maxOrder = 0;
+		// 완료된 매치의 매핑 세트는 전부 실제로 치러진 세트다 — 업스트림 동기화가 unneeded 세트를
+		// 애초에 매핑하지 않기 때문이다. 라이브 수집 이전 경기까지 ENDED 로 내려야 세트 승자가 노출된다.
+		boolean matchCompleted = "completed".equalsIgnoreCase(match.getState());
 
 		// 1) DB 공식 매핑 게임 (gameOrder, recordGameId 보존) + 상태 계산
-		for (LeagueMatchGameRepository.MappedGameRow row :
-				leagueMatchGameRepository.findMappedGameRowsByMatchId(match.getId(), LOLESPORTS_SOURCE)) {
+		for (LeagueMatchGameRepository.MappedGameWinnerRow row :
+				leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId(match.getId(), LOLESPORTS_SOURCE)) {
 			String gameId = row.getExternalGameId();
+			String status = gameStatus(gameId, liveGameIds, recordedSet,
+					matchCompleted || row.getInternalGameId() != null);
 			games.add(new MobileScheduleListResponse.MobileGameSummary(
 					row.getGameOrder(), gameId, row.getInternalGameId(),
-					gameStatus(gameId, liveGameIds, recordedSet),
-					row.getGameOrder() != null ? vodMap.get(row.getGameOrder()) : null));
+					status,
+					row.getGameOrder() != null ? vodMap.get(row.getGameOrder()) : null,
+					winnerTeamCode(match, row, status)));
 			knownGameIds.add(gameId);
 			if (row.getGameOrder() != null) {
 				maxOrder = Math.max(maxOrder, row.getGameOrder());
@@ -238,11 +246,70 @@ public class MobileScheduleService {
 		extraGameIds.removeAll(knownGameIds);
 		int nextOrder = maxOrder + 1;
 		for (String gameId : extraGameIds) {
+			String status = gameStatus(gameId, liveGameIds, recordedSet, matchCompleted);
 			games.add(new MobileScheduleListResponse.MobileGameSummary(
-					nextOrder++, gameId, null, gameStatus(gameId, liveGameIds, recordedSet), null));
+					nextOrder++, gameId, null, status, null,
+					winnerTeamCode(match, null, status)));
 		}
 
 		return new MobileMatchGamesResponse(match.getId(), games);
+	}
+
+	/**
+	 * 세트 승리 팀 코드. 값은 항상 매치의 blue/red 팀 코드 중 하나이며, 종료된 세트에만 채운다.
+	 *
+	 * <p>1순위는 적재된 경기 기록이다. 기록이 없어도 완봉(2-0·3-0)이면 모든 세트 승자가 이긴 팀이라
+	 * 산술로 확정할 수 있다 — CSV 미적재 리그(LPL 등)에서 이 폴백이 절반 이상을 메운다.
+	 * 둘 다 안 되면 null 이다(예: 기록 없는 2-1 경기).</p>
+	 */
+	private String winnerTeamCode(
+			LeagueMatch match,
+			LeagueMatchGameRepository.MappedGameWinnerRow row,
+			String status) {
+		if (!STATUS_ENDED.equals(status)) {
+			return null;
+		}
+		if (row != null) {
+			String externalTeamId = row.getWinnerExternalTeamId();
+			if (externalTeamId != null) {
+				if (externalTeamId.equals(match.getBlueExternalTeamId())) {
+					return match.getBlueTeamCode();
+				}
+				if (externalTeamId.equals(match.getRedExternalTeamId())) {
+					return match.getRedTeamCode();
+				}
+			}
+			// 외부 팀 id 매핑이 없을 때만 내부 팀 코드로 대조한다.
+			String teamCode = row.getWinnerTeamCode();
+			if (teamCode != null) {
+				if (teamCode.equalsIgnoreCase(match.getBlueTeamCode())) {
+					return match.getBlueTeamCode();
+				}
+				if (teamCode.equalsIgnoreCase(match.getRedTeamCode())) {
+					return match.getRedTeamCode();
+				}
+			}
+		}
+		return sweepWinnerTeamCode(match);
+	}
+
+	/** 완봉 경기면 이긴 팀 코드, 아니면 null. */
+	private String sweepWinnerTeamCode(LeagueMatch match) {
+		if (!"completed".equalsIgnoreCase(match.getState())) {
+			return null;
+		}
+		Integer blueScore = match.getBlueScore();
+		Integer redScore = match.getRedScore();
+		if (blueScore == null || redScore == null) {
+			return null;
+		}
+		if (blueScore > 0 && redScore == 0) {
+			return match.getBlueTeamCode();
+		}
+		if (redScore > 0 && blueScore == 0) {
+			return match.getRedTeamCode();
+		}
+		return null;
 	}
 
 	private List<LeagueMatch> findMatches(
@@ -340,11 +407,12 @@ public class MobileScheduleService {
 	}
 
 	private MobileScheduleListResponse.MobileGameSummary toGameSummary(LeagueMatchGameRepository.MappedGameRow row) {
-		// 일정 목록에서는 세트 상태·VOD를 계산하지 않는다(상세 화면에서만 채움).
+		// 일정 목록에서는 세트 상태·VOD·승리 팀을 계산하지 않는다(상세 화면에서만 채움).
 		return new MobileScheduleListResponse.MobileGameSummary(
 				row.getGameOrder(),
 				row.getExternalGameId(),
 				row.getInternalGameId(),
+				null,
 				null,
 				null);
 	}
@@ -371,13 +439,23 @@ public class MobileScheduleService {
 		return vodMap;
 	}
 
-	/** 게임 상태 판정: 라이브 스토어에 있으면 LIVE, 영속 데이터가 있으면 ENDED, 아니면 SCHEDULED. */
-	private String gameStatus(String gameId, java.util.Set<String> liveGameIds, java.util.Set<String> recordedGameIds) {
+	/**
+	 * 게임 상태 판정: 라이브 스토어에 있으면 LIVE, 종료가 확인되면 ENDED, 아니면 SCHEDULED.
+	 *
+	 * <p>{@code knownFinished} 는 라이브 스냅샷 외의 종료 증거다(완료된 매치의 매핑 세트, 적재된 경기 기록).
+	 * 라이브 수집 이전 경기는 스냅샷이 없어 종료된 세트가 SCHEDULED 로 내려갔다 — 전체 매핑 세트
+	 * 4,390건 중 스냅샷 보유는 69건뿐이라 세트 승자를 사실상 못 내보냈다.</p>
+	 */
+	private String gameStatus(
+			String gameId,
+			java.util.Set<String> liveGameIds,
+			java.util.Set<String> recordedGameIds,
+			boolean knownFinished) {
 		if (liveGameIds.contains(gameId)) {
 			return "LIVE";
 		}
-		if (recordedGameIds.contains(gameId)) {
-			return "ENDED";
+		if (recordedGameIds.contains(gameId) || knownFinished) {
+			return STATUS_ENDED;
 		}
 		return "SCHEDULED";
 	}

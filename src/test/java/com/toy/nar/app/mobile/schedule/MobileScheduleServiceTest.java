@@ -298,8 +298,8 @@ class MobileScheduleServiceTest {
 	void getMatchGamesReturnsMappedGames() {
 		when(leagueMatchRepository.findById("match-1"))
 				.thenReturn(Optional.of(match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed")));
-		when(leagueMatchGameRepository.findMappedGameRowsByMatchId("match-1", "LOLESPORTS"))
-				.thenReturn(List.of(new MappedRow("match-1", 1, "game-1", 100L)));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", 100L, null, null)));
 
 		MobileMatchGamesResponse response = service.getMatchGames("match-1");
 
@@ -319,8 +319,8 @@ class MobileScheduleServiceTest {
 		// SET_END 푸시(프레임 신호)와 상세 화면이 같은 시점에 종료로 보인다.
 		when(leagueMatchRepository.findById("match-1"))
 				.thenReturn(Optional.of(match("match-1", "EWC", LocalDateTime.of(2026, 7, 17, 13, 30), "DK", "BLG", "inProgress")));
-		when(leagueMatchGameRepository.findMappedGameRowsByMatchId("match-1", "LOLESPORTS"))
-				.thenReturn(List.of(new MappedRow("match-1", 1, "game-1", null)));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", null, null, null)));
 		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>(java.util.Map.of(
 				"game-1", new com.toy.nar.app.lolesports.live.ActiveLiveGame(
 						"game-1", "match-1", "EWC", "DK", "BLG", LocalDateTime.of(2026, 7, 17, 13, 50), 0))));
@@ -339,8 +339,8 @@ class MobileScheduleServiceTest {
 	void getMatchGamesKeepsLiveStatusWhileFrameNotFinished() {
 		when(leagueMatchRepository.findById("match-1"))
 				.thenReturn(Optional.of(match("match-1", "EWC", LocalDateTime.of(2026, 7, 17, 13, 30), "DK", "BLG", "inProgress")));
-		when(leagueMatchGameRepository.findMappedGameRowsByMatchId("match-1", "LOLESPORTS"))
-				.thenReturn(List.of(new MappedRow("match-1", 1, "game-1", null)));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", null, null, null)));
 		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>(java.util.Map.of(
 				"game-1", new com.toy.nar.app.lolesports.live.ActiveLiveGame(
 						"game-1", "match-1", "EWC", "DK", "BLG", LocalDateTime.of(2026, 7, 17, 13, 50), 0))));
@@ -351,6 +351,131 @@ class MobileScheduleServiceTest {
 		assertThat(response.games()).singleElement()
 				.extracting(MobileScheduleListResponse.MobileGameSummary::status)
 				.isEqualTo("LIVE");
+	}
+
+	@Test
+	void getMatchGamesReturnsWinnerTeamCodeFromRecordedGame() {
+		// 적재된 경기 기록의 승리 팀 외부 id 로 매치의 blue/red 팀 코드를 되짚는다.
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(
+				scoredMatch("match-1", "LCK", "T1", "ext-blue", 2, "GEN", "ext-red", 1, "completed")));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", 100L, "ext-red", "GENG")));
+		markEnded();
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games()).singleElement()
+				.extracting(MobileScheduleListResponse.MobileGameSummary::winnerTeamCode)
+				.isEqualTo("GEN");
+	}
+
+	@Test
+	void getMatchGamesFallsBackToSweepWinnerWhenRecordMissing() {
+		// CSV 미적재 리그(LPL 등)에서도 완봉이면 모든 세트 승자가 확정된다.
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(
+				scoredMatch("match-1", "LPL", "BLG", "ext-blue", 2, "TES", "ext-red", 0, "completed")));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", null, null, null)));
+		markEnded();
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games()).singleElement()
+				.extracting(MobileScheduleListResponse.MobileGameSummary::winnerTeamCode)
+				.isEqualTo("BLG");
+	}
+
+	@Test
+	void getMatchGamesLeavesWinnerNullWhenUndecidable() {
+		// 기록도 없고 완봉도 아니면(2-1) 세트별 승자를 알 수 없다.
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(
+				scoredMatch("match-1", "KESPA", "DNS", "ext-blue", 2, "BRO", "ext-red", 1, "completed")));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", null, null, null)));
+		markEnded();
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games()).singleElement()
+				.extracting(MobileScheduleListResponse.MobileGameSummary::winnerTeamCode)
+				.isNull();
+	}
+
+	@Test
+	void getMatchGamesHidesWinnerWhileSetIsLive() {
+		// 진행 중인 세트는 승자를 알 수 있어도 노출하지 않는다(계약: ENDED 아니면 null).
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(
+				scoredMatch("match-1", "LCK", "T1", "ext-blue", 1, "GEN", "ext-red", 0, "inProgress")));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", 100L, "ext-blue", "T1")));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>(java.util.Map.of(
+				"game-1", new com.toy.nar.app.lolesports.live.ActiveLiveGame(
+						"game-1", "match-1", "LCK", "T1", "GEN", LocalDateTime.of(2026, 7, 17, 13, 50), 0))));
+		when(liveStateStore.isFinished("game-1")).thenReturn(false);
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games()).singleElement()
+				.satisfies(game -> {
+					assertThat(game.status()).isEqualTo("LIVE");
+					assertThat(game.winnerTeamCode()).isNull();
+				});
+	}
+
+	/** 라이브 스토어는 비었고 스냅샷은 있는 상태 = ENDED. */
+	private void markEnded() {
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>());
+		when(minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart("match-1")).thenReturn(List.of("game-1"));
+	}
+
+	private LeagueMatch scoredMatch(
+			String id,
+			String league,
+			String blueCode,
+			String blueExternalTeamId,
+			int blueScore,
+			String redCode,
+			String redExternalTeamId,
+			int redScore,
+			String state) {
+		return LeagueMatch.builder()
+				.id(id)
+				.leagueName(league)
+				.matchTitle(blueCode + " vs " + redCode)
+				.matchDate(LocalDateTime.of(2026, 7, 20, 8, 0))
+				.state(state)
+				.blueTeamName(blueCode)
+				.blueTeamCode(blueCode)
+				.blueExternalTeamId(blueExternalTeamId)
+				.blueScore(blueScore)
+				.redTeamName(redCode)
+				.redTeamCode(redCode)
+				.redExternalTeamId(redExternalTeamId)
+				.redScore(redScore)
+				.build();
+	}
+
+	@Test
+	void getMatchGamesMarksCompletedMatchSetsAsEndedWithoutSnapshots() {
+		// 라이브 수집 이전 경기(스냅샷 없음)도 완료된 매치라면 치러진 세트다 — ENDED 로 내려야 승자가 노출된다.
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(
+				scoredMatch("match-1", "LEC", "VIT", "ext-blue", 2, "MKOI", "ext-red", 1, "completed")));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(
+						new WinnerRow("match-1", 1, "game-1", 10L, "ext-red", "MKOI"),
+						new WinnerRow("match-1", 2, "game-2", 11L, "ext-blue", "VIT")));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>());
+		when(minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart("match-1")).thenReturn(List.of());
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games())
+				.extracting(
+						MobileScheduleListResponse.MobileGameSummary::status,
+						MobileScheduleListResponse.MobileGameSummary::winnerTeamCode)
+				.containsExactly(
+						org.assertj.core.groups.Tuple.tuple("ENDED", "MKOI"),
+						org.assertj.core.groups.Tuple.tuple("ENDED", "VIT"));
 	}
 
 	@Test
@@ -466,6 +591,45 @@ class MobileScheduleServiceTest {
 		@Override
 		public Long getInternalGameId() {
 			return rowInternalGameId;
+		}
+	}
+
+	private record WinnerRow(
+			String rowMatchId,
+			Integer rowGameOrder,
+			String rowExternalGameId,
+			Long rowInternalGameId,
+			String rowWinnerExternalTeamId,
+			String rowWinnerTeamCode) implements LeagueMatchGameRepository.MappedGameWinnerRow {
+
+		@Override
+		public String getMatchId() {
+			return rowMatchId;
+		}
+
+		@Override
+		public Integer getGameOrder() {
+			return rowGameOrder;
+		}
+
+		@Override
+		public String getExternalGameId() {
+			return rowExternalGameId;
+		}
+
+		@Override
+		public Long getInternalGameId() {
+			return rowInternalGameId;
+		}
+
+		@Override
+		public String getWinnerExternalTeamId() {
+			return rowWinnerExternalTeamId;
+		}
+
+		@Override
+		public String getWinnerTeamCode() {
+			return rowWinnerTeamCode;
 		}
 	}
 
