@@ -107,7 +107,7 @@ class MobileScheduleControllerTest {
 								null,
 								List.of(),
 								3,
-								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, null, null))))));
+								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, null, null, null))))));
 
 		mockMvc.perform(get("/api/mobile/schedules")
 						.param("date", "2026-04-01")

@@ -52,7 +52,11 @@ public record MobileScheduleListResponse(
 			@Schema(description = "세트 상태: LIVE(진행 중)/ENDED(종료, 데이터 보유)/SCHEDULED(예정). 일정 목록에서는 null", example = "LIVE", nullable = true)
 			String status,
 			@Schema(description = "세트 다시보기 VOD URL(주로 한국어 유튜브). 없으면 null. 일정 목록에서는 null", example = "https://youtu.be/abc?t=10", nullable = true)
-			String vodUrl) {
+			String vodUrl,
+			@Schema(description = "세트 승리 팀 코드. blueTeam.teamCode/redTeam.teamCode 와 같은 문자열이다. "
+					+ "status 가 ENDED 가 아니거나 승자를 아직 확정하지 못했으면 null. 일정 목록에서는 null",
+					example = "T1", nullable = true)
+			String winnerTeamCode) {
 	}
 
 	public record MobileTeamResult(

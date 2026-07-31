@@ -188,6 +188,69 @@ public class LeagueMatchService {
 		return naver[0] + naver[1] > riotBlue + riotRed ? naver : null;
 	}
 
+	/**
+	 * 스코어 전이로 세트별 승자 목록을 전진시킨다. 업스트림은 세트별 승자를 주지 않으므로
+	 * (getEventDetails/getGames/getCompletedEvents 전수 실측 — games[].teams 는 side 뿐)
+	 * 스코어가 +1 되는 순간 그 세트의 승자를 적는 것이 유일한 실시간 소스다.
+	 *
+	 * <p>형식: 콤마 구분, index = 세트 번호. B/R = 매치 blue/red, '?' = 순서 미상.
+	 * 한 사이클에 두 팀이 함께 오르면(동기화 공백 30분+) 순서를 알 수 없어 '?' 로 채워
+	 * 이후 세트의 인덱스를 지킨다. 스코어가 목록보다 후퇴하면(네이버 wrong-high 정정·리메이크)
+	 * 목록을 재구축한다 — 완봉이면 전부 귀속, 아니면 '?'.</p>
+	 */
+	static String advanceSetWinners(String current, Integer blueScore, Integer redScore, boolean completed) {
+		int blue = blueScore == null ? 0 : blueScore;
+		int red = redScore == null ? 0 : redScore;
+		int total = blue + red;
+		if (total <= 0) {
+			return current;
+		}
+
+		List<String> winners = current == null || current.isBlank()
+				? new ArrayList<>()
+				: new ArrayList<>(Arrays.asList(current.split(",")));
+		long knownBlue = winners.stream().filter("B"::equals).count();
+		long knownRed = winners.stream().filter("R"::equals).count();
+
+		// 스코어 후퇴 — 진행 중엔 업스트림 stale(30분 sync 가 네이버 오버레이보다 뒤짐)일 가능성이
+		// 커서 기존 귀속을 지키고, 최종 스코어(completed)만 재구축 근거로 믿는다.
+		if (blue < knownBlue || red < knownRed || total < winners.size()) {
+			return completed ? rebuildSetWinners(blue, red) : current;
+		}
+
+		// 한쪽이 0 이면 지나간 세트 전부가 상대 승 — '?' 로 남았던 세트도 소급 확정된다.
+		if (blue == 0 || red == 0) {
+			return rebuildSetWinners(blue, red);
+		}
+		if (total == winners.size()) {
+			return current;
+		}
+
+		int added = total - winners.size();
+		long addedBlue = blue - knownBlue;
+		long addedRed = red - knownRed;
+		String mark = addedBlue == added && addedRed == 0 ? "B"
+				: addedRed == added && addedBlue == 0 ? "R"
+				: "?";
+		for (int i = 0; i < added; i++) {
+			winners.add(mark);
+		}
+		return String.join(",", winners);
+	}
+
+	private static boolean isCompleted(LeagueMatch match) {
+		return "completed".equalsIgnoreCase(match.getState());
+	}
+
+	private static String rebuildSetWinners(int blue, int red) {
+		String mark = red == 0 ? "B" : blue == 0 ? "R" : "?";
+		List<String> winners = new ArrayList<>();
+		for (int i = 0; i < blue + red; i++) {
+			winners.add(mark);
+		}
+		return String.join(",", winners);
+	}
+
 	public void syncMatches(String leagueSlug, boolean includeTeamMetadataSync) {
 		log.info("Starting sync for league: {}", leagueSlug);
 		// 1. 외부 API에서 데이터 가져오기 (1페이지 분량, pageToken=null)
@@ -846,6 +909,9 @@ public class LeagueMatchService {
 				LeagueMatch existing = existingMatchesById.get(dto.getMatchId());
 
 				if (existing == null) {
+					// 첫 관측 시점의 스코어로 시작 — 완봉 진행분은 즉시 귀속, 혼합 스코어는 '?' 로 자리만 잡는다.
+					incoming.applySetWinners(advanceSetWinners(
+							null, incoming.getBlueScore(), incoming.getRedScore(), isCompleted(incoming)));
 					dirtyMatches.add(incoming);
 					dirtyMatchIds.add(incoming.getId());
 					inserted++;
@@ -888,6 +954,9 @@ public class LeagueMatchService {
 						incoming.isHasVod(),
 						incoming.getMatchDetailsJson(),
 						incoming.getLastUpdated());
+				existing.applySetWinners(advanceSetWinners(
+						existing.getSetWinners(), incoming.getBlueScore(), incoming.getRedScore(),
+						isCompleted(incoming)));
 				existing.applyBestOf(incoming.getBestOf());
 				applySeasonIfResolvable(existing);
 				dirtyMatches.add(existing);
