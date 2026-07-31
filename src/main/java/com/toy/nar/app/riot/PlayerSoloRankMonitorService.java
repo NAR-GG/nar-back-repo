@@ -16,8 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -147,7 +145,7 @@ public class PlayerSoloRankMonitorService {
 								champion == null ? null : champion.getChampionNameKr(),
 								champion == null ? null : champion.getImageUrl(),
 								queueDisplayName,
-								buildOpggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
+								RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 					}
 					account.markAlertSent(currentGameId);
 					persist(account);
@@ -277,14 +275,6 @@ public class PlayerSoloRankMonitorService {
 		return System.currentTimeMillis();
 	}
 
-	/** OP.GG 소환사 페이지 URL (디스코드 알림과 동일 포맷). 계정 플랫폼별 지역 코드 사용. 정보 부족 시 빈 문자열. */
-	private String buildOpggUrl(String gameName, String tagLine, String platform) {
-		if (gameName == null || gameName.isBlank() || tagLine == null || tagLine.isBlank()) {
-			return "";
-		}
-		String path = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
-		return "https://www.op.gg/summoners/" + RiotPlatform.opggRegion(platform) + "/" + path;
-	}
 
 	private boolean isRankedSolo(RiotCurrentGameResponse currentGame) {
 		return currentGame.gameQueueConfigId() != null && currentGame.gameQueueConfigId() == RANKED_SOLO_QUEUE_ID;

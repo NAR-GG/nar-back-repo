@@ -15,8 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -143,7 +141,7 @@ public class PlayerSoloRankMatchFallbackService {
 				championName,
 				championIconUrl,
 				resultLine,
-				buildOpggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
+				RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 	}
 
 	/** 예: "멜로 승리 · 4/2/8", "가렌으로 패배 · 1/5/9" — 정보 없으면 단계적으로 축약. */
@@ -194,11 +192,4 @@ public class PlayerSoloRankMatchFallbackService {
 		return separatorIndex < 0 ? matchId : matchId.substring(separatorIndex + 1);
 	}
 
-	private String buildOpggUrl(String gameName, String tagLine, String platform) {
-		if (gameName == null || gameName.isBlank() || tagLine == null || tagLine.isBlank()) {
-			return "";
-		}
-		String path = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
-		return "https://www.op.gg/summoners/" + RiotPlatform.opggRegion(platform) + "/" + path;
-	}
 }
