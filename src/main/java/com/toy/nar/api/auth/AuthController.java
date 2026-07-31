@@ -42,6 +42,8 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +68,10 @@ import static org.springframework.http.HttpStatus.*;
 public class AuthController {
 
     private static final int DEFAULT_ONBOARDING_YEAR = 2026;
+
+    /** 온보딩 선수 목록은 페이징 없이 전체를 쓴다. LCK 로스터는 한 시즌 100명 미만이라 상한 200이면 충분하다. */
+    private static final org.springframework.data.domain.PageRequest ONBOARDING_PLAYER_PAGE =
+            org.springframework.data.domain.PageRequest.of(0, 200);
 
     private static final List<OnboardingLeagueOptionResponse> ONBOARDING_LEAGUES = List.of(
             new OnboardingLeagueOptionResponse(
@@ -109,6 +115,7 @@ public class AuthController {
     private final MobileTeamNotificationService mobileTeamNotificationService;
     private final ProfileService profileService;
     private final CloudinarySignatureService cloudinarySignatureService;
+    private final TransactionTemplate transactionTemplate;
 
     @Operation(
             summary = "모바일 카카오 로그인",
@@ -226,8 +233,11 @@ public class AuthController {
         if (teamId != null) {
             validateSelectableTeam(teamId);
         }
+        // findLckPlayerOptions 는 ROW_NUMBER 기반이라 상관 서브쿼리 없이 한 번에 스캔한다.
+        // 예전 findOnboardingPlayers(상관 MAX 서브쿼리)는 실측 팀 지정 1.1초·전체 7.2초로,
+        // 온보딩 응답 지연 → 연타 → 중복키 500 폭주의 근원이었다.
         List<OnboardingPlayerOptionResponse> players = playerRepository
-                .findOnboardingPlayers("LCK", DEFAULT_ONBOARDING_YEAR, teamId)
+                .findLckPlayerOptions("LCK", DEFAULT_ONBOARDING_YEAR, teamId, null, ONBOARDING_PLAYER_PAGE)
                 .stream()
                 .map(OnboardingPlayerOptionResponse::from)
                 .toList();
@@ -300,9 +310,23 @@ public class AuthController {
             @ApiResponse(responseCode = "404", description = "회원 또는 팀을 찾을 수 없음")
     })
     @PostMapping("/onboarding")
-    @Transactional
     public ResponseEntity<MemberResponse> onboarding(@AuthenticationPrincipal Long memberId,
                                                       @Valid @RequestBody OnboardingRequest request) {
+        try {
+            return ResponseEntity.ok(
+                    transactionTemplate.execute(status -> completeOnboarding(memberId, request)));
+        } catch (DataIntegrityViolationException e) {
+            // 온보딩 연타로 동시 요청이 겹치면 즐겨찾기 유니크 제약에 늦은 쪽이 걸린다
+            // (실측 2026-07-31 새벽 29건 — 앞선 요청이 이미 같은 내용으로 완료된 상태).
+            // 이미 완료된 것은 실패가 아니므로 현재 상태를 그대로 돌려준다.
+            return ResponseEntity.ok(
+                    transactionTemplate.execute(status -> memberRepository.findById(memberId)
+                            .map(MemberResponse::from)
+                            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"))));
+        }
+    }
+
+    private MemberResponse completeOnboarding(Long memberId, OnboardingRequest request) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"));
         String favoriteLeague = normalizeOnboardingLeague(request.favoriteLeagueName());
@@ -315,7 +339,7 @@ public class AuthController {
 
         member.completeOnboarding(favoriteLeague, team, favoritePlayers);
         mobileTeamNotificationService.ensureDefaultSubscription(member, team);
-        return ResponseEntity.ok(MemberResponse.from(member));
+        return MemberResponse.from(member);
     }
 
     @Operation(
@@ -338,12 +362,12 @@ public class AuthController {
     @Operation(
             summary = "회원 탈퇴",
             description = "현재 로그인한 사용자의 계정과 모든 관련 데이터(소셜 연동, 기기, 구독, 알림, 평점)를 삭제합니다. "
-                    + "소셜 연동만 앱에서 지우고 나머지는 DB FK ON DELETE CASCADE로 함께 삭제된다."
+                    + "소셜 연동만 앱에서 지우고 나머지는 DB FK ON DELETE CASCADE로 함께 삭제된다. "
+                    + "멱등하다 — 이미 탈퇴한 계정으로 다시 호출해도 204다."
     )
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "회원 탈퇴 성공"),
-            @ApiResponse(responseCode = "404", description = "회원을 찾을 수 없음")
+            @ApiResponse(responseCode = "204", description = "회원 탈퇴 성공(이미 탈퇴한 경우 포함)")
     })
     @DeleteMapping("/me")
     @Transactional
@@ -351,10 +375,11 @@ public class AuthController {
         if (memberId == null) {
             throw new ResponseStatusException(UNAUTHORIZED, "로그인이 필요합니다.");
         }
-        Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"));
-        memberSocialRepository.deleteByMemberId(memberId);
-        memberRepository.delete(member);
+        // 벌크 삭제 + 멱등 처리. 예전엔 조회 후 엔티티 삭제라, 응답이 늦어 사용자가 버튼을 연타하면
+        // 동시 요청이 이미 지워진 행을 지우다 500(stale state)이 나고 이후 재시도는 404가 됐다.
+        // 삭제 대상이 없으면 이미 탈퇴한 것이므로 204 로 응답한다.
+        memberSocialRepository.deleteAllByMemberId(memberId);
+        memberRepository.deleteByMemberId(memberId);
         return ResponseEntity.noContent().build();
     }
 
@@ -427,9 +452,9 @@ public class AuthController {
         }
 
         Set<Long> selectablePlayerIds = playerRepository
-                .findOnboardingPlayers("LCK", DEFAULT_ONBOARDING_YEAR, teamId)
+                .findLckPlayerOptions("LCK", DEFAULT_ONBOARDING_YEAR, teamId, null, ONBOARDING_PLAYER_PAGE)
                 .stream()
-                .map(Player::getId)
+                .map(PlayerRepository.LckPlayerOption::getPlayerId)
                 .collect(Collectors.toSet());
         boolean hasUnavailablePlayer = requestedIds.stream()
                 .anyMatch(playerId -> !selectablePlayerIds.contains(playerId));

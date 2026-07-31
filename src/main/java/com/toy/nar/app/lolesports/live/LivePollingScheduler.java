@@ -48,6 +48,8 @@ public class LivePollingScheduler {
 	private final CacheEvictionService cacheEvictionService;
 	private final NotificationService notificationService;
 	private final com.toy.nar.app.mobile.push.TeamLiveEventPushService teamLiveEventPushService;
+	private final LiveFrameStallTracker frameStallTracker;
+	private final com.toy.nar.app.lolesports.repository.LeagueMatchRepository leagueMatchRepository;
 	@org.springframework.beans.factory.annotation.Qualifier("applicationTaskExecutor")
 	private final java.util.concurrent.Executor applicationTaskExecutor;
 
@@ -125,13 +127,31 @@ public class LivePollingScheduler {
 					// 진행 중 게임을 찾는다. 피드가 라이브면 state 를 inProgress 로 올린다.
 					// 매 사이클 재판정해야 한다 — 이미 추적 중(activeMatchIds)이어도 여기서 다시 올리지 않으면
 					// 아래 syncRealtimeMatchStatus 가 Riot 원본 unstarted 로 DB 를 되돌린다.
+					// 업스트림이 진행 중 게임을 못 알려주는 경우를 피드 실측으로 우회한다. 두 가지가 있다:
+					//  (1) state 를 unstarted 로 방치 (EWC 등)
+					//  (2) state 는 넘어갔는데 liveGameIds 가 비어서 도착 — 실측 15~16분 지연
+					//      (2026-07-27 KESPA T1 vs DNS, 2026-07-28 KESPA DNS vs BRO 3세트)
+					// (2)는 예전에 unstarted 게이트에 걸려 우회로를 못 탔고, 그 사이 세트 하나가
+					// 통째로 추적되지 않았다. 그래서 게이트를 "업스트림이 라이브 게임을 모를 때"로 넓힌다.
+					// completed 는 디스커버리 대상이 아니므로 제외해 불필요한 외부 호출을 막는다.
 					List<String> feedLiveGameIds = List.of();
-					if ("unstarted".equalsIgnoreCase(match.getState())) {
+					boolean upstreamKnowsLiveGames =
+							match.getLiveGameIds() != null && !match.getLiveGameIds().isEmpty();
+					// liveGameIds 가 차 있어도 그 게임의 프레임이 얼어 있으면(다음 세트로 못 넘어간
+					// 낡은 값 — 2026-07-30 HLE vs DK: 세트3 피드가 살아난 뒤에도 업스트림이 세트2 를
+					// 계속 가리킴) 매치의 전체 gameId 를 직접 찔러 다음 세트를 찾는다.
+					boolean trackedGameStalled = hasStalledTrackedGame(activeGames, match.getMatchId());
+					if ((!upstreamKnowsLiveGames || trackedGameStalled)
+							&& !"completed".equalsIgnoreCase(match.getState())) {
+						if (trackedGameStalled && upstreamKnowsLiveGames) {
+							log.info("[live-discovery] 추적 중 게임 프레임 정지 — 피드 직접 프로브 matchId={}",
+									match.getMatchId());
+						}
 						FeedProbe probe = probeFeed(match);
 						feedLiveGameIds = probe.liveGameIds();
 						if (!feedLiveGameIds.isEmpty()) {
 							match.setState("inProgress");
-						} else if (probe.sawFinished()) {
+						} else if ("unstarted".equalsIgnoreCase(match.getState()) && probe.sawFinished()) {
 							// 세트 사이/경기 종료 직후: 피드는 finished 잔상인데 업스트림 state 는 여전히 unstarted.
 							// 업스트림 원본(unstarted)으로 sync 하면 DB 의 inProgress 가 되돌아가므로 쓸 수 없다.
 							// 대신 네이버가 매치 종료(RESULT)를 확인해주면 completed 를 직접 확정한다 —
@@ -172,6 +192,12 @@ public class LivePollingScheduler {
 						}
 						discoveredGameIds.add(gameId);
 						ActiveLiveGame current = activeGames.get(gameId);
+						if (current == null) {
+							// 조사 때마다 디스커버리가 뭘 봤는지 로그가 없어 피드를 수동 조회해야 했다.
+							// 신규 편입은 세트당 1회라 스팸이 아니다.
+							log.info("[live-discovery] 신규 추적 gameId={} matchId={} state={} feedProbe={}",
+									gameId, match.getMatchId(), match.getState(), !feedLiveGameIds.isEmpty());
+						}
 						String resolvedLeagueName = (match.getLeagueName() == null || match.getLeagueName().isBlank())
 								? league
 								: match.getLeagueName();
@@ -236,6 +262,7 @@ public class LivePollingScheduler {
 		toRemove.forEach(gameId -> {
 			liveStateStore.removeGame(gameId);
 			liveObjectEventRecorder.evict(gameId);
+			frameStallTracker.evict(gameId);
 			setEndNotifiedGameIds.remove(gameId);
 			frameFinishedGameIds.remove(gameId);
 			startNotifiedGameIds.remove(gameId);
@@ -259,7 +286,8 @@ public class LivePollingScheduler {
 	 * 창 밖이거나 게임 id 가 없거나 피드가 비면 EMPTY — 기존 inProgress 경로에는 영향 없다.
 	 */
 	private FeedProbe probeFeed(MatchResultDto match) {
-		if (!"unstarted".equalsIgnoreCase(match.getState()) || !withinFeedProbeWindow(match.getMatchDate())) {
+		// state 조건은 호출부가 판단한다(unstarted 방치 + liveGameIds 지연 둘 다 대상).
+		if (!withinFeedProbeWindow(match.getMatchDate())) {
 			return FeedProbe.EMPTY;
 		}
 		List<String> gameIds = match.getGameIds();
@@ -315,34 +343,42 @@ public class LivePollingScheduler {
 	/**
 	 * 세트 시작 알림(디스코드 + SET_START 푸시). 첫 프레임 관측 시 1회.
 	 * 알림 실패가 폴링 실패로 집계되지 않게 여기서 삼킨다.
+	 *
+	 * <p>SET_END 와 마찬가지로 폴링 스레드가 아니라 executor 에서 보낸다. 디스코드 웹훅과 FCM 발송은
+	 * 외부 호출이고 DB 락 대기에도 걸린다 — 실측 2026-07-29 T1 vs KT 에서 이 발송이 락 대기 50초
+	 * (innodb_lock_wait_timeout)에 걸려 폴링 스레드를 세웠다. 폴링이 멈춘 사이 computeStartingTime 이
+	 * 라이브 엣지로 점프해(MAX_LAG_SECONDS) 그 구간 프레임을 영구히 건너뛰었고, 재개 시 19분 점프로
+	 * 관측 공백 가드에 걸려 그 구간 이벤트 알림이 전부 누락됐다.</p>
 	 */
 	private void fireSetStartNotification(ActiveLiveGame activeGame) {
 		log.info("[live-notify] set-start(frame) league={} {} vs {} gameId={} matchId={} set={}",
 				activeGame.leagueName(), activeGame.blueTeamName(), activeGame.redTeamName(),
 				activeGame.gameId(), activeGame.matchId(), activeGame.setNumber());
-		try {
-			if (liveNotificationEnabled) {
-				notificationService.sendLiveMatchNotification(
-						activeGame.leagueName(),
-						activeGame.blueTeamName(),
-						activeGame.redTeamName(),
-						activeGame.gameId(),
-						activeGame.matchId());
+		applicationTaskExecutor.execute(() -> {
+			try {
+				if (liveNotificationEnabled) {
+					notificationService.sendLiveMatchNotification(
+							activeGame.leagueName(),
+							activeGame.blueTeamName(),
+							activeGame.redTeamName(),
+							activeGame.gameId(),
+							activeGame.matchId());
+				}
+				if (teamLiveEventPushService.isEnabled()) {
+					teamLiveEventPushService.notifyMatchEvent(
+							com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_START,
+							activeGame.matchId(),
+							activeGame.setNumber() != null ? activeGame.setNumber() : 0,
+							activeGame.blueEsportsTeamId(),
+							activeGame.redEsportsTeamId(),
+							activeGame.blueTeamName(),
+							activeGame.redTeamName());
+				}
+			} catch (Exception e) {
+				log.warn("[live-notify] set-start failed gameId={} matchId={}: {}",
+						activeGame.gameId(), activeGame.matchId(), e.getMessage());
 			}
-			if (teamLiveEventPushService.isEnabled()) {
-				teamLiveEventPushService.notifyMatchEvent(
-						com.toy.nar.app.mobile.push.TeamLiveEventPushService.TYPE_SET_START,
-						activeGame.matchId(),
-						activeGame.setNumber() != null ? activeGame.setNumber() : 0,
-						activeGame.blueEsportsTeamId(),
-						activeGame.redEsportsTeamId(),
-						activeGame.blueTeamName(),
-						activeGame.redTeamName());
-			}
-		} catch (Exception e) {
-			log.warn("[live-notify] set-start failed gameId={} matchId={}: {}",
-					activeGame.gameId(), activeGame.matchId(), e.getMessage());
-		}
+		});
 	}
 
 	/** window 응답의 마지막 프레임이 gameState=finished 인지. 프레임이 없으면 false. */
@@ -388,6 +424,42 @@ public class LivePollingScheduler {
 		});
 	}
 
+	/**
+	 * 매치 스코어 합이 세트 번호에 도달했으면 그 세트는 실제로 끝난 것이다.
+	 * 스코어는 네이버 종료 확정 sync 로만 올라가므로 퍼즈 중에는 절대 도달하지 않는다.
+	 */
+	private boolean scoreConfirmsSetEnd(ActiveLiveGame activeGame) {
+		Integer setNumber = activeGame.setNumber();
+		if (setNumber == null || setNumber <= 0 || activeGame.matchId() == null) {
+			return false;
+		}
+		try {
+			return leagueMatchRepository.findById(activeGame.matchId())
+					.map(match -> {
+						int blue = match.getBlueScore() == null ? 0 : match.getBlueScore();
+						int red = match.getRedScore() == null ? 0 : match.getRedScore();
+						return blue + red >= setNumber;
+					})
+					.orElse(false);
+		} catch (Exception e) {
+			log.warn("Set-end score check failed matchId={}: {}", activeGame.matchId(), e.getMessage());
+			return false;
+		}
+	}
+
+	/** 이 매치의 추적 중 게임 가운데 프레임이 정지한 것이 있는지. */
+	private boolean hasStalledTrackedGame(Map<String, ActiveLiveGame> activeGames, String matchId) {
+		if (matchId == null || matchId.isBlank()) {
+			return false;
+		}
+		for (ActiveLiveGame activeGame : activeGames.values()) {
+			if (matchId.equals(activeGame.matchId()) && frameStallTracker.isStalled(activeGame.gameId())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private Set<String> activeMatchIds(Map<String, ActiveLiveGame> activeGames) {
 		Set<String> matchIds = new HashSet<>();
 		for (ActiveLiveGame activeGame : activeGames.values()) {
@@ -421,7 +493,14 @@ public class LivePollingScheduler {
 
 				// 세트 종료 1차 판정: 프레임 gameState=finished (실제 종료 후 수 초 내 반영).
 				// finished 프레임은 timestamp 가 멈춰 aggregator 의 stale 필터에 걸리므로 여기 raw 응답에서 본다.
-				if (isFrameFinished(window)) {
+				//
+				// 2차 판정: 프레임 정지 + 매치 스코어 확인. 업스트림이 finished 를 안 주고 피드를
+				// 그냥 얼려버리는 경우가 있다(2026-07-30 HLE vs DK 2세트: 29분 동결). 정지 단독으로는
+				// 절대 종료로 보지 않는다 — 퍼즈 중에도 피드가 얼 수 있고 그때 쏘면 가짜 SET_END 가
+				// 나가고 dedup 이 소진돼 진짜 종료가 무음 스킵된다. 스코어 합(네이버 sync, 세트가
+				// 실제로 끝나야만 갱신됨)이 세트 번호에 도달했을 때만 확정한다.
+				boolean frameStalled = frameStallTracker.observeAndCheckStalled(activeGame.gameId(), window);
+				if (isFrameFinished(window) || (frameStalled && scoreConfirmsSetEnd(activeGame))) {
 					// store 에 마킹해야 세트 상태(LIVE/ENDED)가 stale 3분 잔상 동안 LIVE 로 남지 않는다.
 					// 푸시 게이트(isEnabled/리그)와 무관하게 마킹한다.
 					liveStateStore.markFinished(activeGame.gameId());
@@ -429,7 +508,8 @@ public class LivePollingScheduler {
 							&& teamLiveEventPushService.isEnabled()
 							&& isNotifiableLeague(activeGame.leagueName())
 							&& setEndNotifiedGameIds.add(activeGame.gameId())) {
-						log.info("[live-notify] set-end(frame) gameId={} matchId={} set={}",
+						log.info("[live-notify] set-end({}) gameId={} matchId={} set={}",
+								isFrameFinished(window) ? "frame" : "stall+score",
 								activeGame.gameId(), activeGame.matchId(), activeGame.setNumber());
 						fireSetEndNotification(activeGame);
 					}
@@ -442,6 +522,7 @@ public class LivePollingScheduler {
 					log.warn("Removing game {} after {} consecutive polling failures", failed.gameId(), failed.consecutiveFailures());
 					liveStateStore.removeGame(failed.gameId());
 					liveObjectEventRecorder.evict(failed.gameId());
+					frameStallTracker.evict(failed.gameId());
 					continue;
 				}
 				liveStateStore.getActiveGames().put(failed.gameId(), failed);

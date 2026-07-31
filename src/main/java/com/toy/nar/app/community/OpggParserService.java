@@ -14,6 +14,9 @@ import java.util.List;
 @Service
 public class OpggParserService {
 
+	// Jsoup 기본 타임아웃은 30초 — 외부 사이트가 멈추면 스케줄러가 그만큼 매달린다.
+	private static final int CRAWL_TIMEOUT_MS = 5000;
+
 	private final ObjectMapper objectMapper;
 
 	public OpggParserService(ObjectMapper objectMapper) {
@@ -34,6 +37,7 @@ public class OpggParserService {
 			// 1. Jsoup으로 HTML 가져오기 (User-Agent 설정은 필수)
 			Document doc = Jsoup.connect(url)
 				.userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+				.timeout(CRAWL_TIMEOUT_MS)
 				.get();
 
 			// 2. __NEXT_DATA__ 스크립트 태그 찾기

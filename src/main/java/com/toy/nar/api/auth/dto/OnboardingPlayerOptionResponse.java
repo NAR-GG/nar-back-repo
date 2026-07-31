@@ -23,4 +23,14 @@ public record OnboardingPlayerOptionResponse(
                 player.getRole()
         );
     }
+
+    public static OnboardingPlayerOptionResponse from(
+            com.toy.nar.domain.participant.repository.PlayerRepository.LckPlayerOption option) {
+        return new OnboardingPlayerOptionResponse(
+                option.getPlayerId(),
+                option.getPlayerName(),
+                option.getPlayerImageUrl(),
+                option.getRole()
+        );
+    }
 }

@@ -11,6 +11,8 @@ import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.time.LocalDateTime;
 
 @Entity
@@ -75,13 +77,28 @@ public class Member {
         this.onboardedAt = LocalDateTime.now();
     }
 
+    /**
+     * 즐겨찾기 선수를 목표 집합으로 맞춘다. 이미 있는 항목은 남기고 빠진 것만 지우고 새것만 넣는다.
+     *
+     * <p>예전엔 전부 clear 한 뒤 다시 add 했다. 그러면 같은 선수를 유지하는 재온보딩에서
+     * Hibernate 가 컬렉션 삭제보다 INSERT 를 먼저 flush 해
+     * {@code Duplicate entry '<member>-<player>' for key 'uq_member_favorite_player'} 로 500 이 났다
+     * (실측 2026-07-29 23:27:55, POST /api/auth/onboarding). 유니크 제약이 있는 컬렉션에서
+     * clear-then-add 는 쓸 수 없다.</p>
+     */
     private void replaceFavoritePlayers(Collection<Player> players) {
-        this.favoritePlayers.clear();
-        if (players == null) {
-            return;
-        }
-        players.stream()
-                .distinct()
+        List<Player> desired = players == null
+                ? List.of()
+                : players.stream().filter(player -> player != null && player.getId() != null).distinct().toList();
+
+        Set<Long> desiredIds = desired.stream().map(Player::getId).collect(Collectors.toSet());
+        this.favoritePlayers.removeIf(favorite -> !desiredIds.contains(favorite.getPlayer().getId()));
+
+        Set<Long> keptIds = this.favoritePlayers.stream()
+                .map(favorite -> favorite.getPlayer().getId())
+                .collect(Collectors.toSet());
+        desired.stream()
+                .filter(player -> !keptIds.contains(player.getId()))
                 .map(player -> MemberFavoritePlayer.builder()
                         .member(this)
                         .player(player)

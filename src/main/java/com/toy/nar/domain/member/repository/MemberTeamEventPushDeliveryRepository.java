@@ -13,7 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 멱등 키는 (member_id, match_id, set_number, event_type, event_order).
  */
 public interface MemberTeamEventPushDeliveryRepository
-		extends JpaRepository<MemberTeamEventPushDelivery, Long> {
+		extends JpaRepository<MemberTeamEventPushDelivery, Long>,
+		MemberTeamEventPushDeliveryRepositoryCustom {
 
 	/*
 	 * [중복 발송 버그 수정] 기존 reserve 는 INSERT ... ON DUPLICATE KEY UPDATE + IF 패턴으로
@@ -43,7 +44,13 @@ public interface MemberTeamEventPushDeliveryRepository
 			@Param("eventType") String eventType,
 			@Param("eventOrder") long eventOrder);
 
-	/** 재예약. 실패했거나 5분 넘게 PENDING 으로 방치된 건만 되살린다. SENT 는 절대 재예약되지 않는다. */
+	/**
+	 * 재예약. 실패했거나 1분 넘게 PENDING 으로 방치된 건만 되살린다. SENT 는 절대 재예약되지 않는다.
+	 *
+	 * 방치 기준이 5분이었으나 라이브 경기 알림은 5분 늦으면 의미가 없어 1분으로 줄였다.
+	 * PENDING 은 reserve 직후 FCM 발송까지의 짧은 구간이라(스코어 재조회는 reserve 이전에 끝난다)
+	 * 1분이면 정상 발송 중인 건을 중복 발송할 위험은 없다.
+	 */
 	@Modifying
 	@Transactional
 	@Query(value = """
@@ -55,7 +62,7 @@ public interface MemberTeamEventPushDeliveryRepository
 			  AND event_type = :eventType
 			  AND event_order = :eventOrder
 			  AND (status = 'FAILED'
-					OR (status = 'PENDING' AND updated_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)))
+					OR (status = 'PENDING' AND updated_at < DATE_SUB(NOW(), INTERVAL 1 MINUTE)))
 			""", nativeQuery = true)
 	int reactivateStale(
 			@Param("memberId") Long memberId,

@@ -14,10 +14,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -130,15 +134,8 @@ public class TeamLiveEventPushService {
 			long eventOrder,
 			MobilePushMessage message) {
 		try {
-			List<MemberDevice> devices = deviceRepository.findActiveDevicesBySubscribedMatchId(matchId, eventType);
-			Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
-					.collect(Collectors.groupingBy(
-							device -> device.getMember().getId(),
-							LinkedHashMap::new,
-							Collectors.toList()));
-			for (Map.Entry<Long, List<MemberDevice>> entry : devicesByMember.entrySet()) {
-				sendToMember(entry.getKey(), entry.getValue(), eventType, matchId, setNumber, eventOrder, message);
-			}
+			fanOutBatched(deviceRepository.findActiveDevicesBySubscribedMatchId(matchId, eventType),
+					eventType, matchId, setNumber, eventOrder, message);
 		} catch (Exception e) {
 			log.warn("Failed to prepare match-subscription pushes eventType={} matchId={} setNumber={}",
 					eventType, matchId, setNumber, e);
@@ -277,51 +274,139 @@ public class TeamLiveEventPushService {
 			Long teamId,
 			MobilePushMessage message) {
 		try {
-			List<MemberDevice> devices =
-					deviceRepository.findActiveDevicesBySubscribedTeamId(teamId, eventType);
-			Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
-					.collect(Collectors.groupingBy(
-							device -> device.getMember().getId(),
-							LinkedHashMap::new,
-							Collectors.toList()));
-			for (Map.Entry<Long, List<MemberDevice>> entry : devicesByMember.entrySet()) {
-				sendToMember(entry.getKey(), entry.getValue(), eventType, matchId, setNumber, eventOrder, message);
-			}
+			fanOutBatched(deviceRepository.findActiveDevicesBySubscribedTeamId(teamId, eventType),
+					eventType, matchId, setNumber, eventOrder, message);
 		} catch (Exception e) {
 			log.warn("Failed to prepare team live event pushes eventType={} matchId={} setNumber={} teamId={}",
 					eventType, matchId, setNumber, teamId, e);
 		}
 	}
 
-	private void sendToMember(
-			Long memberId,
+	/**
+	 * 구독자 전원에게 한 번의 발송 호출로 보낸다.
+	 *
+	 * <p>예전엔 구독자마다 {@code pushGateway.send} 를 호출해 FCM 왕복이 구독자 수만큼 났다.
+	 * 실측 2026-07-29 LCK T1 vs KT 에서 구독자 약 1,500명 팬아웃이 이벤트당 8~18분 걸려
+	 * (1명당 0.3~0.7초) 마지막 구독자는 세트가 끝난 뒤에 세트 시작 알림을 받았다. 게다가 세트 시작
+	 * 팬아웃은 폴링 스레드에서 돌아 그 시간 동안 라이브 관측까지 멈췄다.</p>
+	 *
+	 * <p>게이트웨이가 500토큰씩 멀티캐스트하므로 토큰을 모아 한 번에 넘기면 왕복이 구독자 수에서
+	 * 500토큰 단위로 줄어든다(1,500명이면 3회). 발송 후 토큰별 성공 여부로 구독자를 되돌려 기록한다.</p>
+	 *
+	 * <p>dedup 예약과 발송 기록은 아직 구독자 단위 쿼리다 — 배치화는 후속 작업으로 남긴다.</p>
+	 */
+	private void fanOutBatched(
 			List<MemberDevice> devices,
 			String eventType,
 			String matchId,
 			int setNumber,
 			long eventOrder,
 			MobilePushMessage message) {
+		Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
+				.collect(Collectors.groupingBy(
+						device -> device.getMember().getId(),
+						LinkedHashMap::new,
+						Collectors.toList()));
+
+		if (devicesByMember.isEmpty()) {
+			return;
+		}
+
+		// dedup: 양 팀 구독자라도 (member, matchId, setNumber, eventType, eventOrder) 1회만 통과한다.
+		// 구독자 수만큼 왕복하지 않도록 한 번에 예약하고 발송 대상만 돌려받는다.
+		List<Long> reservedIds =
+				deliveryRepository.reserveAll(devicesByMember.keySet(), matchId, setNumber, eventType, eventOrder);
+		if (reservedIds.isEmpty()) {
+			return;
+		}
+
+		Map<Long, List<String>> tokensByMember = new LinkedHashMap<>();
+		for (Long memberId : reservedIds) {
+			List<MemberDevice> memberDevices = devicesByMember.get(memberId);
+			if (memberDevices == null) {
+				continue;
+			}
+			tokensByMember.put(memberId, memberDevices.stream().map(MemberDevice::getFcmToken).toList());
+		}
+		if (tokensByMember.isEmpty()) {
+			return;
+		}
+
+		List<String> allTokens = tokensByMember.values().stream().flatMap(List::stream).toList();
+		MobilePushResult result;
 		try {
-			// dedup: 양 팀 구독자라도 (member, matchId, setNumber, eventType, eventOrder) 1회만 통과한다.
-			if (!deliveryRepository.reserve(memberId, matchId, setNumber, eventType, eventOrder)) {
-				return;
-			}
-			List<String> tokens = devices.stream().map(MemberDevice::getFcmToken).toList();
-			MobilePushResult result = pushGateway.send(tokens, message);
-			if (!result.invalidTokens().isEmpty()) {
-				deactivateInvalidTokens(result.invalidTokens(), matchId, eventType);
-			}
-			if (result.successCount() > 0) {
-				deliveryRepository.markSent(memberId, matchId, setNumber, eventType, eventOrder);
-				recordFeed(memberId, eventType, message);
-			} else {
-				deliveryRepository.markFailed(memberId, matchId, setNumber, eventType, eventOrder,
-						"FCM 전송 성공 기기가 없습니다.");
-			}
+			result = pushGateway.send(allTokens, message);
 		} catch (Exception e) {
-			markFailed(memberId, matchId, setNumber, eventType, eventOrder, truncate(e.getMessage()));
-			log.warn("Team live event push failed memberId={} eventType={} matchId={} setNumber={} eventOrder={}",
-					memberId, eventType, matchId, setNumber, eventOrder, e);
+			// 발송 자체가 실패하면 예약한 구독자 전원을 FAILED 로 남긴다(재예약 대상이 된다).
+			markFailedAll(tokensByMember.keySet(), matchId, setNumber, eventType, eventOrder,
+					truncate(e.getMessage()));
+			log.warn("Team live event multicast failed eventType={} matchId={} setNumber={} members={} tokens={}",
+					eventType, matchId, setNumber, tokensByMember.size(), allTokens.size(), e);
+			return;
+		}
+
+		Set<String> successTokens = new HashSet<>(result.successTokens());
+		List<Long> delivered = new ArrayList<>();
+		List<Long> undelivered = new ArrayList<>();
+		tokensByMember.forEach((memberId, tokens) ->
+				(tokens.stream().anyMatch(successTokens::contains) ? delivered : undelivered).add(memberId));
+
+		markSentAll(delivered, matchId, setNumber, eventType, eventOrder);
+		markFailedAll(undelivered, matchId, setNumber, eventType, eventOrder, "FCM 전송 성공 기기가 없습니다.");
+		recordFeedAll(delivered, eventType, message);
+
+		if (!result.invalidTokens().isEmpty()) {
+			deactivateInvalidTokens(result.invalidTokens(), matchId, eventType);
+		}
+	}
+
+	/** 마감 기록 실패가 발송 흐름을 깨면 안 되므로 흡수한다(푸시는 이미 나갔다). */
+	private void markSentAll(
+			List<Long> memberIds, String matchId, int setNumber, String eventType, long eventOrder) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			deliveryRepository.markSentAll(memberIds, matchId, setNumber, eventType, eventOrder);
+		} catch (Exception e) {
+			log.warn("Failed to mark team live event pushes sent eventType={} matchId={} setNumber={} members={}",
+					eventType, matchId, setNumber, memberIds.size(), e);
+		}
+	}
+
+	private void markFailedAll(
+			Collection<Long> memberIds,
+			String matchId,
+			int setNumber,
+			String eventType,
+			long eventOrder,
+			String errorMessage) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			deliveryRepository.markFailedAll(memberIds, matchId, setNumber, eventType, eventOrder, errorMessage);
+		} catch (Exception e) {
+			log.warn("Failed to mark team live event pushes failed eventType={} matchId={} setNumber={} members={}",
+					eventType, matchId, setNumber, memberIds.size(), e);
+		}
+	}
+
+	/** 마이구독 알림 피드에 한 번에 기록한다. 피드 실패가 푸시 흐름을 깨면 안 되므로 흡수한다. */
+	private void recordFeedAll(List<Long> memberIds, String eventType, MobilePushMessage message) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			notificationService.recordAll(
+					memberIds,
+					MemberNotificationType.valueOf(eventType),
+					message.title(),
+					message.body(),
+					message.data());
+		} catch (Exception e) {
+			log.warn("Failed to record team event notification feed eventType={} members={}",
+					eventType, memberIds.size(), e);
 		}
 	}
 

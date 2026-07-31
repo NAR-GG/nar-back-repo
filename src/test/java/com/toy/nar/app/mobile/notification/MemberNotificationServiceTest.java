@@ -6,6 +6,7 @@ import com.toy.nar.domain.member.entity.MemberNotification;
 import com.toy.nar.domain.member.entity.MemberNotificationType;
 import com.toy.nar.domain.member.repository.MemberNotificationRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -23,6 +24,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -36,6 +39,12 @@ class MemberNotificationServiceTest {
 
 	@Mock
 	private MemberRepository memberRepository;
+
+	@BeforeEach
+	void memberExists() {
+		// requireLogin 이 탈퇴 회원을 401 로 걸러내므로 정상 회원 전제를 깔아둔다.
+		lenient().when(memberRepository.existsById(anyLong())).thenReturn(true);
+	}
 
 	private MemberNotificationService service() {
 		return new MemberNotificationService(notificationRepository, memberRepository);

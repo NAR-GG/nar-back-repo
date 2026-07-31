@@ -13,6 +13,9 @@ import java.util.List;
 @Service
 public class InvenParserService {
 
+	// Jsoup 기본 타임아웃은 30초 — 외부 사이트가 멈추면 스케줄러가 그만큼 매달린다.
+	private static final int CRAWL_TIMEOUT_MS = 5000;
+
 	public List<InvenPostDto> parseInvenPosts(String sortType) {
 		List<InvenPostDto> postList = new ArrayList<>();
 		// 롤 인벤 e스포츠 게시판
@@ -27,6 +30,7 @@ public class InvenParserService {
 			Document doc = Jsoup.connect(url)
 				.userAgent(
 					"Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1")
+				.timeout(CRAWL_TIMEOUT_MS)
 				.get();
 
 			// 게시글 리스트 아이템 추출

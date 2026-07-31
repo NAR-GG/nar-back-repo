@@ -1,6 +1,35 @@
+server:
+  # 무중단 배포에서 구 컨테이너는 nginx 전환 후 docker stop -t 35 로 내려간다.
+  # 그 35초 안에 진행 중인 요청과 라이브 이벤트 저장·FCM 발송을 끝내고 죽어야 알림이 유실되지 않는다.
+  shutdown: graceful
+
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  # docker stop 의 35초보다 짧게 잡아, 강제 SIGKILL 전에 정상 종료가 끝나도록 한다.
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  task:
+    execution:
+      shutdown:
+        # SET_END 푸시처럼 executor 에서 도는 알림 작업을 기다린다(스코어 재조회로 수십 초 걸릴 수 있음).
+        await-termination: true
+        await-termination-period: 25s
+
+  datasource:
+    hikari:
+      # 행 락 대기 상한을 커넥션마다 5초로 낮춘다(MySQL 기본 50초).
+      #
+      # 50초 대기는 사용자 입장에서 실패와 같은데 스레드와 커넥션만 붙잡는다. 실측
+      # 2026-07-29 T1 vs KT 에서 세트 종료 푸시가 구독자마다 정확히 50초씩 락 대기 후
+      # 타임아웃돼(fan-out 이 순차라) 알림 하나가 6분 넘게 밀렸고, 세트 시작 푸시는 폴링
+      # 스레드를 17분간 세워 그 구간 라이브 이벤트가 통째로 누락됐다.
+      #
+      # 세션 변수라 DB 관리자 권한도 재시작도 필요 없고, 글로벌 값(50초)은 그대로 남아
+      # 백업·수동 작업 등 앱 밖 세션에는 영향이 없다.
+      connection-init-sql: "SET SESSION innodb_lock_wait_timeout = ${DB_LOCK_WAIT_TIMEOUT_SECONDS:5}"
 
   jpa:
     properties:

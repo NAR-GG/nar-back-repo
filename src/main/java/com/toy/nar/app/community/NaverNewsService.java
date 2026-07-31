@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -24,15 +24,20 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class NaverNewsService {
 
+	private static final int CRAWL_TIMEOUT_MS = 5000;
+
 	private final ObjectMapper objectMapper;
 	private final NewsPostRepository newsPostRepository;
+	private final TransactionTemplate transactionTemplate;
 
-	@Transactional
+	/** 네이버 API 호출은 트랜잭션 밖, DB 쓰기 루프만 트랜잭션 안. */
 	public void syncNaverNews(String sortType) {
 		List<NaverNewsDto> newsList = parseNaverNews(sortType);
-		for (NaverNewsDto dto : newsList) {
-			saveOrUpdate(dto);
-		}
+		transactionTemplate.executeWithoutResult(status -> {
+			for (NaverNewsDto dto : newsList) {
+				saveOrUpdate(dto);
+			}
+		});
 		log.info("Synced {} Naver news ({})", newsList.size(), sortType);
 	}
 
@@ -47,6 +52,8 @@ public class NaverNewsService {
 			String jsonResponse = Jsoup.connect(url)
 				.ignoreContentType(true)
 				.userAgent("Mozilla/5.0")
+				// Jsoup 기본 타임아웃은 30초 — 외부 사이트가 멈추면 스케줄러가 그만큼 매달린다.
+				.timeout(CRAWL_TIMEOUT_MS)
 				.execute()
 				.body();
 
