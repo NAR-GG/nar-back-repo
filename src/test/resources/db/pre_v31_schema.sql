@@ -23,10 +23,14 @@ CREATE TABLE games (
     actual_game_start_time DATETIME
 );
 
+-- state/blue_score/red_score: 프로드에는 V6(베이스라인 이전)부터 존재. V58 set_winners 완봉 백필이 참조한다.
 CREATE TABLE league_match (
     id VARCHAR(50) PRIMARY KEY,
     league_name VARCHAR(20) NOT NULL,
-    match_date DATETIME
+    match_date DATETIME,
+    state VARCHAR(50),
+    blue_score INT DEFAULT 0,
+    red_score INT DEFAULT 0
 );
 
 CREATE INDEX idx_league_match_name_date ON league_match (league_name, match_date DESC);
