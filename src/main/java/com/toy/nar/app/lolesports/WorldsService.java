@@ -50,6 +50,7 @@ public class WorldsService {
 		JsonNode dataNode = scheduleRoot.path("data").path("schedule");
 		JsonNode eventsNode = dataNode.path("events");
 		String nextToken = dataNode.path("pages").path("older").asText(null);
+		String newerToken = dataNode.path("pages").path("newer").asText(null);
 
 		List<JsonNode> targetEvents = new ArrayList<>();
 		if (eventsNode.isArray()) {
@@ -84,6 +85,7 @@ public class WorldsService {
 		return MatchResponseWrapper.builder()
 				.matches(matchResults)
 				.nextPageToken(nextToken)
+				.newerPageToken(newerToken)
 				.build();
 	}
 
@@ -206,6 +208,7 @@ public class WorldsService {
 					.matchDate(matchDate)
 					.state(finalState)
 					.score(winsA + " : " + winsB)
+					.bestOf(parseBestOf(match))
 					.blueTeam(MatchResultDto.TeamInfo.builder()
 							.externalTeamId(teamA.path("id").asText(null))
 							.code(teamA.path("code").asText())
@@ -698,6 +701,15 @@ public class WorldsService {
 			log.error("API Call Failed: {}", path, e);
 			return null;
 		}
+	}
+
+	/**
+	 * 다전제 규격(match.strategy.count). 대진이 TBD 인 미래 경기도 값이 확정돼서 온다(실측).
+	 * 없거나 0 이면 null — 리그명으로 대체 추정하지 않는다(KeSPA Cup 은 한 리그에 Bo1·Bo3·Bo5 가 섞인다).
+	 */
+	static Integer parseBestOf(JsonNode match) {
+		int count = match.path("strategy").path("count").asInt(0);
+		return count > 0 ? count : null;
 	}
 
 	private List<String> extractTrackedGameIds(JsonNode games) {

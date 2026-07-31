@@ -48,7 +48,8 @@ class MobileMatchControllerTest {
 						"https://chzzk.naver.com/abc",
 						List.of(new MobileScheduleListResponse.MobileStreamLink(
 								"chzzk", "치지직", "LCK 공식 채널 · 한국어", "https://chzzk.naver.com/abc")),
-						List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", null, "LIVE", null))));
+						3,
+						List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", null, "LIVE", null, null))));
 
 		mockMvc.perform(get("/api/mobile/matches/match-1"))
 				.andExpect(status().isOk())
@@ -76,7 +77,8 @@ class MobileMatchControllerTest {
 								new MobileScheduleListResponse.MobileTeamResult("Gen.G", "GEN", "https://example.com/gen.png", 1),
 								null,
 								List.of(),
-								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED", null)))),
+								3,
+								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED", null, "GEN")))),
 						"cursor-token",
 						true));
 
@@ -98,8 +100,8 @@ class MobileMatchControllerTest {
 				.thenReturn(new MobileMatchGamesResponse(
 						"match-1",
 						List.of(
-								new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED", "https://youtu.be/vod-1"),
-								new MobileScheduleListResponse.MobileGameSummary(2, "game-2", null, null, null))));
+								new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED", "https://youtu.be/vod-1", "T1"),
+								new MobileScheduleListResponse.MobileGameSummary(2, "game-2", null, null, null, null))));
 
 		mockMvc.perform(get("/api/mobile/matches/match-1/games"))
 				.andExpect(status().isOk())
