@@ -23,7 +23,8 @@ CREATE TABLE games (
     actual_game_start_time DATETIME
 );
 
--- state/blue_score/red_score: 프로드에는 V6(베이스라인 이전)부터 존재. V58 set_winners 완봉 백필이 참조한다.
+-- state/blue_score/red_score: 프로드에는 V6(베이스라인 이전)부터 존재.
+-- V57 best_of 역산 백필과 V58 set_winners 완봉 백필이 참조한다.
 CREATE TABLE league_match (
     id VARCHAR(50) PRIMARY KEY,
     league_name VARCHAR(20) NOT NULL,

@@ -5,5 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RiotSummonerResponse(
 		String id,
-		String puuid) {
+		String puuid,
+		Integer summonerLevel,
+		Long revisionDate) {
 }

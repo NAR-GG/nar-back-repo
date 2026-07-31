@@ -40,6 +40,8 @@ import java.util.stream.Collectors;
 public class LeagueMatchService {
 
 	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
+	/** 미래(newer) 페이지 추적 상한. 실측상 리그당 1홉이면 끝나지만 시즌 편성이 길어질 때를 대비한 안전장치다. */
+	private static final int MAX_NEWER_PAGE_HOPS = 5;
 	private static final Map<String, String> TEAM_ALIAS_TARGETS_BY_EXTERNAL_ID = Map.of(
 			"107700204561086446", "Deep Cross Gaming",
 			"99566406332987990", "Chiefs Esports Club",
@@ -272,6 +274,45 @@ public class LeagueMatchService {
 		log.info("Synced {} matches for league: {} (inserted={}, updated={}, skipped={})",
 				matches.size(), leagueSlug, upsertResult.insertedMatches(), upsertResult.updatedMatches(),
 				upsertResult.skippedMatches());
+
+		syncNewerPages(leagueSlug, response.getNewerPageToken());
+	}
+
+	/**
+	 * 기본 페이지 창 밖의 미래 경기를 따라간다.
+	 *
+	 * <p>기본 페이지는 과거~가까운 미래까지만 담는다. getSchedule 은 커서 페이지네이션이고 기존 sync 는 {@code pages.older} 만 따라갔다.
+	 * 그래서 창 밖 미래 일정(LCK 플레이오프·결승, LPL 정규 잔여+플레이오프 등)이 DB 에 아예 없었다.
+	 * 여기서는 upsert 만 한다 — 아직 시작도 안 한 경기에는 매핑할 게임이 없어
+	 * autoBackfill 을 태우면 매 sync 마다 헛된 getEventDetails 호출만 쌓인다.</p>
+	 */
+	private void syncNewerPages(String leagueSlug, String startToken) {
+		String token = startToken;
+		Set<String> visitedTokens = new java.util.LinkedHashSet<>();
+		int hops = 0;
+
+		while (token != null && !token.isBlank() && hops < MAX_NEWER_PAGE_HOPS && visitedTokens.add(token)) {
+			hops++;
+			try {
+				MatchResponseWrapper page = worldsService.getWorldsMatches(token, leagueSlug);
+				List<MatchResultDto> matches = page.getMatches();
+				if (matches == null || matches.isEmpty()) {
+					break;
+				}
+				MatchSyncUpsertResult result = upsertLeagueMatches(leagueSlug, matches);
+				log.info("Synced newer page {} for league: {} ({} matches, inserted={}, updated={}, skipped={})",
+						hops, leagueSlug, matches.size(), result.insertedMatches(), result.updatedMatches(),
+						result.skippedMatches());
+				token = page.getNewerPageToken();
+			} catch (Exception e) {
+				log.warn("Failed to sync newer page {} for league={}: {}", hops, leagueSlug, e.getMessage());
+				return;
+			}
+		}
+		if (hops >= MAX_NEWER_PAGE_HOPS) {
+			log.warn("Newer page hop limit reached for league={} (limit={}) — 남은 미래 페이지는 다음 sync 에서 따라간다.",
+					leagueSlug, MAX_NEWER_PAGE_HOPS);
+		}
 	}
 
 	public RecentMatchBackfillResult backfillRecentMatches(String leagueSlug, boolean includeTeamMetadataSync) {
@@ -878,12 +919,18 @@ public class LeagueMatchService {
 				}
 
 				if (!hasRealtimeRelevantChange(existing, incoming)) {
-					// 시즌만 비어 있으면 채운다 (dirtyMatchIds에는 넣지 않아 게임 ID 재동기화는 트리거하지 않음)
+					// 시즌·bestOf 만 비어 있으면 채운다 (dirtyMatchIds에는 넣지 않아 게임 ID 재동기화는 트리거하지 않음)
+					boolean filled = false;
 					if (existing.getSeasonYear() == null) {
 						applySeasonIfResolvable(existing);
-						if (existing.getSeasonYear() != null) {
-							dirtyMatches.add(existing);
-						}
+						filled = existing.getSeasonYear() != null;
+					}
+					if (existing.getBestOf() == null && incoming.getBestOf() != null) {
+						existing.applyBestOf(incoming.getBestOf());
+						filled = true;
+					}
+					if (filled) {
+						dirtyMatches.add(existing);
 					}
 					skipped++;
 					continue;
@@ -910,6 +957,7 @@ public class LeagueMatchService {
 				existing.applySetWinners(advanceSetWinners(
 						existing.getSetWinners(), incoming.getBlueScore(), incoming.getRedScore(),
 						isCompleted(incoming)));
+				existing.applyBestOf(incoming.getBestOf());
 				applySeasonIfResolvable(existing);
 				dirtyMatches.add(existing);
 				dirtyMatchIds.add(existing.getId());
@@ -1172,6 +1220,7 @@ public class LeagueMatchService {
 				.redTeamCode(dto.getRedTeam().getCode()).redTeamName(dto.getRedTeam().getName())
 				.redExternalTeamId(dto.getRedTeam().getExternalTeamId())
 				.redTeamImageUrl(dto.getRedTeam().getImageUrl()).redScore(dto.getRedTeam().getWins()).hasVod(hasVod)
+				.bestOf(dto.getBestOf())
 				.matchDetailsJson(jsonDetails).lastUpdated(LocalDateTime.now()).build();
 	}
 
@@ -1203,6 +1252,7 @@ public class LeagueMatchService {
 																								// string
 				.state(entity.getState()) // [수정] Entity 상태 DTO로 전달
 				.score(entity.getBlueScore() + " : " + entity.getRedScore())
+				.bestOf(entity.getBestOf())
 				.blueTeam(
 						MatchResultDto.TeamInfo.builder()
 								.externalTeamId(entity.getBlueExternalTeamId())

@@ -6,7 +6,9 @@ import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.lolesports.repository.LeagueConfig;
 import com.toy.nar.app.member.service.MemberDeleteService;
 import com.toy.nar.app.participant.service.PlayerAdminService;
+import com.toy.nar.app.riot.RiotAccountVerifyService;
 import com.toy.nar.app.riot.RiotApiException;
+import com.toy.nar.app.riot.dto.RiotAccountVerification;
 import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.domain.member.repository.MemberFavoritePlayerRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -61,6 +63,7 @@ public class BackofficeController {
     private final LeagueRepository leagueRepository;
     private final LeagueConfigService leagueConfigService;
     private final PlayerAdminService playerAdminService;
+    private final RiotAccountVerifyService riotAccountVerifyService;
     private final MemberDeleteService memberDeleteService;
     private final LivePlayerRatingRepository livePlayerRatingRepository;
     private final LeagueMatchRepository leagueMatchRepository;
@@ -205,6 +208,13 @@ public class BackofficeController {
         return PlayerRow.from(playerAdminService.update(
                 id, request.imageUrl(), request.unlockImage(), request.currentTeamId(),
                 request.unlockGameAccounts(), request.gameAccounts()));
+    }
+
+    // 계정 넣기 전 검증(저장 없음). 팀원이 riotId·지역을 확정하기 전에 실제 계정·레벨·티어를 확인한다.
+    @GetMapping("/riot-accounts/verify")
+    public RiotAccountVerification verifyRiotAccount(@RequestParam String riotId,
+                                                     @RequestParam(required = false) String region) {
+        return riotAccountVerifyService.verify(riotId, region);
     }
 
     // 솔랭 전용 선수 등록(은퇴/비현역). LCK 출전 이력 없이 이름+riotId로 생성.

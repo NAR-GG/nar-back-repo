@@ -50,6 +50,8 @@ public class LeagueMatch {
 	 */
 	@Column(length = 32)
 	private String setWinners;
+	/** 다전제 규격(1/3/5). 업스트림 match.strategy.count. 과거 데이터는 완료 스코어로 역산됐다. */
+	private Integer bestOf;
 
 	@Column(columnDefinition = "TEXT")
 	private String matchDetailsJson;
@@ -86,6 +88,13 @@ public class LeagueMatch {
 
 	public void applySetWinners(String setWinners) {
 		this.setWinners = setWinners;
+	}
+
+	/** 업스트림이 준 다전제 규격을 반영한다. null 이면(업스트림 공백) 기존 값을 유지한다. */
+	public void applyBestOf(Integer bestOf) {
+		if (bestOf != null) {
+			this.bestOf = bestOf;
+		}
 	}
 
 	public void applySeason(Integer seasonYear, String seasonSplit) {

@@ -2,6 +2,7 @@ package com.toy.nar.app.riot;
 
 import com.toy.nar.app.riot.dto.RiotAccountResolveResponse;
 import com.toy.nar.app.riot.dto.RiotCurrentGameResponse;
+import com.toy.nar.app.riot.dto.RiotLeagueEntryResponse;
 import com.toy.nar.app.riot.dto.RiotMatchResponse;
 import com.toy.nar.app.riot.dto.RiotSummonerResponse;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class RiotApiClient {
 
+	private static final String RANKED_SOLO_QUEUE_TYPE = "RANKED_SOLO_5x5";
+
 	private final WebClient webClient;
 	private final RiotApiProperties riotApiProperties;
 
@@ -39,12 +42,29 @@ public class RiotApiClient {
 		return getRequired(uri, RiotAccountResolveResponse.class, "Riot account resolve failed");
 	}
 
-	public RiotSummonerResponse getSummonerByPuuid(String puuid) {
+	/**
+	 * 플랫폼별 소환사 조회. 해당 플랫폼에 계정이 없으면 404 → empty.
+	 * PUUID 해석(account-v1)은 글로벌이라 지역 무관이지만 소환사 정보는 플랫폼 호스트로 물어야 한다.
+	 */
+	public Optional<RiotSummonerResponse> findSummonerByPuuid(String puuid, String platform) {
 		ensureConfigured();
-		URI uri = URI.create(riotApiProperties.getKrBaseUrl()
+		URI uri = URI.create(RiotPlatform.apiHost(platform)
 				+ "/lol/summoner/v4/summoners/by-puuid/"
 				+ encodePathSegment(puuid));
-		return getRequired(uri, RiotSummonerResponse.class, "Riot summoner resolve failed");
+		return getOptional(uri, RiotSummonerResponse.class, "Riot summoner resolve failed");
+	}
+
+	/** 솔로 랭크(RANKED_SOLO_5x5) 랭크 정보. 언랭이거나 해당 플랫폼에 기록이 없으면 empty. */
+	public Optional<RiotLeagueEntryResponse> findSoloRankEntry(String puuid, String platform) {
+		ensureConfigured();
+		URI uri = URI.create(RiotPlatform.apiHost(platform)
+				+ "/lol/league/v4/entries/by-puuid/"
+				+ encodePathSegment(puuid));
+		return getOptional(uri, RiotLeagueEntryResponse[].class, "Riot league entries fetch failed")
+				.stream()
+				.flatMap(Arrays::stream)
+				.filter(entry -> RANKED_SOLO_QUEUE_TYPE.equals(entry.queueType()))
+				.findFirst();
 	}
 
 	public List<String> getRecentMatchIdsByPuuid(String puuid, int count) {

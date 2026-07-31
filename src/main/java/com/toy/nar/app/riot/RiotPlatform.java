@@ -1,5 +1,7 @@
 package com.toy.nar.app.riot;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
@@ -97,5 +99,14 @@ public final class RiotPlatform {
 	public static String regionalHost(String platform) {
 		String regional = PLATFORM_TO_REGIONAL.getOrDefault(toPlatform(platform), "asia");
 		return "https://" + regional + ".api.riotgames.com";
+	}
+
+	/** OP.GG 소환사 페이지 URL. 이름·태그가 없으면 빈 문자열. */
+	public static String opggUrl(String gameName, String tagLine, String platform) {
+		if (gameName == null || gameName.isBlank() || tagLine == null || tagLine.isBlank()) {
+			return "";
+		}
+		String path = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
+		return "https://www.op.gg/summoners/" + opggRegion(platform) + "/" + path;
 	}
 }
