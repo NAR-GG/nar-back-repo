@@ -78,9 +78,11 @@ class TeamLiveEventPushServiceBestOfTest {
 				.build();
 		when(deviceRepository.findActiveDevicesBySubscribedMatchId(anyString(), anyString()))
 				.thenReturn(List.of(device));
-		when(deliveryRepository.reserve(anyLong(), anyString(), anyInt(), anyString(), anyLong())).thenReturn(true);
+		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
+				.thenReturn(List.of(1L));
 		when(pushGateway.isAvailable()).thenReturn(true);
-		when(pushGateway.send(any(), any())).thenReturn(new MobilePushResult(1, 0, List.of()));
+		when(pushGateway.send(any(), any()))
+				.thenReturn(new MobilePushResult(1, 0, List.of(), List.of("token-1")));
 	}
 
 	private LeagueMatch match(Integer bestOf, int blueScore, int redScore) {
