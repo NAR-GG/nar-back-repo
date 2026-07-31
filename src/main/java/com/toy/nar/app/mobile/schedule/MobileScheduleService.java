@@ -232,7 +232,7 @@ public class MobileScheduleService {
 					row.getGameOrder(), gameId, row.getInternalGameId(),
 					status,
 					row.getGameOrder() != null ? vodMap.get(row.getGameOrder()) : null,
-					winnerTeamCode(match, row, status)));
+					winnerTeamCode(match, row, row.getGameOrder(), status)));
 			knownGameIds.add(gameId);
 			if (row.getGameOrder() != null) {
 				maxOrder = Math.max(maxOrder, row.getGameOrder());
@@ -247,9 +247,10 @@ public class MobileScheduleService {
 		int nextOrder = maxOrder + 1;
 		for (String gameId : extraGameIds) {
 			String status = gameStatus(gameId, liveGameIds, recordedSet, matchCompleted);
+			int order = nextOrder++;
 			games.add(new MobileScheduleListResponse.MobileGameSummary(
-					nextOrder++, gameId, null, status, null,
-					winnerTeamCode(match, null, status)));
+					order, gameId, null, status, null,
+					winnerTeamCode(match, null, order, status)));
 		}
 
 		return new MobileMatchGamesResponse(match.getId(), games);
@@ -258,13 +259,14 @@ public class MobileScheduleService {
 	/**
 	 * 세트 승리 팀 코드. 값은 항상 매치의 blue/red 팀 코드 중 하나이며, 종료된 세트에만 채운다.
 	 *
-	 * <p>1순위는 적재된 경기 기록이다. 기록이 없어도 완봉(2-0·3-0)이면 모든 세트 승자가 이긴 팀이라
-	 * 산술로 확정할 수 있다 — CSV 미적재 리그(LPL 등)에서 이 폴백이 절반 이상을 메운다.
-	 * 둘 다 안 되면 null 이다(예: 기록 없는 2-1 경기).</p>
+	 * <p>1순위는 적재된 경기 기록(수 일 지연·정합 검증됨), 2순위는 스코어 전이로 적어둔
+	 * set_winners(세트 종료 후 첫 sync 에 확정 — 라이브 중에도 채워진다), 3순위는 완봉 산술이다.
+	 * 셋 다 안 되면 null.</p>
 	 */
 	private String winnerTeamCode(
 			LeagueMatch match,
 			LeagueMatchGameRepository.MappedGameWinnerRow row,
+			Integer gameOrder,
 			String status) {
 		if (!STATUS_ENDED.equals(status)) {
 			return null;
@@ -290,7 +292,28 @@ public class MobileScheduleService {
 				}
 			}
 		}
+		String recorded = recordedSetWinnerTeamCode(match, gameOrder);
+		if (recorded != null) {
+			return recorded;
+		}
 		return sweepWinnerTeamCode(match);
+	}
+
+	/** 스코어 전이 기록(set_winners)의 gameOrder 번째 승자. 없거나 '?' 면 null. */
+	private String recordedSetWinnerTeamCode(LeagueMatch match, Integer gameOrder) {
+		String setWinners = match.getSetWinners();
+		if (setWinners == null || setWinners.isBlank() || gameOrder == null || gameOrder < 1) {
+			return null;
+		}
+		String[] winners = setWinners.split(",");
+		if (gameOrder > winners.length) {
+			return null;
+		}
+		return switch (winners[gameOrder - 1]) {
+			case "B" -> match.getBlueTeamCode();
+			case "R" -> match.getRedTeamCode();
+			default -> null;
+		};
 	}
 
 	/** 완봉 경기면 이긴 팀 코드, 아니면 null. */

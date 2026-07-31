@@ -479,6 +479,76 @@ class MobileScheduleServiceTest {
 	}
 
 	@Test
+	void getMatchGamesReadsWinnerFromScoreTransitionLog() {
+		// 경기 기록(CSV)이 없어도 스코어 전이로 적어둔 set_winners 로 세트 승자를 낸다 — 라이브 직후 2-1 케이스.
+		LeagueMatch match = scoredMatch("match-1", "KESPA", "DNS", "ext-blue", 2, "BRO", "ext-red", 1, "completed");
+		match.applySetWinners("R,B,B");
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(match));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(
+						new WinnerRow("match-1", 1, "game-1", null, null, null),
+						new WinnerRow("match-1", 2, "game-2", null, null, null),
+						new WinnerRow("match-1", 3, "game-3", null, null, null)));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>());
+		when(minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart("match-1")).thenReturn(List.of());
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games())
+				.extracting(MobileScheduleListResponse.MobileGameSummary::winnerTeamCode)
+				.containsExactly("BRO", "DNS", "DNS");
+	}
+
+	@Test
+	void getMatchGamesSkipsUnknownMarkInScoreTransitionLog() {
+		// '?' 세트(순서 미상)는 지어내지 않고 null — 나머지 세트는 정상 귀속.
+		LeagueMatch match = scoredMatch("match-1", "KESPA", "DNS", "ext-blue", 2, "BRO", "ext-red", 1, "completed");
+		match.applySetWinners("?,?,B");
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(match));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(
+						new WinnerRow("match-1", 1, "game-1", null, null, null),
+						new WinnerRow("match-1", 2, "game-2", null, null, null),
+						new WinnerRow("match-1", 3, "game-3", null, null, null)));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>());
+		when(minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart("match-1")).thenReturn(List.of());
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games())
+				.extracting(MobileScheduleListResponse.MobileGameSummary::winnerTeamCode)
+				.containsExactly(null, null, "DNS");
+	}
+
+	@Test
+	void getMatchGamesShowsTransitionWinnerDuringLiveMatch() {
+		// 진행 중 매치의 끝난 세트 — 스코어 전이 기록이 있으면 라이브 중에도 승자를 낸다.
+		LeagueMatch match = scoredMatch("match-1", "LCK", "T1", "ext-blue", 1, "GEN", "ext-red", 0, "inProgress");
+		match.applySetWinners("B");
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(match));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(
+						new WinnerRow("match-1", 1, "game-1", null, null, null),
+						new WinnerRow("match-1", 2, "game-2", null, null, null)));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>(java.util.Map.of(
+				"game-2", new com.toy.nar.app.lolesports.live.ActiveLiveGame(
+						"game-2", "match-1", "LCK", "T1", "GEN", LocalDateTime.of(2026, 7, 31, 19, 0), 0))));
+		when(liveStateStore.isFinished("game-1")).thenReturn(false);
+		when(liveStateStore.isFinished("game-2")).thenReturn(false);
+		when(minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart("match-1")).thenReturn(List.of("game-1"));
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games())
+				.extracting(
+						MobileScheduleListResponse.MobileGameSummary::status,
+						MobileScheduleListResponse.MobileGameSummary::winnerTeamCode)
+				.containsExactly(
+						org.assertj.core.groups.Tuple.tuple("ENDED", "T1"),
+						org.assertj.core.groups.Tuple.tuple("LIVE", null));
+	}
+
+	@Test
 	void getMatchGamesWithUnknownMatchThrowsDataNotFound() {
 		when(leagueMatchRepository.findById("missing")).thenReturn(Optional.empty());
 

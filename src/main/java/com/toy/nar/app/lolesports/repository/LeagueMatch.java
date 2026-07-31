@@ -44,6 +44,13 @@ public class LeagueMatch {
 
 	private boolean hasVod;
 
+	/**
+	 * 세트별 승자. 콤마 구분, index = 세트 번호 (예: "B,R,B"). B/R 은 이 매치의 blue/red 기준,
+	 * '?' 는 순서 미상. 업스트림이 세트별 승자를 주지 않아 스코어 전이 시점에 직접 적는다.
+	 */
+	@Column(length = 32)
+	private String setWinners;
+
 	@Column(columnDefinition = "TEXT")
 	private String matchDetailsJson;
 
@@ -75,6 +82,10 @@ public class LeagueMatch {
 		this.hasVod = hasVod;
 		this.matchDetailsJson = matchDetailsJson;
 		this.lastUpdated = lastUpdated;
+	}
+
+	public void applySetWinners(String setWinners) {
+		this.setWinners = setWinners;
 	}
 
 	public void applySeason(Integer seasonYear, String seasonSplit) {
