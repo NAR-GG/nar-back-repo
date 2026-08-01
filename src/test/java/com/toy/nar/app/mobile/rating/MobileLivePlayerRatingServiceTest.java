@@ -299,6 +299,38 @@ class MobileLivePlayerRatingServiceTest {
 		});
 	}
 
+	@Test
+	void getMyRatingsFallbackKeepsMatchInfoEvenWhenSetNumberUnknown() {
+		Member member = member(7L, "용맹한바론");
+		LivePlayerRating myRating = rating(member, 4, null);
+		LeagueMatch match = LeagueMatch.builder()
+				.id("match-1")
+				.leagueName("LCK")
+				.matchTitle("GEN vs T1")
+				.matchDate(LocalDateTime.of(2026, 7, 31, 10, 0))
+				.state("completed")
+				.blueTeamCode("GEN")
+				.redTeamCode("T1")
+				.build();
+		when(ratingRepository.findByMember_IdOrderByCreatedAtDesc(7L, PageRequest.of(0, 20)))
+				.thenReturn(new PageImpl<>(List.of(myRating), PageRequest.of(0, 20), 1));
+		when(leagueMatchGameRepository.findAllWithMatchByGameIdIn(java.util.Set.of("game-1")))
+				.thenReturn(List.of());
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(match));
+		// 세트 목록에도 이 게임이 없으면(스냅샷 미수집 등) 세트 번호만 null, 매치 정보는 유지
+		when(mobileScheduleService.getMatchGames("match-1")).thenReturn(new MobileMatchGamesResponse(
+				"match-1",
+				List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-0", null, "ENDED", null, "GEN"))));
+
+		var response = service.getMyRatings(7L, 0, 20);
+
+		assertThat(response.ratings()).singleElement().satisfies(item -> {
+			assertThat(item.match()).isNotNull();
+			assertThat(item.match().matchTitle()).isEqualTo("GEN vs T1");
+			assertThat(item.match().gameOrder()).isNull();
+		});
+	}
+
 	private Member member(Long id, String nickname) {
 		Member member = Member.builder().name(nickname).tag("0000").email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", id);

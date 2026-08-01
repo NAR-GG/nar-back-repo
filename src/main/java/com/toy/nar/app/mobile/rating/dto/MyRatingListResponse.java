@@ -38,7 +38,7 @@ public record MyRatingListResponse(
 
 	public record MatchInfo(
 			String matchId,
-			@Schema(description = "세트 순서(1부터 시작)", example = "2")
+			@Schema(description = "세트 순서(1부터 시작). 세트를 특정할 수 없으면 null", example = "2", nullable = true)
 			Integer gameOrder,
 			String leagueName,
 			String matchTitle,
