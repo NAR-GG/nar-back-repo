@@ -76,6 +76,9 @@ public interface LeagueMatchGameRepository extends JpaRepository<LeagueMatchGame
 	 * <p>세트 승자는 적재된 경기 기록(game_participants.is_win)에만 있다 — 업스트림
 	 * getEventDetails 의 games[].teams 는 side 만 주고 세트별 승패를 주지 않는다(실측).
 	 * 팀 식별은 lolesports 외부 팀 id 를 우선한다. 내부 팀 코드는 리그 표기와 다를 수 있다.</p>
+	 *
+	 * <p>winner 파생 테이블은 반드시 이 매치의 게임으로 한정해야 한다 — 한정이 없으면
+	 * game_participants 전체(수십만 행)를 호출마다 머티리얼라이즈해 프로드에서 쿼리당 1초가 걸렸다.</p>
 	 */
 	@Query(value = """
 			SELECT lmg.match_id AS matchId,
@@ -98,6 +101,14 @@ public interface LeagueMatchGameRepository extends JpaRepository<LeagueMatchGame
 			      ON tei.team_id = t.team_id
 			     AND tei.source = :source
 			    WHERE gp.is_win = TRUE
+			      AND gp.game_id IN (
+			          SELECT gei2.game_id
+			          FROM league_match_game lmg2
+			          JOIN game_external_identity gei2
+			            ON gei2.source = :source
+			           AND gei2.external_game_id = lmg2.game_id
+			          WHERE lmg2.match_id = :matchId
+			      )
 			) winner ON winner.game_id = gei.game_id
 			WHERE lmg.match_id = :matchId
 			ORDER BY lmg.game_order ASC
