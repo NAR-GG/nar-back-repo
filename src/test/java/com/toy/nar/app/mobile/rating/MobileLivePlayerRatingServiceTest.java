@@ -6,6 +6,10 @@ import com.toy.nar.app.lolesports.live.dto.LiveParticipantState;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchGame;
 import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
+import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
+import com.toy.nar.app.mobile.schedule.MobileScheduleService;
+import com.toy.nar.app.mobile.schedule.dto.MobileMatchGamesResponse;
+import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingListResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingDetailResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingRequest;
@@ -44,6 +48,8 @@ class MobileLivePlayerRatingServiceTest {
 	private MemberRepository memberRepository;
 	private PlayerRepository playerRepository;
 	private LeagueMatchGameRepository leagueMatchGameRepository;
+	private LeagueMatchRepository leagueMatchRepository;
+	private MobileScheduleService mobileScheduleService;
 	private MobileLivePlayerRatingService service;
 
 	@BeforeEach
@@ -53,12 +59,16 @@ class MobileLivePlayerRatingServiceTest {
 		memberRepository = mock(MemberRepository.class);
 		playerRepository = mock(PlayerRepository.class);
 		leagueMatchGameRepository = mock(LeagueMatchGameRepository.class);
+		leagueMatchRepository = mock(LeagueMatchRepository.class);
+		mobileScheduleService = mock(MobileScheduleService.class);
 		service = new MobileLivePlayerRatingService(
 				liveStateQueryService,
 				ratingRepository,
 				memberRepository,
 				playerRepository,
-				leagueMatchGameRepository);
+				leagueMatchGameRepository,
+				leagueMatchRepository,
+				mobileScheduleService);
 	}
 
 	@Test
@@ -243,11 +253,82 @@ class MobileLivePlayerRatingServiceTest {
 				.thenReturn(new PageImpl<>(List.of(myRating), PageRequest.of(0, 20), 1));
 		when(leagueMatchGameRepository.findAllWithMatchByGameIdIn(java.util.Set.of("game-1")))
 				.thenReturn(List.of());
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.empty());
 
 		var response = service.getMyRatings(7L, 0, 20);
 
 		assertThat(response.ratings()).singleElement()
 				.satisfies(item -> assertThat(item.match()).isNull());
+	}
+
+	@Test
+	void getMyRatingsFallsBackToMatchGamesWhenMappingMissing() {
+		Member member = member(7L, "용맹한바론");
+		LivePlayerRating myRating = rating(member, 4, "2세트 리뷰");
+		LeagueMatch match = LeagueMatch.builder()
+				.id("match-1")
+				.leagueName("LCK")
+				.matchTitle("GEN vs T1")
+				.matchDate(LocalDateTime.of(2026, 7, 31, 10, 0))
+				.state("completed")
+				.blueTeamCode("GEN")
+				.redTeamCode("T1")
+				.build();
+		when(ratingRepository.findByMember_IdOrderByCreatedAtDesc(7L, PageRequest.of(0, 20)))
+				.thenReturn(new PageImpl<>(List.of(myRating), PageRequest.of(0, 20), 1));
+		// 매핑 테이블에는 이 게임이 없다 (동기화 구멍)
+		when(leagueMatchGameRepository.findAllWithMatchByGameIdIn(java.util.Set.of("game-1")))
+				.thenReturn(List.of());
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(match));
+		// 경기상세 세트 목록은 스냅샷 보강으로 이 게임을 2세트로 알고 있다
+		when(mobileScheduleService.getMatchGames("match-1")).thenReturn(new MobileMatchGamesResponse(
+				"match-1",
+				List.of(
+						new MobileScheduleListResponse.MobileGameSummary(1, "game-0", null, "ENDED", null, "GEN"),
+						new MobileScheduleListResponse.MobileGameSummary(2, "game-1", null, "ENDED", null, "T1"))));
+
+		var response = service.getMyRatings(7L, 0, 20);
+
+		assertThat(response.ratings()).singleElement().satisfies(item -> {
+			assertThat(item.match()).isNotNull();
+			assertThat(item.match().matchId()).isEqualTo("match-1");
+			assertThat(item.match().gameOrder()).isEqualTo(2);
+			assertThat(item.match().leagueName()).isEqualTo("LCK");
+			assertThat(item.match().matchTitle()).isEqualTo("GEN vs T1");
+			assertThat(item.match().matchDate()).isEqualTo(LocalDateTime.of(2026, 7, 31, 19, 0));
+		});
+	}
+
+	@Test
+	void getMyRatingsFallbackKeepsMatchInfoEvenWhenSetNumberUnknown() {
+		Member member = member(7L, "용맹한바론");
+		LivePlayerRating myRating = rating(member, 4, null);
+		LeagueMatch match = LeagueMatch.builder()
+				.id("match-1")
+				.leagueName("LCK")
+				.matchTitle("GEN vs T1")
+				.matchDate(LocalDateTime.of(2026, 7, 31, 10, 0))
+				.state("completed")
+				.blueTeamCode("GEN")
+				.redTeamCode("T1")
+				.build();
+		when(ratingRepository.findByMember_IdOrderByCreatedAtDesc(7L, PageRequest.of(0, 20)))
+				.thenReturn(new PageImpl<>(List.of(myRating), PageRequest.of(0, 20), 1));
+		when(leagueMatchGameRepository.findAllWithMatchByGameIdIn(java.util.Set.of("game-1")))
+				.thenReturn(List.of());
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(match));
+		// 세트 목록에도 이 게임이 없으면(스냅샷 미수집 등) 세트 번호만 null, 매치 정보는 유지
+		when(mobileScheduleService.getMatchGames("match-1")).thenReturn(new MobileMatchGamesResponse(
+				"match-1",
+				List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-0", null, "ENDED", null, "GEN"))));
+
+		var response = service.getMyRatings(7L, 0, 20);
+
+		assertThat(response.ratings()).singleElement().satisfies(item -> {
+			assertThat(item.match()).isNotNull();
+			assertThat(item.match().matchTitle()).isEqualTo("GEN vs T1");
+			assertThat(item.match().gameOrder()).isNull();
+		});
 	}
 
 	private Member member(Long id, String nickname) {

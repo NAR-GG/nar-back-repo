@@ -18,6 +18,7 @@ public enum ErrorCode {
 	/* 404 NOT_FOUND : 리소스를 찾을 수 없음 */
 	COMBINATION_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 조건의 조합 데이터를 찾을 수 없습니다."),
 	DATA_NOT_FOUND(HttpStatus.NOT_FOUND, "데이터가 존재하지 않습니다."),
+	NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지사항을 찾을 수 없습니다."),
 
 	/* 500 INTERNAL_SERVER_ERROR : 서버 내부 오류 */
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),

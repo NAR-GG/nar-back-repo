@@ -14,9 +14,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -47,8 +46,20 @@ public class PlayerSoloRankMonitorService {
 	private final PlayerSoloRankPushService playerSoloRankPushService;
 	private final SchedulerAlertService schedulerAlertService;
 	private final SoloRankGameHistoryRecorder soloRankGameHistoryRecorder;
+	private final TransactionTemplate transactionTemplate;
 
-	@Transactional
+	/**
+	 * 추적 계정의 현재 게임을 폴링한다.
+	 *
+	 * <p>예전엔 이 메서드 전체가 {@code @Transactional} 이었다. 그러면 계정 수만큼의 Riot API 호출,
+	 * 디스코드 웹훅, FCM 발송이 모두 하나의 트랜잭션 안에서 일어나 커넥션과 행 락을 사이클 내내 붙잡는다.
+	 * 429(Retry-After 20초 관측)가 겹치면 그 시간이 분 단위로 늘어난다. 실측 2026-07-29에
+	 * {@code insert into member_favorite_player} 등이 락 대기 50초로 타임아웃된 건이 80건이었다.</p>
+	 *
+	 * <p>외부 호출은 트랜잭션 밖에서 하고, 계정 상태 변경만 {@link #persist}로 짧게 커밋한다.
+	 * 계정 엔티티는 조회 시점에 detached 이므로 변경 후 반드시 persist 를 호출해야 반영된다
+	 * (findAllTrackedAccounts 가 player 를 JOIN FETCH 하므로 연관 접근은 안전하다).</p>
+	 */
 	public PlayerSoloRankMonitorResult pollTrackedAccounts() {
 		long startedAt = System.currentTimeMillis();
 		riotApiClient.assertConfigured();
@@ -78,6 +89,7 @@ public class PlayerSoloRankMonitorService {
 
 				if (currentGameOptional.isEmpty()) {
 					account.markNoRecentMatch(checkedAt);
+					persist(account);
 					noRecentMatchCount++;
 					continue;
 				}
@@ -87,6 +99,7 @@ public class PlayerSoloRankMonitorService {
 				String previousLastCheckedGameId = account.getLastCheckedMatchId();
 				if (currentGameId.equals(previousLastCheckedGameId)) {
 					account.markMatchCheckHeartbeat(checkedAt);
+					persist(account);
 					unchangedCount++;
 					continue;
 				}
@@ -96,12 +109,14 @@ public class PlayerSoloRankMonitorService {
 
 				if (isRankedSolo(currentGame)) {
 					account.markRecentRankedSolo(currentGameId, checkedAt);
+					persist(account);
 					rankedSoloCount++;
 					// 구독 여부와 무관하게 솔랭 게임 이력 적재(선수 카드 최근 솔랭·챔프 폭).
 					soloRankGameHistoryRecorder.record(
 							account.getPlayer(), currentGameId, champion, checkedAt);
 				} else {
 					account.markRecentOtherQueue(currentGameId, checkedAt);
+					persist(account);
 					otherQueueCount++;
 				}
 
@@ -130,9 +145,10 @@ public class PlayerSoloRankMonitorService {
 								champion == null ? null : champion.getChampionNameKr(),
 								champion == null ? null : champion.getImageUrl(),
 								queueDisplayName,
-								buildOpggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
+								RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 					}
 					account.markAlertSent(currentGameId);
+					persist(account);
 					alertsSentCount++;
 				}
 			} catch (RiotApiException e) {
@@ -175,6 +191,14 @@ public class PlayerSoloRankMonitorService {
 				rankedSoloCount,
 				alertsSentCount,
 				failedCount);
+	}
+
+	/**
+	 * 계정 상태 변경만 짧은 트랜잭션으로 커밋한다. 외부 API 호출은 절대 이 안에 두지 않는다.
+	 * 계정은 detached 라 save(merge)로 반영한다.
+	 */
+	private void persist(PlayerRiotAccount account) {
+		transactionTemplate.executeWithoutResult(status -> playerRiotAccountRepository.save(account));
 	}
 
 	@Transactional(readOnly = true)
@@ -251,14 +275,6 @@ public class PlayerSoloRankMonitorService {
 		return System.currentTimeMillis();
 	}
 
-	/** OP.GG 소환사 페이지 URL (디스코드 알림과 동일 포맷). 계정 플랫폼별 지역 코드 사용. 정보 부족 시 빈 문자열. */
-	private String buildOpggUrl(String gameName, String tagLine, String platform) {
-		if (gameName == null || gameName.isBlank() || tagLine == null || tagLine.isBlank()) {
-			return "";
-		}
-		String path = URLEncoder.encode(gameName + "-" + tagLine, StandardCharsets.UTF_8);
-		return "https://www.op.gg/summoners/" + RiotPlatform.opggRegion(platform) + "/" + path;
-	}
 
 	private boolean isRankedSolo(RiotCurrentGameResponse currentGame) {
 		return currentGame.gameQueueConfigId() != null && currentGame.gameQueueConfigId() == RANKED_SOLO_QUEUE_ID;

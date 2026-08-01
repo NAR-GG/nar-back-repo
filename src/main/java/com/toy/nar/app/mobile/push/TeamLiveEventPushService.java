@@ -14,10 +14,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -88,17 +92,25 @@ public class TeamLiveEventPushService {
 		// SET_END 는 매치 스코어를 함께 보여준다. 세트 N 종료 시점의 스코어 합은 반드시 N —
 		// DB 가 아직 이번 세트를 반영 못 했으면(업스트림 지연·EWC unstarted 방치) 업스트림을
 		// 직접 재조회하고, 그래도 stale 이면 틀린 스코어 대신 생략한다.
-		String matchScoreLine = TYPE_SET_END.equals(eventType) ? buildMatchScoreLine(matchId, setNumber) : null;
+		// SET_START 에서도 매치를 한 번 읽어 bestOf 를 payload 에 실는다(앱이 마지막 세트를 판정한다).
+		ResolvedMatchScore resolved = TYPE_SET_END.equals(eventType)
+				? resolveMatchScore(matchId, setNumber)
+				: resolveMatchScore(matchId, 0);
+		String matchScoreLine = TYPE_SET_END.equals(eventType) ? scoreLineOf(resolved) : null;
+		Integer bestOf = resolved.bestOf();
 		notifyTeamSide(eventType, matchId, setNumber, NO_EVENT_ORDER,
-				blueEsportsTeamId, blueTeamName, redTeamName, true, matchScoreLine);
+				blueEsportsTeamId, blueTeamName, redTeamName, true, matchScoreLine, resolved);
 		notifyTeamSide(eventType, matchId, setNumber, NO_EVENT_ORDER,
-				redEsportsTeamId, redTeamName, blueTeamName, false, matchScoreLine);
+				redEsportsTeamId, redTeamName, blueTeamName, false, matchScoreLine, resolved);
 
 		// 경기 예약 구독자(팀 무관)에게도 발송. 매치 중립 문구를 1회 만들어 fan-out 한다.
 		// dedup 키가 (member, matchId, ...) 라 팀+매치 양쪽 구독자여도 1회만 나간다.
-		MobilePushMessage matchMessage =
-				buildMatchScopedMessage(eventType, matchId, setNumber, blueTeamName, redTeamName, matchScoreLine);
+		MobilePushMessage matchMessage = buildMatchScopedMessage(
+				eventType, matchId, setNumber, blueTeamName, redTeamName, matchScoreLine, resolved);
 		fanOutToMatchSubscribers(eventType, matchId, setNumber, NO_EVENT_ORDER, matchMessage);
+		if (bestOf == null) {
+			log.debug("bestOf 미확정 매치의 세트 이벤트. matchId={} eventType={}", matchId, eventType);
+		}
 	}
 
 	/** 경기 예약 구독자용 중립 문구. 특정 팀 관점이 아니라 대진 기준으로 표기한다. */
@@ -108,18 +120,26 @@ public class TeamLiveEventPushService {
 			int setNumber,
 			String blueTeamName,
 			String redTeamName,
-			String matchScoreLine) {
+			String matchScoreLine,
+			ResolvedMatchScore resolved) {
 		String matchup = matchup(blueTeamName, redTeamName);
+		// 단판(Bo1)에는 세트 개념이 없다 — KeSPA Cup 그룹 스테이지가 전부 Bo1 이다.
+		String phase = setPhase(resolved.bestOf(), setNumber);
 		String title;
 		String body;
 		if (TYPE_SET_END.equals(eventType)) {
-			title = matchup + " " + setNumber + "세트 종료";
-			body = (matchScoreLine != null ? matchScoreLine : matchup) + " · " + setNumber + "세트 종료";
+			title = matchup + " " + phase + " 종료";
+			body = (matchScoreLine != null ? matchScoreLine : matchup) + " · " + phase + " 종료";
 		} else {
-			title = matchup + " " + setNumber + "세트 시작";
-			body = matchup + " · " + setNumber + "세트 시작";
+			title = matchup + " " + phase + " 시작";
+			body = matchup + " · " + phase + " 시작";
 		}
-		return new MobilePushMessage(title, body, baseData(eventType, matchId, setNumber));
+		return new MobilePushMessage(title, body, baseData(eventType, matchId, setNumber, resolved));
+	}
+
+	/** 단판이면 "경기", 다전제면 "N세트". */
+	private String setPhase(Integer bestOf, int setNumber) {
+		return bestOf != null && bestOf == 1 ? "경기" : setNumber + "세트";
 	}
 
 	/** 경기 예약 구독자 fan-out. 팀 구독 fanOut 과 동일하게 sendToMember(dedup) 를 태운다. */
@@ -130,15 +150,8 @@ public class TeamLiveEventPushService {
 			long eventOrder,
 			MobilePushMessage message) {
 		try {
-			List<MemberDevice> devices = deviceRepository.findActiveDevicesBySubscribedMatchId(matchId, eventType);
-			Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
-					.collect(Collectors.groupingBy(
-							device -> device.getMember().getId(),
-							LinkedHashMap::new,
-							Collectors.toList()));
-			for (Map.Entry<Long, List<MemberDevice>> entry : devicesByMember.entrySet()) {
-				sendToMember(entry.getKey(), entry.getValue(), eventType, matchId, setNumber, eventOrder, message);
-			}
+			fanOutBatched(deviceRepository.findActiveDevicesBySubscribedMatchId(matchId, eventType),
+					eventType, matchId, setNumber, eventOrder, message);
 		} catch (Exception e) {
 			log.warn("Failed to prepare match-subscription pushes eventType={} matchId={} setNumber={}",
 					eventType, matchId, setNumber, e);
@@ -154,22 +167,41 @@ public class TeamLiveEventPushService {
 	 * 돌려 스코어 없이 발송한다. 세트 번호를 모르면(0 이하) 기존처럼 합>0 인 DB 값을 쓴다.</p>
 	 */
 	String buildMatchScoreLine(String matchId, int endedSetNumber) {
+		return scoreLineOf(resolveMatchScore(matchId, endedSetNumber));
+	}
+
+	private String scoreLineOf(ResolvedMatchScore resolved) {
+		if (resolved.match() == null || resolved.score() == null) {
+			return null;
+		}
+		return scoreLine(resolved.match().getBlueTeamName(), resolved.score()[0], resolved.score()[1],
+				resolved.match().getRedTeamName());
+	}
+
+	/**
+	 * 매치와 (가능하면) 방금 끝난 세트가 반영된 스코어를 함께 돌려준다.
+	 * 푸시 payload 에 bestOf·스코어를 실어야 하므로 스코어를 문자열로만 만들지 않는다.
+	 */
+	private ResolvedMatchScore resolveMatchScore(String matchId, int endedSetNumber) {
 		try {
 			var match = leagueMatchRepository.findById(matchId).orElse(null);
 			if (match == null) {
-				return null;
+				return ResolvedMatchScore.EMPTY;
 			}
 			Integer blueScore = match.getBlueScore();
 			Integer redScore = match.getRedScore();
 			int dbSum = (blueScore == null ? 0 : blueScore) + (redScore == null ? 0 : redScore);
 
 			if (endedSetNumber <= 0) {
-				return dbSum > 0 ? scoreLine(match.getBlueTeamName(), blueScore, redScore, match.getRedTeamName()) : null;
+				return dbSum > 0
+						? new ResolvedMatchScore(match,
+								new int[] { blueScore == null ? 0 : blueScore, redScore == null ? 0 : redScore })
+						: new ResolvedMatchScore(match, null);
 			}
-			String dbLine = lineIfFresh(new int[] { blueScore == null ? 0 : blueScore, redScore == null ? 0 : redScore },
-					match, endedSetNumber);
-			if (dbLine != null) {
-				return dbLine;
+			int[] dbScore = freshOrNull(new int[] { blueScore == null ? 0 : blueScore, redScore == null ? 0 : redScore },
+					endedSetNumber);
+			if (dbScore != null) {
+				return new ResolvedMatchScore(match, dbScore);
 			}
 
 			// DB stale — 업스트림이 방금 끝난 세트를 반영할 때까지 짧게 재시도.
@@ -185,34 +217,47 @@ public class TeamLiveEventPushService {
 					int[] naver = naverEsportsScoreClient.fetchScore(
 							match.getBlueTeamCode(), match.getRedTeamCode(), match.getMatchDate());
 					naverUsable = naver != null;
-					String line = lineIfFresh(naver, match, endedSetNumber);
-					if (line != null) {
-						return line;
+					int[] fresh = freshOrNull(naver, endedSetNumber);
+					if (fresh != null) {
+						return new ResolvedMatchScore(match, fresh);
 					}
 				}
-				String line = lineIfFresh(worldsService.fetchMatchGameWins(matchId), match, endedSetNumber);
-				if (line != null) {
-					return line;
+				int[] fresh = freshOrNull(worldsService.fetchMatchGameWins(matchId), endedSetNumber);
+				if (fresh != null) {
+					return new ResolvedMatchScore(match, fresh);
 				}
 			}
 			log.warn("Set-end score still stale after retries. matchId={} endedSet={} dbScore={}:{}",
 					matchId, endedSetNumber, blueScore, redScore);
-			return null;
+			return new ResolvedMatchScore(match, null);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			return null;
+			return ResolvedMatchScore.EMPTY;
 		} catch (Exception e) {
 			log.warn("Failed to load match score for set-end push matchId={}", matchId, e);
-			return null;
+			return ResolvedMatchScore.EMPTY;
 		}
 	}
 
-	/** 스코어 합이 방금 끝난 세트 수 이상(=신선)일 때만 스코어 라인, 아니면 null. */
-	private String lineIfFresh(int[] score, com.toy.nar.app.lolesports.repository.LeagueMatch match, int endedSetNumber) {
+	/** 스코어 합이 방금 끝난 세트 수 이상(=신선)일 때만 그 스코어, 아니면 null. */
+	private int[] freshOrNull(int[] score, int endedSetNumber) {
 		if (score == null || score[0] + score[1] < endedSetNumber) {
 			return null;
 		}
-		return scoreLine(match.getBlueTeamName(), score[0], score[1], match.getRedTeamName());
+		return score;
+	}
+
+	/**
+	 * 스코어 해석 결과. {@code match} 가 null 이면 매치를 못 찾은 것이고,
+	 * {@code score} 가 null 이면 방금 끝난 세트를 반영한 스코어를 못 구한 것(stale)이다.
+	 */
+	private record ResolvedMatchScore(com.toy.nar.app.lolesports.repository.LeagueMatch match, int[] score) {
+
+		private static final ResolvedMatchScore EMPTY = new ResolvedMatchScore(null, null);
+
+		Integer bestOf() {
+			return match == null ? null : match.getBestOf();
+		}
 	}
 
 	private String scoreLine(String blueTeamName, Integer blueScore, Integer redScore, String redTeamName) {
@@ -254,7 +299,8 @@ public class TeamLiveEventPushService {
 			String teamName,
 			String opponentTeamName,
 			boolean blueSide,
-			String matchScoreLine) {
+			String matchScoreLine,
+			ResolvedMatchScore resolvedScore) {
 		Optional<Team> team = resolveLckTeam(esportsTeamId);
 		if (team.isEmpty()) {
 			return;
@@ -265,7 +311,7 @@ public class TeamLiveEventPushService {
 		String blue = blueSide ? displayName : opponent;
 		String red = blueSide ? opponent : displayName;
 		MobilePushMessage message = buildMatchEventMessage(
-				eventType, matchId, setNumber, displayName, blue, red, matchScoreLine);
+				eventType, matchId, setNumber, displayName, blue, red, matchScoreLine, resolvedScore);
 		fanOut(eventType, matchId, setNumber, eventOrder, resolved.getId(), message);
 	}
 
@@ -277,51 +323,139 @@ public class TeamLiveEventPushService {
 			Long teamId,
 			MobilePushMessage message) {
 		try {
-			List<MemberDevice> devices =
-					deviceRepository.findActiveDevicesBySubscribedTeamId(teamId, eventType);
-			Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
-					.collect(Collectors.groupingBy(
-							device -> device.getMember().getId(),
-							LinkedHashMap::new,
-							Collectors.toList()));
-			for (Map.Entry<Long, List<MemberDevice>> entry : devicesByMember.entrySet()) {
-				sendToMember(entry.getKey(), entry.getValue(), eventType, matchId, setNumber, eventOrder, message);
-			}
+			fanOutBatched(deviceRepository.findActiveDevicesBySubscribedTeamId(teamId, eventType),
+					eventType, matchId, setNumber, eventOrder, message);
 		} catch (Exception e) {
 			log.warn("Failed to prepare team live event pushes eventType={} matchId={} setNumber={} teamId={}",
 					eventType, matchId, setNumber, teamId, e);
 		}
 	}
 
-	private void sendToMember(
-			Long memberId,
+	/**
+	 * 구독자 전원에게 한 번의 발송 호출로 보낸다.
+	 *
+	 * <p>예전엔 구독자마다 {@code pushGateway.send} 를 호출해 FCM 왕복이 구독자 수만큼 났다.
+	 * 실측 2026-07-29 LCK T1 vs KT 에서 구독자 약 1,500명 팬아웃이 이벤트당 8~18분 걸려
+	 * (1명당 0.3~0.7초) 마지막 구독자는 세트가 끝난 뒤에 세트 시작 알림을 받았다. 게다가 세트 시작
+	 * 팬아웃은 폴링 스레드에서 돌아 그 시간 동안 라이브 관측까지 멈췄다.</p>
+	 *
+	 * <p>게이트웨이가 500토큰씩 멀티캐스트하므로 토큰을 모아 한 번에 넘기면 왕복이 구독자 수에서
+	 * 500토큰 단위로 줄어든다(1,500명이면 3회). 발송 후 토큰별 성공 여부로 구독자를 되돌려 기록한다.</p>
+	 *
+	 * <p>dedup 예약과 발송 기록은 아직 구독자 단위 쿼리다 — 배치화는 후속 작업으로 남긴다.</p>
+	 */
+	private void fanOutBatched(
 			List<MemberDevice> devices,
 			String eventType,
 			String matchId,
 			int setNumber,
 			long eventOrder,
 			MobilePushMessage message) {
+		Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
+				.collect(Collectors.groupingBy(
+						device -> device.getMember().getId(),
+						LinkedHashMap::new,
+						Collectors.toList()));
+
+		if (devicesByMember.isEmpty()) {
+			return;
+		}
+
+		// dedup: 양 팀 구독자라도 (member, matchId, setNumber, eventType, eventOrder) 1회만 통과한다.
+		// 구독자 수만큼 왕복하지 않도록 한 번에 예약하고 발송 대상만 돌려받는다.
+		List<Long> reservedIds =
+				deliveryRepository.reserveAll(devicesByMember.keySet(), matchId, setNumber, eventType, eventOrder);
+		if (reservedIds.isEmpty()) {
+			return;
+		}
+
+		Map<Long, List<String>> tokensByMember = new LinkedHashMap<>();
+		for (Long memberId : reservedIds) {
+			List<MemberDevice> memberDevices = devicesByMember.get(memberId);
+			if (memberDevices == null) {
+				continue;
+			}
+			tokensByMember.put(memberId, memberDevices.stream().map(MemberDevice::getFcmToken).toList());
+		}
+		if (tokensByMember.isEmpty()) {
+			return;
+		}
+
+		List<String> allTokens = tokensByMember.values().stream().flatMap(List::stream).toList();
+		MobilePushResult result;
 		try {
-			// dedup: 양 팀 구독자라도 (member, matchId, setNumber, eventType, eventOrder) 1회만 통과한다.
-			if (!deliveryRepository.reserve(memberId, matchId, setNumber, eventType, eventOrder)) {
-				return;
-			}
-			List<String> tokens = devices.stream().map(MemberDevice::getFcmToken).toList();
-			MobilePushResult result = pushGateway.send(tokens, message);
-			if (!result.invalidTokens().isEmpty()) {
-				deactivateInvalidTokens(result.invalidTokens(), matchId, eventType);
-			}
-			if (result.successCount() > 0) {
-				deliveryRepository.markSent(memberId, matchId, setNumber, eventType, eventOrder);
-				recordFeed(memberId, eventType, message);
-			} else {
-				deliveryRepository.markFailed(memberId, matchId, setNumber, eventType, eventOrder,
-						"FCM 전송 성공 기기가 없습니다.");
-			}
+			result = pushGateway.send(allTokens, message);
 		} catch (Exception e) {
-			markFailed(memberId, matchId, setNumber, eventType, eventOrder, truncate(e.getMessage()));
-			log.warn("Team live event push failed memberId={} eventType={} matchId={} setNumber={} eventOrder={}",
-					memberId, eventType, matchId, setNumber, eventOrder, e);
+			// 발송 자체가 실패하면 예약한 구독자 전원을 FAILED 로 남긴다(재예약 대상이 된다).
+			markFailedAll(tokensByMember.keySet(), matchId, setNumber, eventType, eventOrder,
+					truncate(e.getMessage()));
+			log.warn("Team live event multicast failed eventType={} matchId={} setNumber={} members={} tokens={}",
+					eventType, matchId, setNumber, tokensByMember.size(), allTokens.size(), e);
+			return;
+		}
+
+		Set<String> successTokens = new HashSet<>(result.successTokens());
+		List<Long> delivered = new ArrayList<>();
+		List<Long> undelivered = new ArrayList<>();
+		tokensByMember.forEach((memberId, tokens) ->
+				(tokens.stream().anyMatch(successTokens::contains) ? delivered : undelivered).add(memberId));
+
+		markSentAll(delivered, matchId, setNumber, eventType, eventOrder);
+		markFailedAll(undelivered, matchId, setNumber, eventType, eventOrder, "FCM 전송 성공 기기가 없습니다.");
+		recordFeedAll(delivered, eventType, message);
+
+		if (!result.invalidTokens().isEmpty()) {
+			deactivateInvalidTokens(result.invalidTokens(), matchId, eventType);
+		}
+	}
+
+	/** 마감 기록 실패가 발송 흐름을 깨면 안 되므로 흡수한다(푸시는 이미 나갔다). */
+	private void markSentAll(
+			List<Long> memberIds, String matchId, int setNumber, String eventType, long eventOrder) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			deliveryRepository.markSentAll(memberIds, matchId, setNumber, eventType, eventOrder);
+		} catch (Exception e) {
+			log.warn("Failed to mark team live event pushes sent eventType={} matchId={} setNumber={} members={}",
+					eventType, matchId, setNumber, memberIds.size(), e);
+		}
+	}
+
+	private void markFailedAll(
+			Collection<Long> memberIds,
+			String matchId,
+			int setNumber,
+			String eventType,
+			long eventOrder,
+			String errorMessage) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			deliveryRepository.markFailedAll(memberIds, matchId, setNumber, eventType, eventOrder, errorMessage);
+		} catch (Exception e) {
+			log.warn("Failed to mark team live event pushes failed eventType={} matchId={} setNumber={} members={}",
+					eventType, matchId, setNumber, memberIds.size(), e);
+		}
+	}
+
+	/** 마이구독 알림 피드에 한 번에 기록한다. 피드 실패가 푸시 흐름을 깨면 안 되므로 흡수한다. */
+	private void recordFeedAll(List<Long> memberIds, String eventType, MobilePushMessage message) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			notificationService.recordAll(
+					memberIds,
+					MemberNotificationType.valueOf(eventType),
+					message.title(),
+					message.body(),
+					message.data());
+		} catch (Exception e) {
+			log.warn("Failed to record team event notification feed eventType={} members={}",
+					eventType, memberIds.size(), e);
 		}
 	}
 
@@ -381,21 +515,23 @@ public class TeamLiveEventPushService {
 			String teamName,
 			String blueTeamName,
 			String redTeamName,
-			String matchScoreLine) {
+			String matchScoreLine,
+			ResolvedMatchScore resolved) {
 		String matchup = matchup(blueTeamName, redTeamName);
+		String phase = setPhase(resolved.bestOf(), setNumber);
 		String title;
 		String body;
 		if (TYPE_SET_END.equals(eventType)) {
-			title = teamName + " " + setNumber + "세트 종료";
+			title = teamName + " " + phase + " 종료";
 			// 매치 스코어를 알면 "T1 1 vs 2 HLE" 로 경기 흐름을 보여준다.
 			body = matchScoreLine != null
-					? matchScoreLine + " · " + setNumber + "세트 종료"
-					: matchup + " · " + setNumber + "세트 종료";
+					? matchScoreLine + " · " + phase + " 종료"
+					: matchup + " · " + phase + " 종료";
 		} else {
-			title = teamName + " 세트 시작";
-			body = matchup + " · " + setNumber + "세트 시작";
+			title = teamName + " " + (resolved.bestOf() != null && resolved.bestOf() == 1 ? "경기" : "세트") + " 시작";
+			body = matchup + " · " + phase + " 시작";
 		}
-		return new MobilePushMessage(title, body, baseData(eventType, matchId, setNumber));
+		return new MobilePushMessage(title, body, baseData(eventType, matchId, setNumber, resolved));
 	}
 
 	/** 모바일 계약: data.type / data.matchId / data.setNumber 는 모두 String. */
@@ -404,6 +540,24 @@ public class TeamLiveEventPushService {
 		data.put("type", eventType);
 		data.put("matchId", matchId);
 		data.put("setNumber", String.valueOf(setNumber));
+		return Map.copyOf(data);
+	}
+
+	/**
+	 * 세트 이벤트 payload. 기본 필드에 {@code bestOf} 와 스코어를 더한다.
+	 * 앱은 이 셋으로 마지막 세트(= max(score) 가 승리 조건 도달)와 다음 세트 존재 여부를 판정해
+	 * Live Activity 를 갱신한다. 모르는 값은 키를 넣지 않는다(구버전 앱은 무시).
+	 */
+	private Map<String, String> baseData(
+			String eventType, String matchId, int setNumber, ResolvedMatchScore resolved) {
+		Map<String, String> data = new LinkedHashMap<>(baseData(eventType, matchId, setNumber));
+		if (resolved.bestOf() != null) {
+			data.put("bestOf", String.valueOf(resolved.bestOf()));
+		}
+		if (resolved.score() != null) {
+			data.put("blueScore", String.valueOf(resolved.score()[0]));
+			data.put("redScore", String.valueOf(resolved.score()[1]));
+		}
 		return Map.copyOf(data);
 	}
 
