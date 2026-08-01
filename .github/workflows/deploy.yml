@@ -49,9 +49,6 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build -x test
 
-      - name: Set up QEMU  # arm64(t4g) 크로스 빌드용 에뮬레이터
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -66,17 +63,15 @@ jobs:
         with:
           context: .
           push: true
-          # amd64(t3)·arm64(t4g) 둘 다 빌드 — 인스턴스 아키텍처 무관하게 실행 + 롤백 안전.
-          platforms: linux/amd64,linux/arm64
+          # 서버는 t4g(arm64) 고정 — arm64만 빌드해 배포 시간을 줄인다.
+          # Dockerfile에 RUN이 없어(레이어 조립뿐) QEMU 에뮬레이터도 불필요.
+          # RUN 스텝을 추가하거나 amd64 인스턴스로 옮기면 QEMU/amd64를 되살릴 것.
+          platforms: linux/arm64
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-
-    steps:
+      # 별도 잡으로 분리하면 러너 기동 비용(~15초)이 추가되므로 같은 잡에서 이어서 배포한다.
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v0.1.6
         env:

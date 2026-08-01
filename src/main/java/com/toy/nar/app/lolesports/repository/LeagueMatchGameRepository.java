@@ -21,6 +21,16 @@ public interface LeagueMatchGameRepository extends JpaRepository<LeagueMatchGame
 		Long getInternalGameId();
 	}
 
+	/** 세트 목록용. 매핑 정보에 세트 승리 팀을 더한 행. */
+	interface MappedGameWinnerRow extends MappedGameRow {
+
+		/** 세트 승리 팀의 lolesports 팀 id. 기록 미적재·매핑 없음이면 null. */
+		String getWinnerExternalTeamId();
+
+		/** 세트 승리 팀의 내부 팀 코드. 외부 id 매핑이 없을 때의 폴백. */
+		String getWinnerTeamCode();
+	}
+
 	List<LeagueMatchGame> findByLeagueMatch_IdOrderByGameOrderAsc(String matchId);
 
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
@@ -59,6 +69,41 @@ public interface LeagueMatchGameRepository extends JpaRepository<LeagueMatchGame
 			ORDER BY lmg.game_order ASC
 			""", nativeQuery = true)
 	List<MappedGameRow> findMappedGameRowsByMatchId(@Param("matchId") String matchId, @Param("source") String source);
+
+	/**
+	 * 매치 상세(세트 목록)용. 매핑 + 세트 승리 팀을 한 번에 읽는다.
+	 *
+	 * <p>세트 승자는 적재된 경기 기록(game_participants.is_win)에만 있다 — 업스트림
+	 * getEventDetails 의 games[].teams 는 side 만 주고 세트별 승패를 주지 않는다(실측).
+	 * 팀 식별은 lolesports 외부 팀 id 를 우선한다. 내부 팀 코드는 리그 표기와 다를 수 있다.</p>
+	 */
+	@Query(value = """
+			SELECT lmg.match_id AS matchId,
+			       lmg.game_order AS gameOrder,
+			       lmg.game_id AS externalGameId,
+			       gei.game_id AS internalGameId,
+			       winner.external_team_id AS winnerExternalTeamId,
+			       winner.team_code AS winnerTeamCode
+			FROM league_match_game lmg
+			LEFT JOIN game_external_identity gei
+			  ON gei.source = :source
+			 AND gei.external_game_id = lmg.game_id
+			LEFT JOIN (
+			    SELECT DISTINCT gp.game_id AS game_id,
+			           t.team_code AS team_code,
+			           tei.external_team_id AS external_team_id
+			    FROM game_participants gp
+			    JOIN teams t ON t.team_id = gp.team_id
+			    LEFT JOIN team_external_identity tei
+			      ON tei.team_id = t.team_id
+			     AND tei.source = :source
+			    WHERE gp.is_win = TRUE
+			) winner ON winner.game_id = gei.game_id
+			WHERE lmg.match_id = :matchId
+			ORDER BY lmg.game_order ASC
+			""", nativeQuery = true)
+	List<MappedGameWinnerRow> findMappedGameWinnerRowsByMatchId(
+			@Param("matchId") String matchId, @Param("source") String source);
 
 	@Query(value = """
 			SELECT lmg.match_id AS matchId,

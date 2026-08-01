@@ -5,12 +5,18 @@ import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.lolesports.repository.LeagueConfig;
 import com.toy.nar.app.member.service.MemberDeleteService;
+import com.toy.nar.app.notice.service.NoticeImageStorageService;
+import com.toy.nar.app.notice.service.NoticeService;
 import com.toy.nar.app.participant.service.PlayerAdminService;
+import com.toy.nar.app.participant.service.PlayerImageStorageService;
+import com.toy.nar.app.riot.RiotAccountVerifyService;
 import com.toy.nar.app.riot.RiotApiException;
+import com.toy.nar.app.riot.dto.RiotAccountVerification;
 import com.toy.nar.domain.game.repository.LeagueRepository;
 import com.toy.nar.domain.member.repository.MemberFavoritePlayerRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.member.repository.MemberTeamNotificationSubscriptionRepository;
+import com.toy.nar.domain.notice.entity.Notice;
 import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
@@ -35,7 +41,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -61,11 +69,15 @@ public class BackofficeController {
     private final LeagueRepository leagueRepository;
     private final LeagueConfigService leagueConfigService;
     private final PlayerAdminService playerAdminService;
+    private final PlayerImageStorageService playerImageStorageService;
+    private final RiotAccountVerifyService riotAccountVerifyService;
     private final MemberDeleteService memberDeleteService;
     private final LivePlayerRatingRepository livePlayerRatingRepository;
     private final LeagueMatchRepository leagueMatchRepository;
     private final MemberFavoritePlayerRepository memberFavoritePlayerRepository;
     private final MemberTeamNotificationSubscriptionRepository teamSubscriptionRepository;
+    private final NoticeService noticeService;
+    private final NoticeImageStorageService noticeImageStorageService;
 
     @GetMapping("/members")
     public Page<MemberRow> members(@RequestParam(required = false) String q, Pageable pageable) {
@@ -199,12 +211,66 @@ public class BackofficeController {
                 leagueName, request.liveEnabled(), request.notificationEnabled(), request.syncEnabled()));
     }
 
+    // ── 공지사항 ─────────────────────────────────────────────────────
+    // 앱 노출은 MobileNoticeController(/api/notices) — 여기는 임시저장 포함 관리 전용.
+
+    @GetMapping("/notices")
+    public Page<NoticeRow> notices(Pageable pageable) {
+        return noticeService.adminPage(pageable).map(NoticeRow::from);
+    }
+
+    @GetMapping("/notices/{id}")
+    public NoticeRow notice(@PathVariable Long id) {
+        return NoticeRow.from(noticeService.findById(id));
+    }
+
+    @PostMapping("/notices")
+    @ResponseStatus(HttpStatus.CREATED)
+    public NoticeRow createNotice(@RequestBody NoticeSaveRequest request) {
+        return NoticeRow.from(noticeService.create(
+                request.title(), request.content(), request.pinned(),
+                request.promoteUntil(), request.published()));
+    }
+
+    @PutMapping("/notices/{id}")
+    public NoticeRow updateNotice(@PathVariable Long id, @RequestBody NoticeSaveRequest request) {
+        return NoticeRow.from(noticeService.update(
+                id, request.title(), request.content(), request.pinned(),
+                request.promoteUntil(), request.published()));
+    }
+
+    @DeleteMapping("/notices/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteNotice(@PathVariable Long id) {
+        noticeService.delete(id);
+    }
+
+    // 공지 본문 이미지 업로드. 에디터가 붙여넣기/드롭 시 호출하고 반환 URL 을 마크다운에 삽입.
+    @PostMapping("/notices/images")
+    public Map<String, String> uploadNoticeImage(@RequestParam("file") MultipartFile file) {
+        return Map.of("url", noticeImageStorageService.upload(file));
+    }
+
     // LCK 선수 한정 수정(이미지 = 수동 잠금 동반, 소속팀 변경, 솔랭 계정 수동 잠금). 서버에서 LCK 출전 이력 검증.
     @PutMapping("/players/{id}")
     public PlayerRow updatePlayer(@PathVariable Long id, @RequestBody PlayerUpdateRequest request) {
         return PlayerRow.from(playerAdminService.update(
                 id, request.imageUrl(), request.unlockImage(), request.currentTeamId(),
                 request.unlockGameAccounts(), request.gameAccounts()));
+    }
+
+    // 선수 이미지 업로드(배포 불필요). 파일은 컨테이너 밖 디렉토리에 저장하고 DB엔 경로만 남긴다.
+    // PUT /players/{id} 와 달리 LCK 게이트가 없다 — LCK CL·LCS 선수도 이미지가 필요하다.
+    @PostMapping("/players/{id}/image")
+    public PlayerRow uploadPlayerImage(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        return PlayerRow.from(playerImageStorageService.upload(id, file));
+    }
+
+    // 계정 넣기 전 검증(저장 없음). 팀원이 riotId·지역을 확정하기 전에 실제 계정·레벨·티어를 확인한다.
+    @GetMapping("/riot-accounts/verify")
+    public RiotAccountVerification verifyRiotAccount(@RequestParam String riotId,
+                                                     @RequestParam(required = false) String region) {
+        return riotAccountVerifyService.verify(riotId, region);
     }
 
     // 솔랭 전용 선수 등록(은퇴/비현역). LCK 출전 이력 없이 이름+riotId로 생성.
@@ -371,6 +437,20 @@ public class BackofficeController {
     public record CronJob(String name, String type, String schedule, String expression, String description) {}
 
     // ponytail: @Scheduled 작업 정적 카탈로그. 16개라 잘 안 바뀜.
+    /** 공지 행. promoteUntil/publishedAt 은 FE 가 날짜만 잘라 표시한다. */
+    public record NoticeRow(Long id, String title, String content, boolean pinned,
+                            LocalDateTime promoteUntil, LocalDateTime publishedAt,
+                            LocalDateTime createdAt) {
+        static NoticeRow from(Notice n) {
+            return new NoticeRow(n.getId(), n.getTitle(), n.getContent(), n.isPinned(),
+                    n.getPromoteUntil(), n.getPublishedAt(), n.getCreatedAt());
+        }
+    }
+
+    /** 공지 저장 요청. published=false 는 임시저장, promoteUntil 은 배너 노출 종료일(null = 배너 없음). */
+    public record NoticeSaveRequest(String title, String content, boolean pinned,
+                                    LocalDate promoteUntil, boolean published) {}
+
     // 실행 성공/실패 이력까지 필요해지면 SchedulerAlertService 저장소 연결, 존재/스케줄 자동추적이 필요하면 ScheduledTaskHolder 도입.
     private static final List<CronJob> CRON_CATALOG = List.of(
             new CronJob("sendDailySummary", "CRON", "매일 09:00", "0 0 9 * * * (KST)", "전일 스케줄러 작업 통계 일일 요약 전송"),

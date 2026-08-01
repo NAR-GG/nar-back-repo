@@ -40,6 +40,8 @@ import java.util.stream.Collectors;
 public class LeagueMatchService {
 
 	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
+	/** 미래(newer) 페이지 추적 상한. 실측상 리그당 1홉이면 끝나지만 시즌 편성이 길어질 때를 대비한 안전장치다. */
+	private static final int MAX_NEWER_PAGE_HOPS = 5;
 	private static final Map<String, String> TEAM_ALIAS_TARGETS_BY_EXTERNAL_ID = Map.of(
 			"107700204561086446", "Deep Cross Gaming",
 			"99566406332987990", "Chiefs Esports Club",
@@ -186,6 +188,69 @@ public class LeagueMatchService {
 		return naver[0] + naver[1] > riotBlue + riotRed ? naver : null;
 	}
 
+	/**
+	 * 스코어 전이로 세트별 승자 목록을 전진시킨다. 업스트림은 세트별 승자를 주지 않으므로
+	 * (getEventDetails/getGames/getCompletedEvents 전수 실측 — games[].teams 는 side 뿐)
+	 * 스코어가 +1 되는 순간 그 세트의 승자를 적는 것이 유일한 실시간 소스다.
+	 *
+	 * <p>형식: 콤마 구분, index = 세트 번호. B/R = 매치 blue/red, '?' = 순서 미상.
+	 * 한 사이클에 두 팀이 함께 오르면(동기화 공백 30분+) 순서를 알 수 없어 '?' 로 채워
+	 * 이후 세트의 인덱스를 지킨다. 스코어가 목록보다 후퇴하면(네이버 wrong-high 정정·리메이크)
+	 * 목록을 재구축한다 — 완봉이면 전부 귀속, 아니면 '?'.</p>
+	 */
+	static String advanceSetWinners(String current, Integer blueScore, Integer redScore, boolean completed) {
+		int blue = blueScore == null ? 0 : blueScore;
+		int red = redScore == null ? 0 : redScore;
+		int total = blue + red;
+		if (total <= 0) {
+			return current;
+		}
+
+		List<String> winners = current == null || current.isBlank()
+				? new ArrayList<>()
+				: new ArrayList<>(Arrays.asList(current.split(",")));
+		long knownBlue = winners.stream().filter("B"::equals).count();
+		long knownRed = winners.stream().filter("R"::equals).count();
+
+		// 스코어 후퇴 — 진행 중엔 업스트림 stale(30분 sync 가 네이버 오버레이보다 뒤짐)일 가능성이
+		// 커서 기존 귀속을 지키고, 최종 스코어(completed)만 재구축 근거로 믿는다.
+		if (blue < knownBlue || red < knownRed || total < winners.size()) {
+			return completed ? rebuildSetWinners(blue, red) : current;
+		}
+
+		// 한쪽이 0 이면 지나간 세트 전부가 상대 승 — '?' 로 남았던 세트도 소급 확정된다.
+		if (blue == 0 || red == 0) {
+			return rebuildSetWinners(blue, red);
+		}
+		if (total == winners.size()) {
+			return current;
+		}
+
+		int added = total - winners.size();
+		long addedBlue = blue - knownBlue;
+		long addedRed = red - knownRed;
+		String mark = addedBlue == added && addedRed == 0 ? "B"
+				: addedRed == added && addedBlue == 0 ? "R"
+				: "?";
+		for (int i = 0; i < added; i++) {
+			winners.add(mark);
+		}
+		return String.join(",", winners);
+	}
+
+	private static boolean isCompleted(LeagueMatch match) {
+		return "completed".equalsIgnoreCase(match.getState());
+	}
+
+	private static String rebuildSetWinners(int blue, int red) {
+		String mark = red == 0 ? "B" : blue == 0 ? "R" : "?";
+		List<String> winners = new ArrayList<>();
+		for (int i = 0; i < blue + red; i++) {
+			winners.add(mark);
+		}
+		return String.join(",", winners);
+	}
+
 	public void syncMatches(String leagueSlug, boolean includeTeamMetadataSync) {
 		log.info("Starting sync for league: {}", leagueSlug);
 		// 1. 외부 API에서 데이터 가져오기 (1페이지 분량, pageToken=null)
@@ -209,6 +274,45 @@ public class LeagueMatchService {
 		log.info("Synced {} matches for league: {} (inserted={}, updated={}, skipped={})",
 				matches.size(), leagueSlug, upsertResult.insertedMatches(), upsertResult.updatedMatches(),
 				upsertResult.skippedMatches());
+
+		syncNewerPages(leagueSlug, response.getNewerPageToken());
+	}
+
+	/**
+	 * 기본 페이지 창 밖의 미래 경기를 따라간다.
+	 *
+	 * <p>기본 페이지는 과거~가까운 미래까지만 담는다. getSchedule 은 커서 페이지네이션이고 기존 sync 는 {@code pages.older} 만 따라갔다.
+	 * 그래서 창 밖 미래 일정(LCK 플레이오프·결승, LPL 정규 잔여+플레이오프 등)이 DB 에 아예 없었다.
+	 * 여기서는 upsert 만 한다 — 아직 시작도 안 한 경기에는 매핑할 게임이 없어
+	 * autoBackfill 을 태우면 매 sync 마다 헛된 getEventDetails 호출만 쌓인다.</p>
+	 */
+	private void syncNewerPages(String leagueSlug, String startToken) {
+		String token = startToken;
+		Set<String> visitedTokens = new java.util.LinkedHashSet<>();
+		int hops = 0;
+
+		while (token != null && !token.isBlank() && hops < MAX_NEWER_PAGE_HOPS && visitedTokens.add(token)) {
+			hops++;
+			try {
+				MatchResponseWrapper page = worldsService.getWorldsMatches(token, leagueSlug);
+				List<MatchResultDto> matches = page.getMatches();
+				if (matches == null || matches.isEmpty()) {
+					break;
+				}
+				MatchSyncUpsertResult result = upsertLeagueMatches(leagueSlug, matches);
+				log.info("Synced newer page {} for league: {} ({} matches, inserted={}, updated={}, skipped={})",
+						hops, leagueSlug, matches.size(), result.insertedMatches(), result.updatedMatches(),
+						result.skippedMatches());
+				token = page.getNewerPageToken();
+			} catch (Exception e) {
+				log.warn("Failed to sync newer page {} for league={}: {}", hops, leagueSlug, e.getMessage());
+				return;
+			}
+		}
+		if (hops >= MAX_NEWER_PAGE_HOPS) {
+			log.warn("Newer page hop limit reached for league={} (limit={}) — 남은 미래 페이지는 다음 sync 에서 따라간다.",
+					leagueSlug, MAX_NEWER_PAGE_HOPS);
+		}
 	}
 
 	public RecentMatchBackfillResult backfillRecentMatches(String leagueSlug, boolean includeTeamMetadataSync) {
@@ -805,6 +909,9 @@ public class LeagueMatchService {
 				LeagueMatch existing = existingMatchesById.get(dto.getMatchId());
 
 				if (existing == null) {
+					// 첫 관측 시점의 스코어로 시작 — 완봉 진행분은 즉시 귀속, 혼합 스코어는 '?' 로 자리만 잡는다.
+					incoming.applySetWinners(advanceSetWinners(
+							null, incoming.getBlueScore(), incoming.getRedScore(), isCompleted(incoming)));
 					dirtyMatches.add(incoming);
 					dirtyMatchIds.add(incoming.getId());
 					inserted++;
@@ -812,12 +919,18 @@ public class LeagueMatchService {
 				}
 
 				if (!hasRealtimeRelevantChange(existing, incoming)) {
-					// 시즌만 비어 있으면 채운다 (dirtyMatchIds에는 넣지 않아 게임 ID 재동기화는 트리거하지 않음)
+					// 시즌·bestOf 만 비어 있으면 채운다 (dirtyMatchIds에는 넣지 않아 게임 ID 재동기화는 트리거하지 않음)
+					boolean filled = false;
 					if (existing.getSeasonYear() == null) {
 						applySeasonIfResolvable(existing);
-						if (existing.getSeasonYear() != null) {
-							dirtyMatches.add(existing);
-						}
+						filled = existing.getSeasonYear() != null;
+					}
+					if (existing.getBestOf() == null && incoming.getBestOf() != null) {
+						existing.applyBestOf(incoming.getBestOf());
+						filled = true;
+					}
+					if (filled) {
+						dirtyMatches.add(existing);
 					}
 					skipped++;
 					continue;
@@ -841,6 +954,10 @@ public class LeagueMatchService {
 						incoming.isHasVod(),
 						incoming.getMatchDetailsJson(),
 						incoming.getLastUpdated());
+				existing.applySetWinners(advanceSetWinners(
+						existing.getSetWinners(), incoming.getBlueScore(), incoming.getRedScore(),
+						isCompleted(incoming)));
+				existing.applyBestOf(incoming.getBestOf());
 				applySeasonIfResolvable(existing);
 				dirtyMatches.add(existing);
 				dirtyMatchIds.add(existing.getId());
@@ -1103,6 +1220,7 @@ public class LeagueMatchService {
 				.redTeamCode(dto.getRedTeam().getCode()).redTeamName(dto.getRedTeam().getName())
 				.redExternalTeamId(dto.getRedTeam().getExternalTeamId())
 				.redTeamImageUrl(dto.getRedTeam().getImageUrl()).redScore(dto.getRedTeam().getWins()).hasVod(hasVod)
+				.bestOf(dto.getBestOf())
 				.matchDetailsJson(jsonDetails).lastUpdated(LocalDateTime.now()).build();
 	}
 
@@ -1134,6 +1252,7 @@ public class LeagueMatchService {
 																								// string
 				.state(entity.getState()) // [수정] Entity 상태 DTO로 전달
 				.score(entity.getBlueScore() + " : " + entity.getRedScore())
+				.bestOf(entity.getBestOf())
 				.blueTeam(
 						MatchResultDto.TeamInfo.builder()
 								.externalTeamId(entity.getBlueExternalTeamId())

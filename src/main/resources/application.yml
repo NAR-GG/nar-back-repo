@@ -7,6 +7,13 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
 
+  # 이미지 업로드(백오피스 공지 5MB·선수 2MB). 기본 1MB 면 서비스 검증 전에 스프링이 먼저 막는다.
+  # 컨테이너 상한은 가장 큰 용도(공지 5MB)에 맞추고, 용도별 상한은 각 서비스 검증이 담당한다.
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
+
   # docker stop 의 35초보다 짧게 잡아, 강제 SIGKILL 전에 정상 종료가 끝나도록 한다.
   lifecycle:
     timeout-per-shutdown-phase: 30s

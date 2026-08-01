@@ -3,8 +3,12 @@ package com.toy.nar.app.mobile.rating;
 import com.toy.nar.app.lolesports.live.LiveStateQueryService;
 import com.toy.nar.app.lolesports.live.dto.LiveGameState;
 import com.toy.nar.app.lolesports.live.dto.LiveParticipantState;
+import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchGame;
 import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
+import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
+import com.toy.nar.app.mobile.schedule.MobileScheduleService;
+import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingDetailResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingListResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingRequest;
@@ -50,6 +54,8 @@ public class MobileLivePlayerRatingService {
 	private final MemberRepository memberRepository;
 	private final PlayerRepository playerRepository;
 	private final LeagueMatchGameRepository leagueMatchGameRepository;
+	private final LeagueMatchRepository leagueMatchRepository;
+	private final MobileScheduleService mobileScheduleService;
 
 	public LivePlayerRatingListResponse getRatings(String gameId, String teamSide, Long memberId) {
 		LiveGameState state = requireState(gameId);
@@ -193,10 +199,17 @@ public class MobileLivePlayerRatingService {
 				? Map.of()
 				: leagueMatchGameRepository.findAllWithMatchByGameIdIn(gameIds).stream()
 						.collect(Collectors.toMap(LeagueMatchGame::getGameId, Function.identity(), (left, right) -> left));
+		// league_match_game 동기화 구멍(마지막 세트 누락 등)이 있어도 경기상세와 동일하게 보이도록,
+		// 미매핑 게임은 경기상세 세트 목록 로직(라이브 스냅샷 보강 포함)으로 matchInfo를 만든다.
+		Map<String, MyRatingListResponse.MatchInfo> fallbackMatchInfoByGameId =
+				buildFallbackMatchInfo(ratings.getContent(), matchGamesByGameId.keySet());
 
 		return new MyRatingListResponse(
 				ratings.getContent().stream()
-						.map(rating -> toMyRatingItem(rating, matchGamesByGameId.get(rating.getLiveGameId())))
+						.map(rating -> toMyRatingItem(
+								rating,
+								matchGamesByGameId.get(rating.getLiveGameId()),
+								fallbackMatchInfoByGameId.get(rating.getLiveGameId())))
 						.toList(),
 				ratings.getNumber(),
 				ratings.getSize(),
@@ -338,7 +351,10 @@ public class MobileLivePlayerRatingService {
 		return sum / count;
 	}
 
-	private MyRatingListResponse.MyRatingItem toMyRatingItem(LivePlayerRating rating, LeagueMatchGame matchGame) {
+	private MyRatingListResponse.MyRatingItem toMyRatingItem(
+			LivePlayerRating rating,
+			LeagueMatchGame matchGame,
+			MyRatingListResponse.MatchInfo fallbackMatchInfo) {
 		Player player = rating.getPlayer();
 		Member member = rating.getMember();
 		Team favoriteTeam = member != null ? member.getFavoriteTeam() : null;
@@ -358,21 +374,59 @@ public class MobileLivePlayerRatingService {
 				rating.getUpdatedAt(),
 				member != null ? member.getProfileImageUrl() : null,
 				favoriteTeam != null ? favoriteTeam.getImageUrl() : null,
-				toMatchInfo(matchGame));
+				matchGame != null ? toMatchInfo(matchGame) : fallbackMatchInfo);
 	}
 
 	private MyRatingListResponse.MatchInfo toMatchInfo(LeagueMatchGame matchGame) {
-		if (matchGame == null) {
-			return null;
-		}
+		return toMatchInfo(matchGame.getLeagueMatch(), matchGame.getGameOrder());
+	}
+
+	private MyRatingListResponse.MatchInfo toMatchInfo(LeagueMatch match, Integer gameOrder) {
 		return new MyRatingListResponse.MatchInfo(
-				matchGame.getLeagueMatch().getId(),
-				matchGame.getGameOrder(),
-				matchGame.getLeagueMatch().getLeagueName(),
-				matchGame.getLeagueMatch().getMatchTitle(),
-				matchGame.getLeagueMatch().getBlueTeamCode(),
-				matchGame.getLeagueMatch().getRedTeamCode(),
-				toKst(matchGame.getLeagueMatch().getMatchDate()));
+				match.getId(),
+				gameOrder,
+				match.getLeagueName(),
+				match.getMatchTitle(),
+				match.getBlueTeamCode(),
+				match.getRedTeamCode(),
+				toKst(match.getMatchDate()));
+	}
+
+	/**
+	 * 매핑 테이블에 없는 게임의 matchInfo 폴백. 리뷰 행이 이미 matchId를 알고 있으므로
+	 * 매치는 직접 조회하고, 세트 번호는 경기상세 세트 목록(getMatchGames)에서 찾는다 —
+	 * 화면 간 세트 번호가 항상 일치한다.
+	 */
+	private Map<String, MyRatingListResponse.MatchInfo> buildFallbackMatchInfo(
+			List<LivePlayerRating> ratings,
+			Set<String> mappedGameIds) {
+		Map<String, List<String>> gameIdsByMatchId = ratings.stream()
+				.filter(rating -> !mappedGameIds.contains(rating.getLiveGameId()))
+				.filter(rating -> rating.getMatchId() != null && !rating.getMatchId().isBlank())
+				.collect(Collectors.groupingBy(LivePlayerRating::getMatchId,
+						Collectors.mapping(LivePlayerRating::getLiveGameId,
+								Collectors.collectingAndThen(Collectors.toSet(), List::copyOf))));
+		if (gameIdsByMatchId.isEmpty()) {
+			return Map.of();
+		}
+		Map<String, MyRatingListResponse.MatchInfo> result = new HashMap<>();
+		for (Map.Entry<String, List<String>> entry : gameIdsByMatchId.entrySet()) {
+			Optional<LeagueMatch> match = leagueMatchRepository.findById(entry.getKey());
+			if (match.isEmpty()) {
+				continue;
+			}
+			Map<String, Integer> orderByGameId = mobileScheduleService.getMatchGames(entry.getKey())
+					.games().stream()
+					.filter(game -> game.gameOrder() != null)
+					.collect(Collectors.toMap(
+							MobileScheduleListResponse.MobileGameSummary::gameId,
+							MobileScheduleListResponse.MobileGameSummary::gameOrder,
+							(left, right) -> left));
+			for (String gameId : entry.getValue()) {
+				result.put(gameId, toMatchInfo(match.get(), orderByGameId.get(gameId)));
+			}
+		}
+		return result;
 	}
 
 	private LocalDateTime toKst(LocalDateTime utcDateTime) {

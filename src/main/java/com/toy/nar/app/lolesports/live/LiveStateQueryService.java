@@ -94,6 +94,11 @@ public class LiveStateQueryService {
 	}
 
 	private LiveGameState enrichMetadata(LiveGameState state) {
+		// 메타데이터가 이미 완비면 resolve 생략. league_match_game에 매핑 없는 게임은
+		// resolve가 라이브 리그 전체 스케줄 API 순회(수 초)로 빠지는데, 채울 것도 없이 낭비다.
+		if (hasCompleteMetadata(state)) {
+			return state;
+		}
 		ActiveLiveGame metadata = liveGameMetadataService.enrich(new ActiveLiveGame(
 				state.gameId(),
 				state.matchId(),
@@ -112,6 +117,17 @@ public class LiveStateQueryService {
 				state.frameTimestampUtc(),
 				state.participants(),
 				state.objectTimeline());
+	}
+
+	private boolean hasCompleteMetadata(LiveGameState state) {
+		return !isBlank(state.matchId())
+				&& !isBlank(state.leagueName())
+				&& !isBlank(state.blueTeamName())
+				&& !isBlank(state.redTeamName());
+	}
+
+	private boolean isBlank(String value) {
+		return value == null || value.isBlank();
 	}
 
 	private LiveObjectEventResponse toObjectEventResponse(LiveGameObjectEvent event) {
