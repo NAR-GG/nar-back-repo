@@ -136,8 +136,6 @@ jobs:
             docker run -d --name "${NEW_NAME}" -p 127.0.0.1:${NEW_PORT}:8080 \
               --restart unless-stopped \
               -m 1536m \
-              -v /srv/nar/images:/app/images \
-              -e IMAGES_DIR=/app/images \
               --log-driver=awslogs \
               --log-opt awslogs-region=ap-northeast-2 \
               --log-opt awslogs-group=/nar/app \

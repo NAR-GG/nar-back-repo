@@ -75,9 +75,6 @@ app:
         - "UCwvk_uRd0w-n0O1I4QRdM0g" # 롤꺾마
 
 nar:
-  images:
-    # 업로드된 선수 이미지 저장 위치. 배포는 -e IMAGES_DIR=/app/images + 호스트 볼륨 마운트.
-    dir: ${IMAGES_DIR:data/images}
   data:
     ingestion:
       jdbc:

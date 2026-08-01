@@ -2,43 +2,43 @@ package com.toy.nar.app.participant.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
-import com.toy.nar.config.PlayerImageProperties;
+import com.toy.nar.app.image.CloudinaryUploadClient;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 
 @ExtendWith(MockitoExtension.class)
 class PlayerImageStorageServiceTest {
 
+	private static final String SECURE_URL =
+			"https://res.cloudinary.com/nar/image/upload/v1722500000/players/860.webp";
+
 	@Mock
 	private PlayerRepository playerRepository;
 
-	@TempDir
-	Path tempDir;
+	@Mock
+	private CloudinaryUploadClient uploadClient;
 
+	@InjectMocks
 	private PlayerImageStorageService service;
-
-	@BeforeEach
-	void setUp() {
-		PlayerImageProperties properties = new PlayerImageProperties();
-		properties.setDir(tempDir.toString());
-		service = new PlayerImageStorageService(playerRepository, properties);
-	}
 
 	private Player givenPlayer() {
 		Player player = Player.builder().name("Quid").build();
@@ -47,48 +47,23 @@ class PlayerImageStorageServiceTest {
 	}
 
 	@Test
-	@DisplayName("webp를 올리면 players/{id}.webp 로 저장하고 image_url을 잠금과 함께 갱신한다")
-	void savesFileAndLocksImage() throws Exception {
+	@DisplayName("선수 ID 고정 public_id로 overwrite 업로드하고 변환 URL을 잠금과 함께 저장한다")
+	void uploadsToCloudinaryAndLocksImage() {
 		Player player = givenPlayer();
+		when(uploadClient.upload(any(MultipartFile.class), anyString(), anyBoolean())).thenReturn(SECURE_URL);
 		var file = new MockMultipartFile("file", "아무이름.webp", "image/webp", new byte[] {1, 2, 3});
 
 		service.upload(860L, file);
 
-		Path saved = tempDir.resolve("players/860.webp");
-		assertThat(Files.exists(saved)).isTrue();
-		assertThat(Files.readAllBytes(saved)).containsExactly(1, 2, 3);
-		// 캐시 무효화용 ?v= 가 붙는다 — 같은 파일명을 덮어써도 앱이 새 이미지를 받는다.
-		assertThat(player.getImageUrl()).startsWith("/images/players/860.webp?v=");
+		verify(uploadClient).upload(file, "players/860", true);
+		// 버전(/v.../)은 Cloudinary가 붙여 주고, 전송 최적화 변환이 끼워진다.
+		assertThat(player.getImageUrl())
+				.isEqualTo("https://res.cloudinary.com/nar/image/upload/f_auto,q_auto,w_500,c_limit/v1722500000/players/860.webp");
 		assertThat(player.isImageLocked()).isTrue();
 	}
 
 	@Test
-	@DisplayName("재업로드는 같은 파일명을 덮어쓴다(고아 파일 없음)")
-	void overwritesOnReupload() throws Exception {
-		Player player = Player.builder().name("Quid").build();
-		when(playerRepository.findWithCurrentTeamById(860L)).thenReturn(Optional.of(player));
-
-		service.upload(860L, new MockMultipartFile("file", "a.webp", "image/webp", new byte[] {1}));
-		service.upload(860L, new MockMultipartFile("file", "b.webp", "image/webp", new byte[] {9, 9}));
-
-		try (var entries = Files.list(tempDir.resolve("players"))) {
-			assertThat(entries).hasSize(1);
-		}
-		assertThat(Files.readAllBytes(tempDir.resolve("players/860.webp"))).containsExactly(9, 9);
-	}
-
-	@Test
-	@DisplayName("확장자는 파일명이 아니라 Content-Type으로 정한다")
-	void picksExtensionFromContentType() {
-		givenPlayer();
-
-		service.upload(860L, new MockMultipartFile("file", "../../evil.webp", "image/png", new byte[] {1}));
-
-		assertThat(Files.exists(tempDir.resolve("players/860.png"))).isTrue();
-	}
-
-	@Test
-	@DisplayName("허용하지 않는 타입은 거부한다")
+	@DisplayName("허용하지 않는 타입은 업로드 없이 거부한다")
 	void rejectsDisallowedType() {
 		givenPlayer();
 		var file = new MockMultipartFile("file", "x.svg", "image/svg+xml", new byte[] {1});
@@ -96,10 +71,11 @@ class PlayerImageStorageServiceTest {
 		assertThatThrownBy(() -> service.upload(860L, file))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("webp");
+		verify(uploadClient, never()).upload(any(), anyString(), anyBoolean());
 	}
 
 	@Test
-	@DisplayName("2MB를 넘으면 거부한다")
+	@DisplayName("2MB를 넘으면 업로드 없이 거부한다")
 	void rejectsOversizedFile() {
 		givenPlayer();
 		byte[] big = new byte[(int) PlayerImageStorageService.MAX_BYTES + 1];
@@ -108,6 +84,7 @@ class PlayerImageStorageServiceTest {
 		assertThatThrownBy(() -> service.upload(860L, file))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("2MB");
+		verify(uploadClient, never()).upload(any(), anyString(), anyBoolean());
 	}
 
 	@Test

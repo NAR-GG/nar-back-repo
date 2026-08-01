@@ -56,6 +56,3 @@ src/main/build/
 logs/
 test_result.log
 .env.local
-
-# 로컬 업로드 이미지 저장소(nar.images.dir 기본값)
-data/
