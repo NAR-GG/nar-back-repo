@@ -270,7 +270,9 @@ public class AuthController {
         String newAccessToken = jwtTokenProvider.createAccessToken(member.getId(), member.isOnboarded(), member.getRole().name());
         String newRefreshToken = jwtTokenProvider.createRefreshToken(member.getId());
 
-        refreshTokenRepository.delete(stored);
+        // 벌크 삭제 — 동시 리프레시의 늦은 쪽이 이미 지워진 행을 만나도(0건 삭제) 예외 없이
+        // 자기 토큰을 커밋한다. 두 클라이언트 모두 유효한 토큰을 받는다.
+        refreshTokenRepository.deleteByToken(refreshToken);
         refreshTokenRepository.save(RefreshToken.builder()
                 .member(member)
                 .token(newRefreshToken)

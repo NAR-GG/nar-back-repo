@@ -38,6 +38,10 @@ public class JwtTokenProvider {
     public String createRefreshToken(Long memberId) {
         return Jwts.builder()
                 .subject(String.valueOf(memberId))
+                // jti 가 없으면 페이로드가 (subject, iat, exp)뿐인데 iat/exp 는 초 단위라
+                // 같은 회원에게 같은 초에 발급한 토큰이 바이트 동일해진다. DB unique(token)에
+                // 걸려 동시 리프레시/로그인이 500 으로 죽었다(실측 2026-07-31 새벽 14건).
+                .id(java.util.UUID.randomUUID().toString())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + REFRESH_TOKEN_EXPIRY_MS))
                 .signWith(secretKey)
