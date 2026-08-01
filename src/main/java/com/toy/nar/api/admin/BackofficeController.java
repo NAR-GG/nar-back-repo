@@ -8,6 +8,7 @@ import com.toy.nar.app.member.service.MemberDeleteService;
 import com.toy.nar.app.notice.service.NoticeImageStorageService;
 import com.toy.nar.app.notice.service.NoticeService;
 import com.toy.nar.app.participant.service.PlayerAdminService;
+import com.toy.nar.app.participant.service.PlayerImageStorageService;
 import com.toy.nar.app.riot.RiotAccountVerifyService;
 import com.toy.nar.app.riot.RiotApiException;
 import com.toy.nar.app.riot.dto.RiotAccountVerification;
@@ -68,6 +69,7 @@ public class BackofficeController {
     private final LeagueRepository leagueRepository;
     private final LeagueConfigService leagueConfigService;
     private final PlayerAdminService playerAdminService;
+    private final PlayerImageStorageService playerImageStorageService;
     private final RiotAccountVerifyService riotAccountVerifyService;
     private final MemberDeleteService memberDeleteService;
     private final LivePlayerRatingRepository livePlayerRatingRepository;
@@ -255,6 +257,13 @@ public class BackofficeController {
         return PlayerRow.from(playerAdminService.update(
                 id, request.imageUrl(), request.unlockImage(), request.currentTeamId(),
                 request.unlockGameAccounts(), request.gameAccounts()));
+    }
+
+    // 선수 이미지 업로드(배포 불필요). 파일은 컨테이너 밖 디렉토리에 저장하고 DB엔 경로만 남긴다.
+    // PUT /players/{id} 와 달리 LCK 게이트가 없다 — LCK CL·LCS 선수도 이미지가 필요하다.
+    @PostMapping("/players/{id}/image")
+    public PlayerRow uploadPlayerImage(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        return PlayerRow.from(playerImageStorageService.upload(id, file));
     }
 
     // 계정 넣기 전 검증(저장 없음). 팀원이 riotId·지역을 확정하기 전에 실제 계정·레벨·티어를 확인한다.

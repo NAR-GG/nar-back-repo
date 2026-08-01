@@ -1,20 +1,11 @@
 package com.toy.nar.app.notice.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.toy.nar.app.auth.profile.CloudinarySignatureService;
-import com.toy.nar.config.CloudinaryProperties;
-import java.time.Instant;
-import java.util.Map;
+import com.toy.nar.app.image.CloudinaryUploadClient;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.reactive.function.BodyInserters;
-import org.springframework.web.reactive.function.client.WebClient;
 
 /**
  * 공지 본문 이미지 저장 — Cloudinary 서버사이드 업로드.
@@ -34,9 +25,7 @@ public class NoticeImageStorageService {
     /** 폰 화면(시안 375, @3x=1125)에 충분한 폭 + 포맷/품질 자동. */
     private static final String DELIVERY_TRANSFORM = "f_auto,q_auto,w_750,c_limit";
 
-    private final CloudinaryProperties properties;
-    private final CloudinarySignatureService signatureService;
-    private final WebClient webClient;
+    private final CloudinaryUploadClient uploadClient;
 
     public String upload(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -49,45 +38,8 @@ public class NoticeImageStorageService {
             throw new IllegalArgumentException("지원하지 않는 이미지 형식입니다. (png/jpg/webp/gif)");
         }
 
-        String publicId = "notices/" + UUID.randomUUID();
-        long timestamp = Instant.now().getEpochSecond();
-        String signature = signatureService.sign(Map.of(
-                "public_id", publicId,
-                "timestamp", String.valueOf(timestamp)));
-
-        MultipartBodyBuilder body = new MultipartBodyBuilder();
-        body.part("file", toResource(file));
-        body.part("public_id", publicId);
-        body.part("timestamp", String.valueOf(timestamp));
-        body.part("api_key", properties.getApiKey());
-        body.part("signature", signature);
-
-        JsonNode response = webClient.post()
-                .uri("https://api.cloudinary.com/v1_1/" + properties.getCloudName() + "/image/upload")
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(BodyInserters.fromMultipartData(body.build()))
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block();
-        if (response == null || response.path("secure_url").isMissingNode()) {
-            throw new IllegalStateException("이미지 업로드에 실패했습니다.");
-        }
-        return withDeliveryTransform(response.path("secure_url").asText());
-    }
-
-    private static ByteArrayResource toResource(MultipartFile file) {
-        try {
-            byte[] bytes = file.getBytes();
-            String name = file.getOriginalFilename();
-            return new ByteArrayResource(bytes) {
-                @Override
-                public String getFilename() {
-                    return name == null || name.isBlank() ? "image" : name;
-                }
-            };
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException("업로드 파일을 읽지 못했습니다.", e);
-        }
+        String secureUrl = uploadClient.upload(file, "notices/" + UUID.randomUUID(), false);
+        return withDeliveryTransform(secureUrl);
     }
 
     /** https://res.cloudinary.com/{cloud}/image/upload/... → /upload/{transform}/... */
