@@ -1,5 +1,6 @@
 package com.toy.nar.domain.participant.repository;
 
+import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +19,11 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 	// 백오피스 수정 응답이 트랜잭션 밖(OSIV off)에서 currentTeam을 직렬화하므로 함께 로딩한다.
 	@EntityGraph(attributePaths = {"currentTeam"})
 	Optional<Player> findWithCurrentTeamById(Long id);
+
+	// 로스터 diff 알림 대상: 소속팀이 LCK 1군인 선수. 팀명 비교를 위해 currentTeam을 함께 로딩한다.
+	@EntityGraph(attributePaths = {"currentTeam"})
+	@Query("SELECT p FROM Player p WHERE UPPER(p.currentTeam.code) IN :codes")
+	List<Player> findByCurrentTeamCodeIn(@Param("codes") List<String> codes);
 
 	// 백오피스 검색(리그 필터 없음): 선수명·실명 부분일치. q 가 null 이면 전체.
 	// currentTeam은 목록 응답에 팀명을 실어야 해서 EntityGraph로 함께 로딩(N+1/LAZY 예외 방지).
@@ -97,6 +103,14 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 	 * {@code platform = 'KR'}이 있어 해외 리그 선수의 NA/EUW 계정이 목록에서 빠졌다
 	 * (라이브 감지는 플랫폼 무관인데 구독 자체가 불가능한 모순). 자격은 {@code enabled}·
 	 * {@code primary_account}만으로 판단한다.
+	 *
+	 * <p>{@code current_team_id}(백오피스 수동 소속팀)가 <b>LCK 1군 팀일 때만</b> 경기 기록 팀을 덮는다.
+	 * 이적한 선수는 새 팀 경기가 CSV에 들어오기 전까지 옛 팀에 남는데, 백오피스에서 고치면 즉시 반영되게
+	 * 하려는 것이다. 1군 코드로 좁히는 이유: {@code current_team_id}는 V54가 "전 리그 최근 경기 팀"으로
+	 * 일괄 백필한 값이라 1군 선수인데도 챌린저스·아카데미 팀을 가리키는 경우가 많다(2026-08 기준 LCK
+	 * 2026 출전자 64명 중 9명). 2군 팀은 {@code team_code}가 없어 온보딩 팀 목록
+	 * ({@link LckTeamCatalog#TEAM_CODES})에 없으므로, 조건 없이 덮으면 그 9명이 어느 팀 목록에도
+	 * 안 잡혀 사라진다.
 	 */
 	@Query(
 			value = """
@@ -108,10 +122,10 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 							p.player_name AS playerName,
 							p.image_url AS playerImageUrl,
 							p.role AS role,
-							t.team_id AS teamId,
-							t.team_code AS teamCode,
-							t.team_name AS teamName,
-							t.team_image_url AS teamImageUrl,
+							COALESCE(ct.team_id, t.team_id) AS teamId,
+							COALESCE(ct.team_code, t.team_code) AS teamCode,
+							COALESCE(ct.team_name, t.team_name) AS teamName,
+							COALESCE(ct.team_image_url, t.team_image_url) AS teamImageUrl,
 							ROW_NUMBER() OVER (
 								PARTITION BY p.player_id
 								ORDER BY g.actual_game_start_time DESC, g.game_id DESC
@@ -121,6 +135,8 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 						JOIN leagues l ON g.league_id = l.league_id
 						JOIN players p ON gp.player_id = p.player_id
 						JOIN teams t ON gp.team_id = t.team_id
+						LEFT JOIN teams ct ON ct.team_id = p.current_team_id
+						                  AND ct.team_code IN (:firstTeamCodes)
 						WHERE l.league_name = :leagueName
 						  AND l.season_year = :year
 						UNION ALL
@@ -165,7 +181,7 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 						SELECT
 							p.player_id AS playerId,
 							p.player_name AS playerName,
-							t.team_id AS teamId,
+							COALESCE(ct.team_id, t.team_id) AS teamId,
 							ROW_NUMBER() OVER (
 								PARTITION BY p.player_id
 								ORDER BY g.actual_game_start_time DESC, g.game_id DESC
@@ -175,6 +191,8 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 						JOIN leagues l ON g.league_id = l.league_id
 						JOIN players p ON gp.player_id = p.player_id
 						JOIN teams t ON gp.team_id = t.team_id
+						LEFT JOIN teams ct ON ct.team_id = p.current_team_id
+						                  AND ct.team_code IN (:firstTeamCodes)
 						WHERE l.league_name = :leagueName
 						  AND l.season_year = :year
 						UNION ALL
@@ -206,23 +224,31 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 			@Param("year") int year,
 			@Param("teamId") Long teamId,
 			@Param("query") String query,
+			@Param("firstTeamCodes") List<String> firstTeamCodes,
 			Pageable pageable);
 
+	default Page<LckPlayerOption> findLckPlayerOptions(
+			String leagueName, int year, Long teamId, String query, Pageable pageable) {
+		return findLckPlayerOptions(leagueName, year, teamId, query, LckTeamCatalog.TEAM_CODES, pageable);
+	}
+
+	// 팀 컬럼 override 근거는 findLckPlayerOptions javadoc 참고(1군 코드일 때만 current_team이 이긴다).
 	@Query("""
 			SELECT DISTINCT
 				p.id AS playerId,
 				p.name AS playerName,
 				p.imageUrl AS playerImageUrl,
 				p.role AS role,
-				t.id AS teamId,
-				t.code AS teamCode,
-				t.name AS teamName,
-				t.imageUrl AS teamImageUrl
+				COALESCE(ct.id, t.id) AS teamId,
+				COALESCE(ct.code, t.code) AS teamCode,
+				COALESCE(ct.name, t.name) AS teamName,
+				COALESCE(ct.imageUrl, t.imageUrl) AS teamImageUrl
 			FROM GameParticipant gp
 			JOIN gp.player p
 			JOIN gp.team t
 			JOIN gp.game g
 			JOIN g.league l
+			LEFT JOIN Team ct ON ct.id = p.currentTeam.id AND ct.code IN :firstTeamCodes
 			WHERE l.leagueName = :leagueName
 			  AND l.seasonYear = :year
 			  AND g.actualGameStartTime = (
@@ -235,28 +261,35 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 				    AND l2.seasonYear = :year
 			  )
 			  AND p.id = :playerId
-			ORDER BY t.name
+			ORDER BY COALESCE(ct.name, t.name)
 			""")
 	List<LckPlayerOption> findLckPlayerOption(
 			@Param("leagueName") String leagueName,
 			@Param("year") int year,
-			@Param("playerId") Long playerId);
+			@Param("playerId") Long playerId,
+			@Param("firstTeamCodes") List<String> firstTeamCodes);
 
+	default List<LckPlayerOption> findLckPlayerOption(String leagueName, int year, Long playerId) {
+		return findLckPlayerOption(leagueName, year, playerId, LckTeamCatalog.TEAM_CODES);
+	}
+
+	// 팀 컬럼 override 근거는 findLckPlayerOptions javadoc 참고(1군 코드일 때만 current_team이 이긴다).
 	@Query("""
 			SELECT DISTINCT
 				p.id AS playerId,
 				p.name AS playerName,
 				p.imageUrl AS playerImageUrl,
 				p.role AS role,
-				t.id AS teamId,
-				t.code AS teamCode,
-				t.name AS teamName,
-				t.imageUrl AS teamImageUrl
+				COALESCE(ct.id, t.id) AS teamId,
+				COALESCE(ct.code, t.code) AS teamCode,
+				COALESCE(ct.name, t.name) AS teamName,
+				COALESCE(ct.imageUrl, t.imageUrl) AS teamImageUrl
 			FROM GameParticipant gp
 			JOIN gp.player p
 			JOIN gp.team t
 			JOIN gp.game g
 			JOIN g.league l
+			LEFT JOIN Team ct ON ct.id = p.currentTeam.id AND ct.code IN :firstTeamCodes
 			WHERE l.leagueName = :leagueName
 			  AND l.seasonYear = :year
 			  AND g.actualGameStartTime = (
@@ -269,12 +302,18 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
 				    AND l2.seasonYear = :year
 			  )
 			  AND p.id IN :playerIds
-			ORDER BY p.name, t.name
+			ORDER BY p.name, COALESCE(ct.name, t.name)
 			""")
 	List<LckPlayerOption> findLckPlayerOptionsByPlayerIds(
 			@Param("leagueName") String leagueName,
 			@Param("year") int year,
-			@Param("playerIds") Set<Long> playerIds);
+			@Param("playerIds") Set<Long> playerIds,
+			@Param("firstTeamCodes") List<String> firstTeamCodes);
+
+	default List<LckPlayerOption> findLckPlayerOptionsByPlayerIds(
+			String leagueName, int year, Set<Long> playerIds) {
+		return findLckPlayerOptionsByPlayerIds(leagueName, year, playerIds, LckTeamCatalog.TEAM_CODES);
+	}
 
 	// 솔랭 전용 선수(계정 보유, 팀 없음)를 LckPlayerOption으로 투영. 구독 표시/검증 병합용.
 	@Query(value = """
