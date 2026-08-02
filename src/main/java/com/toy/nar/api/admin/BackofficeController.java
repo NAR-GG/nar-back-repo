@@ -225,13 +225,14 @@ public class BackofficeController {
                         v.getSetEndEnabled(), v.getLiveEventEnabled()));
     }
 
-    // 구독 탭 — 구독자가 있는 경기 목록(구독자 수 desc). q로 경기명·팀명 검색.
+    // 구독 탭 — 구독자가 있는 경기 목록(구독자 수 desc). q로 경기명·팀명 검색, state로 진행 상태 필터.
     // 정렬은 쿼리에 고정(인기순)이라 클라이언트 sort는 무시(page/size만 사용).
     @GetMapping("/subscriptions/matches")
     public Page<SubscribedMatchRow> subscribedMatches(@RequestParam(required = false) String q,
+                                                      @RequestParam(required = false) String state,
                                                       Pageable pageable) {
         Pageable pageOnly = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
-        return matchSubscriptionRepository.findSubscribedMatches(blankToNull(q), pageOnly)
+        return matchSubscriptionRepository.findSubscribedMatches(blankToNull(q), blankToNull(state), pageOnly)
                 .map(v -> new SubscribedMatchRow(v.getMatchId(), v.getLeagueName(), v.getMatchTitle(),
                         v.getBlueTeamName(), v.getRedTeamName(), v.getState(), toKst(v.getMatchDate()),
                         v.getSubscriberCount()));

@@ -25,7 +25,8 @@ public interface MemberMatchSubscriptionRepository
 	List<String> findMatchIdsByMemberId(@Param("memberId") Long memberId);
 
 	// 백오피스 구독 탭: 구독자가 1명 이상인 경기만(인기순, 동수면 최신 경기 우선).
-	// 전체 경기는 대부분 구독자 0이라 INNER JOIN 으로 걸러낸다. q 는 경기명·팀명 검색.
+	// 전체 경기는 대부분 구독자 0이라 INNER JOIN 으로 걸러낸다. q 는 경기명·팀명 검색,
+	// state 는 업스트림 값(unstarted/inProgress/completed) 정확일치.
 	// match_date 는 UTC 저장이라 KST 변환은 컨트롤러에서 한다(리뷰 탭과 동일).
 	@Query(value = """
 			SELECT lm.id AS matchId,
@@ -42,6 +43,7 @@ public interface MemberMatchSubscriptionRepository
 			       OR LOWER(lm.match_title) LIKE LOWER(CONCAT('%', :q, '%'))
 			       OR LOWER(lm.blue_team_name) LIKE LOWER(CONCAT('%', :q, '%'))
 			       OR LOWER(lm.red_team_name) LIKE LOWER(CONCAT('%', :q, '%')))
+			  AND (:state IS NULL OR lm.state = :state)
 			GROUP BY lm.id, lm.league_name, lm.match_title, lm.blue_team_name,
 			         lm.red_team_name, lm.state, lm.match_date
 			ORDER BY subscriberCount DESC, lm.match_date DESC
@@ -54,9 +56,11 @@ public interface MemberMatchSubscriptionRepository
 			       OR LOWER(lm.match_title) LIKE LOWER(CONCAT('%', :q, '%'))
 			       OR LOWER(lm.blue_team_name) LIKE LOWER(CONCAT('%', :q, '%'))
 			       OR LOWER(lm.red_team_name) LIKE LOWER(CONCAT('%', :q, '%')))
+			  AND (:state IS NULL OR lm.state = :state)
 			""",
 			nativeQuery = true)
-	Page<SubscribedMatchView> findSubscribedMatches(@Param("q") String q, Pageable pageable);
+	Page<SubscribedMatchView> findSubscribedMatches(@Param("q") String q, @Param("state") String state,
+			Pageable pageable);
 
 	// 백오피스 구독 탭: 특정 경기를 구독한 회원 목록(최근 구독순) + 알림 토글 상태. 팀 구독과 동일 패턴.
 	@Query(value = """
