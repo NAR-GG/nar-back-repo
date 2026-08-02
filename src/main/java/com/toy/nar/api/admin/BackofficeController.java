@@ -1,5 +1,8 @@
 package com.toy.nar.api.admin;
 
+import com.toy.nar.app.admin.dto.StatsOverviewResponse;
+import com.toy.nar.app.admin.dto.StatsSeriesResponse;
+import com.toy.nar.app.admin.service.AdminStatsService;
 import com.toy.nar.app.lolesports.LeagueConfigService;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
@@ -81,6 +84,7 @@ public class BackofficeController {
     private final MemberDeviceRepository memberDeviceRepository;
     private final MemberTeamNotificationSubscriptionRepository teamSubscriptionRepository;
     private final MemberMatchSubscriptionRepository matchSubscriptionRepository;
+    private final AdminStatsService adminStatsService;
     private final NoticeService noticeService;
     private final NoticeImageStorageService noticeImageStorageService;
 
@@ -290,6 +294,21 @@ public class BackofficeController {
             throw new NoSuchElementException("리뷰를 찾을 수 없습니다: " + id);
         }
         livePlayerRatingRepository.deleteById(id);
+    }
+
+    /**
+     * 대시보드 시계열 — 가입·구독·알림을 1시간 버킷으로. 값 0인 시간대는 행이 없다.
+     * 일별 화면은 프론트가 시간 버킷을 합쳐 그리고, 24시간 롤링 뷰는 마지막 이틀 버킷으로 만든다.
+     */
+    @GetMapping("/stats/series")
+    public StatsSeriesResponse statsSeries(@RequestParam(defaultValue = "30") int days) {
+        return adminStatsService.series(days);
+    }
+
+    /** 대시보드 퍼널·분포 — 기간과 무관한 값이라 시계열과 분리. */
+    @GetMapping("/stats/overview")
+    public StatsOverviewResponse statsOverview() {
+        return adminStatsService.overview();
     }
 
     @GetMapping("/cron-jobs")
