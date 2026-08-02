@@ -17,18 +17,22 @@ import java.util.List;
  * <p>시간 버킷은 <b>1시간</b> 단위로만 내려준다. 일별 화면은 프론트에서 시간 버킷을 합쳐 쓴다
  * (일별/24시간 뷰가 쿼리 하나를 공유하고, 24시간 롤링 윈도가 자정을 가로질러도 그대로 만들어진다).
  * 값이 0인 버킷은 행 자체가 없다 — 빈 구간 채우기는 화면 쪽 책임.
+ *
+ * <p>버킷 키는 <b>에폭 시(epoch hour)</b> 정수다. 문자열({@code DATE_FORMAT})로 그룹핑하면 35만 행짜리
+ * 알림 집계가 프로덕션에서 3,311ms 걸렸고, 같은 쿼리를 정수 키로 바꾸니 1,257ms 였다(2026-08-03 EXPLAIN ANALYZE
+ * 실측). 사람이 읽을 포맷 변환은 서비스에서 한다.
  */
 public interface AdminStatsRepository extends Repository<Member, Long> {
 
-    /** {@code bucket} = {@code 2026-08-02T13:00} 형식(서버 로컬시각), {@code cnt} = 그 1시간 동안의 건수. */
+    /** {@code bucket} = 에폭 시(= 유닉스 시각 / 3600), {@code cnt} = 그 1시간 동안의 건수. */
     interface HourCount {
-        String getBucket();
+        long getBucket();
 
         long getCnt();
     }
 
     interface SubscriptionHourCount {
-        String getBucket();
+        long getBucket();
 
         long getPlayerCnt();
 
@@ -54,7 +58,7 @@ public interface AdminStatsRepository extends Repository<Member, Long> {
     }
 
     @Query(value = """
-            SELECT DATE_FORMAT(created_at, '%Y-%m-%dT%H:00') AS bucket, COUNT(*) AS cnt
+            SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600) AS bucket, COUNT(*) AS cnt
             FROM member
             WHERE created_at >= :from
             GROUP BY bucket
@@ -72,13 +76,13 @@ public interface AdminStatsRepository extends Repository<Member, Long> {
                    SUM(t) AS teamCnt,
                    SUM(m) AS matchCnt
             FROM (
-                SELECT DATE_FORMAT(created_at, '%Y-%m-%dT%H:00') AS bucket, COUNT(*) AS p, 0 AS t, 0 AS m
+                SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600) AS bucket, COUNT(*) AS p, 0 AS t, 0 AS m
                 FROM member_favorite_player WHERE created_at >= :from GROUP BY bucket
                 UNION ALL
-                SELECT DATE_FORMAT(created_at, '%Y-%m-%dT%H:00'), 0, COUNT(*), 0
+                SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600), 0, COUNT(*), 0
                 FROM member_team_notification_subscription WHERE created_at >= :from GROUP BY 1
                 UNION ALL
-                SELECT DATE_FORMAT(created_at, '%Y-%m-%dT%H:00'), 0, 0, COUNT(*)
+                SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600), 0, 0, COUNT(*)
                 FROM member_match_subscription WHERE created_at >= :from GROUP BY 1
             ) x
             GROUP BY bucket
@@ -86,9 +90,15 @@ public interface AdminStatsRepository extends Repository<Member, Long> {
             """, nativeQuery = true)
     List<SubscriptionHourCount> subscriptionsByHour(@Param("from") LocalDateTime from);
 
-    /** 인앱 알림 생성 건수 = 발송량. 푸시 전송 결과 테이블(delivery)이 아니라 알림함 기준이다. */
+    /**
+     * 인앱 알림 생성 건수 = 발송량. 푸시 전송 결과 테이블(delivery)이 아니라 알림함 기준이다.
+     *
+     * <p>대시보드에서 제일 비싼 쿼리. 알림은 대량 발송이라 35만 행이 최근 몇 주에 몰려 있어
+     * 기간을 좁혀도 스캔량이 줄지 않고(30일·60일 모두 전량), 모든 행이 조건에 걸려 인덱스 seek 도 의미가 없다.
+     * 그래서 별도 엔드포인트 + 캐시로 분리해 나머지 카드가 먼저 그려지게 한다.
+     */
     @Query(value = """
-            SELECT DATE_FORMAT(created_at, '%Y-%m-%dT%H:00') AS bucket, COUNT(*) AS cnt
+            SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600) AS bucket, COUNT(*) AS cnt
             FROM member_notification
             WHERE created_at >= :from
             GROUP BY bucket
