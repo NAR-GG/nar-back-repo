@@ -21,6 +21,10 @@ public interface MemberFavoritePlayerRepository extends JpaRepository<MemberFavo
 	@EntityGraph(attributePaths = "player")
 	Optional<MemberFavoritePlayer> findByMember_IdAndPlayer_Id(Long memberId, Long playerId);
 
+	// 백오피스 회원 상세: 소속팀 이름까지 한 방에(선수마다 팀 조회하면 N+1).
+	@EntityGraph(attributePaths = {"player", "player.currentTeam"})
+	List<MemberFavoritePlayer> findWithPlayerAndTeamByMember_IdOrderByCreatedAtDesc(Long memberId);
+
 	@Query("""
 			SELECT favorite.player.id
 			FROM MemberFavoritePlayer favorite
