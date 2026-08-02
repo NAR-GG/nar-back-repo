@@ -1,5 +1,8 @@
 package com.toy.nar.api.admin;
 
+import com.toy.nar.app.admin.dto.StatsOverviewResponse;
+import com.toy.nar.app.admin.dto.StatsSeriesResponse;
+import com.toy.nar.app.admin.service.AdminStatsService;
 import com.toy.nar.app.lolesports.LeagueConfigService;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
@@ -81,6 +84,7 @@ public class BackofficeController {
     private final MemberDeviceRepository memberDeviceRepository;
     private final MemberTeamNotificationSubscriptionRepository teamSubscriptionRepository;
     private final MemberMatchSubscriptionRepository matchSubscriptionRepository;
+    private final AdminStatsService adminStatsService;
     private final NoticeService noticeService;
     private final NoticeImageStorageService noticeImageStorageService;
 
@@ -221,13 +225,14 @@ public class BackofficeController {
                         v.getSetEndEnabled(), v.getLiveEventEnabled()));
     }
 
-    // 구독 탭 — 구독자가 있는 경기 목록(구독자 수 desc). q로 경기명·팀명 검색.
+    // 구독 탭 — 구독자가 있는 경기 목록(구독자 수 desc). q로 경기명·팀명 검색, state로 진행 상태 필터.
     // 정렬은 쿼리에 고정(인기순)이라 클라이언트 sort는 무시(page/size만 사용).
     @GetMapping("/subscriptions/matches")
     public Page<SubscribedMatchRow> subscribedMatches(@RequestParam(required = false) String q,
+                                                      @RequestParam(required = false) String state,
                                                       Pageable pageable) {
         Pageable pageOnly = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
-        return matchSubscriptionRepository.findSubscribedMatches(blankToNull(q), pageOnly)
+        return matchSubscriptionRepository.findSubscribedMatches(blankToNull(q), blankToNull(state), pageOnly)
                 .map(v -> new SubscribedMatchRow(v.getMatchId(), v.getLeagueName(), v.getMatchTitle(),
                         v.getBlueTeamName(), v.getRedTeamName(), v.getState(), toKst(v.getMatchDate()),
                         v.getSubscriberCount()));
@@ -289,6 +294,21 @@ public class BackofficeController {
             throw new NoSuchElementException("리뷰를 찾을 수 없습니다: " + id);
         }
         livePlayerRatingRepository.deleteById(id);
+    }
+
+    /**
+     * 대시보드 시계열 — 가입·구독·알림을 1시간 버킷으로. 값 0인 시간대는 행이 없다.
+     * 일별 화면은 프론트가 시간 버킷을 합쳐 그리고, 24시간 롤링 뷰는 마지막 이틀 버킷으로 만든다.
+     */
+    @GetMapping("/stats/series")
+    public StatsSeriesResponse statsSeries(@RequestParam(defaultValue = "30") int days) {
+        return adminStatsService.series(days);
+    }
+
+    /** 대시보드 퍼널·분포 — 기간과 무관한 값이라 시계열과 분리. */
+    @GetMapping("/stats/overview")
+    public StatsOverviewResponse statsOverview() {
+        return adminStatsService.overview();
     }
 
     @GetMapping("/cron-jobs")

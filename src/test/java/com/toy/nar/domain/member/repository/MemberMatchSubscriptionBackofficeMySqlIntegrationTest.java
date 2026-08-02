@@ -62,10 +62,11 @@ class MemberMatchSubscriptionBackofficeMySqlIntegrationTest {
 	@BeforeEach
 	void seed() {
 		// m-hot: 구독자 2명, m-cold: 1명, m-none: 0명(목록에서 빠져야 함).
+		// m-cold 만 unstarted — state 필터 검증용.
 		matchRepository.saveAll(List.of(
-				match("m-hot", "LCK", LocalDateTime.of(2026, 7, 10, 9, 0), "T1", "GEN"),
-				match("m-cold", "LCK", LocalDateTime.of(2026, 7, 11, 9, 0), "KT", "DK"),
-				match("m-none", "LEC", LocalDateTime.of(2026, 7, 12, 9, 0), "G2", "FNC")));
+				match("m-hot", "LCK", LocalDateTime.of(2026, 7, 10, 9, 0), "T1", "GEN", "completed"),
+				match("m-cold", "LCK", LocalDateTime.of(2026, 7, 11, 9, 0), "KT", "DK", "unstarted"),
+				match("m-none", "LEC", LocalDateTime.of(2026, 7, 12, 9, 0), "G2", "FNC", "unstarted")));
 
 		Member alice = new Member("앨리스", "1234", "a@nar.kr");
 		Member bob = new Member("밥", "5678", "b@nar.kr");
@@ -82,7 +83,7 @@ class MemberMatchSubscriptionBackofficeMySqlIntegrationTest {
 	@Test
 	@DisplayName("구독자가 있는 경기만 구독자 수 내림차순으로 내려준다")
 	void listsOnlySubscribedMatchesOrderedByCount() {
-		var page = repository.findSubscribedMatches(null, PageRequest.of(0, 20));
+		var page = repository.findSubscribedMatches(null, null, PageRequest.of(0, 20));
 
 		assertThat(page.getTotalElements()).isEqualTo(2);
 		assertThat(page.getContent()).extracting(v -> v.getMatchId() + ":" + v.getSubscriberCount())
@@ -92,9 +93,18 @@ class MemberMatchSubscriptionBackofficeMySqlIntegrationTest {
 	@Test
 	@DisplayName("q는 경기명·팀명 부분일치로 거른다")
 	void searchMatchesTeamName() {
-		var page = repository.findSubscribedMatches("gen", PageRequest.of(0, 20));
+		var page = repository.findSubscribedMatches("gen", null, PageRequest.of(0, 20));
 
 		assertThat(page.getContent()).extracting(v -> v.getMatchId()).containsExactly("m-hot");
+	}
+
+	@Test
+	@DisplayName("state 는 진행 상태 정확일치로 거른다")
+	void filtersByState() {
+		var page = repository.findSubscribedMatches(null, "unstarted", PageRequest.of(0, 20));
+
+		assertThat(page.getTotalElements()).isEqualTo(1);
+		assertThat(page.getContent()).extracting(v -> v.getMatchId()).containsExactly("m-cold");
 	}
 
 	@Test
@@ -117,13 +127,14 @@ class MemberMatchSubscriptionBackofficeMySqlIntegrationTest {
 		assertThat(page.getContent()).extracting(v -> v.getEmail()).containsExactly("a@nar.kr");
 	}
 
-	private static LeagueMatch match(String id, String league, LocalDateTime date, String blue, String red) {
+	private static LeagueMatch match(String id, String league, LocalDateTime date, String blue, String red,
+			String state) {
 		return LeagueMatch.builder()
 				.id(id)
 				.leagueName(league)
 				.matchTitle(blue + " vs " + red)
 				.matchDate(date)
-				.state("completed")
+				.state(state)
 				.blueTeamName(blue)
 				.redTeamName(red)
 				.build();
