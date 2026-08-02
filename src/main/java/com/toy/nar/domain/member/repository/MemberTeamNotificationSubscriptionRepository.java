@@ -18,6 +18,10 @@ public interface MemberTeamNotificationSubscriptionRepository
 	@EntityGraph(attributePaths = "team")
 	List<MemberTeamNotificationSubscription> findByMember_Id(Long memberId);
 
+	// 백오피스 회원 상세: 최근 구독순.
+	@EntityGraph(attributePaths = "team")
+	List<MemberTeamNotificationSubscription> findByMember_IdOrderByCreatedAtDesc(Long memberId);
+
 	@EntityGraph(attributePaths = "team")
 	Optional<MemberTeamNotificationSubscription> findByMember_IdAndTeam_Id(Long memberId, Long teamId);
 
