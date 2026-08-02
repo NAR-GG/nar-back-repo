@@ -522,10 +522,10 @@ public class BackofficeController {
     /** 공지 행. promoteUntil/publishedAt 은 FE 가 날짜만 잘라 표시한다. */
     public record NoticeRow(Long id, String title, String content, boolean pinned,
                             LocalDateTime promoteUntil, LocalDateTime publishedAt,
-                            LocalDateTime createdAt) {
+                            LocalDateTime createdAt, long viewCount) {
         static NoticeRow from(Notice n) {
             return new NoticeRow(n.getId(), n.getTitle(), n.getContent(), n.isPinned(),
-                    n.getPromoteUntil(), n.getPublishedAt(), n.getCreatedAt());
+                    n.getPromoteUntil(), n.getPublishedAt(), n.getCreatedAt(), n.getViewCount());
         }
     }
 

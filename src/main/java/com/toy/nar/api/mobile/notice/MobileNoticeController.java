@@ -10,8 +10,12 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -36,6 +40,15 @@ public class MobileNoticeController {
         Page<Notice> page =
                 admin ? noticeService.adminPage(pageable) : noticeService.publishedPage(pageable);
         return page.map(NoticeResponse::from);
+    }
+
+    @Operation(summary = "공지 조회수 증가",
+            description = "앱에서 공지 상세를 열 때 호출한다. 목록에 본문이 함께 내려가므로 앱이 직접 알려줘야 조회수가 쌓인다. "
+                    + "중복 제거 없이 열람 횟수를 센다. 없는 공지면 404.")
+    @PostMapping("/{id}/view")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void increaseViewCount(@PathVariable Long id) {
+        noticeService.increaseViewCount(id);
     }
 
     @Operation(summary = "띠배너 공지 목록",

@@ -70,6 +70,14 @@ public class NoticeService {
         return notice;
     }
 
+    /** 앱에서 공지 상세를 열었을 때 조회수 +1. 중복 제거 없이 열람 횟수를 그대로 센다. */
+    @Transactional
+    public void increaseViewCount(Long id) {
+        if (noticeRepository.increaseViewCount(id) == 0) {
+            throw new CustomException(ErrorCode.NOTICE_NOT_FOUND);
+        }
+    }
+
     @Transactional
     public void delete(Long id) {
         if (!noticeRepository.existsById(id)) {

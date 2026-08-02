@@ -49,6 +49,10 @@ public class Notice {
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 
+    /** 조회수. 증가는 NoticeRepository 의 UPDATE 쿼리로만 한다(updatedAt 을 건드리지 않도록). */
+    @Column(name = "view_count", nullable = false)
+    private long viewCount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

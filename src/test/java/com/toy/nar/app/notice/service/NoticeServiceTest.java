@@ -68,6 +68,18 @@ class NoticeServiceTest {
     }
 
     @Test
+    @DisplayName("조회수 증가: 갱신 행 없으면 NOTICE_NOT_FOUND")
+    void increaseViewCount() {
+        when(noticeRepository.increaseViewCount(1L)).thenReturn(1);
+        when(noticeRepository.increaseViewCount(99L)).thenReturn(0);
+
+        noticeService.increaseViewCount(1L);
+
+        assertThatThrownBy(() -> noticeService.increaseViewCount(99L))
+                .isInstanceOf(CustomException.class);
+    }
+
+    @Test
     @DisplayName("없는 공지 수정/삭제는 NOTICE_NOT_FOUND")
     void notFound() {
         when(noticeRepository.findById(99L)).thenReturn(Optional.empty());
