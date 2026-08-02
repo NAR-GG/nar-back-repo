@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -29,6 +30,9 @@ public class NotificationService {
 
 	@Value("${notification.discord.player-webhook-url:}")
 	private String playerDiscordWebhookUrl;
+
+	@Value("${notification.discord.roster-webhook-url:}")
+	private String rosterDiscordWebhookUrl;
 
 	@Value("${notification.enabled:false}")
 	private boolean notificationEnabled;
@@ -283,6 +287,26 @@ public class NotificationService {
 		);
 
 		sendNotification(String.format("[%s] ⚔️ %s → %s", league, killer, victim), message, "danger");
+	}
+
+	/**
+	 * LCK 1군 로스터 변동(이적 의심) 알림. 자동 반영이 아니라 백오피스에서 확정하라는 안내다.
+	 * 전용 웹훅이 없으면 운영 웹훅으로 보낸다.
+	 */
+	public void sendLckRosterDiffNotification(List<String> diffLines) {
+		if (!notificationEnabled || diffLines == null || diffLines.isEmpty()) return;
+
+		String message = String.format("상태: 소속팀 불일치 감지\n감지 시각: `%s`\n\n" +
+				"```text\n%s\n```\n" +
+				"백오피스 → 선수 관리에서 소속팀을 확정해 주세요. 자동 반영되지 않습니다.",
+			LocalDateTime.now().format(ALERT_TIME_FORMATTER),
+			String.join("\n", diffLines)
+		);
+
+		String webhookUrl = (rosterDiscordWebhookUrl == null || rosterDiscordWebhookUrl.isEmpty())
+				? discordWebhookUrl
+				: rosterDiscordWebhookUrl;
+		sendNotification(webhookUrl, "[LCK 로스터 변동 감지]", message, "warning");
 	}
 
 	private String teamDisplay(String teamSide, String teamName) {

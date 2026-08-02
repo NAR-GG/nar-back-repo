@@ -13,6 +13,7 @@ import com.toy.nar.app.riot.RiotAccountVerifyService;
 import com.toy.nar.app.riot.RiotApiException;
 import com.toy.nar.app.riot.dto.RiotAccountVerification;
 import com.toy.nar.domain.game.repository.LeagueRepository;
+import com.toy.nar.domain.member.repository.MemberDeviceRepository;
 import com.toy.nar.domain.member.repository.MemberFavoritePlayerRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.member.repository.MemberTeamNotificationSubscriptionRepository;
@@ -28,6 +29,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -75,15 +77,71 @@ public class BackofficeController {
     private final LivePlayerRatingRepository livePlayerRatingRepository;
     private final LeagueMatchRepository leagueMatchRepository;
     private final MemberFavoritePlayerRepository memberFavoritePlayerRepository;
+    private final MemberDeviceRepository memberDeviceRepository;
     private final MemberTeamNotificationSubscriptionRepository teamSubscriptionRepository;
     private final NoticeService noticeService;
     private final NoticeImageStorageService noticeImageStorageService;
 
     @GetMapping("/members")
     public Page<MemberRow> members(@RequestParam(required = false) String q, Pageable pageable) {
-        return memberRepository.searchForBackoffice(blankToNull(q), pageable)
-                .map(m -> new MemberRow(m.getId(), m.getNickname(), m.getEmail(),
-                        m.getFavoriteLeagueName(), m.getCreatedAt()));
+        return memberRepository.searchForBackoffice(blankToNull(q), sanitizeMemberSort(pageable))
+                .map(m -> new MemberRow(m.getId(), m.getName() + "#" + m.getTag(), m.getEmail(),
+                        m.getFavoriteLeagueName(), m.getCreatedAt(),
+                        m.getFavoritePlayerCount(), m.getFavoriteTeamCount()));
+    }
+
+    // 회원 목록 native 쿼리는 정렬 프로퍼티를 SELECT 별칭 그대로 ORDER BY 에 붙인다.
+    // 목록에 없는 값이 오면 Unknown column 으로 500 이 나므로 화이트리스트 밖은 버린다.
+    private static final Set<String> MEMBER_SORT_KEYS =
+            Set.of("id", "name", "email", "createdAt", "favoritePlayerCount", "favoriteTeamCount");
+
+    static Pageable sanitizeMemberSort(Pageable pageable) {
+        Sort sort = Sort.by(pageable.getSort().stream()
+                .filter(order -> MEMBER_SORT_KEYS.contains(order.getProperty()))
+                .toList());
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
+    }
+
+    /**
+     * 회원 상세 — 구독(선수·팀)·작성 리뷰까지 한 번에. 목록 행 클릭으로 진입한다.
+     * 쿼리 5방(회원 + 선수구독 + 팀구독 + 리뷰 + 기기 수) + 리뷰 경기 정보 배치 조회 1방.
+     */
+    @GetMapping("/members/{id}")
+    public MemberDetail member(@PathVariable Long id) {
+        var member = memberRepository.findWithFavoriteTeamById(id)
+                .orElseThrow(() -> new NoSuchElementException("회원을 찾을 수 없습니다: " + id));
+
+        List<SubscribedPlayerRow> players = memberFavoritePlayerRepository
+                .findWithPlayerAndTeamByMember_IdOrderByCreatedAtDesc(id).stream()
+                .map(favorite -> {
+                    Player player = favorite.getPlayer();
+                    var team = player.getCurrentTeam();
+                    return new SubscribedPlayerRow(player.getId(), player.getName(), player.getImageUrl(),
+                            team != null ? team.getName() : null, player.getRole(), favorite.getCreatedAt());
+                })
+                .toList();
+
+        List<SubscribedTeamRow> teams = teamSubscriptionRepository.findByMember_IdOrderByCreatedAtDesc(id).stream()
+                .map(subscription -> {
+                    var team = subscription.getTeam();
+                    return new SubscribedTeamRow(team.getId(), team.getName(), team.getCode(),
+                            team.getImageUrl(), subscription.getCreatedAt());
+                })
+                .toList();
+
+        // ponytail: 리뷰 최근 100건 캡(현재 최다 작성자도 두 자릿수). 넘치면 별도 엔드포인트로 분리.
+        List<LivePlayerRating> ratings = livePlayerRatingRepository
+                .findByMember_IdOrderByCreatedAtDesc(id, PageRequest.of(0, 100)).getContent();
+        Map<String, LeagueMatch> matches = findMatchesOf(ratings);
+        List<RatingRow> comments = ratings.stream()
+                .map(r -> RatingRow.from(r, matches.get(r.getMatchId()), member.getNickname()))
+                .toList();
+
+        var favoriteTeam = member.getFavoriteTeam();
+        return new MemberDetail(member.getId(), member.getNickname(), member.getEmail(),
+                member.getFavoriteLeagueName(), favoriteTeam != null ? favoriteTeam.getName() : null,
+                memberDeviceRepository.countByMember_IdAndActiveTrue(id), member.getCreatedAt(),
+                players, teams, comments);
     }
 
     @GetMapping("/players")
@@ -177,12 +235,17 @@ public class BackofficeController {
         String fieldParam = blankToNull(field);
         Page<LivePlayerRating> page = livePlayerRatingRepository.searchForBackoffice(
                 blankToNull(q), fieldParam == null ? "all" : fieldParam, rating, pageable);
-        Set<String> matchIds = page.getContent().stream()
+        Map<String, LeagueMatch> matches = findMatchesOf(page.getContent());
+        return page.map(r -> RatingRow.from(r, matches.get(r.getMatchId())));
+    }
+
+    // 리뷰 목록에 붙일 경기 정보를 matchId 로 배치 조회한다(행마다 조회하면 N+1).
+    private Map<String, LeagueMatch> findMatchesOf(List<LivePlayerRating> ratings) {
+        Set<String> matchIds = ratings.stream()
                 .map(LivePlayerRating::getMatchId)
                 .collect(Collectors.toSet());
-        Map<String, LeagueMatch> matches = leagueMatchRepository.findAllById(matchIds).stream()
+        return leagueMatchRepository.findAllById(matchIds).stream()
                 .collect(Collectors.toMap(LeagueMatch::getId, m -> m));
-        return page.map(r -> RatingRow.from(r, matches.get(r.getMatchId())));
     }
 
     @DeleteMapping("/ratings/{id}")
@@ -348,8 +411,22 @@ public class BackofficeController {
                 .body(Map.of("message", "Riot API 오류로 저장하지 못했습니다. 잠시 후 다시 시도해 주세요"));
     }
 
-    public record MemberRow(Long id, String name, String email,
-                            String favoriteLeagueName, LocalDateTime createdAt) {}
+    public record MemberRow(Long id, String name, String email, String favoriteLeagueName,
+                            LocalDateTime createdAt, long favoritePlayerCount, long favoriteTeamCount) {}
+
+    /** 회원 상세. comments 는 목록(/ratings)과 같은 {@link RatingRow} 라 FE 가 표를 재사용한다. */
+    public record MemberDetail(Long id, String name, String email, String favoriteLeagueName,
+                               String favoriteTeamName, long deviceCount, LocalDateTime createdAt,
+                               List<SubscribedPlayerRow> players, List<SubscribedTeamRow> teams,
+                               List<RatingRow> comments) {}
+
+    /** id = 선수 id (FE 가 구독 탭 선수 상세로 이동한다). */
+    public record SubscribedPlayerRow(Long id, String playerName, String imageUrl, String teamName,
+                                      String role, LocalDateTime subscribedAt) {}
+
+    /** id = 팀 id (FE 가 구독 탭 팀 상세로 이동한다). */
+    public record SubscribedTeamRow(Long id, String teamName, String teamCode, String imageUrl,
+                                    LocalDateTime subscribedAt) {}
 
     // 구독 탭 — 구독 가능 선수 행(구독자 수 포함). id 필드는 FE 데이터그리드 rowKey 용.
     public record SubscribablePlayerRow(Long id, String playerName, String imageUrl, String role,
@@ -401,6 +478,11 @@ public class BackofficeController {
                             String memberNickname, Integer rating, String comment,
                             LocalDateTime createdAt) {
         static RatingRow from(LivePlayerRating r, LeagueMatch match) {
+            return from(r, match, r.getMember().getNickname());
+        }
+
+        // 회원 상세처럼 닉네임을 이미 아는 경로용 — r.getMember() 는 지연 로딩이라 건드리지 않는다.
+        static RatingRow from(LivePlayerRating r, LeagueMatch match, String memberNickname) {
             return new RatingRow(r.getId(), r.getMatchId(),
                     match != null ? match.getLeagueName() : null,
                     match != null ? match.getMatchTitle() : null,
@@ -408,7 +490,7 @@ public class BackofficeController {
                     match != null ? match.getRedTeamCode() : null,
                     match != null ? toKst(match.getMatchDate()) : null,
                     r.getPlayerName(), r.getChampionName(), r.getRole(),
-                    r.getMember().getNickname(), r.getRating(), r.getComment(),
+                    memberNickname, r.getRating(), r.getComment(),
                     r.getCreatedAt());
         }
 
@@ -440,10 +522,10 @@ public class BackofficeController {
     /** 공지 행. promoteUntil/publishedAt 은 FE 가 날짜만 잘라 표시한다. */
     public record NoticeRow(Long id, String title, String content, boolean pinned,
                             LocalDateTime promoteUntil, LocalDateTime publishedAt,
-                            LocalDateTime createdAt) {
+                            LocalDateTime createdAt, long viewCount) {
         static NoticeRow from(Notice n) {
             return new NoticeRow(n.getId(), n.getTitle(), n.getContent(), n.isPinned(),
-                    n.getPromoteUntil(), n.getPublishedAt(), n.getCreatedAt());
+                    n.getPromoteUntil(), n.getPublishedAt(), n.getCreatedAt(), n.getViewCount());
         }
     }
 
