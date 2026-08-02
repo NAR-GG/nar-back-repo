@@ -218,6 +218,68 @@ class PlayerRepositoryLckPlayerOptionsTest {
 				.containsExactly("Mover", "Faker");
 	}
 
+	@Test
+	@DisplayName("current_team_id가 LCK 1군 팀이면 경기 기록 팀을 덮는다 (이적 즉시 반영)")
+	void currentTeamOverridesLatestGameTeamWhenFirstTeam() {
+		// GenStar가 T1으로 이적했지만 새 팀 경기는 아직 CSV에 없는 상황.
+		exec("UPDATE players SET current_team_id = " + T1 + " WHERE player_id = 6");
+		em.flush();
+		em.clear();
+
+		Page<LckPlayerOption> page = playerRepository.findLckPlayerOptions(
+				LCK, YEAR, null, "GenStar", PageRequest.of(0, 50));
+		assertThat(page.getContent()).hasSize(1);
+		assertThat(page.getContent().get(0).getTeamId()).isEqualTo(T1);
+		assertThat(page.getContent().get(0).getTeamCode()).isEqualTo("T1");
+
+		// 팀 필터도 새 팀 기준으로 걸려야 한다. (countQuery 쪽 override 누락 시 여기서 깨진다)
+		assertThat(playerRepository.findLckPlayerOptions(LCK, YEAR, T1, null, PageRequest.of(0, 50)))
+				.extracting(LckPlayerOption::getPlayerName).contains("GenStar");
+		Page<LckPlayerOption> gen = playerRepository.findLckPlayerOptions(
+				LCK, YEAR, GEN, null, PageRequest.of(0, 50));
+		assertThat(gen.getTotalElements()).isZero();
+		assertThat(gen.getContent()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("current_team_id가 2군 팀(team_code 없음)이면 무시하고 경기 기록 팀을 쓴다")
+	void currentTeamIgnoredWhenNotFirstTeam() {
+		// V54 백필이 1군 선수에게도 챌린저스 팀을 넣어놨다. 그대로 덮으면 온보딩 팀 목록에서 사라진다.
+		exec("INSERT INTO teams (team_id, team_name, team_code, team_image_url)"
+				+ " VALUES (30, 'T1 Esports Academy', NULL, 'academy.png')");
+		exec("UPDATE players SET current_team_id = 30 WHERE player_id = 1");
+		em.flush();
+		em.clear();
+
+		Page<LckPlayerOption> page = playerRepository.findLckPlayerOptions(
+				LCK, YEAR, null, "Faker", PageRequest.of(0, 50));
+		assertThat(page.getContent()).hasSize(1);
+		assertThat(page.getContent().get(0).getTeamId()).isEqualTo(T1);
+
+		assertThat(playerRepository.findLckPlayerOptions(LCK, YEAR, T1, null, PageRequest.of(0, 50)))
+				.extracting(LckPlayerOption::getPlayerName).contains("Faker");
+	}
+
+	@Test
+	@DisplayName("단건·다건 조회도 1군 current_team_id를 동일하게 반영한다")
+	void byPlayerIdQueriesApplySameOverride() {
+		exec("UPDATE players SET current_team_id = " + T1 + " WHERE player_id = 6");
+		exec("INSERT INTO teams (team_id, team_name, team_code, team_image_url)"
+				+ " VALUES (30, 'T1 Esports Academy', NULL, 'academy.png')");
+		exec("UPDATE players SET current_team_id = 30 WHERE player_id = 1");
+		em.flush();
+		em.clear();
+
+		assertThat(playerRepository.findLckPlayerOption(LCK, YEAR, 6L))
+				.singleElement()
+				.extracting(LckPlayerOption::getTeamId).isEqualTo(T1);
+		assertThat(playerRepository.findLckPlayerOptionsByPlayerIds(LCK, YEAR, Set.of(1L, 6L)))
+				.extracting(LckPlayerOption::getPlayerName, LckPlayerOption::getTeamId)
+				.containsExactlyInAnyOrder(
+						org.assertj.core.api.Assertions.tuple("Faker", T1),
+						org.assertj.core.api.Assertions.tuple("GenStar", T1));
+	}
+
 	// ── 시딩 헬퍼 (네이티브 SQL) ─────────────────────────────────
 
 	private void exec(String sql) {

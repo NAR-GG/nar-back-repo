@@ -71,6 +71,8 @@ notification:
   discord:
     webhook-url: ${DISCORD_WEBHOOK_URL:}
     player-webhook-url: ${DISCORD_PLAYER_WEBHOOK_URL:}
+    # 비우면 운영 웹훅(webhook-url)으로 폴백한다.
+    roster-webhook-url: ${DISCORD_ROSTER_WEBHOOK_URL:}
   scheduler:
     summary-enabled: ${SCHEDULER_SUMMARY_ENABLED:true}
     daily-summary-cron: ${SCHEDULER_DAILY_SUMMARY_CRON:0 0 9 * * *}
