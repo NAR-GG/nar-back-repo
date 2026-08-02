@@ -18,6 +18,9 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 
 	Optional<MemberDevice> findByIdAndMember_Id(Long id, Long memberId);
 
+	// 백오피스 회원 상세: 푸시 받을 수 있는 기기 수.
+	long countByMember_IdAndActiveTrue(Long memberId);
+
 	@EntityGraph(attributePaths = "member")
 	@Query("""
 			SELECT DISTINCT device
