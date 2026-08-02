@@ -15,7 +15,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
 	@ExceptionHandler(CustomException.class)
 	protected ResponseEntity<ErrorResponse> handleCustomException(CustomException e) {
-		log.error("handleCustomException throw CustomException : {}", e.getErrorCode());
+		// 4xx는 예상된 비즈니스 흐름이라 warn — ERROR 로그는 Sentry 이벤트로 수집되므로 5xx만 남긴다
+		if (e.getErrorCode().getHttpStatus().is5xxServerError()) {
+			log.error("handleCustomException throw CustomException : {}", e.getErrorCode(), e);
+		} else {
+			log.warn("handleCustomException throw CustomException : {}", e.getErrorCode());
+		}
 		return ErrorResponse.toResponseEntity(e.getErrorCode());
 	}
 
@@ -29,7 +34,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 	// 그 외 모든 예외 처리 (500)
 	@ExceptionHandler(Exception.class)
 	protected ResponseEntity<ErrorResponse> handleException(Exception e) {
-		log.error("handleException : {}", e.getMessage());
+		log.error("handleException : {}", e.getMessage(), e);
 		return ErrorResponse.toResponseEntity(ErrorCode.INTERNAL_SERVER_ERROR);
 	}
 }
