@@ -79,6 +79,14 @@ notification:
     warning-cooldown-minutes: ${SCHEDULER_WARNING_COOLDOWN_MINUTES:60}
     zero-new-games-threshold: ${SCHEDULER_ZERO_NEW_GAMES_THRESHOLD:3}
 
+# Sentry 에러 트래킹. DSN이 비어 있으면 SDK 자체가 비활성화되므로 로컬/시크릿 미설정 환경에 무해.
+# 별도 코드 훅 없이 logback ERROR 로그(스택트레이스 포함)를 이벤트로 수집한다.
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: prod
+  release: ${SENTRY_RELEASE:}
+  send-default-pii: false
+
 logging:
   level:
     org.hibernate.SQL: info

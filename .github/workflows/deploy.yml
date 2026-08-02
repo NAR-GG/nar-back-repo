@@ -142,6 +142,8 @@ jobs:
               --log-opt awslogs-create-group=true \
               -e SPRING_PROFILES_ACTIVE="prod" \
               -e DISCORD_WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}" \
+              -e SENTRY_DSN="${{ secrets.SENTRY_DSN }}" \
+              -e SENTRY_RELEASE="${{ github.sha }}" \
               -e DB_URL="${{ secrets.DB_URL }}" \
               -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
               -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \

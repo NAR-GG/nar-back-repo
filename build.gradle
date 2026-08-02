@@ -32,6 +32,9 @@ dependencies {
 	implementation 'org.mapstruct:mapstruct:1.6.3'
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+	implementation 'io.sentry:sentry-spring-boot-starter-jakarta:8.16.0'
+	// ERROR 레벨 로그를 Sentry 이벤트로 수집 (starter가 클래스패스에 있으면 자동 설정)
+	implementation 'io.sentry:sentry-logback:8.16.0'
 	runtimeOnly 'com.mysql:mysql-connector-j'
 	annotationProcessor 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
