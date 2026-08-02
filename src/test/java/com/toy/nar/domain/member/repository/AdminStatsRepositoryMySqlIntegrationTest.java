@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 대시보드 집계 네이티브 쿼리를 실제 MySQL 8 에서 검증한다.
- * {@code DATE_FORMAT} 시간 버킷, 세 구독 테이블 UNION, {@code FROM dual} 서브쿼리 묶음, {@code LIMIT :limit} 바인딩은
+ * 정수(에폭 시) 시간 버킷, 세 구독 테이블 UNION, {@code FROM dual} 서브쿼리 묶음, {@code LIMIT :limit} 바인딩은
  * H2 나 JPQL 로는 검증이 안 되고 런타임에야 깨지는 것들이라 MySQL 대상 테스트가 필요하다.
  *
  * <p>로컬 dev MySQL(docker-compose, 3308)의 격리 스키마 nar_admin_stats_test 에 ddl-auto=create-drop 으로 실행한다.
@@ -67,8 +67,8 @@ class AdminStatsRepositoryMySqlIntegrationTest {
     private static final LocalDateTime HOUR_B = LocalDateTime.now().minusDays(1).withHour(21).withMinute(5).withSecond(0).withNano(0);
     private static final LocalDateTime FROM = LocalDateTime.now().minusDays(3).withHour(0).withMinute(0).withSecond(0).withNano(0);
 
-    private String bucketA;
-    private String bucketB;
+    private long bucketA;
+    private long bucketB;
 
     @BeforeEach
     void setUp() {
@@ -124,8 +124,10 @@ class AdminStatsRepositoryMySqlIntegrationTest {
     static class TestJpaConfiguration {
     }
 
-    private static String bucketOf(LocalDateTime at) {
-        return "%04d-%02d-%02dT%02d:00".formatted(at.getYear(), at.getMonthValue(), at.getDayOfMonth(), at.getHour());
+    /** 리포지토리는 에폭 시(유닉스 시각/3600) 정수를 버킷 키로 준다. */
+    private static long bucketOf(LocalDateTime at) {
+        return at.withMinute(0).withSecond(0).withNano(0)
+                .atZone(java.time.ZoneId.systemDefault()).toEpochSecond() / 3600;
     }
 
     @Test

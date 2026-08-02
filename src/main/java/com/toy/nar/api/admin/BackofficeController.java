@@ -1,5 +1,6 @@
 package com.toy.nar.api.admin;
 
+import com.toy.nar.app.admin.dto.StatsNotificationsResponse;
 import com.toy.nar.app.admin.dto.StatsOverviewResponse;
 import com.toy.nar.app.admin.dto.StatsSeriesResponse;
 import com.toy.nar.app.admin.service.AdminStatsService;
@@ -297,12 +298,18 @@ public class BackofficeController {
     }
 
     /**
-     * 대시보드 시계열 — 가입·구독·알림을 1시간 버킷으로. 값 0인 시간대는 행이 없다.
+     * 대시보드 시계열 — 가입·구독을 1시간 버킷으로. 값 0인 시간대는 행이 없다.
      * 일별 화면은 프론트가 시간 버킷을 합쳐 그리고, 24시간 롤링 뷰는 마지막 이틀 버킷으로 만든다.
      */
     @GetMapping("/stats/series")
     public StatsSeriesResponse statsSeries(@RequestParam(defaultValue = "30") int days) {
         return adminStatsService.series(days);
+    }
+
+    /** 알림 발송량만 분리 — 35만 행 집계라 혼자 느리다. 나머지 카드가 먼저 그려지게 한다. */
+    @GetMapping("/stats/notifications")
+    public StatsNotificationsResponse statsNotifications(@RequestParam(defaultValue = "30") int days) {
+        return adminStatsService.notifications(days);
     }
 
     /** 대시보드 퍼널·분포 — 기간과 무관한 값이라 시계열과 분리. */
