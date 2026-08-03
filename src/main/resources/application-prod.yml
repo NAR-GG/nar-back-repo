@@ -78,6 +78,15 @@ notification:
     player-webhook-url: ${DISCORD_PLAYER_WEBHOOK_URL:}
     # 비우면 운영 웹훅(webhook-url)으로 폴백한다.
     roster-webhook-url: ${DISCORD_ROSTER_WEBHOOK_URL:}
+  # 알림 피드 보존 정책. 타입별로 생성량·열람률이 달라 보존일을 나눈다(2026-08-04 실측 근거는
+  # MemberNotificationRetentionService javadoc 참고). 보존 기간이 무한스크롤이 거슬러 올라갈 수 있는 한계다.
+  retention:
+    cron: ${NOTIFICATION_RETENTION_CRON:0 40 4 * * *}
+    live-event-days: ${NOTIFICATION_RETENTION_LIVE_EVENT_DAYS:7}
+    solo-rank-days: ${NOTIFICATION_RETENTION_SOLO_RANK_DAYS:7}
+    set-days: ${NOTIFICATION_RETENTION_SET_DAYS:30}
+    chunk-size: ${NOTIFICATION_RETENTION_CHUNK_SIZE:5000}
+    max-chunks-per-type: ${NOTIFICATION_RETENTION_MAX_CHUNKS:400}
   scheduler:
     summary-enabled: ${SCHEDULER_SUMMARY_ENABLED:true}
     daily-summary-cron: ${SCHEDULER_DAILY_SUMMARY_CRON:0 0 9 * * *}
