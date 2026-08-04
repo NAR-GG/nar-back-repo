@@ -110,7 +110,8 @@ tasks.register('generateJooq', JavaExec) {
 tasks.named('test') {
 	useJUnitPlatform()
 	systemProperties System.properties.findAll { key, _ ->
-		key.startsWith('benchmark.') || key.startsWith('deadlock.') || key.startsWith('dataintegrity.') || key.startsWith('fullcontext.')
+		key.startsWith('benchmark.') || key.startsWith('deadlock.') || key.startsWith('dataintegrity.')
+				|| key.startsWith('fullcontext.') || key.startsWith('apns.')
 	}
 }
 
