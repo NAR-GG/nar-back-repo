@@ -30,8 +30,8 @@ class LiveActivityPushServiceTest {
 		apnsClient = mock(ApnsLiveActivityClient.class);
 		service = new LiveActivityPushService(tokenRepository, apnsClient);
 		when(apnsClient.isAvailable()).thenReturn(true);
-		when(apnsClient.sendUpdate(anyString(), any())).thenReturn(true);
-		when(apnsClient.sendEnd(anyString(), any(), any())).thenReturn(true);
+		when(apnsClient.sendUpdateAsync(anyString(), any())).thenReturn(alive(true));
+		when(apnsClient.sendEndAsync(anyString(), any(), any())).thenReturn(alive(true));
 	}
 
 	@Test
@@ -80,7 +80,7 @@ class LiveActivityPushServiceTest {
 		service.notifySetEnd("match-1", 3, 2, 1, true, "T1");
 
 		ArgumentCaptor<Map<String, Object>> captor = mapCaptor();
-		verify(apnsClient).sendEnd(eq("tok-1"), captor.capture(), any(Duration.class));
+		verify(apnsClient).sendEndAsync(eq("tok-1"), captor.capture(), any(Duration.class));
 		assertThat(captor.getValue()).containsEntry("phase", "matchEnded")
 				.containsEntry("statusLabel", "경기 종료")
 				.containsEntry("winnerTeamCode", "T1");
@@ -91,7 +91,7 @@ class LiveActivityPushServiceTest {
 	@Test
 	void APNs_가_죽었다고_한_토큰만_비활성화한다() {
 		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("live", "dead"));
-		when(apnsClient.sendUpdate(eq("dead"), any())).thenReturn(false);
+		when(apnsClient.sendUpdateAsync(eq("dead"), any())).thenReturn(alive(false));
 
 		service.notifySetStart("match-1", 1, 0, 0);
 
@@ -113,7 +113,45 @@ class LiveActivityPushServiceTest {
 
 		service.notifySetStart("match-1", 1, 0, 0);
 
-		verify(apnsClient, never()).sendUpdate(anyString(), any());
+		verify(apnsClient, never()).sendUpdateAsync(anyString(), any());
+	}
+
+	@Test
+	void 카드가_많아도_왕복을_직렬로_쌓지_않는다() throws Exception {
+		// 동기 발송을 토큰 수만큼 반복하면 카드가 많은 경기에서 마지막 사람은 세트가 끝난 뒤에
+		// 카드가 갱신된다(FCM 쪽 1,500명 팬아웃 8~18분 실사고와 같은 모양).
+		// 전부 띄운 뒤에 기다려야 하므로, 첫 응답이 늦어도 나머지 발송이 먼저 나가 있어야 한다.
+		int cardCount = 200;
+		List<String> tokens = java.util.stream.IntStream.range(0, cardCount)
+				.mapToObj(i -> "tok-" + i).toList();
+		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(tokens);
+
+		java.util.concurrent.CountDownLatch allDispatched =
+				new java.util.concurrent.CountDownLatch(cardCount);
+		java.util.concurrent.CompletableFuture<Boolean> blocked = new java.util.concurrent.CompletableFuture<>();
+		when(apnsClient.sendUpdateAsync(anyString(), any())).thenAnswer(invocation -> {
+			allDispatched.countDown();
+			// 첫 토큰만 늦게 끝난다. 직렬이라면 여기서 막혀 나머지가 발송되지 않는다.
+			return "tok-0".equals(invocation.getArgument(0)) ? blocked : alive(true);
+		});
+
+		Thread caller = new Thread(() -> service.notifySetStart("match-1", 1, 0, 0));
+		// 직렬로 회귀하면 caller 가 blocked 에 갇힌다. 데몬으로 두어 실패가 빌드를 멈추지 않게 한다.
+		caller.setDaemon(true);
+		caller.start();
+
+		boolean dispatchedWithoutWaiting;
+		try {
+			dispatchedWithoutWaiting = allDispatched.await(5, java.util.concurrent.TimeUnit.SECONDS);
+		} finally {
+			blocked.complete(true);
+		}
+
+		assertThat(dispatchedWithoutWaiting)
+				.as("느린 토큰 하나가 나머지 발송을 막으면 안 된다")
+				.isTrue();
+		caller.join(5_000);
+		verify(apnsClient, org.mockito.Mockito.times(cardCount)).sendUpdateAsync(anyString(), any());
 	}
 
 	@Test
@@ -123,13 +161,17 @@ class LiveActivityPushServiceTest {
 
 		service.notifySetStart("match-1", 1, 0, 0);
 
-		verify(apnsClient, never()).sendUpdate(anyString(), any());
+		verify(apnsClient, never()).sendUpdateAsync(anyString(), any());
 	}
 
 	private Map<String, Object> captureUpdate() {
 		ArgumentCaptor<Map<String, Object>> captor = mapCaptor();
-		verify(apnsClient).sendUpdate(anyString(), captor.capture());
+		verify(apnsClient).sendUpdateAsync(anyString(), captor.capture());
 		return captor.getValue();
+	}
+
+	private java.util.concurrent.CompletableFuture<Boolean> alive(boolean value) {
+		return java.util.concurrent.CompletableFuture.completedFuture(value);
 	}
 
 	@SuppressWarnings("unchecked")

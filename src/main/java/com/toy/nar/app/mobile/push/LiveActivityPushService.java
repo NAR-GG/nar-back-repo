@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * iOS Live Activity(잠금화면 실시간 경기 카드)를 서버가 직접 갱신한다.
@@ -112,15 +113,30 @@ public class LiveActivityPushService {
 			return;
 		}
 
-		List<String> deadTokens = new ArrayList<>();
+		// 토큰마다 동기 발송하면 왕복이 직렬로 쌓여, 카드가 많은 경기에서 마지막 사람은
+		// 세트가 끝난 뒤에야 카드가 갱신된다(FCM 쪽 실사고와 같은 모양 — ApnsLiveActivityClient 참고).
+		// HTTP/2 다중화를 살리려면 전부 띄운 뒤 한 번에 기다려야 한다.
+		Map<String, CompletableFuture<Boolean>> inFlight = new LinkedHashMap<>();
 		for (String token : tokens) {
-			boolean alive = end
-					? apnsClient.sendEnd(token, contentState, MATCH_END_DISMISS_AFTER)
-					: apnsClient.sendUpdate(token, contentState);
+			inFlight.put(token, end
+					? apnsClient.sendEndAsync(token, contentState, MATCH_END_DISMISS_AFTER)
+					: apnsClient.sendUpdateAsync(token, contentState));
+		}
+
+		List<String> deadTokens = new ArrayList<>();
+		inFlight.forEach((token, future) -> {
+			// sendAsync 가 예외를 이미 흡수하지만, join 단계의 사고까지 발송 흐름을 깨지 않게 한 번 더 막는다.
+			boolean alive;
+			try {
+				alive = future.join();
+			} catch (Exception e) {
+				log.warn("APNs 발송 결과 수집 실패 matchId={}: {}", matchId, e.getMessage());
+				alive = true;
+			}
 			if (!alive) {
 				deadTokens.add(token);
 			}
-		}
+		});
 		log.info("[live-activity] matchId={} end={} 발송 {}건, 죽은 토큰 {}건",
 				matchId, end, tokens.size(), deadTokens.size());
 

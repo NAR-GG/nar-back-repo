@@ -22,6 +22,7 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * iOS Live Activity 갱신용 APNs HTTP/2 클라이언트.
@@ -87,7 +88,7 @@ public class ApnsLiveActivityClient {
 	 *         그 외 실패는 예외로 던지지 않고 true 를 돌려 다음 이벤트에 다시 시도하게 둔다.
 	 */
 	public boolean sendUpdate(String pushToken, Map<String, Object> contentState) {
-		return send(pushToken, body("update", contentState, null));
+		return sendUpdateAsync(pushToken, contentState).join();
 	}
 
 	/**
@@ -95,7 +96,25 @@ public class ApnsLiveActivityClient {
 	 * 앱의 30분 자동 dismiss 타이머를 대신하므로 앱이 안 떠 있어도 카드가 남지 않는다.
 	 */
 	public boolean sendEnd(String pushToken, Map<String, Object> contentState, Duration dismissAfter) {
-		return send(pushToken, body("end", contentState, Instant.now().plus(dismissAfter)));
+		return sendEndAsync(pushToken, contentState, dismissAfter).join();
+	}
+
+	/**
+	 * 비동기 발송. 카드가 많은 경기에서는 반드시 이쪽을 써서 한꺼번에 띄워야 한다.
+	 *
+	 * <p>동기 발송을 토큰 수만큼 반복하면 왕복이 직렬로 쌓인다. FCM 쪽에서 같은 모양으로
+	 * 사고가 났다 — 2026-07-29 LCK T1 vs KT 에서 구독자 1,500명 팬아웃이 이벤트당 8~18분
+	 * 걸려 마지막 사람은 세트가 끝난 뒤에 시작 알림을 받았다({@code TeamLiveEventPushService} 참고).
+	 * HTTP/2 는 한 커넥션에 요청을 다중화하므로 비동기로 넘기면 왕복이 겹쳐 전체가 한 번의
+	 * 왕복 시간에 수렴한다.</p>
+	 */
+	public CompletableFuture<Boolean> sendUpdateAsync(String pushToken, Map<String, Object> contentState) {
+		return sendAsync(pushToken, body("update", contentState, null));
+	}
+
+	public CompletableFuture<Boolean> sendEndAsync(
+			String pushToken, Map<String, Object> contentState, Duration dismissAfter) {
+		return sendAsync(pushToken, body("end", contentState, Instant.now().plus(dismissAfter)));
 	}
 
 	private Map<String, Object> body(String event, Map<String, Object> contentState, Instant dismissalDate) {
@@ -109,12 +128,17 @@ public class ApnsLiveActivityClient {
 		return Map.of("aps", aps);
 	}
 
-	private boolean send(String pushToken, Map<String, Object> payload) {
+	/**
+	 * @return 토큰이 살아 있으면 true. 실패해도 예외를 흘리지 않는다 —
+	 *         일시 오류는 true 로 두어 다음 이벤트에 자연히 재시도된다.
+	 */
+	private CompletableFuture<Boolean> sendAsync(String pushToken, Map<String, Object> payload) {
 		if (!isAvailable()) {
-			return true;
+			return CompletableFuture.completedFuture(true);
 		}
+		HttpRequest request;
 		try {
-			HttpRequest request = HttpRequest.newBuilder()
+			request = HttpRequest.newBuilder()
 					.uri(URI.create(host + "/3/device/" + pushToken))
 					.header("authorization", "bearer " + authToken())
 					.header("apns-topic", bundleId + ".push-type.liveactivity")
@@ -124,24 +148,28 @@ public class ApnsLiveActivityClient {
 					.timeout(Duration.ofSeconds(10))
 					.POST(HttpRequest.BodyPublishers.ofByteArray(objectMapper.writeValueAsBytes(payload)))
 					.build();
-
-			HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-			if (response.statusCode() == 200) {
-				return true;
-			}
-			// 410 = 액티비티가 끝났거나 앱이 지워져 토큰이 죽었다. 400 BadDeviceToken 도 재사용 불가.
-			boolean tokenDead = response.statusCode() == 410
-					|| (response.statusCode() == 400 && response.body().contains("BadDeviceToken"));
-			log.warn("APNs Live Activity 발송 실패 status={} body={} tokenDead={}",
-					response.statusCode(), response.body(), tokenDead);
-			return !tokenDead;
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			return true;
 		} catch (Exception e) {
-			log.warn("APNs Live Activity 발송 오류: {}", e.getMessage());
-			return true;
+			// 키 로딩·JSON 직렬화 실패. 토큰 문제가 아니므로 살려 둔다.
+			log.warn("APNs Live Activity 요청 생성 실패: {}", e.getMessage());
+			return CompletableFuture.completedFuture(true);
 		}
+
+		return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+				.handle((response, error) -> {
+					if (error != null) {
+						log.warn("APNs Live Activity 발송 오류: {}", error.getMessage());
+						return true;
+					}
+					if (response.statusCode() == 200) {
+						return true;
+					}
+					// 410 = 액티비티가 끝났거나 앱이 지워져 토큰이 죽었다. 400 BadDeviceToken 도 재사용 불가.
+					boolean tokenDead = response.statusCode() == 410
+							|| (response.statusCode() == 400 && response.body().contains("BadDeviceToken"));
+					log.warn("APNs Live Activity 발송 실패 status={} body={} tokenDead={}",
+							response.statusCode(), response.body(), tokenDead);
+					return !tokenDead;
+				});
 	}
 
 	/** APNs 인증 JWT. 발급이 잦으면 APNs 가 거부하므로 TTL 동안 재사용한다. */
