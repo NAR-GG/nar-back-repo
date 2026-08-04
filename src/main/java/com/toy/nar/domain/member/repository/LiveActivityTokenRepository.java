@@ -28,4 +28,17 @@ public interface LiveActivityTokenRepository extends JpaRepository<LiveActivityT
 	@Query("update LiveActivityToken t set t.active = false, t.updatedAt = CURRENT_TIMESTAMP "
 			+ "where t.pushToken in :pushTokens")
 	int deactivateByPushTokenIn(@Param("pushTokens") List<String> pushTokens);
+
+	/**
+	 * 매치가 끝나 그 경기의 카드를 전부 정리한다.
+	 *
+	 * <p>토큰 목록을 IN 절로 넘기지 않는다. 카드가 많은 경기면 IN 절에 토큰 수만큼 문자열이
+	 * 실려(1,500장이면 100KB 넘는 SQL) 파싱·플래닝이 목록 크기를 따라 커진다. 매치 종료는
+	 * "이 매치 전부"라 조건을 그대로 쓰면 되고, 그러면 (match_id, active) 인덱스 한 번으로 끝난다.</p>
+	 */
+	@Transactional
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query("update LiveActivityToken t set t.active = false, t.updatedAt = CURRENT_TIMESTAMP "
+			+ "where t.matchId = :matchId and t.active = true")
+	int deactivateAllByMatchId(@Param("matchId") String matchId);
 }

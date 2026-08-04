@@ -94,6 +94,22 @@ class LiveActivityTokenRepositoryTest {
 	}
 
 	@Test
+	void 매치_단위로_한_번에_비활성화한다() {
+		assertThat(tokenRepository.deactivateAllByMatchId("match-1")).isEqualTo(2);
+
+		assertThat(tokenRepository.findActivePushTokensByMatchId("match-1")).isEmpty();
+		// 다른 매치는 건드리지 않는다.
+		assertThat(tokenRepository.findActivePushTokensByMatchId("match-2")).containsExactly("tok-other");
+	}
+
+	@Test
+	void 이미_비활성인_토큰은_다시_세지_않는다() {
+		// active = true 조건이 빠지면 이미 죽은 tok-dead 까지 세어 3 이 나온다.
+		assertThat(tokenRepository.deactivateAllByMatchId("match-1")).isEqualTo(2);
+		assertThat(tokenRepository.deactivateAllByMatchId("match-1")).isZero();
+	}
+
+	@Test
 	void 푸시_토큰으로_단건_조회한다() {
 		assertThat(tokenRepository.findByPushToken("tok-a"))
 				.get()

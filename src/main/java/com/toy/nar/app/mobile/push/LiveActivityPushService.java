@@ -141,12 +141,14 @@ public class LiveActivityPushService {
 				matchId, end, tokens.size(), deadTokens.size());
 
 		// 매치가 끝났으면 이 카드들은 더 갱신되지 않는다 — 토큰을 함께 정리한다.
-		List<String> toDeactivate = end ? tokens : deadTokens;
-		if (toDeactivate.isEmpty()) {
-			return;
-		}
+		// 매치 단위 정리는 조건으로 지우는 편이 낫다. 토큰을 IN 절로 넘기면 카드 수만큼
+		// 문자열이 실려 SQL 이 커지는데, "이 매치 전부"는 인덱스 한 번이면 되는 조건이다.
 		try {
-			tokenRepository.deactivateByPushTokenIn(toDeactivate);
+			if (end) {
+				tokenRepository.deactivateAllByMatchId(matchId);
+			} else if (!deadTokens.isEmpty()) {
+				tokenRepository.deactivateByPushTokenIn(deadTokens);
+			}
 		} catch (Exception e) {
 			log.warn("Live Activity 토큰 비활성화 실패 matchId={}: {}", matchId, e.getMessage());
 		}

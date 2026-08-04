@@ -84,8 +84,9 @@ class LiveActivityPushServiceTest {
 		assertThat(captor.getValue()).containsEntry("phase", "matchEnded")
 				.containsEntry("statusLabel", "경기 종료")
 				.containsEntry("winnerTeamCode", "T1");
-		// 끝난 카드는 더 갱신되지 않으므로 죽은 토큰 여부와 무관하게 전부 비활성화한다.
-		verify(tokenRepository).deactivateByPushTokenIn(List.of("tok-1", "tok-2"));
+		// 끝난 카드는 더 갱신되지 않으므로 매치 단위로 한 번에 정리한다(IN 절로 토큰을 나열하지 않는다).
+		verify(tokenRepository).deactivateAllByMatchId("match-1");
+		verify(tokenRepository, never()).deactivateByPushTokenIn(any());
 	}
 
 	@Test
