@@ -125,9 +125,12 @@ class AdminStatsRepositoryMySqlIntegrationTest {
     }
 
     /** 리포지토리는 에폭 시(유닉스 시각/3600) 정수를 버킷 키로 준다. */
+    /**
+     * 버킷 = 1970-01-01 부터 흐른 <b>벽시계</b> 시간 수. 타임존을 끼우면 안 된다 — 끼우는 순간
+     * DB 세션 타임존이 UTC 인 프로덕션에서 버킷이 밀렸던 그 버그를 테스트가 그대로 재현해 통과시킨다.
+     */
     private static long bucketOf(LocalDateTime at) {
-        return at.withMinute(0).withSecond(0).withNano(0)
-                .atZone(java.time.ZoneId.systemDefault()).toEpochSecond() / 3600;
+        return java.time.temporal.ChronoUnit.HOURS.between(LocalDateTime.of(1970, 1, 1, 0, 0), at);
     }
 
     @Test
