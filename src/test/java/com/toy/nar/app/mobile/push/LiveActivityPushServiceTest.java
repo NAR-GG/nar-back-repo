@@ -156,6 +156,90 @@ class LiveActivityPushServiceTest {
 	}
 
 	@Test
+	void 다음_세트가_시작된_뒤_도착한_이전_세트_종료는_버린다() {
+		// 2026-07-31 LCK Gen.G vs T1 실측: 업스트림이 끝난 게임 id 를 계속 실어 보내
+		// 1세트 종료가 2세트 진행 중에 5회 추가 발화했다. 그대로 두면 2세트를 하는 내내
+		// 카드가 "SET 1 종료 / 다음 세트 준비 중" 으로 덮인다.
+		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));
+
+		service.notifySetStart("match-1", 1, 0, 0);
+		service.notifySetEnd("match-1", 1, 0, 1, false, null);
+		service.notifySetStart("match-1", 2, 0, 1);
+		org.mockito.Mockito.clearInvocations(apnsClient);
+
+		service.notifySetEnd("match-1", 1, 0, 1, false, null);   // 재발화
+		service.notifySetEnd("match-1", 1, 0, 1, false, null);
+
+		verify(apnsClient, never()).sendUpdateAsync(anyString(), any());
+	}
+
+	@Test
+	void 낡은_세트_종료가_매치_종료로_판정돼도_카드를_닫지_않는다() {
+		// 치명 케이스: 재발화한 1세트 종료를 그 시점 스코어(0:2)로 계산하면 matchEnded=true 가 된다.
+		// 그대로 나가면 end 이벤트 + 토큰 전체 비활성화라 남은 세트 동안 카드가 영구히 멈춘다.
+		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));
+
+		service.notifySetStart("match-1", 1, 0, 0);
+		service.notifySetEnd("match-1", 1, 0, 1, false, null);
+		service.notifySetStart("match-1", 2, 0, 1);
+		org.mockito.Mockito.clearInvocations(apnsClient, tokenRepository);
+
+		service.notifySetEnd("match-1", 1, 0, 2, true, "GEN");   // 낡은 세트 번호 + 현재 스코어
+
+		verify(apnsClient, never()).sendEndAsync(anyString(), any(), any());
+		verify(tokenRepository, never()).deactivateAllByMatchId(anyString());
+	}
+
+	@Test
+	void 정상_순서는_모두_통과한다() {
+		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));
+
+		service.notifySetStart("match-1", 1, 0, 0);
+		service.notifySetEnd("match-1", 1, 1, 0, false, null);
+		service.notifySetStart("match-1", 2, 1, 0);
+		service.notifySetEnd("match-1", 2, 1, 1, false, null);
+		service.notifySetStart("match-1", 3, 1, 1);
+
+		verify(apnsClient, org.mockito.Mockito.times(5)).sendUpdateAsync(anyString(), any());
+
+		service.notifySetEnd("match-1", 3, 2, 1, true, "T1");
+		verify(apnsClient).sendEndAsync(anyString(), any(), any());
+	}
+
+	@Test
+	void 같은_상태_재발화는_통과시킨다() {
+		// 같은 세트를 다시 그리는 것뿐이라 무해하고, 그 사이 스코어가 갱신됐을 수 있다.
+		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));
+
+		service.notifySetStart("match-1", 2, 1, 0);
+		service.notifySetStart("match-1", 2, 1, 0);
+
+		verify(apnsClient, org.mockito.Mockito.times(2)).sendUpdateAsync(anyString(), any());
+	}
+
+	@Test
+	void 세트_번호를_모르면_카드를_갱신하지_않는다() {
+		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));
+
+		service.notifySetStart("match-1", 0, 0, 0);
+
+		verify(apnsClient, never()).sendUpdateAsync(anyString(), any());
+	}
+
+	@Test
+	void 매치가_달라지면_진행도가_섞이지_않는다() {
+		when(tokenRepository.findActivePushTokensByMatchId(anyString())).thenReturn(List.of("tok-1"));
+
+		service.notifySetStart("match-1", 3, 1, 1);
+		org.mockito.Mockito.clearInvocations(apnsClient);
+
+		// 다른 경기의 1세트는 match-1 의 3세트와 무관하게 통과해야 한다.
+		service.notifySetStart("match-2", 1, 0, 0);
+
+		verify(apnsClient).sendUpdateAsync(anyString(), any());
+	}
+
+	@Test
 	void 토큰_조회가_실패해도_예외가_새지_않는다() {
 		when(tokenRepository.findActivePushTokensByMatchId("match-1"))
 				.thenThrow(new RuntimeException("DB down"));
