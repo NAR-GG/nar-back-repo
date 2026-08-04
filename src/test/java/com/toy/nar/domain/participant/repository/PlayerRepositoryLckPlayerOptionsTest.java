@@ -261,6 +261,31 @@ class PlayerRepositoryLckPlayerOptionsTest {
 	}
 
 	@Test
+	@DisplayName("current_team_id가 해외 1군 팀(LCK 아님, team_code 있음)이어도 경기 기록 팀을 덮는다")
+	void currentTeamOverridesWithNonLckCodedTeam() {
+		// LCK 출전 후 해외 이적(Loki: LCK 2026 → Cloud9). 백오피스 수정이 앱 목록에도 보여야 한다.
+		exec(team(40, "Cloud9", "C9"));
+		exec("UPDATE players SET current_team_id = 40 WHERE player_id = 6");
+		em.flush();
+		em.clear();
+
+		Page<LckPlayerOption> page = playerRepository.findLckPlayerOptions(
+				LCK, YEAR, null, "GenStar", PageRequest.of(0, 50));
+		assertThat(page.getContent()).singleElement()
+				.extracting(LckPlayerOption::getTeamCode).isEqualTo("C9");
+
+		// 옛 팀 필터에서는 빠져야 한다.
+		assertThat(playerRepository.findLckPlayerOptions(LCK, YEAR, GEN, null, PageRequest.of(0, 50)))
+				.extracting(LckPlayerOption::getPlayerName).doesNotContain("GenStar");
+
+		// 단건·다건(구독 목록) 경로도 동일.
+		assertThat(playerRepository.findLckPlayerOption(LCK, YEAR, 6L))
+				.singleElement().extracting(LckPlayerOption::getTeamCode).isEqualTo("C9");
+		assertThat(playerRepository.findLckPlayerOptionsByPlayerIds(LCK, YEAR, Set.of(6L)))
+				.extracting(LckPlayerOption::getTeamCode).containsExactly("C9");
+	}
+
+	@Test
 	@DisplayName("단건·다건 조회도 1군 current_team_id를 동일하게 반영한다")
 	void byPlayerIdQueriesApplySameOverride() {
 		exec("UPDATE players SET current_team_id = " + T1 + " WHERE player_id = 6");
