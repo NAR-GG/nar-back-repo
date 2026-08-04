@@ -9,10 +9,8 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -34,6 +32,7 @@ public class AdminStatsService {
     private static final int TOP_LIMIT = 10;
     private static final String HOUR = "HOUR";
     private static final DateTimeFormatter BUCKET_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:00");
+    private static final LocalDateTime EPOCH_DATE = LocalDateTime.of(1970, 1, 1, 0, 0);
 
     private final AdminStatsRepository statsRepository;
 
@@ -83,10 +82,14 @@ public class AdminStatsService {
         return LocalDate.now().minusDays(clampDays(days) - 1L).atStartOfDay();
     }
 
-    /** 에폭 시(정수) → {@code 2026-08-02T13:00}. 포맷을 SQL 이 아니라 여기서 하는 이유는 리포지토리 주석 참고. */
-    private static String bucketLabel(long epochHour) {
-        return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochHour * 3600), ZoneId.systemDefault())
-                .format(BUCKET_FORMAT);
+    /**
+     * 버킷 정수 → {@code 2026-08-02T13:00}. 포맷을 SQL 이 아니라 여기서 하는 이유는 리포지토리 주석 참고.
+     *
+     * <p>정수는 <b>에폭 시각이 아니라</b> 1970-01-01 기준 벽시계 시간 수다(리포지토리의 {@code TIMESTAMPDIFF}).
+     * 그래서 타임존 변환 없이 그대로 되돌린다 — 여기서 {@code ZoneId} 를 끼우면 DB 세션 타임존에 따라 버킷이 밀린다.
+     */
+    private static String bucketLabel(long hoursSinceEpochDate) {
+        return EPOCH_DATE.plusHours(hoursSinceEpochDate).format(BUCKET_FORMAT);
     }
 
     private static List<StatsOverviewResponse.LabelCount> toLabelCounts(
