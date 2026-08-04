@@ -13,9 +13,4 @@ public record MobilePushResult(
 		int failureCount,
 		List<String> invalidTokens,
 		List<String> successTokens) {
-
-	/** 토큰별 결과가 필요 없는 호출부(단일 구독자 발송 등)를 위한 생성자. */
-	public MobilePushResult(int successCount, int failureCount, List<String> invalidTokens) {
-		this(successCount, failureCount, invalidTokens, List.of());
-	}
 }
