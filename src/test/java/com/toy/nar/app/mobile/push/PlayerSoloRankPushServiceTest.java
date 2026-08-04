@@ -52,22 +52,19 @@ class PlayerSoloRankPushServiceTest {
 	@Test
 	void sendsOncePerSubscribedMemberAndDeactivatesInvalidTokens() {
 		Player player = player(10L, "Faker");
-		Member firstMember = member(7L);
-		Member secondMember = member(8L);
-		MemberDevice first = device(1L, firstMember, "token-1");
-		MemberDevice second = device(2L, secondMember, "token-2");
+		MemberDevice first = device(1L, member(7L), "token-1");
+		MemberDevice second = device(2L, member(8L), "token-2");
 
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L))
 				.thenReturn(List.of(first, second));
-		when(deliveryRepository.reserve(any(), eq(10L), eq("game-1"))).thenReturn(true);
+		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"))).thenReturn(List.of(7L, 8L));
 		when(pushGateway.send(any(), any()))
-				.thenReturn(new MobilePushResult(1, 0, List.of()))
-				.thenReturn(new MobilePushResult(0, 1, List.of("token-2")));
+				.thenReturn(new MobilePushResult(1, 1, List.of("token-2"), List.of("token-1")));
 
 		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
 
-		verify(deliveryRepository).markSent(7L, 10L, "game-1");
-		verify(deliveryRepository).markFailed(8L, 10L, "game-1", "FCM 전송 성공 기기가 없습니다.");
+		verify(deliveryRepository).markSentAll(List.of(7L), 10L, "game-1");
+		verify(deliveryRepository).markFailedAll(List.of(8L), 10L, "game-1", "FCM 전송 성공 기기가 없습니다.");
 		verify(deviceRepository).deactivateByFcmTokenIn(List.of("token-2"));
 	}
 
@@ -86,14 +83,15 @@ class PlayerSoloRankPushServiceTest {
 		Player player = player(10L, "Faker");
 		MemberDevice device = device(1L, member(7L), "token");
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
-		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(true);
-		when(pushGateway.send(any(), any())).thenReturn(new MobilePushResult(1, 0, List.of()));
+		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"))).thenReturn(List.of(7L));
+		when(pushGateway.send(any(), any()))
+				.thenReturn(new MobilePushResult(1, 0, List.of(), List.of("token")));
 		doThrow(new IllegalStateException("topic down"))
 				.when(pushGateway).sendToTopic(any(), any());
 
 		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1"))
 				.doesNotThrowAnyException();
-		verify(deliveryRepository).markSent(7L, 10L, "game-1");
+		verify(deliveryRepository).markSentAll(List.of(7L), 10L, "game-1");
 	}
 
 	@Test
@@ -101,7 +99,7 @@ class PlayerSoloRankPushServiceTest {
 		Player player = player(10L, "Faker");
 		MemberDevice device = device(1L, member(7L), "token");
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
-		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(false);
+		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"))).thenReturn(List.of());
 
 		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
 
@@ -113,12 +111,12 @@ class PlayerSoloRankPushServiceTest {
 		Player player = player(10L, "Faker");
 		MemberDevice device = device(1L, member(7L), "token");
 		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
-		when(deliveryRepository.reserve(7L, 10L, "game-1")).thenReturn(true);
+		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"))).thenReturn(List.of(7L));
 		when(pushGateway.send(any(), any())).thenThrow(new IllegalStateException("firebase down"));
 
 		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1"))
 				.doesNotThrowAnyException();
-		verify(deliveryRepository).markFailed(7L, 10L, "game-1", "firebase down");
+		verify(deliveryRepository).markFailedAll(List.of(7L), 10L, "game-1", "firebase down");
 	}
 
 	private Member member(Long id) {
