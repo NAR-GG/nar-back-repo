@@ -18,13 +18,19 @@ import java.util.List;
  * (일별/24시간 뷰가 쿼리 하나를 공유하고, 24시간 롤링 윈도가 자정을 가로질러도 그대로 만들어진다).
  * 값이 0인 버킷은 행 자체가 없다 — 빈 구간 채우기는 화면 쪽 책임.
  *
- * <p>버킷 키는 <b>에폭 시(epoch hour)</b> 정수다. 문자열({@code DATE_FORMAT})로 그룹핑하면 35만 행짜리
+ * <p>버킷 키는 <b>1970-01-01 부터 흐른 시간(hour)</b> 정수다. 문자열({@code DATE_FORMAT})로 그룹핑하면 35만 행짜리
  * 알림 집계가 프로덕션에서 3,311ms 걸렸고, 같은 쿼리를 정수 키로 바꾸니 1,257ms 였다(2026-08-03 EXPLAIN ANALYZE
  * 실측). 사람이 읽을 포맷 변환은 서비스에서 한다.
+ *
+ * <p><b>{@code UNIX_TIMESTAMP()} 를 쓰지 않는 이유</b>: {@code created_at} 은 타임존 없는 {@code DATETIME}(=KST 벽시계)
+ * 인데 {@code UNIX_TIMESTAMP()} 는 그 값을 <b>MySQL 세션 {@code time_zone} 기준</b>으로 해석한다. JDBC 의
+ * {@code serverTimezone}/{@code connectionTimeZone} 은 클라이언트 변환 옵션일 뿐 세션 타임존을 바꾸지 않으므로,
+ * DB 서버가 UTC 면 버킷이 9시간 밀린다(프로덕션에서 실제로 밀렸다). {@code TIMESTAMPDIFF} 는 벽시계끼리의
+ * 순수 산술이라 세션 타임존과 무관하고, 문자열 시절 {@code DATE_FORMAT} 과 의미가 정확히 같다.
  */
 public interface AdminStatsRepository extends Repository<Member, Long> {
 
-    /** {@code bucket} = 에폭 시(= 유닉스 시각 / 3600), {@code cnt} = 그 1시간 동안의 건수. */
+    /** {@code bucket} = 1970-01-01 00:00 부터 흐른 시간(벽시계 기준), {@code cnt} = 그 1시간 동안의 건수. */
     interface HourCount {
         long getBucket();
 
@@ -58,7 +64,7 @@ public interface AdminStatsRepository extends Repository<Member, Long> {
     }
 
     @Query(value = """
-            SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600) AS bucket, COUNT(*) AS cnt
+            SELECT TIMESTAMPDIFF(HOUR, '1970-01-01', created_at) AS bucket, COUNT(*) AS cnt
             FROM member
             WHERE created_at >= :from
             GROUP BY bucket
@@ -76,13 +82,13 @@ public interface AdminStatsRepository extends Repository<Member, Long> {
                    SUM(t) AS teamCnt,
                    SUM(m) AS matchCnt
             FROM (
-                SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600) AS bucket, COUNT(*) AS p, 0 AS t, 0 AS m
+                SELECT TIMESTAMPDIFF(HOUR, '1970-01-01', created_at) AS bucket, COUNT(*) AS p, 0 AS t, 0 AS m
                 FROM member_favorite_player WHERE created_at >= :from GROUP BY bucket
                 UNION ALL
-                SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600), 0, COUNT(*), 0
+                SELECT TIMESTAMPDIFF(HOUR, '1970-01-01', created_at), 0, COUNT(*), 0
                 FROM member_team_notification_subscription WHERE created_at >= :from GROUP BY 1
                 UNION ALL
-                SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600), 0, 0, COUNT(*)
+                SELECT TIMESTAMPDIFF(HOUR, '1970-01-01', created_at), 0, 0, COUNT(*)
                 FROM member_match_subscription WHERE created_at >= :from GROUP BY 1
             ) x
             GROUP BY bucket
@@ -98,7 +104,7 @@ public interface AdminStatsRepository extends Repository<Member, Long> {
      * 그래서 별도 엔드포인트 + 캐시로 분리해 나머지 카드가 먼저 그려지게 한다.
      */
     @Query(value = """
-            SELECT FLOOR(UNIX_TIMESTAMP(created_at) / 3600) AS bucket, COUNT(*) AS cnt
+            SELECT TIMESTAMPDIFF(HOUR, '1970-01-01', created_at) AS bucket, COUNT(*) AS cnt
             FROM member_notification
             WHERE created_at >= :from
             GROUP BY bucket
