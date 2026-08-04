@@ -195,10 +195,15 @@ public class PlayerSoloRankMonitorService {
 
 	/**
 	 * 계정 상태 변경만 짧은 트랜잭션으로 커밋한다. 외부 API 호출은 절대 이 안에 두지 않는다.
-	 * 계정은 detached 라 save(merge)로 반영한다.
+	 *
+	 * <p>detached 스냅샷을 {@code save}(merge)하면 전체 컬럼 UPDATE라 사이클 도중 백오피스에서 바뀐
+	 * {@code riot_id}·{@code platform}·{@code puuid}가 스냅샷 값으로 되돌아간다. 그래서 트랜잭션
+	 * 안에서 현재 행을 다시 읽고 라이브 상태 컬럼만 옮긴다(managed 엔티티라 별도 save 불필요).
 	 */
 	private void persist(PlayerRiotAccount account) {
-		transactionTemplate.executeWithoutResult(status -> playerRiotAccountRepository.save(account));
+		transactionTemplate.executeWithoutResult(status ->
+				playerRiotAccountRepository.findById(account.getId())
+						.ifPresent(current -> current.copyLiveStateFrom(account)));
 	}
 
 	@Transactional(readOnly = true)

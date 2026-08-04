@@ -166,6 +166,21 @@ public class PlayerRiotAccount {
 		this.lastAlertedMatchId = matchId;
 	}
 
+	/**
+	 * 폴링 스냅샷(detached)의 라이브 상태만 이 엔티티로 옮긴다.
+	 *
+	 * <p>모니터가 사이클 시작에 읽어둔 엔티티를 그대로 {@code save}(merge)하면 전체 컬럼 UPDATE라
+	 * {@code riot_id}·{@code platform}·{@code puuid}까지 스냅샷 시점 값으로 되돌아간다. 그 사이
+	 * 백오피스에서 계정을 교체했다면(2026-08-04 Loki: C9loki#kr3/NA1 → 옛 Loki#zxc/KR로 롤백)
+	 * 엉뚱한 계정을 폴링해 솔랭 알림이 끊긴다. 그래서 상태 컬럼만 골라 옮긴다.
+	 */
+	public void copyLiveStateFrom(PlayerRiotAccount snapshot) {
+		this.liveStatus = snapshot.liveStatus;
+		this.lastCheckedMatchId = snapshot.lastCheckedMatchId;
+		this.lastAlertedMatchId = snapshot.lastAlertedMatchId;
+		this.lastMatchCheckedAt = snapshot.lastMatchCheckedAt;
+	}
+
 	@PrePersist
 	public void onCreate() {
 		LocalDateTime now = LocalDateTime.now();
