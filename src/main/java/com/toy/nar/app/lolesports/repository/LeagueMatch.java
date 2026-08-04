@@ -97,6 +97,18 @@ public class LeagueMatch {
 		}
 	}
 
+	/**
+	 * 이미 확정한 경기 결과(상태·스코어)를 그대로 옮겨 담는다.
+	 *
+	 * <p>업스트림이 끝난 경기를 미시작·0:0 으로 방치할 때, 그 값으로 덮이지 않도록
+	 * 동기화 대상 엔티티에 기존 결과를 되돌려 놓는 용도다.</p>
+	 */
+	public void restoreResult(String state, Integer blueScore, Integer redScore) {
+		this.state = state;
+		this.blueScore = blueScore;
+		this.redScore = redScore;
+	}
+
 	public void applySeason(Integer seasonYear, String seasonSplit) {
 		this.seasonYear = seasonYear;
 		this.seasonSplit = seasonSplit;
