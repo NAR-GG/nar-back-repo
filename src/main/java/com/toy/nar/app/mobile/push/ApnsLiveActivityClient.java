@@ -27,9 +27,8 @@ import java.util.Map;
  * iOS Live Activity 갱신용 APNs HTTP/2 클라이언트.
  *
  * <p>FCM 을 못 쓰는 유일한 경로다 — ActivityKit 푸시 토큰은 FCM 등록 토큰이 아니라서
- * firebase-admin 으로 보낼 수 없다. 대신 발송량이 작아(경기당 10~20건, 세트/스코어 변화 시에만.
- * 경과 시간은 위젯이 {@code Text(style: .timer)} 로 자체 갱신한다) 전용 SDK 없이
- * JDK HttpClient + jjwt 로 충분하다.
+ * firebase-admin 으로 보낼 수 없다. 대신 발송량이 작아(세트/스코어가 바뀔 때만이라 경기당 10~20건)
+ * 전용 SDK 없이 JDK HttpClient + jjwt 로 충분하다.
  *
  * <p>ponytail: 커넥션 풀·재시도·배치를 직접 하지 않는다. HttpClient 가 HTTP/2 멀티플렉싱을
  * 알아서 하고 발송량이 작아 지금은 이득이 없다. 발송량이 커지거나 부분 실패 재시도가
@@ -41,12 +40,6 @@ public class ApnsLiveActivityClient {
 
 	/** APNs 는 인증 토큰 수명을 1시간으로 제한한다. 만료 직전이 아니라 여유를 두고 새로 만든다. */
 	private static final Duration TOKEN_TTL = Duration.ofMinutes(50);
-
-	/**
-	 * Swift {@code Date} 의 기본 Codable 인코딩은 Unix epoch 가 아니라 2001-01-01 기준 초다.
-	 * ActivityKit 이 content-state 를 표준 JSONDecoder 로 읽으므로 여기서 맞춰 보낸다.
-	 */
-	static final long APPLE_REFERENCE_EPOCH_SECONDS = 978_307_200L;
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 	private final HttpClient httpClient = HttpClient.newBuilder()
@@ -183,10 +176,5 @@ public class ApnsLiveActivityClient {
 		} catch (Exception e) {
 			throw new IOException("APNs .p8 키를 읽지 못했습니다: " + keyPath, e);
 		}
-	}
-
-	/** Unix epoch 초 → Swift {@code Date} 가 기대하는 2001-01-01 기준 초. */
-	static double toAppleReferenceSeconds(Instant instant) {
-		return instant.getEpochSecond() - (double) APPLE_REFERENCE_EPOCH_SECONDS;
 	}
 }

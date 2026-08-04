@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,14 +42,9 @@ public class LiveActivityPushService {
 		return apnsClient.isAvailable();
 	}
 
-	/** 세트 시작 — 카드를 진행 중으로 바꾸고 경과 시간 기준점을 지금으로 잡는다. */
+	/** 세트 시작 — 카드를 진행 중으로 바꾼다. */
 	public void notifySetStart(String matchId, int setNumber, Integer blueScore, Integer redScore) {
-		Map<String, Object> state = contentState(
-				PHASE_PLAYING, setNumber, blueScore, redScore, "", null);
-		// 진행 중일 때만 setStartedAt 을 싣는다. 위젯이 이 값으로 경과 시간을 스스로 흘려
-		// 초 단위 갱신에 푸시가 필요 없다.
-		state.put("setStartedAt", ApnsLiveActivityClient.toAppleReferenceSeconds(Instant.now()));
-		fanOut(matchId, state, false);
+		fanOut(matchId, contentState(PHASE_PLAYING, setNumber, blueScore, redScore, "", null), false);
 	}
 
 	/**

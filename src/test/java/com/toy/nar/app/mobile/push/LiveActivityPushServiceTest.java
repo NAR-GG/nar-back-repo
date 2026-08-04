@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -36,7 +35,7 @@ class LiveActivityPushServiceTest {
 	}
 
 	@Test
-	void 세트_시작은_진행중_상태와_경과시간_기준점을_보낸다() {
+	void 세트_시작은_진행중_상태와_스코어만_보낸다() {
 		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));
 
 		service.notifySetStart("match-1", 2, 1, 0);
@@ -46,9 +45,10 @@ class LiveActivityPushServiceTest {
 				.containsEntry("setNumber", 2)
 				.containsEntry("scoreA", 1)
 				.containsEntry("scoreB", 0)
-				// 위젯이 이 기준점으로 경과 시간을 스스로 흘린다(초 단위 푸시 불필요).
-				.containsKey("setStartedAt");
-		assertThat(state).doesNotContainKey("winnerTeamCode");
+				.doesNotContainKey("winnerTeamCode")
+				// 카드에서 경과 시간을 뺐다. 시간 관련 필드는 싣지 않는다.
+				.doesNotContainKey("setStartedAt")
+				.doesNotContainKey("frozenTime");
 	}
 
 	@Test
@@ -124,20 +124,6 @@ class LiveActivityPushServiceTest {
 		service.notifySetStart("match-1", 1, 0, 0);
 
 		verify(apnsClient, never()).sendUpdate(anyString(), any());
-	}
-
-	/**
-	 * Swift {@code Date} 의 기본 Codable 인코딩은 Unix epoch 가 아니라 2001-01-01 기준 초다.
-	 * 여길 틀리면 위젯 경과 시간이 31년 어긋난 채 조용히 표시된다.
-	 */
-	@Test
-	void 애플_기준시_변환은_2001년_기준_초다() {
-		assertThat(ApnsLiveActivityClient.toAppleReferenceSeconds(Instant.parse("2001-01-01T00:00:00Z")))
-				.isZero();
-		assertThat(ApnsLiveActivityClient.toAppleReferenceSeconds(Instant.parse("2001-01-01T00:01:00Z")))
-				.isEqualTo(60.0);
-		assertThat(ApnsLiveActivityClient.toAppleReferenceSeconds(Instant.ofEpochSecond(0)))
-				.isEqualTo(-978_307_200.0);
 	}
 
 	private Map<String, Object> captureUpdate() {
