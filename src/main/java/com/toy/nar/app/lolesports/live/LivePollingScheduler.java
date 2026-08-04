@@ -48,6 +48,7 @@ public class LivePollingScheduler {
 	private final CacheEvictionService cacheEvictionService;
 	private final NotificationService notificationService;
 	private final com.toy.nar.app.mobile.push.TeamLiveEventPushService teamLiveEventPushService;
+	private final com.toy.nar.app.mobile.push.LiveActivityPushService liveActivityPushService;
 	private final LiveFrameStallTracker frameStallTracker;
 	private final com.toy.nar.app.lolesports.repository.LeagueMatchRepository leagueMatchRepository;
 	@org.springframework.beans.factory.annotation.Qualifier("applicationTaskExecutor")
@@ -378,7 +379,29 @@ public class LivePollingScheduler {
 				log.warn("[live-notify] set-start failed gameId={} matchId={}: {}",
 						activeGame.gameId(), activeGame.matchId(), e.getMessage());
 			}
+			// 디스코드·FCM 실패가 카드 갱신까지 막지 않도록 try 밖에서 부른다(SET_END 와 동일).
+			pushLiveActivitySetStart(activeGame);
 		});
+	}
+
+	/**
+	 * iOS Live Activity 카드를 진행 중으로 바꾼다. 앱 폴링은 백그라운드에서 멈추므로
+	 * 잠금화면 카드는 이 푸시로만 갱신된다. 알림 흐름을 깨지 않게 실패를 흡수한다.
+	 */
+	private void pushLiveActivitySetStart(ActiveLiveGame activeGame) {
+		if (!liveActivityPushService.isEnabled()) {
+			return;
+		}
+		try {
+			var match = leagueMatchRepository.findById(activeGame.matchId()).orElse(null);
+			liveActivityPushService.notifySetStart(
+					activeGame.matchId(),
+					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
+					match == null ? null : match.getBlueScore(),
+					match == null ? null : match.getRedScore());
+		} catch (Exception e) {
+			log.warn("[live-activity] set-start 실패 matchId={}: {}", activeGame.matchId(), e.getMessage());
+		}
 	}
 
 	/** window 응답의 마지막 프레임이 gameState=finished 인지. 프레임이 없으면 false. */
@@ -421,7 +444,52 @@ public class LivePollingScheduler {
 				log.warn("[live-notify] set-end FCM failed gameId={} matchId={}: {}",
 						activeGame.gameId(), activeGame.matchId(), e.getMessage());
 			}
+			pushLiveActivitySetEnd(activeGame);
 		});
+	}
+
+	/**
+	 * iOS Live Activity 카드를 세트 종료(또는 매치 종료)로 바꾼다.
+	 *
+	 * <p>SET_END 푸시가 스코어 재조회로 최대 60초 블로킹될 수 있어 그 뒤에 부른다 —
+	 * 그때쯤이면 DB 스코어도 갱신돼 카드와 알림이 같은 값을 보게 된다.</p>
+	 */
+	private void pushLiveActivitySetEnd(ActiveLiveGame activeGame) {
+		if (!liveActivityPushService.isEnabled()) {
+			return;
+		}
+		try {
+			var match = leagueMatchRepository.findById(activeGame.matchId()).orElse(null);
+			Integer blue = match == null ? null : match.getBlueScore();
+			Integer red = match == null ? null : match.getRedScore();
+			Integer bestOf = match == null ? null : match.getBestOf();
+			boolean matchEnded = isMatchEnded(bestOf, blue, red);
+			String winner = null;
+			if (matchEnded && match != null) {
+				winner = (blue == null ? 0 : blue) > (red == null ? 0 : red)
+						? match.getBlueTeamCode()
+						: match.getRedTeamCode();
+			}
+			liveActivityPushService.notifySetEnd(
+					activeGame.matchId(),
+					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
+					blue, red, matchEnded, winner);
+		} catch (Exception e) {
+			log.warn("[live-activity] set-end 실패 matchId={}: {}", activeGame.matchId(), e.getMessage());
+		}
+	}
+
+	/**
+	 * 다전제 승리 조건 도달 여부. bestOf 를 모르면 매치 종료로 단정하지 않는다 —
+	 * 잘못 종료로 보내면 카드가 경기 도중에 내려간다.
+	 */
+	static boolean isMatchEnded(Integer bestOf, Integer blueScore, Integer redScore) {
+		if (bestOf == null || bestOf < 1) {
+			return false;
+		}
+		int blue = blueScore == null ? 0 : blueScore;
+		int red = redScore == null ? 0 : redScore;
+		return Math.max(blue, red) >= bestOf / 2 + 1;
 	}
 
 	/**
