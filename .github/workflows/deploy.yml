@@ -76,11 +76,16 @@ jobs:
         uses: appleboy/ssh-action@v0.1.6
         env:
           FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+          # iOS Live Activity 푸시용 APNs .p8 (base64). 비어 있으면 설치·마운트를 건너뛰고
+          # APNS_ENABLED 가 false 로 남아 발송 경로 전체가 skip 된다.
+          APNS_KEY_BASE64: ${{ secrets.APNS_KEY_BASE64 }}
+          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+          APNS_TEAM_ID: ${{ secrets.APNS_TEAM_ID }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: FIREBASE_SERVICE_ACCOUNT_BASE64
+          envs: FIREBASE_SERVICE_ACCOUNT_BASE64,APNS_KEY_BASE64,APNS_KEY_ID,APNS_TEAM_ID
           script: |
             set -eu
 
@@ -96,6 +101,29 @@ jobs:
               | base64 --decode \
               | sudo tee "${FIREBASE_SECRET_FILE}" > /dev/null
             sudo chmod 600 "${FIREBASE_SECRET_FILE}"
+
+            # iOS Live Activity 용 APNs 인증 키(.p8).
+            # 키가 아직 없으면 시크릿이 비어 있고, 그러면 설치·마운트를 건너뛴 채
+            # APNS_ENABLED=false 로 떠서 기존 배포와 동작이 같다(발송 경로 전체 skip).
+            APNS_SECRET_FILE="${FIREBASE_SECRET_DIR}/apns-auth-key.p8"
+            APNS_MOUNT_ARGS=""
+            APNS_ENV_ARGS=""
+            if [ -n "${APNS_KEY_BASE64:-}" ]; then
+              echo "Installing APNs auth key..."
+              printf '%s' "${APNS_KEY_BASE64}" \
+                | base64 --decode \
+                | sudo tee "${APNS_SECRET_FILE}" > /dev/null
+              sudo chmod 600 "${APNS_SECRET_FILE}"
+              APNS_MOUNT_ARGS="-v ${APNS_SECRET_FILE}:/run/secrets/apns-auth-key.p8:ro"
+              APNS_ENV_ARGS="-e APNS_ENABLED=true \
+                -e APNS_KEY_PATH=/run/secrets/apns-auth-key.p8 \
+                -e APNS_KEY_ID=${APNS_KEY_ID:-} \
+                -e APNS_TEAM_ID=${APNS_TEAM_ID:-} \
+                -e APNS_BUNDLE_ID=com.nar.wardingapp"
+            else
+              echo "APNS_KEY_BASE64 not set — Live Activity 푸시 비활성 상태로 배포합니다."
+              sudo rm -f "${APNS_SECRET_FILE}"
+            fi
 
             echo "Checking disk usage before cleanup..."
             df -h
@@ -176,6 +204,8 @@ jobs:
               -e JAVA_TOOL_OPTIONS="-Xmx768m -javaagent:/whatap/${WHATAP_JAR} --add-opens=java.base/java.lang=ALL-UNNAMED -Dwhatap.oname=${NEW_NAME}" \
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
               -v /opt/whatap:/whatap \
+              ${APNS_MOUNT_ARGS} \
+              ${APNS_ENV_ARGS} \
               "${APP_IMAGE}"
 
             # micro+swap 환경은 기동이 느릴 수 있어 상한 120초(60회 x 2초)

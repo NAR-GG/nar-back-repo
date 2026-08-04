@@ -50,6 +50,7 @@ class LivePollingSchedulerTest {
 				cacheEvictionService,
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -94,6 +95,7 @@ class LivePollingSchedulerTest {
 				cacheEvictionService,
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -291,6 +293,7 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -328,6 +331,7 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -366,6 +370,7 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -405,6 +410,7 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -446,6 +452,7 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -482,6 +489,7 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -524,6 +532,7 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -560,6 +569,7 @@ class LivePollingSchedulerTest {
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -752,6 +762,7 @@ class LivePollingSchedulerTest {
 				mock(CacheEvictionService.class),
 				mock(NotificationService.class),
 				pushService,
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				frameStallTracker,
 				leagueMatchRepository,
 				Runnable::run);
@@ -780,6 +791,7 @@ class LivePollingSchedulerTest {
 				mock(CacheEvictionService.class),
 				mock(NotificationService.class),
 				pushService,
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -806,6 +818,7 @@ class LivePollingSchedulerTest {
 				mock(CacheEvictionService.class),
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
+				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -816,5 +829,27 @@ class LivePollingSchedulerTest {
 				Instant.parse("2026-05-29T12:00:19Z"));
 
 		assertThat(nextWindow).isEqualTo(Instant.parse("2026-05-29T12:00:20Z"));
+	}
+
+	@Test
+	void 매치_종료_판정은_다전제_승리조건을_따른다() {
+		// Live Activity 카드를 end 로 내릴지 가르는 판정이라, 틀리면 경기 도중에 카드가 사라진다.
+		assertThat(LivePollingScheduler.isMatchEnded(1, 1, 0)).isTrue();
+		assertThat(LivePollingScheduler.isMatchEnded(3, 2, 0)).isTrue();
+		assertThat(LivePollingScheduler.isMatchEnded(3, 1, 1)).isFalse();
+		assertThat(LivePollingScheduler.isMatchEnded(5, 2, 2)).isFalse();
+		assertThat(LivePollingScheduler.isMatchEnded(5, 3, 2)).isTrue();
+	}
+
+	@Test
+	void bestOf_를_모르면_매치_종료로_단정하지_않는다() {
+		// 모르는 채로 종료를 보내면 카드가 경기 중에 내려간다. 모를 땐 유지가 안전하다.
+		assertThat(LivePollingScheduler.isMatchEnded(null, 3, 0)).isFalse();
+		assertThat(LivePollingScheduler.isMatchEnded(0, 3, 0)).isFalse();
+	}
+
+	@Test
+	void 스코어가_null_이면_0으로_보고_종료로_보지_않는다() {
+		assertThat(LivePollingScheduler.isMatchEnded(3, null, null)).isFalse();
 	}
 }

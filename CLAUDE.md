@@ -119,6 +119,13 @@ DISCORD_ROSTER_WEBHOOK_URL                # LCK 로스터 변동 알림. 비우�
 GOOGLE_DRIVE_CSV_ID
 RIOT_MONITOR_ENABLED, RIOT_API_ENABLED   # feature flags for scheduling
 JWT_SECRET
+
+# iOS Live Activity 서버 푸시 (APNs 직결). 5개가 모두 채워져야 발송한다 — 하나라도 비면 전 구간 skip.
+# FCM 으로는 대체 불가: ActivityKit 푸시 토큰은 FCM 등록 토큰이 아니다.
+APNS_ENABLED                             # 기본 false
+APNS_KEY_PATH                            # Apple Developer 에서 받은 .p8 파일 경로
+APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID
+APNS_HOST                                # 기본 https://api.push.apple.com (개발 빌드는 api.sandbox.push.apple.com)
 ```
 
 ### 스케줄러 전역 스위치
