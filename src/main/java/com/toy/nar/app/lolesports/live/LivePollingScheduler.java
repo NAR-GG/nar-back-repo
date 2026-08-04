@@ -375,11 +375,12 @@ public class LivePollingScheduler {
 							activeGame.blueTeamName(),
 							activeGame.redTeamName());
 				}
-				pushLiveActivitySetStart(activeGame);
 			} catch (Exception e) {
 				log.warn("[live-notify] set-start failed gameId={} matchId={}: {}",
 						activeGame.gameId(), activeGame.matchId(), e.getMessage());
 			}
+			// 디스코드·FCM 실패가 카드 갱신까지 막지 않도록 try 밖에서 부른다(SET_END 와 동일).
+			pushLiveActivitySetStart(activeGame);
 		});
 	}
 
