@@ -49,6 +49,7 @@ public class LivePollingScheduler {
 	private final NotificationService notificationService;
 	private final com.toy.nar.app.mobile.push.TeamLiveEventPushService teamLiveEventPushService;
 	private final com.toy.nar.app.mobile.push.LiveActivityPushService liveActivityPushService;
+	private final com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository teamExternalIdentityRepository;
 	private final LiveFrameStallTracker frameStallTracker;
 	private final com.toy.nar.app.lolesports.repository.LeagueMatchRepository leagueMatchRepository;
 	@org.springframework.beans.factory.annotation.Qualifier("applicationTaskExecutor")
@@ -394,13 +395,45 @@ public class LivePollingScheduler {
 		}
 		try {
 			var match = leagueMatchRepository.findById(activeGame.matchId()).orElse(null);
-			liveActivityPushService.notifySetStart(
-					activeGame.matchId(),
-					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
-					match == null ? null : match.getBlueScore(),
-					match == null ? null : match.getRedScore());
+			int setNumber = activeGame.setNumber() != null ? activeGame.setNumber() : 0;
+			Integer blueScore = match == null ? null : match.getBlueScore();
+			Integer redScore = match == null ? null : match.getRedScore();
+
+			// 이미 카드를 띄운 사람들 갱신.
+			liveActivityPushService.notifySetStart(activeGame.matchId(), setNumber, blueScore, redScore);
+
+			// 아직 카드가 없는 구독자에게는 카드를 새로 만들어 준다.
+			// 세트마다 진영이 스왑되므로 팀 표기는 세트 기준(ActiveLiveGame)이 아니라
+			// 매치 기준(LeagueMatch)을 쓴다 — 앱도 매치 기준으로 A/B 를 잡는다.
+			if (match != null) {
+				liveActivityPushService.startCards(
+						activeGame.matchId(), setNumber, blueScore, redScore,
+						resolveTeamId(match.getBlueExternalTeamId()),
+						resolveTeamId(match.getRedExternalTeamId()),
+						new com.toy.nar.app.mobile.push.LiveActivityPushService.MatchCardAttributes(
+								match.getId(),
+								match.getBlueTeamName(), match.getBlueTeamCode(),
+								match.getRedTeamName(), match.getRedTeamCode(),
+								match.getLeagueName()));
+			}
 		} catch (Exception e) {
 			log.warn("[live-activity] set-start 실패 matchId={}: {}", activeGame.matchId(), e.getMessage());
+		}
+	}
+
+	/** 팀 구독 매칭용 내부 팀 id. 해석 실패하면 null 이고, 그 팀 구독자는 대상에서 빠진다. */
+	private Long resolveTeamId(String externalTeamId) {
+		if (externalTeamId == null || externalTeamId.isBlank()) {
+			return null;
+		}
+		try {
+			return teamExternalIdentityRepository
+					.findBySourceAndExternalTeamId("LOLESPORTS", externalTeamId)
+					.map(identity -> identity.getTeam().getId())
+					.orElse(null);
+		} catch (Exception e) {
+			log.warn("[live-activity] 팀 id 해석 실패 externalTeamId={}: {}", externalTeamId, e.getMessage());
+			return null;
 		}
 	}
 

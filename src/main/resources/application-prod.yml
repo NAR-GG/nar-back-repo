@@ -195,3 +195,7 @@ apns:
   bundle-id: ${APNS_BUNDLE_ID:}
   # 개발 빌드(Xcode 직접 설치)는 https://api.sandbox.push.apple.com 로 보내야 한다.
   host: ${APNS_HOST:https://api.push.apple.com}
+  push-to-start:
+    # 사용자가 띄우지 않은 카드를 서버가 잠금화면에 만들어 내는 동작이라 별도 스위치로 둔다.
+    # 앱이 push-to-start 토큰을 올리기 시작한 뒤에 켠다(iOS 17.2+).
+    enabled: ${APNS_PUSH_TO_START_ENABLED:false}

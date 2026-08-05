@@ -1,8 +1,10 @@
 package com.toy.nar.app.mobile.liveactivity;
 
 import com.toy.nar.app.mobile.liveactivity.dto.LiveActivityTokenRequest;
+import com.toy.nar.domain.member.entity.LiveActivityStartToken;
 import com.toy.nar.domain.member.entity.LiveActivityToken;
 import com.toy.nar.domain.member.entity.Member;
+import com.toy.nar.domain.member.repository.LiveActivityStartTokenRepository;
 import com.toy.nar.domain.member.repository.LiveActivityTokenRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,7 @@ public class LiveActivityTokenService {
 
 	private final MemberRepository memberRepository;
 	private final LiveActivityTokenRepository tokenRepository;
+	private final LiveActivityStartTokenRepository startTokenRepository;
 
 	/**
 	 * 토큰 등록 또는 갱신. 같은 토큰이 다시 오면 매치와 활성 여부만 갱신한다
@@ -34,6 +37,33 @@ public class LiveActivityTokenService {
 								.matchId(request.matchId())
 								.pushToken(request.pushToken())
 								.build()));
+	}
+
+	/**
+	 * push-to-start 토큰 등록 또는 갱신.
+	 *
+	 * <p>카드 단위 토큰과 달리 앱 단위라 매치를 받지 않는다. 이 토큰이 있어야 서버가 카드를
+	 * 새로 만들 수 있다({@code Activity.pushToStartTokenUpdates}, iOS 17.2+).</p>
+	 */
+	@Transactional
+	public void registerStartToken(Long memberId, String pushToken) {
+		Member member = requireMember(memberId);
+		startTokenRepository.findByPushToken(pushToken)
+				.ifPresentOrElse(
+						token -> token.reactivate(member),
+						() -> startTokenRepository.save(LiveActivityStartToken.builder()
+								.member(member)
+								.pushToken(pushToken)
+								.build()));
+	}
+
+	/** 사용자가 실시간 활동을 끄거나 로그아웃할 때 호출한다. */
+	@Transactional
+	public void unregisterStartToken(Long memberId, String pushToken) {
+		requireMemberId(memberId);
+		startTokenRepository.findByPushToken(pushToken)
+				.filter(token -> token.getMember().getId().equals(memberId))
+				.ifPresent(LiveActivityStartToken::deactivate);
 	}
 
 	/**

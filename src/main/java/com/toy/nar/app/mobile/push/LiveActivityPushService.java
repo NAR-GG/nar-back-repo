@@ -1,8 +1,10 @@
 package com.toy.nar.app.mobile.push;
 
+import com.toy.nar.domain.member.repository.LiveActivityStartTokenRepository;
 import com.toy.nar.domain.member.repository.LiveActivityTokenRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -37,8 +39,19 @@ public class LiveActivityPushService {
 	/** 경기 종료 카드를 남겨 두는 시간. 앱의 자동 dismiss 타이머와 같은 값. */
 	private static final Duration MATCH_END_DISMISS_AFTER = Duration.ofMinutes(30);
 
+	/** 앱의 ActivityAttributes 타입 이름. 다르면 APNs 는 200 을 주고 카드만 안 뜬다. */
+	private static final String ATTRIBUTES_TYPE = "MatchLiveAttributes";
+
 	private final LiveActivityTokenRepository tokenRepository;
+	private final LiveActivityStartTokenRepository startTokenRepository;
 	private final ApnsLiveActivityClient apnsClient;
+
+	/**
+	 * push-to-start 별도 스위치. 카드를 "갱신"하는 것과 달리 사용자가 띄우지 않은 카드를
+	 * 잠금화면에 만들어 내는 동작이라, APNs 전체를 켠 뒤에도 이것만 따로 끌 수 있게 둔다.
+	 */
+	@Value("${apns.push-to-start.enabled:false}")
+	private boolean pushToStartEnabled;
 
 	/**
 	 * 매치별로 마지막에 카드에 반영한 진행도. 뒤처진 이벤트를 걸러내는 워터마크다.
@@ -66,6 +79,117 @@ public class LiveActivityPushService {
 			return;
 		}
 		fanOut(matchId, contentState(PHASE_PLAYING, setNumber, blueScore, redScore, "", null), false);
+	}
+
+	/**
+	 * 구독자에게 카드를 새로 띄운다(push-to-start).
+	 *
+	 * <p>지금까지 카드는 앱이 실행돼야만 떴다. 잠금화면 카드를 보는 상황이 곧 앱이 안 떠 있는
+	 * 상황이라, 정작 필요한 때에 카드가 없었다. 세트 시작 시점에 서버가 만들어 준다.</p>
+	 *
+	 * <p>{@code notifySetStart} 와 대상이 다르다. 그쪽은 이미 카드를 띄운 토큰에 보내고,
+	 * 이쪽은 이 경기를 구독한 회원 중 아직 카드가 없는 사람에게 보낸다. 두 경로는 겹치지 않는다.</p>
+	 *
+	 * @param blueTeamId 팀 구독 매칭용 내부 팀 id. 해석 실패 시 null (경기 구독자만 대상이 된다)
+	 */
+	public void startCards(
+			String matchId,
+			int setNumber,
+			Integer blueScore,
+			Integer redScore,
+			Long blueTeamId,
+			Long redTeamId,
+			MatchCardAttributes attributes) {
+		if (!isEnabled() || !pushToStartEnabled || matchId == null || matchId.isBlank()) {
+			return;
+		}
+		List<LiveActivityStartTokenRepository.StartTargetRow> targets;
+		try {
+			targets = startTokenRepository.findStartTargets(matchId, blueTeamId, redTeamId);
+		} catch (Exception e) {
+			log.warn("push-to-start 대상 조회 실패 matchId={}: {}", matchId, e.getMessage());
+			return;
+		}
+		if (targets.isEmpty()) {
+			return;
+		}
+
+		Map<String, Object> state = contentState(PHASE_PLAYING, setNumber, blueScore, redScore, "", null);
+		Map<String, CompletableFuture<Boolean>> inFlight = new LinkedHashMap<>();
+		for (LiveActivityStartTokenRepository.StartTargetRow target : targets) {
+			// 응원 팀 하트는 회원마다 달라 payload 를 회원별로 만든다.
+			inFlight.put(target.getPushToken(), apnsClient.sendStartAsync(
+					target.getPushToken(),
+					ATTRIBUTES_TYPE,
+					attributes.toPayload(target.getFavoriteTeamCode()),
+					state));
+		}
+
+		List<String> deadTokens = new ArrayList<>();
+		inFlight.forEach((token, future) -> {
+			boolean alive;
+			try {
+				alive = future.join();
+			} catch (Exception e) {
+				log.warn("push-to-start 결과 수집 실패 matchId={}: {}", matchId, e.getMessage());
+				alive = true;
+			}
+			if (!alive) {
+				deadTokens.add(token);
+			}
+		});
+		log.info("[live-activity] push-to-start matchId={} set={} 발송 {}건, 죽은 토큰 {}건",
+				matchId, setNumber, targets.size(), deadTokens.size());
+
+		if (!deadTokens.isEmpty()) {
+			try {
+				startTokenRepository.deactivateByPushTokenIn(deadTokens);
+			} catch (Exception e) {
+				log.warn("push-to-start 토큰 비활성화 실패 matchId={}: {}", matchId, e.getMessage());
+			}
+		}
+	}
+
+	/**
+	 * 카드의 정적 속성. Swift {@code MatchLiveAttributes} 의 필드 구성과 정확히 맞아야 한다.
+	 *
+	 * <p>로고는 파일명만 넘긴다. 앱이 App Group 에 미리 캐싱해 둔 파일을 위젯이 읽는 구조라
+	 * (확장은 렌더 시점에 네트워크를 못 쓴다), 파일이 없으면 로고 없이 그려진다.</p>
+	 */
+	public record MatchCardAttributes(
+			String matchId,
+			String teamAName,
+			String teamACode,
+			String teamBName,
+			String teamBCode,
+			String leagueName) {
+
+		Map<String, Object> toPayload(String favoriteTeamCode) {
+			Map<String, Object> payload = new LinkedHashMap<>();
+			payload.put("matchId", nullToEmpty(matchId));
+			payload.put("teamAName", nullToEmpty(teamAName));
+			payload.put("teamACode", nullToEmpty(teamACode));
+			payload.put("teamBName", nullToEmpty(teamBName));
+			payload.put("teamBCode", nullToEmpty(teamBCode));
+			payload.put("leagueName", nullToEmpty(leagueName));
+			// 앱과 합의한 캐시 파일명 규칙: <팀코드>.png
+			logoFile(teamACode).ifPresent(file -> payload.put("teamALogoFile", file));
+			logoFile(teamBCode).ifPresent(file -> payload.put("teamBLogoFile", file));
+			if (favoriteTeamCode != null && !favoriteTeamCode.isBlank()) {
+				payload.put("favoriteTeamCode", favoriteTeamCode);
+			}
+			return payload;
+		}
+
+		private static java.util.Optional<String> logoFile(String teamCode) {
+			return teamCode == null || teamCode.isBlank()
+					? java.util.Optional.empty()
+					: java.util.Optional.of(teamCode + ".png");
+		}
+
+		private static String nullToEmpty(String value) {
+			return value == null ? "" : value;
+		}
 	}
 
 	/**

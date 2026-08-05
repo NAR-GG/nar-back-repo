@@ -117,6 +117,30 @@ public class ApnsLiveActivityClient {
 		return sendAsync(pushToken, body("end", contentState, Instant.now().plus(dismissAfter)));
 	}
 
+	/**
+	 * 카드를 새로 만든다(push-to-start, iOS 17.2+).
+	 *
+	 * <p>갱신과 달리 정적 속성까지 실어 보낸다. {@code attributes-type} 은 앱의
+	 * ActivityAttributes 타입 이름과 정확히 같아야 하고, {@code attributes} 는 그 타입의
+	 * 필드 구성과 일치해야 한다. 어긋나면 APNs 는 200 을 주고 카드만 안 뜬다.</p>
+	 *
+	 * <p>토큰도 다르다 — 여기 넘기는 것은 액티비티 토큰이 아니라 앱 단위
+	 * push-to-start 토큰이다.</p>
+	 */
+	public CompletableFuture<Boolean> sendStartAsync(
+			String pushToStartToken,
+			String attributesType,
+			Map<String, Object> attributes,
+			Map<String, Object> contentState) {
+		Map<String, Object> aps = new LinkedHashMap<>();
+		aps.put("timestamp", Instant.now().getEpochSecond());
+		aps.put("event", "start");
+		aps.put("attributes-type", attributesType);
+		aps.put("attributes", attributes);
+		aps.put("content-state", contentState);
+		return sendAsync(pushToStartToken, Map.of("aps", aps));
+	}
+
 	private Map<String, Object> body(String event, Map<String, Object> contentState, Instant dismissalDate) {
 		Map<String, Object> aps = new LinkedHashMap<>();
 		aps.put("timestamp", Instant.now().getEpochSecond());

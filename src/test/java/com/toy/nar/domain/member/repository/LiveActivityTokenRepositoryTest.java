@@ -60,6 +60,66 @@ class LiveActivityTokenRepositoryTest {
 		em.clear();
 	}
 
+	@Autowired
+	private LiveActivityStartTokenRepository startTokenRepository;
+
+	@Test
+	void push_to_start_는_구독자에게_보내되_카드가_이미_있으면_제외한다() {
+		subscribeBothMembersToTeam10();
+
+		// match-1 은 seed 에서 두 회원 모두 활성 카드를 갖고 있다 → 전원 제외.
+		assertThat(startTokenRepository.findStartTargets("match-1", 10L, null)).isEmpty();
+
+		// match-3 은 아무도 카드가 없다 → 구독자 전원이 대상.
+		assertThat(startTokenRepository.findStartTargets("match-3", 10L, null))
+				.extracting(LiveActivityStartTokenRepository.StartTargetRow::getPushToken)
+				.containsExactlyInAnyOrder("start-1", "start-2");
+	}
+
+	@Test
+	void 구독하지_않은_팀_경기는_대상이_아니다() {
+		subscribeBothMembersToTeam10();
+
+		assertThat(startTokenRepository.findStartTargets("match-3", 99L, 98L)).isEmpty();
+	}
+
+	@Test
+	void 세트_시작_알림을_끈_구독자에게는_카드를_만들지_않는다() {
+		// 알림을 끈 사람에게 잠금화면 카드를 띄우면 안 된다.
+		exec("INSERT INTO teams (team_id, team_name, team_code) VALUES (10, 'T1', 'T1')");
+		insertStartToken(1L, 1L, "start-1");
+		exec("INSERT INTO member_team_notification_subscription"
+				+ " (id, member_id, team_id, set_start_enabled, set_end_enabled,"
+				+ "  live_event_enabled, created_at, updated_at)"
+				+ " VALUES (1, 1, 10, false, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+		em.flush();
+		em.clear();
+
+		assertThat(startTokenRepository.findStartTargets("match-3", 10L, null)).isEmpty();
+	}
+
+	private void subscribeBothMembersToTeam10() {
+		exec("INSERT INTO teams (team_id, team_name, team_code) VALUES (10, 'T1', 'T1')");
+		insertStartToken(1L, 1L, "start-1");
+		insertStartToken(2L, 2L, "start-2");
+		for (long memberId = 1; memberId <= 2; memberId++) {
+			exec("INSERT INTO member_team_notification_subscription"
+					+ " (id, member_id, team_id, set_start_enabled, set_end_enabled,"
+					+ "  live_event_enabled, created_at, updated_at)"
+					+ " VALUES (" + memberId + ", " + memberId + ", 10,"
+					+ " true, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+		}
+		em.flush();
+		em.clear();
+	}
+
+	private void insertStartToken(long id, long memberId, String pushToken) {
+		exec("INSERT INTO live_activity_start_token"
+				+ " (id, member_id, push_token, active, created_at, updated_at)"
+				+ " VALUES (" + id + ", " + memberId + ", '" + pushToken + "', true,"
+				+ " CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+	}
+
 	@Test
 	void 매치의_활성_토큰만_돌려준다() {
 		assertThat(tokenRepository.findActivePushTokensByMatchId("match-1"))
