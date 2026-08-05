@@ -51,6 +51,7 @@ class LivePollingSchedulerTest {
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -96,6 +97,7 @@ class LivePollingSchedulerTest {
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -294,6 +296,7 @@ class LivePollingSchedulerTest {
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -332,6 +335,7 @@ class LivePollingSchedulerTest {
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -371,6 +375,7 @@ class LivePollingSchedulerTest {
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -411,6 +416,7 @@ class LivePollingSchedulerTest {
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -453,6 +459,7 @@ class LivePollingSchedulerTest {
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -490,6 +497,7 @@ class LivePollingSchedulerTest {
 				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -533,6 +541,7 @@ class LivePollingSchedulerTest {
 				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -570,6 +579,7 @@ class LivePollingSchedulerTest {
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -763,6 +773,7 @@ class LivePollingSchedulerTest {
 				mock(NotificationService.class),
 				pushService,
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				frameStallTracker,
 				leagueMatchRepository,
 				Runnable::run);
@@ -792,6 +803,7 @@ class LivePollingSchedulerTest {
 				mock(NotificationService.class),
 				pushService,
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);
@@ -819,6 +831,7 @@ class LivePollingSchedulerTest {
 				mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
 				mock(com.toy.nar.app.mobile.push.LiveActivityPushService.class),
+				mock(com.toy.nar.domain.participant.repository.TeamExternalIdentityRepository.class),
 				new LiveFrameStallTracker(180_000L),
 				mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class),
 				Runnable::run);

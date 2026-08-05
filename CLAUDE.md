@@ -126,6 +126,7 @@ APNS_ENABLED                             # 기본 false
 APNS_KEY_PATH                            # Apple Developer 에서 받은 .p8 파일 경로
 APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID
 APNS_HOST                                # 기본 https://api.push.apple.com (개발 빌드는 api.sandbox.push.apple.com)
+APNS_PUSH_TO_START_ENABLED               # 서버가 잠금화면 카드를 생성(push-to-start, iOS 17.2+). 기본 false
 ```
 
 ### 스케줄러 전역 스위치

@@ -1,6 +1,7 @@
 package com.toy.nar.api.mobile.liveactivity;
 
 import com.toy.nar.app.mobile.liveactivity.LiveActivityTokenService;
+import com.toy.nar.app.mobile.liveactivity.dto.LiveActivityStartTokenRequest;
 import com.toy.nar.app.mobile.liveactivity.dto.LiveActivityTokenRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -36,6 +37,31 @@ public class MobileLiveActivityController {
 			@AuthenticationPrincipal Long memberId,
 			@Valid @RequestBody LiveActivityTokenRequest request) {
 		tokenService.register(memberId, request);
+		return ResponseEntity.noContent().build();
+	}
+
+	@Operation(
+			summary = "push-to-start 토큰 등록/갱신",
+			description = "앱이 실행 중이 아닐 때도 서버가 잠금화면 카드를 만들 수 있게 하는 앱 단위 토큰입니다. "
+					+ "iOS 17.2 이상에서 Activity.pushToStartTokenUpdates 로 받습니다. "
+					+ "카드 단위 토큰(POST /)과 다른 값이라 따로 올려야 합니다.")
+	@PostMapping("/start-token")
+	public ResponseEntity<Void> registerStartToken(
+			@AuthenticationPrincipal Long memberId,
+			@Valid @RequestBody LiveActivityStartTokenRequest request) {
+		tokenService.registerStartToken(memberId, request.pushToken());
+		return ResponseEntity.noContent().build();
+	}
+
+	@Operation(
+			summary = "push-to-start 토큰 해제",
+			description = "사용자가 실시간 활동을 끄거나 로그아웃할 때 호출합니다.")
+	@DeleteMapping("/start-token")
+	public ResponseEntity<Void> unregisterStartToken(
+			@AuthenticationPrincipal Long memberId,
+			@Parameter(description = "등록할 때 올린 push-to-start 토큰")
+			@RequestParam String pushToken) {
+		tokenService.unregisterStartToken(memberId, pushToken);
 		return ResponseEntity.noContent().build();
 	}
 

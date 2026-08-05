@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.push;
 
+import com.toy.nar.domain.member.repository.LiveActivityStartTokenRepository;
 import com.toy.nar.domain.member.repository.LiveActivityTokenRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,14 +22,16 @@ import static org.mockito.Mockito.when;
 class LiveActivityPushServiceTest {
 
 	private LiveActivityTokenRepository tokenRepository;
+	private LiveActivityStartTokenRepository startTokenRepository;
 	private ApnsLiveActivityClient apnsClient;
 	private LiveActivityPushService service;
 
 	@BeforeEach
 	void setUp() {
 		tokenRepository = mock(LiveActivityTokenRepository.class);
+		startTokenRepository = mock(LiveActivityStartTokenRepository.class);
 		apnsClient = mock(ApnsLiveActivityClient.class);
-		service = new LiveActivityPushService(tokenRepository, apnsClient);
+		service = new LiveActivityPushService(tokenRepository, startTokenRepository, apnsClient);
 		when(apnsClient.isAvailable()).thenReturn(true);
 		when(apnsClient.sendUpdateAsync(anyString(), any())).thenReturn(alive(true));
 		when(apnsClient.sendEndAsync(anyString(), any(), any())).thenReturn(alive(true));
@@ -247,6 +250,136 @@ class LiveActivityPushServiceTest {
 		service.notifySetStart("match-1", 1, 0, 0);
 
 		verify(apnsClient, never()).sendUpdateAsync(anyString(), any());
+	}
+
+	// ── push-to-start ──────────────────────────────
+
+	@Test
+	void 구독자에게_카드를_새로_만든다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargets("match-1", 10L, 20L))
+				.thenReturn(List.of(startTarget("start-tok", 1L, "T1")));
+
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		ArgumentCaptor<Map<String, Object>> attrs = mapCaptor();
+		ArgumentCaptor<Map<String, Object>> state = mapCaptor();
+		verify(apnsClient).sendStartAsync(eq("start-tok"), eq("MatchLiveAttributes"),
+				attrs.capture(), state.capture());
+		assertThat(attrs.getValue())
+				.containsEntry("matchId", "match-1")
+				.containsEntry("teamACode", "T1")
+				.containsEntry("teamBCode", "HLE")
+				.containsEntry("leagueName", "LCK")
+				// 앱과 합의한 캐시 파일명 규칙
+				.containsEntry("teamALogoFile", "T1.png")
+				.containsEntry("teamBLogoFile", "HLE.png")
+				.containsEntry("favoriteTeamCode", "T1");
+		assertThat(state.getValue()).containsEntry("phase", "playing").containsEntry("setNumber", 1);
+	}
+
+	@Test
+	void 응원팀이_없으면_하트_필드를_빼고_보낸다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargets("match-1", 10L, 20L))
+				.thenReturn(List.of(startTarget("start-tok", 1L, null)));
+
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		ArgumentCaptor<Map<String, Object>> attrs = mapCaptor();
+		verify(apnsClient).sendStartAsync(anyString(), anyString(), attrs.capture(), any());
+		assertThat(attrs.getValue()).doesNotContainKey("favoriteTeamCode");
+	}
+
+	@Test
+	void 회원마다_응원팀이_달라_payload_를_따로_만든다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargets("match-1", 10L, 20L)).thenReturn(List.of(
+				startTarget("tok-a", 1L, "T1"),
+				startTarget("tok-b", 2L, "HLE")));
+
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		ArgumentCaptor<Map<String, Object>> attrs = mapCaptor();
+		verify(apnsClient, org.mockito.Mockito.times(2))
+				.sendStartAsync(anyString(), anyString(), attrs.capture(), any());
+		assertThat(attrs.getAllValues()).extracting(m -> m.get("favoriteTeamCode"))
+				.containsExactly("T1", "HLE");
+	}
+
+	@Test
+	void push_to_start_스위치가_꺼져_있으면_조회조차_하지_않는다() {
+		// APNs 자체는 켜져 있어도 카드 생성만 따로 끌 수 있어야 한다.
+		when(apnsClient.isAvailable()).thenReturn(true);
+
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		verify(startTokenRepository, never()).findStartTargets(anyString(), any(), any());
+	}
+
+	@Test
+	void 대상이_없으면_발송하지_않는다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargets("match-1", 10L, 20L)).thenReturn(List.of());
+
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		verify(apnsClient, never()).sendStartAsync(anyString(), anyString(), any(), any());
+	}
+
+	@Test
+	void 죽은_push_to_start_토큰만_비활성화한다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargets("match-1", 10L, 20L)).thenReturn(List.of(
+				startTarget("live", 1L, null),
+				startTarget("dead", 2L, null)));
+		when(apnsClient.sendStartAsync(eq("dead"), anyString(), any(), any())).thenReturn(alive(false));
+
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		verify(startTokenRepository).deactivateByPushTokenIn(List.of("dead"));
+	}
+
+	@Test
+	void 대상_조회가_실패해도_예외가_새지_않는다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargets(anyString(), any(), any()))
+				.thenThrow(new RuntimeException("DB down"));
+
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		verify(apnsClient, never()).sendStartAsync(anyString(), anyString(), any(), any());
+	}
+
+	private void enablePushToStart() {
+		when(apnsClient.isAvailable()).thenReturn(true);
+		org.springframework.test.util.ReflectionTestUtils.setField(service, "pushToStartEnabled", true);
+		when(apnsClient.sendStartAsync(anyString(), anyString(), any(), any())).thenReturn(alive(true));
+	}
+
+	private LiveActivityPushService.MatchCardAttributes attributes() {
+		return new LiveActivityPushService.MatchCardAttributes(
+				"match-1", "T1", "T1", "Hanwha Life Esports", "HLE", "LCK");
+	}
+
+	private LiveActivityStartTokenRepository.StartTargetRow startTarget(
+			String pushToken, Long memberId, String favoriteTeamCode) {
+		return new LiveActivityStartTokenRepository.StartTargetRow() {
+			@Override
+			public String getPushToken() {
+				return pushToken;
+			}
+
+			@Override
+			public Long getMemberId() {
+				return memberId;
+			}
+
+			@Override
+			public String getFavoriteTeamCode() {
+				return favoriteTeamCode;
+			}
+		};
 	}
 
 	private Map<String, Object> captureUpdate() {
