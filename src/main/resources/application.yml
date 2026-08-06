@@ -3,6 +3,19 @@ server:
   # 그 35초 안에 진행 중인 요청과 라이브 이벤트 저장·FCM 발송을 끝내고 죽어야 알림이 유실되지 않는다.
   shutdown: graceful
 
+  # JSON 응답 gzip. 실측: /api/mobile/schedules/calendar?league=ALL 33,751B → 4,921B (85% 감소),
+  # /schedules/filters 2,054B → 708B. 셀룰러에서 첫 화면 진입 체감에 직접 영향을 준다.
+  #
+  # 앞단 nginx(Ubuntu 기본 설정)는 gzip 자체는 on 이지만 gzip_types 가 비어 text/html 만
+  # 압축한다. nginx 설정은 레포에 없어 서버 SSH 로만 바꿀 수 있으므로 WAS 에서 켠다.
+  # nginx gzip 필터는 업스트림에 Content-Encoding 이 이미 있으면 건너뛰므로 이중 압축은 없다.
+  #
+  # mime-types 는 기본값에 application/json 이 이미 포함돼 있어 지정하지 않는다.
+  # min-response-size 만 기본 2KB → 1KB 로 낮춘다(filters 가 2,054B 로 경계에 걸린다).
+  compression:
+    enabled: true
+    min-response-size: 1KB
+
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}

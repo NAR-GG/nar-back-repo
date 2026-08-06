@@ -1,7 +1,9 @@
 package com.toy.nar.api.v1;
 
+import java.time.Duration;
 import java.util.List;
 
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,7 +31,10 @@ public class CategoryController {
 	public ResponseEntity<CategoryTree> getCategoryTree(
 			@RequestParam(value = "year", defaultValue = "2026") int year) {
 		CategoryTree tree = categoryService.buildCategoryTree(year);
-		return ResponseEntity.ok(tree);
+		// 리그·시즌·팀 트리는 시즌 전환 때만 바뀐다.
+		return ResponseEntity.ok()
+				.cacheControl(CacheControl.maxAge(Duration.ofHours(1)))
+				.body(tree);
 	}
 
 }

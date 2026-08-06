@@ -8,12 +8,15 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Duration;
 
 @Tag(name = "Mobile. 경기 리스트", description = "모바일 경기 리스트 무한 스크롤 및 세트(게임) 조회 전용 API")
 @RestController
@@ -65,6 +68,10 @@ public class MobileMatchController {
 	public ResponseEntity<MobileMatchGamesResponse> getMatchGames(
 			@Parameter(description = "매치 ID", example = "113990000000000001")
 			@PathVariable String matchId) {
-		return ResponseEntity.ok(mobileScheduleService.getMatchGames(matchId));
+		// 종료 경기는 불변이지만 진행 중 경기도 같은 엔드포인트를 쓴다. 5분을 주면 다음 세트가
+		// 시작돼도 앱에 5분 늦게 보이므로 30초로 제한한다.
+		return ResponseEntity.ok()
+				.cacheControl(CacheControl.maxAge(Duration.ofSeconds(30)))
+				.body(mobileScheduleService.getMatchGames(matchId));
 	}
 }
