@@ -238,6 +238,30 @@ public class LeagueMatchService {
 		return String.join(",", winners);
 	}
 
+	/**
+	 * 업스트림이 이미 끝난 경기를 결과 없는 상태로 되돌려 보내는지.
+	 *
+	 * <p>KESPA·EWC 는 경기가 끝나도 state 를 unstarted, 스코어를 0:0 으로 방치한다. 30분 주기
+	 * 전체 동기화는 그 값을 조건 없이 덮어써서 이미 확정한 결과를 지운다. 2026-08-04 KESPA
+	 * T1 vs HLE 가 18:02 에 네이버로 2:1 completed 확정된 뒤 이 경로로 0:0 unstarted 가 됐다.
+	 * 디스커버리의 재확정은 matchId 당 1회라 되돌려진 뒤에는 스스로 복구되지 않는다.</p>
+	 *
+	 * <p>스코어 합이 0인 경우만 막는다. 리메이크나 오기 정정처럼 실제로 값이 바뀌는 갱신은
+	 * 0 이 아닌 스코어로 들어오므로 그대로 통과한다.</p>
+	 */
+	static boolean isResultRegression(LeagueMatch existing, LeagueMatch incoming) {
+		if (!isCompleted(existing) || scoreSum(existing) <= 0) {
+			return false;
+		}
+		return scoreSum(incoming) == 0;
+	}
+
+	private static int scoreSum(LeagueMatch match) {
+		int blue = match.getBlueScore() == null ? 0 : match.getBlueScore();
+		int red = match.getRedScore() == null ? 0 : match.getRedScore();
+		return blue + red;
+	}
+
 	private static boolean isCompleted(LeagueMatch match) {
 		return "completed".equalsIgnoreCase(match.getState());
 	}
@@ -916,6 +940,14 @@ public class LeagueMatchService {
 					dirtyMatchIds.add(incoming.getId());
 					inserted++;
 					continue;
+				}
+
+				if (isResultRegression(existing, incoming)) {
+					log.warn("업스트림이 완료된 매치를 결과 없는 상태로 되돌려 기존 결과를 유지한다. "
+									+ "matchId={} 유지={}:{}({}) 수신={}:{}({})",
+							existing.getId(), existing.getBlueScore(), existing.getRedScore(), existing.getState(),
+							incoming.getBlueScore(), incoming.getRedScore(), incoming.getState());
+					incoming.restoreResult(existing.getState(), existing.getBlueScore(), existing.getRedScore());
 				}
 
 				if (!hasRealtimeRelevantChange(existing, incoming)) {
