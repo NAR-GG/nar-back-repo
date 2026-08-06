@@ -9,12 +9,14 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
@@ -32,7 +34,10 @@ public class MobileScheduleController {
 	public ResponseEntity<MobileScheduleFilterResponse> getFilters(
 			@Parameter(description = "팀 옵션을 조회할 리그 (전체는 ALL)", example = "LCK")
 			@RequestParam(defaultValue = "LCK") String league) {
-		return ResponseEntity.ok(mobileScheduleService.getFilters(league));
+		// 리그·팀·시즌 목록은 로스터 변동/시즌 전환 때만 바뀌므로 1시간 캐시.
+		return ResponseEntity.ok()
+				.cacheControl(CacheControl.maxAge(Duration.ofHours(1)))
+				.body(mobileScheduleService.getFilters(league));
 	}
 
 	@Operation(summary = "모바일 월별 캘린더 조회", description = "월별 캘린더 마킹용 경기 날짜와 경기 수를 조회합니다.")
@@ -44,7 +49,10 @@ public class MobileScheduleController {
 			@RequestParam(defaultValue = "LCK") List<String> league,
 			@Parameter(description = "팀 ID. 복수 지정 가능: teamId=1&teamId=3", example = "1")
 			@RequestParam(required = false) List<Long> teamId) {
-		return ResponseEntity.ok(mobileScheduleService.getCalendar(month, league, teamId));
+		// 앱 첫 화면이 진입 즉시 부르는 응답. 마킹용 날짜/경기 수라 30초 지연은 눈에 띄지 않는다.
+		return ResponseEntity.ok()
+				.cacheControl(CacheControl.maxAge(Duration.ofSeconds(30)))
+				.body(mobileScheduleService.getCalendar(month, league, teamId));
 	}
 
 	@Operation(summary = "모바일 일별 경기 리스트 조회", description = "선택 날짜의 모바일 경기 리스트 카드 데이터를 조회합니다.")
