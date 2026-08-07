@@ -105,6 +105,8 @@ jobs:
             # iOS Live Activity 용 APNs 인증 키(.p8).
             # 키가 아직 없으면 시크릿이 비어 있고, 그러면 설치·마운트를 건너뛴 채
             # APNS_ENABLED=false 로 떠서 기존 배포와 동작이 같다(발송 경로 전체 skip).
+            # APNS_PUSH_TO_START_ENABLED 는 서버가 잠금화면 카드를 새로 만드는 별도 스위치다
+            # (#351 에서 기본 OFF 로 머지). 앱이 push-to-start 토큰을 올리기 시작해 켠다.
             APNS_SECRET_FILE="${FIREBASE_SECRET_DIR}/apns-auth-key.p8"
             APNS_MOUNT_ARGS=""
             APNS_ENV_ARGS=""
@@ -119,7 +121,8 @@ jobs:
                 -e APNS_KEY_PATH=/run/secrets/apns-auth-key.p8 \
                 -e APNS_KEY_ID=${APNS_KEY_ID:-} \
                 -e APNS_TEAM_ID=${APNS_TEAM_ID:-} \
-                -e APNS_BUNDLE_ID=com.nar.wardingapp"
+                -e APNS_BUNDLE_ID=com.nar.wardingapp \
+                -e APNS_PUSH_TO_START_ENABLED=true"
             else
               echo "APNS_KEY_BASE64 not set — Live Activity 푸시 비활성 상태로 배포합니다."
               sudo rm -f "${APNS_SECRET_FILE}"
