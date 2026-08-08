@@ -246,14 +246,21 @@ public class LeagueMatchService {
 	 * T1 vs HLE 가 18:02 에 네이버로 2:1 completed 확정된 뒤 이 경로로 0:0 unstarted 가 됐다.
 	 * 디스커버리의 재확정은 matchId 당 1회라 되돌려진 뒤에는 스스로 복구되지 않는다.</p>
 	 *
-	 * <p>스코어 합이 0인 경우만 막는다. 리메이크나 오기 정정처럼 실제로 값이 바뀌는 갱신은
-	 * 0 이 아닌 스코어로 들어오므로 그대로 통과한다.</p>
+	 * <p>결과가 있는 completed 를 completed 가 아닌 상태로 되돌리는 것은 전부 막는다.
+	 * 처음에는 스코어 합 0 만 막았는데, 그것으로는 마지막 세트 구간을 못 잡는다 — 업스트림
+	 * gameWins 는 마지막 세트에서 25분+ stale 이라 2:0 으로 끝난 경기가 0:0 이 아니라
+	 * {@code inProgress 1:0} 으로 들어온다. 네이버로 먼저 확정한 completed 가 그 값에 덮여
+	 * "종료 → 진행중 → 종료" 로 튄다.</p>
+	 *
+	 * <p>업스트림도 종료로 보는 갱신({@code incoming} 이 completed)은 그대로 통과시킨다 —
+	 * 리메이크·오기 정정이 이 경로로 들어오고, 업스트림 flip 이 도착했을 때 최종 스코어로
+	 * 덮어쓰는 self-heal 도 여기에 의존한다.</p>
 	 */
 	static boolean isResultRegression(LeagueMatch existing, LeagueMatch incoming) {
 		if (!isCompleted(existing) || scoreSum(existing) <= 0) {
 			return false;
 		}
-		return scoreSum(incoming) == 0;
+		return !isCompleted(incoming);
 	}
 
 	private static int scoreSum(LeagueMatch match) {

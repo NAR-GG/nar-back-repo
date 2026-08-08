@@ -73,6 +73,22 @@ class LeagueMatchServiceResultRegressionTest {
 		assertThat(incoming.getRedScore()).isEqualTo(1);
 	}
 
+	@Test
+	void 완료된_경기를_직전_세트_스코어의_진행중_으로_되돌려도_막는다() {
+		// 스코어 합 0 만 막던 시절의 구멍. 업스트림 gameWins 는 마지막 세트에서 25분+ stale 이라
+		// 2:0 으로 끝난 경기가 0:0 이 아니라 inProgress 1:0 으로 들어온다. 네이버로 먼저 확정한
+		// completed 가 여기 덮이면 화면이 "종료 -> 진행중 -> 종료" 로 튄다.
+		assertThat(LeagueMatchService.isResultRegression(
+				match("completed", 2, 0), match("inProgress", 1, 0))).isTrue();
+	}
+
+	@Test
+	void 완료된_경기를_같은_스코어의_진행중_으로_되돌려도_막는다() {
+		// 스코어는 따라왔는데 state 만 늦게 오는 구간. state 만 되돌아가도 화면은 진행중이 된다.
+		assertThat(LeagueMatchService.isResultRegression(
+				match("completed", 2, 0), match("inProgress", 2, 0))).isTrue();
+	}
+
 	private LeagueMatch match(String state, Integer blueScore, Integer redScore) {
 		return LeagueMatch.builder()
 				.id("116929376557102172")
