@@ -29,6 +29,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -196,7 +197,7 @@ class MobileScheduleServiceTest {
 		when(leagueMatchRepository.findMobileMatchPage("LCK", null, null, null, null, PageRequest.of(0, 3)))
 				.thenReturn(List.of(first, second, overflow));
 
-		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, null, 2);
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, null, 2, null);
 
 		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
 				.containsExactly("match-2", "match-1");
@@ -212,7 +213,7 @@ class MobileScheduleServiceTest {
 		when(leagueMatchRepository.findMobileMatchPage("LCK", null, null, null, null, PageRequest.of(0, 21)))
 				.thenReturn(List.of(match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed")));
 
-		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, null, null);
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, null, null, null);
 
 		assertThat(response.matches()).hasSize(1);
 		assertThat(response.hasNext()).isFalse();
@@ -232,7 +233,7 @@ class MobileScheduleServiceTest {
 				PageRequest.of(0, 21)))
 				.thenReturn(List.of());
 
-		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, cursor, null);
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, cursor, null, null);
 
 		assertThat(response.matches()).isEmpty();
 		assertThat(response.hasNext()).isFalse();
@@ -252,7 +253,7 @@ class MobileScheduleServiceTest {
 		when(leagueMatchRepository.findMobileTeamMatchPage("LCK", "T1", "T1", null, null, null, null, PageRequest.of(0, 21)))
 				.thenReturn(List.of());
 
-		MobileMatchPageResponse response = service.getMatchPage("LCK", 1L, null, null, null, null);
+		MobileMatchPageResponse response = service.getMatchPage("LCK", 1L, null, null, null, null, null);
 
 		assertThat(response.teamId()).isEqualTo(1L);
 		verify(leagueMatchRepository).findMobileTeamMatchPage("LCK", "T1", "T1", null, null, null, null, PageRequest.of(0, 21));
@@ -263,9 +264,71 @@ class MobileScheduleServiceTest {
 		when(leagueMatchRepository.findMobileMatchPage("LCK", 2026, "Spring", null, null, PageRequest.of(0, 21)))
 				.thenReturn(List.of());
 
-		service.getMatchPage("LCK", null, 2026, "Spring", null, null);
+		service.getMatchPage("LCK", null, 2026, "Spring", null, null, null);
 
 		verify(leagueMatchRepository).findMobileMatchPage("LCK", 2026, "Spring", null, null, PageRequest.of(0, 21));
+	}
+
+	/** from 이 있으면 오름차순 쿼리로 가고, KST 00:00 이 UTC 로 변환돼 넘어간다. */
+	@Test
+	void getMatchPageWithFromUsesAscendingQueryAndKstMidnightInUtc() {
+		LeagueMatch first = match("match-1", "LCK", LocalDateTime.of(2026, 8, 9, 9, 0), "T1", "GEN", "unstarted");
+		LeagueMatch second = match("match-2", "LCK", LocalDateTime.of(2026, 8, 10, 9, 0), "DK", "HLE", "unstarted");
+		LeagueMatch overflow = match("match-3", "LCK", LocalDateTime.of(2026, 8, 11, 9, 0), "KT", "NS", "unstarted");
+		LocalDateTime fromUtc = LocalDateTime.of(2026, 8, 8, 15, 0); // KST 2026-08-09 00:00
+		when(leagueMatchRepository.findMobileMatchPageAsc("LCK", null, null, fromUtc, null, null, PageRequest.of(0, 3)))
+				.thenReturn(List.of(first, second, overflow));
+
+		MobileMatchPageResponse response = service.getMatchPage(
+				"LCK", null, null, null, null, 2, LocalDate.of(2026, 8, 9));
+
+		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
+				.containsExactly("match-1", "match-2");
+		assertThat(response.hasNext()).isTrue();
+		assertThat(new String(
+				java.util.Base64.getUrlDecoder().decode(response.nextCursor()),
+				java.nio.charset.StandardCharsets.UTF_8))
+				.isEqualTo("2026-08-10T09:00:00|match-2");
+		verify(leagueMatchRepository, never()).findMobileMatchPage(
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+	}
+
+	/** 오름차순 다음 페이지: 커서는 방향과 무관한 (matchDate, id) 그대로 되돌아온다. */
+	@Test
+	void getMatchPageWithFromAndCursorContinuesAscending() {
+		String cursor = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+				"2026-08-10T09:00:00|match-2".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		LocalDateTime fromUtc = LocalDateTime.of(2026, 8, 8, 15, 0);
+		when(leagueMatchRepository.findMobileMatchPageAsc(
+				"LCK", null, null, fromUtc, LocalDateTime.of(2026, 8, 10, 9, 0), "match-2", PageRequest.of(0, 21)))
+				.thenReturn(List.of(match("match-3", "LCK", LocalDateTime.of(2026, 8, 11, 9, 0), "KT", "NS", "unstarted")));
+
+		MobileMatchPageResponse response = service.getMatchPage(
+				"LCK", null, null, null, cursor, null, LocalDate.of(2026, 8, 9));
+
+		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
+				.containsExactly("match-3");
+		assertThat(response.hasNext()).isFalse();
+		verify(leagueMatchRepository).findMobileMatchPageAsc(
+				"LCK", null, null, fromUtc, LocalDateTime.of(2026, 8, 10, 9, 0), "match-2", PageRequest.of(0, 21));
+	}
+
+	@Test
+	void getMatchPageWithFromAndTeamIdUsesAscendingTeamQuery() {
+		when(teamRepository.findById(1L)).thenReturn(Optional.of(team(1L, "T1", "T1", "https://example.com/t1.png")));
+		LocalDateTime fromUtc = LocalDateTime.of(2026, 8, 8, 15, 0);
+		when(leagueMatchRepository.findMobileTeamMatchPageAsc(
+				"LCK", "T1", "T1", null, null, fromUtc, null, null, PageRequest.of(0, 21)))
+				.thenReturn(List.of());
+
+		MobileMatchPageResponse response = service.getMatchPage(
+				"LCK", 1L, null, null, null, null, LocalDate.of(2026, 8, 9));
+
+		assertThat(response.teamId()).isEqualTo(1L);
+		verify(leagueMatchRepository).findMobileTeamMatchPageAsc(
+				"LCK", "T1", "T1", null, null, fromUtc, null, null, PageRequest.of(0, 21));
 	}
 
 	@Test
@@ -288,7 +351,7 @@ class MobileScheduleServiceTest {
 
 	@Test
 	void getMatchPageWithInvalidCursorThrowsInvalidInput() {
-		assertThatThrownBy(() -> service.getMatchPage("LCK", null, null, null, "not-a-cursor", null))
+		assertThatThrownBy(() -> service.getMatchPage("LCK", null, null, null, "not-a-cursor", null, null))
 				.isInstanceOf(CustomException.class)
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);

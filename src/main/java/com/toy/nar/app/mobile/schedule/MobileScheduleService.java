@@ -143,13 +143,24 @@ public class MobileScheduleService {
 		return new MobileScheduleListResponse(date.toString(), echoLeague(normalizedLeagues), echoTeamId(teamId), matches);
 	}
 
+	/**
+	 * 경기 리스트 커서 페이지.
+	 *
+	 * <p>{@code from} 이 있으면 그 날짜(KST 00:00) 이후 경기를 오름차순(과거→미래)으로,
+	 * 없으면 기존대로 최신→과거 내림차순으로 내린다. 정렬 방향을 따로 받지 않는 건 의도된 선택이다 —
+	 * "이 날짜부터 앞으로"라는 의미에 정렬이 딸려온다.</p>
+	 *
+	 * <p>커서 값은 (matchDate, id) 그대로라 방향과 무관하다. 단, DESC 페이지의 커서를 from 과 함께
+	 * 되던지면 그 지점부터 미래로 읽는다 — 방향을 섞은 호출은 앱이 하지 않는다.</p>
+	 */
 	public MobileMatchPageResponse getMatchPage(
 			String league,
 			Long teamId,
 			Integer seasonYear,
 			String seasonSplit,
 			String cursor,
-			Integer size) {
+			Integer size,
+			LocalDate from) {
 		String normalizedLeague = normalizeLeague(league);
 		String leagueParam = leagueParam(normalizedLeague);
 		TeamFilter teamFilter = resolveTeamFilter(teamId);
@@ -159,24 +170,27 @@ public class MobileScheduleService {
 				: Math.max(1, Math.min(size, MAX_PAGE_SIZE));
 		MatchCursor matchCursor = decodeCursor(cursor);
 		PageRequest fetchLimit = PageRequest.of(0, pageSize + 1);
+		LocalDateTime cursorDate = matchCursor != null ? matchCursor.matchDate() : null;
+		String cursorId = matchCursor != null ? matchCursor.matchId() : null;
+		// matchDate 는 UTC 저장이라 KST 기준 그날 00:00 을 UTC 로 옮겨 비교한다.
+		LocalDateTime fromUtc = from == null ? null : toUtc(from.atStartOfDay());
 
-		List<LeagueMatch> fetched = teamFilter == null
-				? leagueMatchRepository.findMobileMatchPage(
-						leagueParam,
-						seasonYear,
-						normalizedSplit,
-						matchCursor != null ? matchCursor.matchDate() : null,
-						matchCursor != null ? matchCursor.matchId() : null,
-						fetchLimit)
-				: leagueMatchRepository.findMobileTeamMatchPage(
-						leagueParam,
-						teamFilter.name(),
-						teamFilter.code(),
-						seasonYear,
-						normalizedSplit,
-						matchCursor != null ? matchCursor.matchDate() : null,
-						matchCursor != null ? matchCursor.matchId() : null,
-						fetchLimit);
+		List<LeagueMatch> fetched;
+		if (fromUtc == null) {
+			fetched = teamFilter == null
+					? leagueMatchRepository.findMobileMatchPage(
+							leagueParam, seasonYear, normalizedSplit, cursorDate, cursorId, fetchLimit)
+					: leagueMatchRepository.findMobileTeamMatchPage(
+							leagueParam, teamFilter.name(), teamFilter.code(), seasonYear, normalizedSplit,
+							cursorDate, cursorId, fetchLimit);
+		} else {
+			fetched = teamFilter == null
+					? leagueMatchRepository.findMobileMatchPageAsc(
+							leagueParam, seasonYear, normalizedSplit, fromUtc, cursorDate, cursorId, fetchLimit)
+					: leagueMatchRepository.findMobileTeamMatchPageAsc(
+							leagueParam, teamFilter.name(), teamFilter.code(), seasonYear, normalizedSplit,
+							fromUtc, cursorDate, cursorId, fetchLimit);
+		}
 
 		List<LeagueMatch> page = fetched.size() > pageSize ? fetched.subList(0, pageSize) : fetched;
 		Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId = loadGames(page);

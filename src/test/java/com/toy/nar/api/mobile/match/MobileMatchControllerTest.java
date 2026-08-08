@@ -11,9 +11,11 @@ import org.springframework.http.converter.json.MappingJackson2HttpMessageConvert
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -62,7 +64,7 @@ class MobileMatchControllerTest {
 
 	@Test
 	void getMatchesReturnsCursorPageShape() throws Exception {
-		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20))
+		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20, null))
 				.thenReturn(new MobileMatchPageResponse(
 						"LCK",
 						null,
@@ -92,6 +94,18 @@ class MobileMatchControllerTest {
 				.andExpect(jsonPath("$.matches[0].games[0].recordGameId").value(100L))
 				.andExpect(jsonPath("$.nextCursor").value("cursor-token"))
 				.andExpect(jsonPath("$.hasNext").value(true));
+	}
+
+	@Test
+	void getMatchesBindsFromAsLocalDate() throws Exception {
+		when(mobileScheduleService.getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9)))
+				.thenReturn(new MobileMatchPageResponse("ALL", null, List.of(), null, false));
+
+		mockMvc.perform(get("/api/mobile/matches").param("league", "ALL").param("from", "2026-08-09"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.league").value("ALL"));
+
+		verify(mobileScheduleService).getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9));
 	}
 
 	@Test

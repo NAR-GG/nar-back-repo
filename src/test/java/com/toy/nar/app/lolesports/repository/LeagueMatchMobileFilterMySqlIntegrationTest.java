@@ -6,6 +6,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -85,6 +86,32 @@ class LeagueMatchMobileFilterMySqlIntegrationTest {
 
 		assertThat(result).extracting(LeagueMatch::getId)
 				.containsExactly("m-lck");
+	}
+
+	/** from 오름차순 페이지: from 이전 경기는 빠지고 과거→미래 순으로 나온다. */
+	@Test
+	void ascPageFiltersFromAndOrdersAscending() {
+		List<LeagueMatch> result = repository.findMobileMatchPageAsc(
+				null, null, null, LocalDateTime.of(2026, 7, 11, 0, 0), null, null, PageRequest.of(0, 10));
+
+		assertThat(result).extracting(LeagueMatch::getId).containsExactly("m-lec", "m-kespa");
+	}
+
+	/** 오름차순 커서: 부등호가 뒤집혀 커서 이후(미래) 경기만 이어진다. */
+	@Test
+	void ascPageCursorContinuesForward() {
+		List<LeagueMatch> result = repository.findMobileMatchPageAsc(
+				null, null, null, START, LocalDateTime.of(2026, 7, 11, 9, 0), "m-lec", PageRequest.of(0, 10));
+
+		assertThat(result).extracting(LeagueMatch::getId).containsExactly("m-kespa");
+	}
+
+	@Test
+	void ascTeamPageFiltersFromAndTeam() {
+		List<LeagueMatch> result = repository.findMobileTeamMatchPageAsc(
+				null, "T1", "T1", null, null, START, null, null, PageRequest.of(0, 10));
+
+		assertThat(result).extracting(LeagueMatch::getId).containsExactly("m-lck", "m-kespa");
 	}
 
 	private LeagueMatch match(String id, String league, LocalDateTime date, String blue, String red) {

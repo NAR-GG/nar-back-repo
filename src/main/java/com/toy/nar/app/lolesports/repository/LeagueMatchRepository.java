@@ -111,6 +111,31 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 			@Param("cursorId") String cursorId,
 			Pageable pageable);
 
+	/**
+	 * 오름차순(과거→미래) 커서 페이지. {@code from} 이 지정된 호출에서만 쓴다.
+	 * JPQL 이 ORDER BY 방향을 파라미터로 못 받아 DESC 쿼리와 분리했다.
+	 */
+	@Query("""
+			SELECT m
+			FROM LeagueMatch m
+			WHERE (:leagueName IS NULL OR m.leagueName = :leagueName)
+			  AND (:seasonYear IS NULL OR m.seasonYear = :seasonYear)
+			  AND (:seasonSplit IS NULL OR m.seasonSplit = :seasonSplit)
+			  AND m.matchDate >= :from
+			  AND (:cursorId IS NULL
+					OR m.matchDate > :cursorDate
+					OR (m.matchDate = :cursorDate AND m.id > :cursorId))
+			ORDER BY m.matchDate ASC, m.id ASC
+			""")
+	List<LeagueMatch> findMobileMatchPageAsc(
+			@Param("leagueName") String leagueName,
+			@Param("seasonYear") Integer seasonYear,
+			@Param("seasonSplit") String seasonSplit,
+			@Param("from") LocalDateTime from,
+			@Param("cursorDate") LocalDateTime cursorDate,
+			@Param("cursorId") String cursorId,
+			Pageable pageable);
+
 	@Query("""
 			SELECT m
 			FROM LeagueMatch m
@@ -134,6 +159,36 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 			@Param("teamCode") String teamCode,
 			@Param("seasonYear") Integer seasonYear,
 			@Param("seasonSplit") String seasonSplit,
+			@Param("cursorDate") LocalDateTime cursorDate,
+			@Param("cursorId") String cursorId,
+			Pageable pageable);
+
+	/** {@link #findMobileMatchPageAsc} 의 팀 필터 버전. */
+	@Query("""
+			SELECT m
+			FROM LeagueMatch m
+			WHERE (:leagueName IS NULL OR m.leagueName = :leagueName)
+			  AND (:seasonYear IS NULL OR m.seasonYear = :seasonYear)
+			  AND (:seasonSplit IS NULL OR m.seasonSplit = :seasonSplit)
+			  AND (
+					LOWER(m.blueTeamName) = LOWER(:teamName)
+					OR LOWER(m.redTeamName) = LOWER(:teamName)
+					OR (:teamCode IS NOT NULL AND m.blueTeamCode IS NOT NULL AND LOWER(m.blueTeamCode) = LOWER(:teamCode))
+					OR (:teamCode IS NOT NULL AND m.redTeamCode IS NOT NULL AND LOWER(m.redTeamCode) = LOWER(:teamCode))
+			  )
+			  AND m.matchDate >= :from
+			  AND (:cursorId IS NULL
+					OR m.matchDate > :cursorDate
+					OR (m.matchDate = :cursorDate AND m.id > :cursorId))
+			ORDER BY m.matchDate ASC, m.id ASC
+			""")
+	List<LeagueMatch> findMobileTeamMatchPageAsc(
+			@Param("leagueName") String leagueName,
+			@Param("teamName") String teamName,
+			@Param("teamCode") String teamCode,
+			@Param("seasonYear") Integer seasonYear,
+			@Param("seasonSplit") String seasonSplit,
+			@Param("from") LocalDateTime from,
 			@Param("cursorDate") LocalDateTime cursorDate,
 			@Param("cursorId") String cursorId,
 			Pageable pageable);
