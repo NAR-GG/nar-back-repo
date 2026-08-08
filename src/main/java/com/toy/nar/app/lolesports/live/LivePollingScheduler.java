@@ -89,6 +89,13 @@ public class LivePollingScheduler {
 	 */
 	private final java.util.Set<String> startNotifiedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+	/**
+	 * 매치 종료(matchEnded) Live Activity 카드를 이미 보낸 matchId.
+	 * 세트 종료 편승 경로와 늦은 스코어 복구 경로가 같은 매치에 두 번 쏘지 않게 한다.
+	 * ponytail: {@link #naverFinalizedMatchIds} 와 같은 이유로 프로세스 생애 동안 누적된다 — 하루 수십 건이라 무해.
+	 */
+	private final java.util.Set<String> matchEndCardPushedMatchIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.max-consecutive-failures:6}")
 	private int maxConsecutiveFailures;
 
@@ -136,6 +143,31 @@ public class LivePollingScheduler {
 					// (2)는 예전에 unstarted 게이트에 걸려 우회로를 못 탔고, 그 사이 세트 하나가
 					// 통째로 추적되지 않았다. 그래서 게이트를 "업스트림이 라이브 게임을 모를 때"로 넓힌다.
 					// completed 는 디스커버리 대상이 아니므로 제외해 불필요한 외부 호출을 막는다.
+					// 네이버 종료 확정으로 이미 completed 를 쓴 매치는 업스트림 flip 이 올 때까지 손대지 않는다.
+					// 프로브도 sync 도 스킵한다 — 업스트림 원본(inProgress/unstarted)으로 sync 하면
+					// DB 의 completed 가 되돌아간다. flip 이 도착하면 state 가 completed 라 이 게이트를 지나
+					// 아래 recentlyCompleted 경로로 최종 스코어가 덮어써진다(self-heal).
+					if (naverFinalizedMatchIds.contains(match.getMatchId())
+							&& !"completed".equalsIgnoreCase(match.getState())) {
+						continue;
+					}
+
+					// 추적 중인 세트가 전부 프레임 finished 로 확정됐는데 업스트림 state 는 아직 inProgress 인 구간.
+					// 업스트림 completed flip 은 실측 4분 50초~16분 늦게 온다(LCK 6경기, 2026-08-05~07 CloudWatch).
+					// 네이버는 종료 후 ~1.5분에 matchStatus=RESULT 를 주므로 그걸로 먼저 확정한다.
+					// 세트 사이면 네이버가 아직 RESULT 가 아니라 false 를 돌려주고 기존 경로가 그대로 돈다.
+					// 프레임 신호를 트리거로 쓰는 이유: probeFeed 는 업스트림이 liveGameIds 를 비웠거나
+					// 프레임이 180초 정지해야 돌아서 그만큼 확정이 늦다.
+					// ponytail: 세트 사이엔 이 호출과 overlayNaverScoreIfAhead 가 같은 day 응답을 각각 받아온다
+					// (10초 주기 2콜). 세트 간격이 짧아 무해 — 콜 수가 문제되면 사이클 단위로 캐시한다.
+					if (!"completed".equalsIgnoreCase(match.getState())
+							&& allTrackedGamesFinished(activeGames, match.getMatchId())
+							&& leagueMatchService.syncCompletedMatchFromNaver(match, league)) {
+						naverFinalizedMatchIds.add(match.getMatchId());
+						scheduleCacheDirty = true;
+						continue;
+					}
+
 					List<String> feedLiveGameIds = List.of();
 					boolean upstreamKnowsLiveGames =
 							match.getLiveGameIds() != null && !match.getLiveGameIds().isEmpty();
@@ -491,6 +523,11 @@ public class LivePollingScheduler {
 		if (!liveActivityPushService.isEnabled()) {
 			return;
 		}
+		// 복구 경로(retryMatchEndCard)가 먼저 매치 종료를 보냈으면 여기서 setEnded 를 뒤에 쏘면 안 된다 —
+		// 매치 종료 발송이 워터마크를 지우므로(notifySetEnd) 뒤늦은 setEnded 가 통과해 카드가 되돌아간다.
+		if (matchEndCardPushedMatchIds.contains(activeGame.matchId())) {
+			return;
+		}
 		try {
 			var match = leagueMatchRepository.findById(activeGame.matchId()).orElse(null);
 			Integer blue = match == null ? null : match.getBlueScore();
@@ -503,12 +540,60 @@ public class LivePollingScheduler {
 						? match.getBlueTeamCode()
 						: match.getRedTeamCode();
 			}
+			if (matchEnded) {
+				matchEndCardPushedMatchIds.add(activeGame.matchId());
+			}
 			liveActivityPushService.notifySetEnd(
 					activeGame.matchId(),
 					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
 					blue, red, matchEnded, winner);
 		} catch (Exception e) {
 			log.warn("[live-activity] set-end 실패 matchId={}: {}", activeGame.matchId(), e.getMessage());
+		}
+	}
+
+	/**
+	 * 늦게 도착한 스코어로 매치 종료 카드를 복구한다.
+	 *
+	 * <p>매치 종료 카드는 세트 종료 이벤트에 편승하는데(그 경로가 {@code PHASE_MATCH_ENDED} 유일 진입점),
+	 * 그 시점 DB 스코어가 아직 직전 세트 값이면 setEnded 로 나가 카드가 "다음 세트 준비 중" 으로 고착한다.
+	 * 세트 종료 이벤트는 gameId 단위로 dedup 돼 재발화가 없어서, 스코어가 뒤늦게 맞아도 카드가
+	 * iOS 한도(8시간)까지 잘못된 상태로 잠금화면에 남는다.
+	 * 실측 2026-08-08 DNS vs NS: 카드 21:46:46 발송(스코어 1:0) / 2:0 도착 21:47:03 — 17초 차이로 고착.</p>
+	 *
+	 * <p>그래서 프레임 finished 로 확정된 세트에 대해 폴링 tick 마다 스코어를 다시 보고,
+	 * 다전제 승리 조건에 도달했으면 매치 종료를 한 번 더 보낸다. 카드 진행도 워터마크가
+	 * setEnded(1) → matchEnded(2) 상승만 허용하므로 순서가 뒤집히는 발송은 없다.</p>
+	 */
+	private void retryMatchEndCard(ActiveLiveGame activeGame) {
+		if (!liveActivityPushService.isEnabled()
+				|| activeGame.matchId() == null
+				|| matchEndCardPushedMatchIds.contains(activeGame.matchId())) {
+			return;
+		}
+		try {
+			var match = leagueMatchRepository.findById(activeGame.matchId()).orElse(null);
+			if (match == null
+					|| !isMatchEnded(match.getBestOf(), match.getBlueScore(), match.getRedScore())) {
+				return;
+			}
+			// add 로 검사와 등록을 한 번에 한다 — 세트 종료 편승 경로와 동시에 들어올 수 있다.
+			if (!matchEndCardPushedMatchIds.add(activeGame.matchId())) {
+				return;
+			}
+			int blue = match.getBlueScore() == null ? 0 : match.getBlueScore();
+			int red = match.getRedScore() == null ? 0 : match.getRedScore();
+			String winner = blue > red ? match.getBlueTeamCode() : match.getRedTeamCode();
+			log.info("[live-activity] 매치 종료 카드 복구 matchId={} set={} score={}:{}",
+					activeGame.matchId(), activeGame.setNumber(), blue, red);
+			// 폴링 스레드에서 APNs 팬아웃을 태우면 다음 프레임 수집이 밀린다.
+			applicationTaskExecutor.execute(() -> liveActivityPushService.notifySetEnd(
+					activeGame.matchId(),
+					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
+					blue, red, true, winner));
+		} catch (Exception e) {
+			log.warn("[live-activity] 매치 종료 카드 복구 실패 matchId={}: {}",
+					activeGame.matchId(), e.getMessage());
 		}
 	}
 
@@ -546,6 +631,27 @@ public class LivePollingScheduler {
 			log.warn("Set-end score check failed matchId={}: {}", activeGame.matchId(), e.getMessage());
 			return false;
 		}
+	}
+
+	/**
+	 * 이 매치의 추적 중 게임이 하나 이상 있고 전부 프레임 finished 로 확정됐는지.
+	 * 하나라도 안 끝났으면(=다음 세트 진행 중) false 라 세트 사이에만 참이 된다.
+	 */
+	private boolean allTrackedGamesFinished(Map<String, ActiveLiveGame> activeGames, String matchId) {
+		if (matchId == null || matchId.isBlank()) {
+			return false;
+		}
+		boolean anyTracked = false;
+		for (ActiveLiveGame activeGame : activeGames.values()) {
+			if (!matchId.equals(activeGame.matchId())) {
+				continue;
+			}
+			anyTracked = true;
+			if (!frameFinishedGameIds.contains(activeGame.gameId())) {
+				return false;
+			}
+		}
+		return anyTracked;
 	}
 
 	/** 이 매치의 추적 중 게임 가운데 프레임이 정지한 것이 있는지. */
@@ -614,6 +720,12 @@ public class LivePollingScheduler {
 								activeGame.gameId(), activeGame.matchId(), activeGame.setNumber());
 						fireSetEndNotification(activeGame);
 					}
+				}
+
+				// 종료된 세트는 stale 제거(기본 3분) 전까지 매 tick 여기를 지난다. 그동안 스코어가
+				// 늦게 도착하면 매치 종료 카드를 복구한다.
+				if (frameFinishedGameIds.contains(activeGame.gameId())) {
+					retryMatchEndCard(activeGame);
 				}
 
 				liveFrameProcessor.process(activeGame, window, details);

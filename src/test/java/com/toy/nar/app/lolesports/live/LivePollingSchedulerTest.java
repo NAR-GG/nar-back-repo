@@ -709,6 +709,112 @@ class LivePollingSchedulerTest {
 				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
 	}
 
+	@Test
+	void lateScoreRecoversMatchEndCard() {
+		// 세트 종료 시점 DB 스코어가 직전 세트 값이면 카드가 setEnded 로 나가 "다음 세트 준비 중" 으로
+		// 고착한다(2026-08-08 DNS vs NS: 카드 21:46:46 / 스코어 2:0 도착 21:47:03).
+		// 스코어가 뒤늦게 도착하면 매치 종료 카드를 한 번 더 보내 복구해야 한다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		java.util.concurrent.atomic.AtomicInteger blueScore = new java.util.concurrent.atomic.AtomicInteger(1);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService,
+				new LiveFrameStallTracker(180_000L), matchRepositoryWithMutableScore(blueScore));
+		var activityPush = liveActivityPushService(scheduler);
+		when(activityPush.isEnabled()).thenReturn(true);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+
+		scheduler.pollActiveGames();          // 스코어 1:0 — 아직 매치 종료 조건 미달
+		blueScore.set(2);                     // 네이버 sync 로 2:0 도착
+		scheduler.pollActiveGames();
+
+		verify(activityPush, times(1)).notifySetEnd("match-1", 2, 1, 0, false, null);
+		verify(activityPush, times(1)).notifySetEnd("match-1", 2, 2, 0, true, "KT");
+	}
+
+	@Test
+	void matchEndCardIsNotSentTwiceWhenScoreWasAlreadyFresh() {
+		// 세트 종료 시점에 이미 스코어가 맞으면 편승 경로가 매치 종료를 보내고,
+		// 복구 경로는 같은 매치에 두 번 쏘지 않아야 한다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		java.util.concurrent.atomic.AtomicInteger blueScore = new java.util.concurrent.atomic.AtomicInteger(2);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService,
+				new LiveFrameStallTracker(180_000L), matchRepositoryWithMutableScore(blueScore));
+		var activityPush = liveActivityPushService(scheduler);
+		when(activityPush.isEnabled()).thenReturn(true);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+
+		scheduler.pollActiveGames();
+		scheduler.pollActiveGames();
+
+		verify(activityPush, times(1)).notifySetEnd("match-1", 2, 2, 0, true, "KT");
+		verify(activityPush, never()).notifySetEnd(
+				anyString(), anyInt(), anyInt(), anyInt(), eq(false), org.mockito.ArgumentMatchers.any());
+	}
+
+	@Test
+	void allTrackedSetsFinishedFlipsMatchToCompletedFromNaver() {
+		// 업스트림 state 가 inProgress 인 채로 flip 이 실측 4분 50초~16분 늦게 온다.
+		// 추적 세트가 전부 프레임 finished 면 네이버 RESULT 로 먼저 확정해야 한다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		WorldsService worldsService = mock(WorldsService.class);
+		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
+		when(leagueMatchService.findLeaguesWithMatchesBetween(
+				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(List.of("LCK"));
+		when(leagueMatchService.syncCompletedMatchFromNaver(
+				org.mockito.ArgumentMatchers.any(), anyString())).thenReturn(true);
+		LivePollingScheduler scheduler = schedulerWith(
+				liveStateStore, mock(TeamLiveEventPushService.class), worldsService, leagueMatchService);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+		// 폴링이 프레임 finished 를 확정해야 디스커버리가 종료 후보로 본다.
+		scheduler.pollActiveGames();
+
+		MatchResultDto inProgress = MatchResultDto.builder()
+				.matchId("match-1").leagueName("LCK").state("inProgress")
+				.matchDate(Instant.now().minusSeconds(3600).toString())
+				.gameIds(List.of("game-1")).liveGameIds(List.of("game-1")).build();
+		when(worldsService.getWorldsMatches(null, "LCK")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of(inProgress)).build());
+
+		scheduler.discoverLiveGames();
+		scheduler.discoverLiveGames();
+
+		// 확정은 1회. 이후 사이클은 업스트림 flip 전까지 네이버를 다시 찌르지 않는다.
+		verify(leagueMatchService, times(1)).syncCompletedMatchFromNaver(inProgress, "LCK");
+		// 업스트림 원본 inProgress 로 sync 하면 방금 쓴 completed 가 되돌아간다.
+		verify(leagueMatchService, never()).syncRealtimeMatchStatus(
+				org.mockito.ArgumentMatchers.any(), anyString());
+	}
+
+	/** 스코어가 폴링 사이에 바뀌는 상황(네이버 sync 지연)을 흉내낸다. bestOf 3, 승리 조건 2승. */
+	private com.toy.nar.app.lolesports.repository.LeagueMatchRepository matchRepositoryWithMutableScore(
+			java.util.concurrent.atomic.AtomicInteger blueScore) {
+		var match = mock(com.toy.nar.app.lolesports.repository.LeagueMatch.class);
+		when(match.getBlueScore()).thenAnswer(invocation -> blueScore.get());
+		when(match.getRedScore()).thenReturn(0);
+		when(match.getBestOf()).thenReturn(3);
+		when(match.getBlueTeamCode()).thenReturn("KT");
+		when(match.getRedTeamCode()).thenReturn("HLE");
+		var repository = mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class);
+		when(repository.findById("match-1")).thenReturn(java.util.Optional.of(match));
+		return repository;
+	}
+
+	private com.toy.nar.app.mobile.push.LiveActivityPushService liveActivityPushService(
+			LivePollingScheduler scheduler) {
+		return (com.toy.nar.app.mobile.push.LiveActivityPushService)
+				ReflectionTestUtils.getField(scheduler, "liveActivityPushService");
+	}
+
 	private com.toy.nar.app.lolesports.repository.LeagueMatchRepository matchRepositoryWithScore(
 			int blueScore, int redScore) {
 		var match = mock(com.toy.nar.app.lolesports.repository.LeagueMatch.class);
