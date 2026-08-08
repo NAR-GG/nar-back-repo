@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
+import java.time.LocalDate;
 
 @Tag(name = "Mobile. 경기 리스트", description = "모바일 경기 리스트 무한 스크롤 및 세트(게임) 조회 전용 API")
 @RestController
@@ -30,6 +32,8 @@ public class MobileMatchController {
 			summary = "모바일 경기 리스트 커서 페이지 조회",
 			description = "최신 경기부터 과거 방향으로 커서 기반 페이지네이션 조회합니다. "
 					+ "첫 페이지는 cursor 없이 호출하고, 이후 응답의 nextCursor를 cursor로 전달하면 이어서 조회됩니다. "
+					+ "from을 주면 그 날짜(KST 00:00) 이후 경기를 과거→미래 오름차순으로 내려줍니다 "
+					+ "('오늘 이후' 필터용). 정렬 방향은 from 유무로 결정되며 별도 파라미터는 없습니다. "
 					+ "각 경기에는 세트(games) 식별자 목록이 포함됩니다. "
 					+ "시즌 필터 옵션은 /api/mobile/schedules/filters 응답의 seasons에서 가져옵니다.")
 	@GetMapping
@@ -45,8 +49,10 @@ public class MobileMatchController {
 			@Parameter(description = "이전 응답의 nextCursor. 첫 페이지는 생략")
 			@RequestParam(required = false) String cursor,
 			@Parameter(description = "페이지 크기(1~50)", example = "20")
-			@RequestParam(defaultValue = "20") Integer size) {
-		return ResponseEntity.ok(mobileScheduleService.getMatchPage(league, teamId, seasonYear, split, cursor, size));
+			@RequestParam(defaultValue = "20") Integer size,
+			@Parameter(description = "이 날짜(KST) 00:00 이후 경기만. 지정하면 오름차순(과거→미래)", example = "2026-08-09")
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from) {
+		return ResponseEntity.ok(mobileScheduleService.getMatchPage(league, teamId, seasonYear, split, cursor, size, from));
 	}
 
 	@Operation(
