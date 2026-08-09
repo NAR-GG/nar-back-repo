@@ -115,6 +115,10 @@ public class LiveActivityPushService {
 		}
 
 		Map<String, Object> state = contentState(PHASE_PLAYING, setNumber, blueScore, redScore, "", null);
+		// alert 는 iOS 가 start 를 받아들이는 필수 조건이다(ApnsLiveActivityClient.sendStartAsync 참고).
+		// 문구는 SET_START FCM 배너와 겹치므로 최소한으로 — 시스템이 상황 따라 워치 등에만 쓴다.
+		String alertTitle = attributes.teamAName() + " vs " + attributes.teamBName();
+		String alertBody = setNumber + "세트 시작";
 		Map<String, CompletableFuture<Boolean>> inFlight = new LinkedHashMap<>();
 		for (LiveActivityStartTokenRepository.StartTargetRow target : targets) {
 			// 응원 팀 하트는 회원마다 달라 payload 를 회원별로 만든다.
@@ -122,7 +126,9 @@ public class LiveActivityPushService {
 					target.getPushToken(),
 					ATTRIBUTES_TYPE,
 					attributes.toPayload(target.getFavoriteTeamCode()),
-					state));
+					state,
+					alertTitle,
+					alertBody));
 		}
 
 		List<String> deadTokens = new ArrayList<>();
