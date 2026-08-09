@@ -17,6 +17,10 @@ public interface LiveActivityTokenRepository extends JpaRepository<LiveActivityT
 	@Query("select t.pushToken from LiveActivityToken t where t.matchId = :matchId and t.active = true")
 	List<String> findActivePushTokensByMatchId(@Param("matchId") String matchId);
 
+	/** 살아있는 카드가 있는 매치 목록. 스윕이 "끝난 매치의 카드"를 찾는 출발점이다. */
+	@Query("select distinct t.matchId from LiveActivityToken t where t.active = true")
+	List<String> findDistinctActiveMatchIds();
+
 	/**
 	 * APNs 가 410(Unregistered) 등으로 거절한 토큰은 더 쓰지 않는다.
 	 *
