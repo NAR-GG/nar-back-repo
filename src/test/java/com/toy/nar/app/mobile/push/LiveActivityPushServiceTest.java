@@ -265,7 +265,9 @@ class LiveActivityPushServiceTest {
 		ArgumentCaptor<Map<String, Object>> attrs = mapCaptor();
 		ArgumentCaptor<Map<String, Object>> state = mapCaptor();
 		verify(apnsClient).sendStartAsync(eq("start-tok"), eq("MatchLiveAttributes"),
-				attrs.capture(), state.capture());
+				attrs.capture(), state.capture(),
+				// alert 없이 보내면 iOS 가 start 를 버린다 — 문구까지 계약이다.
+				eq("T1 vs Hanwha Life Esports"), eq("1세트 시작"));
 		assertThat(attrs.getValue())
 				.containsEntry("matchId", "match-1")
 				.containsEntry("teamACode", "T1")
@@ -287,7 +289,8 @@ class LiveActivityPushServiceTest {
 		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
 
 		ArgumentCaptor<Map<String, Object>> attrs = mapCaptor();
-		verify(apnsClient).sendStartAsync(anyString(), anyString(), attrs.capture(), any());
+		verify(apnsClient).sendStartAsync(anyString(), anyString(), attrs.capture(), any(),
+				anyString(), anyString());
 		assertThat(attrs.getValue()).doesNotContainKey("favoriteTeamCode");
 	}
 
@@ -302,7 +305,8 @@ class LiveActivityPushServiceTest {
 
 		ArgumentCaptor<Map<String, Object>> attrs = mapCaptor();
 		verify(apnsClient, org.mockito.Mockito.times(2))
-				.sendStartAsync(anyString(), anyString(), attrs.capture(), any());
+				.sendStartAsync(anyString(), anyString(), attrs.capture(), any(),
+						anyString(), anyString());
 		assertThat(attrs.getAllValues()).extracting(m -> m.get("favoriteTeamCode"))
 				.containsExactly("T1", "HLE");
 	}
@@ -324,7 +328,8 @@ class LiveActivityPushServiceTest {
 
 		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
 
-		verify(apnsClient, never()).sendStartAsync(anyString(), anyString(), any(), any());
+		verify(apnsClient, never()).sendStartAsync(anyString(), anyString(), any(), any(),
+				anyString(), anyString());
 	}
 
 	@Test
@@ -333,7 +338,8 @@ class LiveActivityPushServiceTest {
 		when(startTokenRepository.findStartTargets("match-1", 10L, 20L)).thenReturn(List.of(
 				startTarget("live", 1L, null),
 				startTarget("dead", 2L, null)));
-		when(apnsClient.sendStartAsync(eq("dead"), anyString(), any(), any())).thenReturn(alive(false));
+		when(apnsClient.sendStartAsync(eq("dead"), anyString(), any(), any(), anyString(), anyString()))
+				.thenReturn(alive(false));
 
 		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
 
@@ -348,13 +354,15 @@ class LiveActivityPushServiceTest {
 
 		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
 
-		verify(apnsClient, never()).sendStartAsync(anyString(), anyString(), any(), any());
+		verify(apnsClient, never()).sendStartAsync(anyString(), anyString(), any(), any(),
+				anyString(), anyString());
 	}
 
 	private void enablePushToStart() {
 		when(apnsClient.isAvailable()).thenReturn(true);
 		org.springframework.test.util.ReflectionTestUtils.setField(service, "pushToStartEnabled", true);
-		when(apnsClient.sendStartAsync(anyString(), anyString(), any(), any())).thenReturn(alive(true));
+		when(apnsClient.sendStartAsync(anyString(), anyString(), any(), any(), anyString(), anyString()))
+				.thenReturn(alive(true));
 	}
 
 	private LiveActivityPushService.MatchCardAttributes attributes() {

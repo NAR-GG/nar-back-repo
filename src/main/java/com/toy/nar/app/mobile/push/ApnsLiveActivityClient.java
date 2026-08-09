@@ -126,18 +126,28 @@ public class ApnsLiveActivityClient {
 	 *
 	 * <p>토큰도 다르다 — 여기 넘기는 것은 액티비티 토큰이 아니라 앱 단위
 	 * push-to-start 토큰이다.</p>
+	 *
+	 * <p>{@code alert} 는 장식이 아니라 필수다. 없으면 iOS 가 start 이벤트를 그대로 버린다 —
+	 * 실측 2026-08-09 KT vs DK: APNs 200, 기기 도착, 예산 통과까지 다 되고 liveactivitiesd 가
+	 * "Received start without an alert configuration" ERROR 로 카드 생성을 중단했다.</p>
 	 */
 	public CompletableFuture<Boolean> sendStartAsync(
 			String pushToStartToken,
 			String attributesType,
 			Map<String, Object> attributes,
-			Map<String, Object> contentState) {
+			Map<String, Object> contentState,
+			String alertTitle,
+			String alertBody) {
+		Map<String, Object> alert = new LinkedHashMap<>();
+		alert.put("title", alertTitle);
+		alert.put("body", alertBody);
 		Map<String, Object> aps = new LinkedHashMap<>();
 		aps.put("timestamp", Instant.now().getEpochSecond());
 		aps.put("event", "start");
 		aps.put("attributes-type", attributesType);
 		aps.put("attributes", attributes);
 		aps.put("content-state", contentState);
+		aps.put("alert", alert);
 		return sendAsync(pushToStartToken, Map.of("aps", aps));
 	}
 
