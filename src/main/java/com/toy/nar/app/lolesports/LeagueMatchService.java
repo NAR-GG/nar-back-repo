@@ -73,6 +73,7 @@ public class LeagueMatchService {
 	private final TransactionTemplate transactionTemplate;
 	private final GameRepository gameRepository;
 	private final NaverEsportsScoreClient naverEsportsScoreClient;
+	private final com.toy.nar.app.schedule.CacheEvictionService cacheEvictionService;
 
 	// [Scheduler용] 특정 리그의 최신 경기를 가져와 DB에 저장 (1페이지)
 	public void syncMatches(String leagueSlug) {
@@ -134,8 +135,17 @@ public class LeagueMatchService {
 		}
 		NaverEsportsScoreClient.Result naver = naverEsportsScoreClient.fetchResult(
 				match.getBlueTeam().getCode(), match.getRedTeam().getCode(), matchDateUtc);
-		if (naver == null || !naver.finished() || naver.score() == null
-				|| naver.score()[0] + naver.score()[1] == 0) {
+		if (naver == null || naver.score() == null) {
+			return false;
+		}
+		// 종료 확정과 별개로, 이미 받아온 네이버 스코어가 DB 보다 앞서면 스코어만 먼저 반영한다.
+		// 세트 사이 KESPA 는 업스트림 state 가 unstarted 로 방치돼 디스커버리가 realtime sync
+		// (네이버 오버레이 포함)에 도달하지 못하고 매 사이클 이 메서드에서만 돈다 — 여기서
+		// 버리면 다음 세트 픽밴의 Riot flip 까지 스코어가 고착된다(실측 2026-08-10 DNS vs GEN:
+		// 세트1 종료 후 20분간 0:0).
+		LeagueMatch existing = leagueMatchRepository.findById(match.getMatchId()).orElse(null);
+		overlayScoreOnlyIfAhead(existing, naver.score());
+		if (!naver.finished() || naver.score()[0] + naver.score()[1] == 0) {
 			return false;
 		}
 		// 네이버 RESULT 만으로는 매치 종료를 단정할 수 없다 — KESPA 는 네이버가 RESULT 플래그를
@@ -146,8 +156,7 @@ public class LeagueMatchService {
 		// 미상이면 확정하지 않는다. 늦더라도(업스트림 flip 대기) 틀리는 것보단 낫다.
 		Integer bestOf = match.getBestOf() != null
 				? match.getBestOf()
-				: leagueMatchRepository.findById(match.getMatchId())
-						.map(LeagueMatch::getBestOf).orElse(null);
+				: existing == null ? null : existing.getBestOf();
 		if (!reachesMatchWin(bestOf, naver.score()[0], naver.score()[1])) {
 			log.info("Naver RESULT 를 다전제 미완으로 무시. matchId={} bestOf={} score={}:{}",
 					match.getMatchId(), bestOf, naver.score()[0], naver.score()[1]);
@@ -174,6 +183,44 @@ public class LeagueMatchService {
 			return false;
 		}
 		return Math.max(blueScore, redScore) >= bestOf / 2 + 1;
+	}
+
+	/**
+	 * 종료 확정을 보류하더라도 네이버 스코어가 DB 보다 앞서면 스코어만 선반영한다.
+	 * state 는 건드리지 않는다 — 되돌림 클래스(#354/#355)와 무관하게 유지.
+	 * 실패해도 종료 확정 흐름을 깨면 안 되므로 흡수한다.
+	 */
+	private void overlayScoreOnlyIfAhead(LeagueMatch existing, int[] naverScore) {
+		try {
+			int[] ahead = scoreOnlyOverlay(existing, naverScore);
+			if (ahead == null) {
+				return;
+			}
+			existing.applyScore(ahead[0], ahead[1], LocalDateTime.now());
+			existing.applySetWinners(advanceSetWinners(
+					existing.getSetWinners(), ahead[0], ahead[1], false));
+			leagueMatchRepository.save(existing);
+			cacheEvictionService.evictScheduleCaches();
+			log.info("세트 사이 네이버 스코어 선반영. matchId={} score={}:{}",
+					existing.getId(), ahead[0], ahead[1]);
+		} catch (Exception e) {
+			log.warn("네이버 스코어 선반영 실패. matchId={}",
+					existing == null ? null : existing.getId(), e);
+		}
+	}
+
+	/**
+	 * 스코어 선반영 판정. 네이버 합이 DB 합보다 앞설 때만 그 스코어, 아니면 null.
+	 * 완료된 경기는 대상이 아니다 — 완료 스코어는 Riot 최종값이 진실이고,
+	 * 네이버 wrong-high 가 확정 결과를 덮으면 안 된다.
+	 */
+	static int[] scoreOnlyOverlay(LeagueMatch existing, int[] naverScore) {
+		if (existing == null || naverScore == null || isCompleted(existing)) {
+			return null;
+		}
+		int blue = existing.getBlueScore() == null ? 0 : existing.getBlueScore();
+		int red = existing.getRedScore() == null ? 0 : existing.getRedScore();
+		return pickAheadScore(naverScore, blue, red);
 	}
 
 	/**

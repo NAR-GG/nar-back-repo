@@ -64,6 +64,7 @@ class LeagueMatchServiceLeagueNameTest {
 				new ObjectMapper(),
 				transactionTemplate,
 				gameRepository,
+				null,
 				null);
 	}
 
