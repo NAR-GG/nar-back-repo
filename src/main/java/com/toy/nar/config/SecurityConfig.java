@@ -57,7 +57,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/mobile/me/notification-subscriptions/**",
                                 "/api/mobile/me/notifications/**",
-                                "/api/mobile/me/match-subscriptions/**"
+                                "/api/mobile/me/match-subscriptions/**",
+                                "/api/mobile/me/quiet-hours"
                         ).authenticated()
                         .requestMatchers(
                                 "/api/auth/me", "/api/auth/logout", "/api/auth/onboarding"

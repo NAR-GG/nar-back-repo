@@ -27,13 +27,11 @@ public class PlayerSoloRankPushService {
 
 	private static final String PUSH_TYPE = "PLAYER_SOLO_RANK_STARTED";
 
-	/** '전체 선수 솔랭 알림'(앱에서 구독하는 FCM 토픽) — 모바일과 이름이 일치해야 한다. */
-	private static final String ALL_SOLO_RANK_TOPIC = "all_solo_rank";
-
 	private final MemberDeviceRepository deviceRepository;
 	private final PlayerSoloRankPushDeliveryRepository deliveryRepository;
 	private final MobilePushGateway pushGateway;
 	private final MemberNotificationService notificationService;
+	private final QuietAwarePushSender quietAwarePushSender;
 
 	public void notifySubscribers(
 			Player player,
@@ -76,10 +74,6 @@ public class PlayerSoloRankPushService {
 	}
 
 	private void dispatch(Player player, String gameId, MobilePushMessage message) {
-
-		// 전체 선수 솔랭 알림 토픽 구독자에게 발송 (구독 여부와 무관). 게임당 1회.
-		sendToAllSoloRankTopic(player, gameId, message);
-
 		try {
 			fanOutBatched(
 					deviceRepository.findActiveDevicesBySubscribedPlayerId(player.getId()),
@@ -89,18 +83,6 @@ public class PlayerSoloRankPushService {
 		} catch (Exception e) {
 			log.warn(
 					"Failed to prepare player solo rank pushes playerId={} gameId={}",
-					player.getId(),
-					gameId,
-					e);
-		}
-	}
-
-	private void sendToAllSoloRankTopic(Player player, String gameId, MobilePushMessage message) {
-		try {
-			pushGateway.sendToTopic(ALL_SOLO_RANK_TOPIC, message);
-		} catch (Exception e) {
-			log.warn(
-					"Failed to send all-solo-rank topic push playerId={} gameId={}",
 					player.getId(),
 					gameId,
 					e);
@@ -156,7 +138,8 @@ public class PlayerSoloRankPushService {
 		List<String> allTokens = tokensByMember.values().stream().flatMap(List::stream).toList();
 		MobilePushResult result;
 		try {
-			result = pushGateway.send(allTokens, message);
+			// 잠자기 회원은 무음으로 갈린다. 회원별로 쪼개지 않고 2그룹 멀티캐스트.
+			result = quietAwarePushSender.send(tokensByMember, message);
 		} catch (Exception e) {
 			// 발송 자체가 실패하면 예약한 구독자 전원을 FAILED 로 남긴다(재예약 대상이 된다).
 			markFailedAll(List.copyOf(tokensByMember.keySet()), player.getId(), gameId, truncate(e.getMessage()));

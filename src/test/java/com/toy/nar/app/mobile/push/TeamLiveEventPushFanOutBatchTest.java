@@ -17,6 +17,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,6 +49,7 @@ class TeamLiveEventPushFanOutBatchTest {
 			mock(MemberTeamEventPushDeliveryRepository.class);
 	private final MobilePushGateway pushGateway = mock(MobilePushGateway.class);
 	private final MemberNotificationService notificationService = mock(MemberNotificationService.class);
+	private final QuietAwarePushSender quietAwarePushSender = mock(QuietAwarePushSender.class);
 
 	private TeamLiveEventPushService service;
 
@@ -61,7 +63,8 @@ class TeamLiveEventPushFanOutBatchTest {
 				pushGateway,
 				notificationService,
 				mock(WorldsService.class),
-				mock(NaverEsportsScoreClient.class));
+				mock(NaverEsportsScoreClient.class),
+				quietAwarePushSender);
 		ReflectionTestUtils.setField(service, "fcmNotificationEnabled", true);
 		when(pushGateway.isAvailable()).thenReturn(true);
 	}
@@ -72,14 +75,15 @@ class TeamLiveEventPushFanOutBatchTest {
 		givenSubscribers(List.of(device(1L, "token-1"), device(2L, "token-2"), device(3L, "token-3")));
 		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
 				.thenReturn(List.of(1L, 2L, 3L));
-		when(pushGateway.send(any(), any()))
+		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new MobilePushResult(3, 0, List.of(), List.of("token-1", "token-2", "token-3")));
 
 		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 10L, null, "제목", "본문");
 
-		ArgumentCaptor<List<String>> tokens = ArgumentCaptor.forClass(List.class);
-		verify(pushGateway, times(1)).send(tokens.capture(), any());
-		assertThat(tokens.getValue()).containsExactly("token-1", "token-2", "token-3");
+		ArgumentCaptor<Map<Long, List<String>>> byMember = ArgumentCaptor.forClass(Map.class);
+		verify(quietAwarePushSender, times(1)).send(byMember.capture(), any());
+		assertThat(byMember.getValue().values().stream().flatMap(List::stream).toList())
+				.containsExactly("token-1", "token-2", "token-3");
 
 		verify(deliveryRepository, times(1)).reserveAll(any(), eq(MATCH_ID), eq(SET_NUMBER), anyString(), anyLong());
 		verify(deliveryRepository, times(1)).markSentAll(any(), eq(MATCH_ID), eq(SET_NUMBER), anyString(), anyLong());
@@ -96,7 +100,7 @@ class TeamLiveEventPushFanOutBatchTest {
 		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
 				.thenReturn(List.of(1L, 2L));
 		// token-2 만 성공
-		when(pushGateway.send(any(), any()))
+		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new MobilePushResult(1, 1, List.of(), List.of("token-2")));
 
 		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 11L, null, "제목", "본문");
@@ -111,14 +115,15 @@ class TeamLiveEventPushFanOutBatchTest {
 		givenSubscribers(List.of(device(1L, "token-1"), device(2L, "token-2")));
 		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
 				.thenReturn(List.of(2L));
-		when(pushGateway.send(any(), any()))
+		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new MobilePushResult(1, 0, List.of(), List.of("token-2")));
 
 		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 12L, null, "제목", "본문");
 
-		ArgumentCaptor<List<String>> tokens = ArgumentCaptor.forClass(List.class);
-		verify(pushGateway).send(tokens.capture(), any());
-		assertThat(tokens.getValue()).containsExactly("token-2");
+		ArgumentCaptor<Map<Long, List<String>>> byMember = ArgumentCaptor.forClass(Map.class);
+		verify(quietAwarePushSender).send(byMember.capture(), any());
+		assertThat(byMember.getValue().values().stream().flatMap(List::stream).toList())
+				.containsExactly("token-2");
 	}
 
 	@Test
@@ -130,6 +135,24 @@ class TeamLiveEventPushFanOutBatchTest {
 
 		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 13L, null, "제목", "본문");
 
+		verify(quietAwarePushSender, never()).send(any(), any());
+	}
+
+	@Test
+	@DisplayName("발송은 회원별 토큰맵으로 sender 에 위임하고 게이트웨이를 직접 부르지 않는다")
+	void 발송은_sender_에_위임한다() {
+		givenSubscribers(List.of(device(1L, "token-1"), device(2L, "token-2")));
+		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
+				.thenReturn(List.of(1L, 2L));
+		when(quietAwarePushSender.send(any(), any()))
+				.thenReturn(new MobilePushResult(2, 0, List.of(), List.of("token-1", "token-2")));
+
+		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 14L, null, "제목", "본문");
+
+		ArgumentCaptor<Map<Long, List<String>>> byMember = ArgumentCaptor.forClass(Map.class);
+		verify(quietAwarePushSender, times(1)).send(byMember.capture(), any());
+		assertThat(byMember.getValue())
+				.containsExactlyInAnyOrderEntriesOf(Map.of(1L, List.of("token-1"), 2L, List.of("token-2")));
 		verify(pushGateway, never()).send(any(), any());
 	}
 

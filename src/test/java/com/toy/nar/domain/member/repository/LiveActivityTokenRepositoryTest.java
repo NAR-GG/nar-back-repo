@@ -47,10 +47,10 @@ class LiveActivityTokenRepositoryTest {
 
 	@BeforeEach
 	void seed() {
-		exec("INSERT INTO member (id, name, tag, role, created_at)"
-				+ " VALUES (1, '테스터', '0001', 'USER', CURRENT_TIMESTAMP)");
-		exec("INSERT INTO member (id, name, tag, role, created_at)"
-				+ " VALUES (2, '테스터2', '0002', 'USER', CURRENT_TIMESTAMP)");
+		exec("INSERT INTO member (id, name, tag, role, created_at, quiet_hours_enabled, quiet_start_time, quiet_end_time)"
+				+ " VALUES (1, '테스터', '0001', 'USER', CURRENT_TIMESTAMP, false, '01:00:00', '08:00:00')");
+		exec("INSERT INTO member (id, name, tag, role, created_at, quiet_hours_enabled, quiet_start_time, quiet_end_time)"
+				+ " VALUES (2, '테스터2', '0002', 'USER', CURRENT_TIMESTAMP, false, '01:00:00', '08:00:00')");
 		// match-1: 활성 2개 + 비활성 1개, match-2: 활성 1개
 		insertToken(1L, "match-1", "tok-a", 1L, true);
 		insertToken(2L, "match-1", "tok-b", 2L, true);

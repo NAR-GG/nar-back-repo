@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Entity
 @Table(name = "member")
@@ -56,6 +57,15 @@ public class Member {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "quiet_hours_enabled", nullable = false)
+    private boolean quietHoursEnabled;
+
+    @Column(name = "quiet_start_time", nullable = false)
+    private LocalTime quietStartTime = LocalTime.of(1, 0);
+
+    @Column(name = "quiet_end_time", nullable = false)
+    private LocalTime quietEndTime = LocalTime.of(8, 0);
 
     @Builder
     public Member(String name, String tag, String email) {
@@ -115,5 +125,12 @@ public class Member {
 
     public boolean isOnboarded() {
         return this.onboardedAt != null;
+    }
+
+    /** 알림 잠자기 설정을 갱신한다. 값 검증은 서비스에서 끝낸 뒤 호출한다. */
+    public void updateQuietHours(boolean enabled, LocalTime startTime, LocalTime endTime) {
+        this.quietHoursEnabled = enabled;
+        this.quietStartTime = startTime;
+        this.quietEndTime = endTime;
     }
 }

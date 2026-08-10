@@ -56,6 +56,8 @@ class TeamLiveEventPushServiceBestOfTest {
 	private WorldsService worldsService;
 	@Mock
 	private NaverEsportsScoreClient naverEsportsScoreClient;
+	@Mock
+	private QuietAwarePushSender quietAwarePushSender;
 
 	private TeamLiveEventPushService service;
 
@@ -64,7 +66,7 @@ class TeamLiveEventPushServiceBestOfTest {
 		service = new TeamLiveEventPushService(
 				deviceRepository, deliveryRepository, teamExternalIdentityRepository,
 				leagueMatchRepository, pushGateway, notificationService, worldsService,
-				naverEsportsScoreClient);
+				naverEsportsScoreClient, quietAwarePushSender);
 		ReflectionTestUtils.setField(service, "fcmNotificationEnabled", true);
 		ReflectionTestUtils.setField(service, "scoreRetryAttempts", 1);
 		ReflectionTestUtils.setField(service, "scoreRetryDelayMs", 0L);
@@ -81,7 +83,7 @@ class TeamLiveEventPushServiceBestOfTest {
 		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
 				.thenReturn(List.of(1L));
 		when(pushGateway.isAvailable()).thenReturn(true);
-		when(pushGateway.send(any(), any()))
+		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new MobilePushResult(1, 0, List.of(), List.of("token-1")));
 	}
 
@@ -102,7 +104,7 @@ class TeamLiveEventPushServiceBestOfTest {
 
 	private MobilePushMessage captureSentMessage() {
 		ArgumentCaptor<MobilePushMessage> captor = ArgumentCaptor.forClass(MobilePushMessage.class);
-		org.mockito.Mockito.verify(pushGateway).send(any(), captor.capture());
+		org.mockito.Mockito.verify(quietAwarePushSender).send(any(), captor.capture());
 		return captor.getValue();
 	}
 

@@ -15,6 +15,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,13 +48,14 @@ class PlayerSoloRankPushFanOutBatchTest {
 			mock(PlayerSoloRankPushDeliveryRepository.class);
 	private final MobilePushGateway pushGateway = mock(MobilePushGateway.class);
 	private final MemberNotificationService notificationService = mock(MemberNotificationService.class);
+	private final QuietAwarePushSender quietAwarePushSender = mock(QuietAwarePushSender.class);
 
 	private PlayerSoloRankPushService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new PlayerSoloRankPushService(
-				deviceRepository, deliveryRepository, pushGateway, notificationService);
+				deviceRepository, deliveryRepository, pushGateway, notificationService, quietAwarePushSender);
 		when(pushGateway.isAvailable()).thenReturn(true);
 	}
 
@@ -65,14 +67,16 @@ class PlayerSoloRankPushFanOutBatchTest {
 				device(3L, member(9L), "token-3"));
 		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID)))
 				.thenReturn(List.of(7L, 8L, 9L));
-		when(pushGateway.send(any(), any()))
+		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new MobilePushResult(3, 0, List.of(), List.of("token-1", "token-2", "token-3")));
 
 		notifyGame();
 
-		ArgumentCaptor<List<String>> tokens = ArgumentCaptor.forClass(List.class);
-		verify(pushGateway, times(1)).send(tokens.capture(), any());
-		assertThat(tokens.getValue()).containsExactly("token-1", "token-2", "token-3");
+		ArgumentCaptor<Map<Long, List<String>>> byMember = ArgumentCaptor.forClass(Map.class);
+		verify(quietAwarePushSender, times(1)).send(byMember.capture(), any());
+		assertThat(byMember.getValue().values().stream().flatMap(List::stream).toList())
+				.containsExactly("token-1", "token-2", "token-3");
+		verify(pushGateway, never()).send(any(), any());
 
 		verify(deliveryRepository, times(1)).reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID));
 		verify(deliveryRepository, times(1)).markSentAll(any(), eq(PLAYER_ID), eq(GAME_ID));
@@ -85,7 +89,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 		givenSubscribers(device(1L, member(7L), "token-1"), device(2L, member(8L), "token-2"));
 		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(7L, 8L));
 		// token-2 만 성공
-		when(pushGateway.send(any(), any()))
+		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new MobilePushResult(1, 1, List.of(), List.of("token-2")));
 
 		notifyGame();
@@ -103,14 +107,15 @@ class PlayerSoloRankPushFanOutBatchTest {
 	void 예약되지_않은_구독자는_발송_대상에서_빠진다() {
 		givenSubscribers(device(1L, member(7L), "token-1"), device(2L, member(8L), "token-2"));
 		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(8L));
-		when(pushGateway.send(any(), any()))
+		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new MobilePushResult(1, 0, List.of(), List.of("token-2")));
 
 		notifyGame();
 
-		ArgumentCaptor<List<String>> tokens = ArgumentCaptor.forClass(List.class);
-		verify(pushGateway).send(tokens.capture(), any());
-		assertThat(tokens.getValue()).containsExactly("token-2");
+		ArgumentCaptor<Map<Long, List<String>>> byMember = ArgumentCaptor.forClass(Map.class);
+		verify(quietAwarePushSender).send(byMember.capture(), any());
+		assertThat(byMember.getValue().values().stream().flatMap(List::stream).toList())
+				.containsExactly("token-2");
 	}
 
 	@Test
@@ -121,7 +126,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 
 		notifyGame();
 
-		verify(pushGateway, never()).send(any(), any());
+		verify(quietAwarePushSender, never()).send(any(), any());
 	}
 
 	@Test
@@ -129,7 +134,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 	void 발송_예외시_예약자_전원을_실패로_남긴다() {
 		givenSubscribers(device(1L, member(7L), "token-1"), device(2L, member(8L), "token-2"));
 		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(7L, 8L));
-		when(pushGateway.send(any(), any())).thenThrow(new IllegalStateException("firebase down"));
+		when(quietAwarePushSender.send(any(), any())).thenThrow(new IllegalStateException("firebase down"));
 
 		notifyGame();
 
