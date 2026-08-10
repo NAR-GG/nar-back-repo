@@ -50,7 +50,7 @@ public class MobileQuietHoursService {
 	}
 
 	/**
-	 * 같은 패키지 {@code MobileTeamNotificationService:118-123} 와 동일한 처리다.
+	 * 같은 패키지 {@code MobileTeamNotificationService#requireMember} 와 동일한 처리다.
 	 * {@code ErrorCode} 에 회원 미존재 상수가 없어 형제 서비스 패턴을 따른다.
 	 */
 	private Member findMember(Long memberId) {

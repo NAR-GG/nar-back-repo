@@ -42,8 +42,7 @@
 |---|---|
 | `src/main/resources/db/migration/V65__Add_member_quiet_hours.sql` | 컬럼 3개 추가 |
 | `src/main/java/com/toy/nar/domain/member/repository/dto/MemberQuietHours.java` | projection DTO |
-| `src/main/java/com/toy/nar/config/ClockConfig.java` | KST `Clock` 빈 |
-| `src/main/java/com/toy/nar/app/mobile/push/QuietHoursResolver.java` | 회원 집합 → 지금 잠자기인 회원 집합 |
+| `src/main/java/com/toy/nar/app/mobile/push/QuietHoursResolver.java` | 기존 `AppConfig.clock()` 빈을 주입받아 KST 로 고정, 회원 집합 → 지금 잠자기인 회원 집합 |
 | `src/main/java/com/toy/nar/app/mobile/push/QuietAwarePushSender.java` | 2그룹 분할 발송 + 결과 병합 |
 | `src/main/java/com/toy/nar/app/mobile/notification/dto/QuietHoursResponse.java` | GET 응답 |
 | `src/main/java/com/toy/nar/app/mobile/notification/dto/QuietHoursUpdateRequest.java` | PUT 요청 |
@@ -256,16 +255,19 @@ EOF
 ### Task 2: 잠자기 판정 (`QuietHoursResolver`)
 
 **Files:**
-- Create: `src/main/java/com/toy/nar/config/ClockConfig.java`
 - Create: `src/main/java/com/toy/nar/app/mobile/push/QuietHoursResolver.java`
 - Test: `src/test/java/com/toy/nar/app/mobile/push/QuietHoursResolverTest.java`
 
 **Interfaces:**
-- Consumes: `MemberRepository#findQuietHoursByMemberIds`, `MemberQuietHours` (Task 1)
+- Consumes: `MemberRepository#findQuietHoursByMemberIds`, `MemberQuietHours` (Task 1), 기존 `AppConfig#clock()` 빈
 - Produces:
   - `QuietHoursResolver#quietMemberIds(Collection<Long> memberIds): Set<Long>` — 지금 잠자기 구간에 있는 회원 id. 빈 입력이면 `Set.of()`.
   - `QuietHoursResolver#isWithin(LocalTime now, LocalTime start, LocalTime end): boolean` (package-private static, 테스트용)
-  - `@Bean Clock` (KST)
+
+새 `Clock` 빈은 만들지 않는다. `AppConfig`가 이미 `clock()` 빈을 등록하고 있어(`Clock.systemDefaultZone()`),
+같은 이름으로 `ClockConfig`를 또 만들면 빈 이름 충돌로 `BeanDefinitionOverrideException`이 터져 부팅이
+죽는다. 대신 기존 빈을 그대로 주입받고, `QuietHoursResolver` 안에서 판정 시점에
+`clock.withZone(ZoneId.of("Asia/Seoul"))`로 KST를 고정한다 — 주입된 시계의 존이 무엇이든 여기서 덮어쓴다.
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -364,32 +366,11 @@ class QuietHoursResolverTest {
 Run: `./gradlew test --tests "com.toy.nar.app.mobile.push.QuietHoursResolverTest"`
 Expected: 컴파일 실패 — `cannot find symbol: class QuietHoursResolver`
 
-- [ ] **Step 3: Clock 빈 작성**
+- [ ] **Step 3: 기존 Clock 빈 확인**
 
-`src/main/java/com/toy/nar/config/ClockConfig.java`:
-
-```java
-package com.toy.nar.config;
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-import java.time.Clock;
-import java.time.ZoneId;
-
-@Configuration
-public class ClockConfig {
-
-	/**
-	 * 알림 잠자기 시각 판정용 시계. KST 고정 — 유저별 타임존은 두지 않는다.
-	 * 테스트에서 시각을 고정할 수 있도록 빈으로 뺐다.
-	 */
-	@Bean
-	public Clock clock() {
-		return Clock.system(ZoneId.of("Asia/Seoul"));
-	}
-}
-```
+`src/main/java/com/toy/nar/config/AppConfig.java`에 이미 `@Bean public Clock clock()`이 있다.
+새 `ClockConfig`를 만들지 않는다 — 빈 이름이 겹쳐 `BeanDefinitionOverrideException`으로 부팅이 죽는다.
+KST 고정은 이 빈을 주입받는 `QuietHoursResolver` 쪽 책임으로 넘긴다(Step 4).
 
 - [ ] **Step 4: 판정 컴포넌트 작성**
 
@@ -406,6 +387,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -415,6 +397,9 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 public class QuietHoursResolver {
+
+	/** 잠자기 판정은 KST 기준이다. 주입된 시계의 존이 무엇이든 여기서 고정한다. */
+	private static final ZoneId KOREA = ZoneId.of("Asia/Seoul");
 
 	private final MemberRepository memberRepository;
 	private final Clock clock;
@@ -429,7 +414,7 @@ public class QuietHoursResolver {
 		if (memberIds.isEmpty()) {
 			return Set.of();
 		}
-		LocalTime now = LocalTime.now(clock);
+		LocalTime now = LocalTime.now(clock.withZone(KOREA));
 		try {
 			return memberRepository.findQuietHoursByMemberIds(memberIds).stream()
 					.filter(quiet -> isWithin(now, quiet.startTime(), quiet.endTime()))
@@ -458,8 +443,7 @@ Expected: 5개 테스트 PASS
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add src/main/java/com/toy/nar/config/ClockConfig.java \
-        src/main/java/com/toy/nar/app/mobile/push/QuietHoursResolver.java \
+git add src/main/java/com/toy/nar/app/mobile/push/QuietHoursResolver.java \
         src/test/java/com/toy/nar/app/mobile/push/QuietHoursResolverTest.java
 git commit -m "$(cat <<'EOF'
 feat: 알림 잠자기 시각 판정 QuietHoursResolver

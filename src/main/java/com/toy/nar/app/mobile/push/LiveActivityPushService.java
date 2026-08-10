@@ -25,6 +25,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Android 는 여기 오지 않는다. 진행 중 알림 기반이라 기존 FCM data 메시지
  * ({@link TeamLiveEventPushService} 가 이미 type/matchId/setNumber/bestOf/스코어를 싣는다)로
  * 앱을 깨워 알림을 다시 그리면 되고, 백엔드에 추가할 것이 없다.</p>
+ *
+ * <p>이 경로는 알림 잠자기({@code QuietAwarePushSender}) 대상이 아니다. APNs
+ * push-to-start/update 는 {@code alert}·{@code sound} 없이 content-state 만 바꾸는
+ * Live Activity 갱신이라, 애초에 소리나 배너가 나지 않는다 — 잠자기를 끼울 지점이 없다.</p>
  */
 @Slf4j
 @Service

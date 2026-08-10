@@ -55,7 +55,7 @@ LCK 정규시즌 경기는 17:00~22:00 KST라 기본 잠자기 시간(01:00~08:0
 `member`에 컬럼 3개. 1:1이라 별도 테이블을 만들지 않는다.
 
 ```sql
--- V32__add_member_quiet_hours.sql
+-- V65__Add_member_quiet_hours.sql
 ALTER TABLE member
   ADD COLUMN quiet_hours_enabled TINYINT(1) NOT NULL DEFAULT 0,
   ADD COLUMN quiet_start_time TIME NOT NULL DEFAULT '01:00:00',
@@ -126,9 +126,13 @@ Android O+ 는 **알림 채널 설정이 서버 payload보다 우선한다.** �
 
 ## 발송 경로별 적용
 
-### 솔랭 — 회원 단위 루프라 간단
+### 솔랭 — 경기와 같은 배치 팬아웃, 2그룹 분할
 
-`PlayerSoloRankPushService.sendToMember`(`:111`)가 이미 회원별로 돌므로 판정만 끼운다.
+`PlayerSoloRankPushService`도 `sendToMember` 같은 회원별 루프가 아니라 `fanOutBatched`로
+배치 멀티캐스트한다. 회원별로 쪼개면 안 되는 이유는 경기 경로와 같다 — 2026-08-04 프로덕션에서
+구독자 1,502명 개별 발송이 472초 걸려 솔랭 폴 스레드를 14분 멈춘 사고가 있었다. 그래서 여기도
+경기와 동일하게 구독자를 잠자기 걸린 집합 / 안 걸린 집합 2그룹으로 나눠 멀티캐스트를 최대 2회
+보내는 방식으로 판정을 끼운다.
 
 ### 경기 — 팬아웃을 2그룹으로 분할
 
@@ -158,13 +162,14 @@ Android O+ 는 **알림 채널 설정이 서버 payload보다 우선한다.** �
 ## API
 
 ```
-PUT /api/mobile/members/me/quiet-hours
+PUT /api/mobile/me/quiet-hours
 { "enabled": true, "startTime": "01:00", "endTime": "08:00" }
 ```
 
 - `enabled=true`인데 `startTime == endTime`이면 400
 - 분이 5의 배수가 아니면 400 (클라가 5분 스텝이므로 서버는 계약 확인만)
-- 현재 설정은 기존 회원 정보 조회 응답에 필드로 얹는다 — 엔드포인트를 새로 만들지 않는다
+- `GET`/`PUT` 전용 엔드포인트를 신설했다 — 기존 회원 정보 조회 응답에 필드로 얹지 않는다.
+  앱이 이미 파싱하는 회원 DTO를 건드리지 않아야 회귀 위험이 작기 때문이다.
 
 ## 앱 UI
 
