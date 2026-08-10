@@ -11,6 +11,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 
@@ -81,5 +82,17 @@ class QuietHoursResolverTest {
 		QuietHoursResolver resolver = new QuietHoursResolver(memberRepository, fixedAt(2, 30));
 
 		assertThat(resolver.quietMemberIds(Set.of(1L))).isEmpty();
+	}
+
+	@Test
+	void 시계_존이_KST_가_아니어도_KST_로_판정한다() {
+		// 2026-08-10T18:00Z = 2026-08-11T03:00 KST. 잠자기 01:00~08:00 안이다.
+		// resolver 가 KST 로 강제하지 않고 시계 존(UTC)을 그대로 쓰면 18:00 이라 구간 밖이 된다.
+		Clock utcClock = Clock.fixed(Instant.parse("2026-08-10T18:00:00Z"), ZoneOffset.UTC);
+		when(memberRepository.findQuietHoursByMemberIds(Set.of(1L))).thenReturn(List.of(
+				new MemberQuietHours(1L, true, LocalTime.of(1, 0), LocalTime.of(8, 0))));
+		QuietHoursResolver resolver = new QuietHoursResolver(memberRepository, utcClock);
+
+		assertThat(resolver.quietMemberIds(Set.of(1L))).containsExactlyInAnyOrder(1L);
 	}
 }
