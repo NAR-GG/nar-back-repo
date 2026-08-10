@@ -18,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -55,7 +56,7 @@ class TeamLiveEventPushServiceScoreLineTest {
 		service = new TeamLiveEventPushService(
 				deviceRepository, deliveryRepository, teamExternalIdentityRepository,
 				leagueMatchRepository, pushGateway, notificationService, worldsService,
-				naverEsportsScoreClient);
+				naverEsportsScoreClient, mock(QuietAwarePushSender.class));
 		// 테스트에서 재시도 대기 없이 즉시 진행
 		ReflectionTestUtils.setField(service, "scoreRetryAttempts", 3);
 		ReflectionTestUtils.setField(service, "scoreRetryDelayMs", 0L);
