@@ -110,7 +110,7 @@ class PlayerSoloRankPushServiceTest {
 
 		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
 
-		verify(pushGateway, never()).send(any(), any());
+		verify(quietAwarePushSender, never()).send(any(), any());
 	}
 
 	@Test
