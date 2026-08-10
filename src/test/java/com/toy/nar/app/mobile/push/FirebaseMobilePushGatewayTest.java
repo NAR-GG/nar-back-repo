@@ -26,6 +26,8 @@ import static org.mockito.Mockito.mock;
  * {@code @Key} 직렬화 기반이라 public 게터가 없다. 소스 jar로 확인한 실제 구조:
  * - AndroidConfig 는 "notification" 필드(AndroidNotification, silent=false 면 null)를 갖고,
  *   AndroidNotification 은 "channelId" 필드를 갖는다.
+ * - AndroidConfig 의 "priority" 필드는 {@code Priority} enum 이 아니라 그 이름을 소문자로 바꾼
+ *   {@code String}("high"/"normal")이다 — 빌더가 생성 시점에 {@code name().toLowerCase()}로 변환한다.
  * - ApnsConfig 는 "aps" 필드를 따로 갖지 않는다. 생성 시점에 Aps.getFields()를
  *   "payload"라는 Map<String,Object> 필드에 key "aps"로 즉시 합쳐 넣는다.
  *   Aps 자신도 sound 등 개별 필드가 없고, 전부 "fields"라는 Map<String,Object>에
@@ -51,6 +53,8 @@ class FirebaseMobilePushGatewayTest {
 				(AndroidNotification) ReflectionTestUtils.getField(config, "notification");
 		assertThat(notification).isNotNull();
 		assertThat(ReflectionTestUtils.getField(notification, "channelId")).isEqualTo("warding_quiet");
+		// 채널이 importance 를 좌우하지만, priority 도 NORMAL 로 낮춰야 헤드업 표시를 덜 유도한다.
+		assertThat(ReflectionTestUtils.getField(config, "priority")).isEqualTo("normal");
 	}
 
 	@Test
@@ -61,6 +65,9 @@ class FirebaseMobilePushGatewayTest {
 		AndroidConfig config = gateway.androidConfig(message);
 
 		assertThat(ReflectionTestUtils.getField(config, "notification")).isNull();
+		// 소리가 나는 경로는 배너 노출을 위해 HIGH 우선순위여야 한다 — 여기가 죽으면
+		// 기존 알림 전부의 헤드업 표시가 조용히 사라진다.
+		assertThat(ReflectionTestUtils.getField(config, "priority")).isEqualTo("high");
 	}
 
 	@Test

@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalTime;
 
 public record QuietHoursUpdateRequest(
-		boolean enabled,
+		@NotNull Boolean enabled,
 		@NotNull @JsonFormat(pattern = "HH:mm") LocalTime startTime,
 		@NotNull @JsonFormat(pattern = "HH:mm") LocalTime endTime) {
 }

@@ -68,6 +68,16 @@ class MobileQuietHoursServiceTest {
 	}
 
 	@Test
+	void 종료_분이_5의_배수가_아니면_거부한다() {
+		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+		assertThatThrownBy(() -> service.update(
+				1L, new QuietHoursUpdateRequest(true, LocalTime.of(1, 0), LocalTime.of(8, 7))))
+				.isInstanceOf(CustomException.class)
+				.hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_QUIET_HOURS);
+	}
+
+	@Test
 	void 꺼진_상태로_저장할_때는_시각을_검증하지_않는다() {
 		when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
 
