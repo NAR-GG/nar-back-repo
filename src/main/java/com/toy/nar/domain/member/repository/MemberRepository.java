@@ -1,6 +1,7 @@
 package com.toy.nar.domain.member.repository;
 
 import com.toy.nar.domain.member.entity.Member;
+import com.toy.nar.domain.member.repository.dto.MemberQuietHours;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -10,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
@@ -28,6 +31,19 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @Modifying
     @Query("delete from Member member where member.id = :memberId")
     int deleteByMemberId(@Param("memberId") Long memberId);
+
+    /**
+     * 잠자기를 켜둔 회원의 설정만 한 방에 조회한다. 꺼둔 회원은 결과에 없다.
+     * 시각 비교는 Java 에서 한다 — SQL 로 비교하면 DB 세션 타임존에 따라 밀린다(914d932).
+     */
+    @Query("""
+            select new com.toy.nar.domain.member.repository.dto.MemberQuietHours(
+                m.id, m.quietHoursEnabled, m.quietStartTime, m.quietEndTime)
+            from Member m
+            where m.id in :memberIds
+              and m.quietHoursEnabled = true
+            """)
+    List<MemberQuietHours> findQuietHoursByMemberIds(@Param("memberIds") Collection<Long> memberIds);
 
     // 백오피스 상세: 관심 팀 이름을 같이 쓰므로 fetch 해둔다(OSIV off).
     @EntityGraph(attributePaths = "favoriteTeam")

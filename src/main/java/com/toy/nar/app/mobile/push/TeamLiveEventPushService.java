@@ -57,6 +57,7 @@ public class TeamLiveEventPushService {
 	private final MemberNotificationService notificationService;
 	private final com.toy.nar.app.lolesports.WorldsService worldsService;
 	private final com.toy.nar.app.lolesports.NaverEsportsScoreClient naverEsportsScoreClient;
+	private final QuietAwarePushSender quietAwarePushSender;
 
 	@Value("${live.notification.fcm.enabled:false}")
 	private boolean fcmNotificationEnabled;
@@ -384,7 +385,8 @@ public class TeamLiveEventPushService {
 		List<String> allTokens = tokensByMember.values().stream().flatMap(List::stream).toList();
 		MobilePushResult result;
 		try {
-			result = pushGateway.send(allTokens, message);
+			// 잠자기 회원은 무음으로 갈린다. 회원별로 쪼개지 않고 2그룹 멀티캐스트.
+			result = quietAwarePushSender.send(tokensByMember, message);
 		} catch (Exception e) {
 			// 발송 자체가 실패하면 예약한 구독자 전원을 FAILED 로 남긴다(재예약 대상이 된다).
 			markFailedAll(tokensByMember.keySet(), matchId, setNumber, eventType, eventOrder,
