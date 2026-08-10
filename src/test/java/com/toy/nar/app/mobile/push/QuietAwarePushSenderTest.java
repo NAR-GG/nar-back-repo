@@ -93,4 +93,21 @@ class QuietAwarePushSenderTest {
 		assertThat(result.failureCount()).isEqualTo(2);
 		assertThat(result.invalidTokens()).containsExactlyInAnyOrder("loud-b", "quiet-a");
 	}
+
+	@Test
+	void 무음_발송이_실패해도_소리_그룹의_배달_기록은_지우지_않는다() {
+		when(quietHoursResolver.quietMemberIds(any())).thenReturn(Set.of(2L));
+		when(pushGateway.send(eq(List.of("loud-a", "loud-b")), any()))
+				.thenReturn(new MobilePushResult(2, 0, List.of(), List.of("loud-a", "loud-b")));
+		when(pushGateway.send(eq(List.of("quiet-a")), any()))
+				.thenThrow(new IllegalStateException("FCM down"));
+
+		MobilePushResult result = sender().send(tokens(), message);
+
+		// 소리 그룹은 성공으로 남아 호출처가 SENT + 피드 기록을 할 수 있어야 한다.
+		assertThat(result.successCount()).isEqualTo(2);
+		assertThat(result.successTokens()).containsExactly("loud-a", "loud-b");
+		// 무음 그룹만 실패로 집계돼 재예약 대상이 된다.
+		assertThat(result.failureCount()).isEqualTo(1);
+	}
 }
