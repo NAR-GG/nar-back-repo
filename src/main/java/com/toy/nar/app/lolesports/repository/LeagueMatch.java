@@ -90,6 +90,13 @@ public class LeagueMatch {
 		this.setWinners = setWinners;
 	}
 
+	/** 스코어만 반영한다 — state 를 옮기면 되돌림 클래스(#354/#355)가 재발하므로 건드리지 않는다. */
+	public void applyScore(Integer blueScore, Integer redScore, LocalDateTime lastUpdated) {
+		this.blueScore = blueScore;
+		this.redScore = redScore;
+		this.lastUpdated = lastUpdated;
+	}
+
 	/** 업스트림이 준 다전제 규격을 반영한다. null 이면(업스트림 공백) 기존 값을 유지한다. */
 	public void applyBestOf(Integer bestOf) {
 		if (bestOf != null) {

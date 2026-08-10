@@ -68,6 +68,7 @@ class LeagueMatchServiceNewerPageTest {
 				new ObjectMapper(),
 				transactionTemplate,
 				gameRepository,
+				null,
 				null);
 		when(leagueMatchRepository.findAllById(anyList())).thenReturn(List.of());
 		when(leagueMatchGameRepository.findMappedGameRowsByMatchIds(anyList(), org.mockito.ArgumentMatchers.any()))
