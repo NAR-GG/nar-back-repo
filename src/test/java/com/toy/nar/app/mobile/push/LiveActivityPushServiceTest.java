@@ -210,6 +210,39 @@ class LiveActivityPushServiceTest {
 	}
 
 	@Test
+	void forceMatchEnd_는_워터마크가_더_높아도_발송한다() {
+		// 리메이크로 폴링 워터마크(3세트 playing=30)가 스코어 합 기반 세트(2)보다 높은 상황.
+		// notifySetEnd 라면 키 22 < 30 으로 기각되지만, 스윕의 근거는 DB 확정 상태라 우회한다.
+		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));
+		service.notifySetStart("match-1", 3, 1, 0);
+
+		service.forceMatchEnd("match-1", 2, 2, 0, "T1");
+
+		verify(apnsClient).sendEndAsync(anyString(), any(), any());
+		assertThat(service.matchEndPushed("match-1")).isTrue();
+	}
+
+	@Test
+	void 매치_종료가_나가면_늦은_setEnded_역행을_가드가_본다() {
+		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));
+
+		assertThat(service.matchEndPushed("match-1")).isFalse();
+		assertThat(service.claimMatchEndPush("match-1")).isTrue();
+		// 두 번째 선점은 실패 — 발송 경로 셋(편승·복구·스윕)의 dedup.
+		assertThat(service.claimMatchEndPush("match-1")).isFalse();
+		assertThat(service.matchEndPushed("match-1")).isTrue();
+	}
+
+	@Test
+	void notifySetEnd_매치종료도_발송_기록을_남긴다() {
+		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));
+
+		service.notifySetEnd("match-1", 2, 2, 0, true, "T1");
+
+		assertThat(service.matchEndPushed("match-1")).isTrue();
+	}
+
+	@Test
 	void 같은_상태_재발화는_통과시킨다() {
 		// 같은 세트를 다시 그리는 것뿐이라 무해하고, 그 사이 스코어가 갱신됐을 수 있다.
 		when(tokenRepository.findActivePushTokensByMatchId("match-1")).thenReturn(List.of("tok-1"));

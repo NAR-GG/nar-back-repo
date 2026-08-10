@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,43 +36,50 @@ class LiveActivityOrphanCardSweeperTest {
 	}
 
 	@Test
-	void 끝난_매치의_살아있는_카드에_매치_종료를_보낸다() {
+	void 끝난_매치의_살아있는_카드에_매치_종료를_강제_발송한다() {
 		when(tokenRepository.findDistinctActiveMatchIds()).thenReturn(List.of("match-1"));
 		when(leagueMatchRepository.findAllById(List.of("match-1")))
-				.thenReturn(List.of(match("match-1", "completed", 2, 0)));
+				.thenReturn(List.of(match("match-1", "completed", 3, 2, 0)));
 
 		sweeper.sweep();
 
-		// 세트 번호 = 스코어 합, 승자 = 스코어 우세 팀 코드.
-		verify(pushService).notifySetEnd("match-1", 2, 2, 0, true, "BLU");
+		// forceMatchEnd: DB 확정 상태 기반이라 워터마크 검사를 우회한다. 세트 = 스코어 합.
+		verify(pushService).forceMatchEnd("match-1", 2, 2, 0, "BLU");
 	}
 
 	@Test
 	void 진행_중인_매치는_건드리지_않는다() {
 		when(tokenRepository.findDistinctActiveMatchIds()).thenReturn(List.of("match-1"));
 		when(leagueMatchRepository.findAllById(List.of("match-1")))
-				.thenReturn(List.of(match("match-1", "inProgress", 1, 0)));
+				.thenReturn(List.of(match("match-1", "inProgress", 3, 1, 0)));
 
 		sweeper.sweep();
 
-		verify(pushService, never()).notifySetEnd(
-				org.mockito.ArgumentMatchers.anyString(),
-				org.mockito.ArgumentMatchers.anyInt(),
-				org.mockito.ArgumentMatchers.any(),
-				org.mockito.ArgumentMatchers.any(),
-				org.mockito.ArgumentMatchers.anyBoolean(),
-				org.mockito.ArgumentMatchers.any());
+		verifyNoForceMatchEnd();
 	}
 
 	@Test
-	void 스코어_미상이면_승자_없이_세트1로_닫는다() {
+	void completed_라도_승리_조건_미달이면_오염_의심으로_보류한다() {
+		// 2026-08-10 GEN vs HLE 실사고: 네이버 조기 RESULT 로 bo3 이 1:0 completed.
+		// 이걸 믿고 쓸면 진행 중 경기 카드를 닫고 토큰을 죽여 복구 불가가 된다.
 		when(tokenRepository.findDistinctActiveMatchIds()).thenReturn(List.of("match-1"));
 		when(leagueMatchRepository.findAllById(List.of("match-1")))
-				.thenReturn(List.of(match("match-1", "completed", null, null)));
+				.thenReturn(List.of(match("match-1", "completed", 3, 1, 0)));
 
 		sweeper.sweep();
 
-		verify(pushService).notifySetEnd("match-1", 1, 0, 0, true, null);
+		verifyNoForceMatchEnd();
+	}
+
+	@Test
+	void bestOf_미상_completed_는_검증_불가라_보류한다() {
+		when(tokenRepository.findDistinctActiveMatchIds()).thenReturn(List.of("match-1"));
+		when(leagueMatchRepository.findAllById(List.of("match-1")))
+				.thenReturn(List.of(match("match-1", "completed", null, 2, 0)));
+
+		sweeper.sweep();
+
+		verifyNoForceMatchEnd();
 	}
 
 	@Test
@@ -81,11 +91,16 @@ class LiveActivityOrphanCardSweeperTest {
 		verifyNoInteractions(tokenRepository, leagueMatchRepository);
 	}
 
-	private static LeagueMatch match(String id, String state, Integer blue, Integer red) {
+	private void verifyNoForceMatchEnd() {
+		verify(pushService, never()).forceMatchEnd(anyString(), anyInt(), any(), any(), any());
+	}
+
+	private static LeagueMatch match(String id, String state, Integer bestOf, Integer blue, Integer red) {
 		return LeagueMatch.builder()
 				.id(id)
 				.leagueName("LCK")
 				.state(state)
+				.bestOf(bestOf)
 				.blueTeamCode("BLU")
 				.blueScore(blue)
 				.redTeamCode("RED")

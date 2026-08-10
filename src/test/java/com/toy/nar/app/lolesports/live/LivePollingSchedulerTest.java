@@ -811,8 +811,16 @@ class LivePollingSchedulerTest {
 
 	private com.toy.nar.app.mobile.push.LiveActivityPushService liveActivityPushService(
 			LivePollingScheduler scheduler) {
-		return (com.toy.nar.app.mobile.push.LiveActivityPushService)
+		var mock = (com.toy.nar.app.mobile.push.LiveActivityPushService)
 				ReflectionTestUtils.getField(scheduler, "liveActivityPushService");
+		// 스케줄러가 종료 발송 선점(claim)/조회를 실제 집합 의미로 쓰므로 모의도 그 계약을 따른다 —
+		// 기본 스텁(false)이면 복구 경로가 선점 실패로 오인해 발송 자체를 건너뛴다.
+		java.util.Set<String> claimed = java.util.concurrent.ConcurrentHashMap.newKeySet();
+		when(mock.claimMatchEndPush(anyString()))
+				.thenAnswer(inv -> claimed.add(inv.getArgument(0)));
+		when(mock.matchEndPushed(anyString()))
+				.thenAnswer(inv -> claimed.contains(inv.getArgument(0)));
+		return mock;
 	}
 
 	private com.toy.nar.app.lolesports.repository.LeagueMatchRepository matchRepositoryWithScore(

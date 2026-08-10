@@ -69,8 +69,26 @@ public class LiveActivityPushService {
 	 */
 	private final Map<String, Long> lastProgressByMatch = new ConcurrentHashMap<>();
 
+	/**
+	 * 매치 종료 카드를 이미 내보낸 매치. 발송자가 셋(프레임 편승·복구 재시도·스윕)이라
+	 * "종료가 나간 뒤 늦은 setEnded 가 카드를 되돌리는" 역행을 막는 상태는 발송 지점인
+	 * 여기서 공유해야 한다 — 스케줄러 안에 있으면 스윕 발송이 보이지 않는다.
+	 */
+	private final java.util.Set<String> matchEndPushedMatchIds =
+			java.util.concurrent.ConcurrentHashMap.newKeySet();
+
 	public boolean isEnabled() {
 		return apnsClient.isAvailable();
+	}
+
+	/** 이 매치의 종료 카드가 이미 나갔는지. 늦은 setEnded 를 쏘기 전에 확인한다. */
+	public boolean matchEndPushed(String matchId) {
+		return matchEndPushedMatchIds.contains(matchId);
+	}
+
+	/** 종료 발송 선점. 처음 선점했으면 true — 동시 진입하는 발송 경로의 dedup 에 쓴다. */
+	public boolean claimMatchEndPush(String matchId) {
+		return matchEndPushedMatchIds.add(matchId);
 	}
 
 	/** 세트 시작 — 카드를 진행 중으로 바꾼다. */
@@ -262,10 +280,32 @@ public class LiveActivityPushService {
 				phase, setNumber, blueScore, redScore, label, matchEnded ? winnerTeamCode : null);
 		fanOut(matchId, state, matchEnded);
 		if (matchEnded) {
+			claimMatchEndPush(matchId);
 			// 카드가 닫혔으니 워터마크도 함께 정리한다. 이후 늦게 도착하는 이벤트는
 			// 토큰이 이미 비활성이라 fanOut 에서 자연히 걸러진다.
 			lastProgressByMatch.remove(matchId);
 		}
+	}
+
+	/**
+	 * 매치 종료 강제 발송 — 스윕 전용. 진행도 워터마크({@link #accept}) 검사를 건너뛴다.
+	 *
+	 * <p>워터마크는 발송 이벤트끼리의 순서를 지키는 장치인데, 스윕의 근거는 이벤트가 아니라
+	 * DB 확정 상태(completed)다. completed 보다 미래의 이벤트는 없으므로 순서 검사가 지킬 게
+	 * 없고, 오히려 방해가 된다 — 리메이크로 폴링 워터마크(gameIds 인덱스 기준 세트)가 스코어 합
+	 * 기반 세트 추정보다 높으면 스윕 발송이 영구 기각돼, 스윕이 잡으려던 카드 고착을 스윕
+	 * 자신이 재생산한다(5분마다 기각 반복).</p>
+	 */
+	public void forceMatchEnd(String matchId, int setNumber, Integer blueScore, Integer redScore,
+			String winnerTeamCode) {
+		if (matchId == null || matchId.isBlank()) {
+			return;
+		}
+		Map<String, Object> state = contentState(
+				PHASE_MATCH_ENDED, Math.max(1, setNumber), blueScore, redScore, "경기 종료", winnerTeamCode);
+		fanOut(matchId, state, true);
+		claimMatchEndPush(matchId);
+		lastProgressByMatch.remove(matchId);
 	}
 
 	/**
