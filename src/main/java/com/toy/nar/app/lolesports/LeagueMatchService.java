@@ -138,14 +138,19 @@ public class LeagueMatchService {
 				|| naver.score()[0] + naver.score()[1] == 0) {
 			return false;
 		}
-		// 네이버 RESULT 만으로는 매치 종료를 단정할 수 없다 — KESPA 는 네이버가 세트를 개별
-		// 경기로 올려서 세트 사이에도 RESULT 가 온다(실측 2026-08-10 GEN vs HLE: 세트1 종료
-		// 직후 RESULT 1:0 → bo3 가 1:0 completed 로 고착, 이후 추적까지 게이트에 막혀 세트2·3
-		// 무음). 다전제 승리 조건에 실제로 도달한 스코어만 종료로 받아들인다.
-		// bestOf 미상이면 확정하지 않는다 — 늦더라도(업스트림 flip 대기) 틀리는 것보단 낫다.
-		if (!reachesMatchWin(match.getBestOf(), naver.score()[0], naver.score()[1])) {
+		// 네이버 RESULT 만으로는 매치 종료를 단정할 수 없다 — KESPA 는 네이버가 RESULT 플래그를
+		// 매치 중간에 미리 세운다(실측 2026-08-10 GEN vs HLE: 세트1 종료 직후 RESULT+진행 스코어
+		// 1:0 → bo3 가 1:0 completed 로 고착, 이후 추적까지 게이트에 막혀 세트2·3 무음).
+		// 다전제 승리 조건에 실제로 도달한 스코어만 종료로 받아들인다.
+		// bestOf 는 업스트림 DTO 가 간헐적으로 비워 보내므로 DB 값으로 폴백한다 — 폴백까지
+		// 미상이면 확정하지 않는다. 늦더라도(업스트림 flip 대기) 틀리는 것보단 낫다.
+		Integer bestOf = match.getBestOf() != null
+				? match.getBestOf()
+				: leagueMatchRepository.findById(match.getMatchId())
+						.map(LeagueMatch::getBestOf).orElse(null);
+		if (!reachesMatchWin(bestOf, naver.score()[0], naver.score()[1])) {
 			log.info("Naver RESULT 를 다전제 미완으로 무시. matchId={} bestOf={} score={}:{}",
-					match.getMatchId(), match.getBestOf(), naver.score()[0], naver.score()[1]);
+					match.getMatchId(), bestOf, naver.score()[0], naver.score()[1]);
 			return false;
 		}
 		match.getBlueTeam().setWins(naver.score()[0]);
@@ -164,7 +169,7 @@ public class LeagueMatchService {
 	}
 
 	/** 다전제 승리 조건 도달 여부. LivePollingScheduler.isMatchEnded 와 같은 판정 — bestOf 미상은 false. */
-	static boolean reachesMatchWin(Integer bestOf, int blueScore, int redScore) {
+	public static boolean reachesMatchWin(Integer bestOf, int blueScore, int redScore) {
 		if (bestOf == null || bestOf < 1) {
 			return false;
 		}

@@ -89,12 +89,8 @@ public class LivePollingScheduler {
 	 */
 	private final java.util.Set<String> startNotifiedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-	/**
-	 * 매치 종료(matchEnded) Live Activity 카드를 이미 보낸 matchId.
-	 * 세트 종료 편승 경로와 늦은 스코어 복구 경로가 같은 매치에 두 번 쏘지 않게 한다.
-	 * ponytail: {@link #naverFinalizedMatchIds} 와 같은 이유로 프로세스 생애 동안 누적된다 — 하루 수십 건이라 무해.
-	 */
-	private final java.util.Set<String> matchEndCardPushedMatchIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+	// 매치 종료 카드 발송 여부는 LiveActivityPushService 가 공유 상태로 관리한다
+	// (matchEndPushed/claimMatchEndPush) — 스윕까지 발송자가 셋이라 여기 두면 스윕 발송이 안 보인다.
 
 	@org.springframework.beans.factory.annotation.Value("${lolesports.live.max-consecutive-failures:6}")
 	private int maxConsecutiveFailures;
@@ -523,9 +519,9 @@ public class LivePollingScheduler {
 		if (!liveActivityPushService.isEnabled()) {
 			return;
 		}
-		// 복구 경로(retryMatchEndCard)가 먼저 매치 종료를 보냈으면 여기서 setEnded 를 뒤에 쏘면 안 된다 —
-		// 매치 종료 발송이 워터마크를 지우므로(notifySetEnd) 뒤늦은 setEnded 가 통과해 카드가 되돌아간다.
-		if (matchEndCardPushedMatchIds.contains(activeGame.matchId())) {
+		// 복구 경로(retryMatchEndCard)나 스윕이 먼저 매치 종료를 보냈으면 setEnded 를 뒤에 쏘면 안 된다 —
+		// 매치 종료 발송이 워터마크를 지우므로 뒤늦은 setEnded 가 통과해 카드가 되돌아간다.
+		if (liveActivityPushService.matchEndPushed(activeGame.matchId())) {
 			return;
 		}
 		try {
@@ -541,7 +537,7 @@ public class LivePollingScheduler {
 						: match.getRedTeamCode();
 			}
 			if (matchEnded) {
-				matchEndCardPushedMatchIds.add(activeGame.matchId());
+				liveActivityPushService.claimMatchEndPush(activeGame.matchId());
 			}
 			liveActivityPushService.notifySetEnd(
 					activeGame.matchId(),
@@ -568,7 +564,7 @@ public class LivePollingScheduler {
 	private void retryMatchEndCard(ActiveLiveGame activeGame) {
 		if (!liveActivityPushService.isEnabled()
 				|| activeGame.matchId() == null
-				|| matchEndCardPushedMatchIds.contains(activeGame.matchId())) {
+				|| liveActivityPushService.matchEndPushed(activeGame.matchId())) {
 			return;
 		}
 		try {
@@ -577,8 +573,8 @@ public class LivePollingScheduler {
 					|| !isMatchEnded(match.getBestOf(), match.getBlueScore(), match.getRedScore())) {
 				return;
 			}
-			// add 로 검사와 등록을 한 번에 한다 — 세트 종료 편승 경로와 동시에 들어올 수 있다.
-			if (!matchEndCardPushedMatchIds.add(activeGame.matchId())) {
+			// claim 으로 검사와 등록을 한 번에 한다 — 세트 종료 편승 경로·스윕과 동시에 들어올 수 있다.
+			if (!liveActivityPushService.claimMatchEndPush(activeGame.matchId())) {
 				return;
 			}
 			int blue = match.getBlueScore() == null ? 0 : match.getBlueScore();
