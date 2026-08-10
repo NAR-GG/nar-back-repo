@@ -1099,7 +1099,8 @@ EOF
 				.containsExactly("token-1", "token-2", "token-3");
 ```
 
-그리고 위임 검증 테스트를 추가한다:
+그리고 위임 검증 테스트를 추가한다. 기대 맵과 `any()` 를 한 `verify` 에 섞으면 Mockito 가
+`InvalidUseOfMatchersException` 을 던지므로 캡처로 검증한다:
 
 ```java
 	@Test
@@ -1113,21 +1114,12 @@ EOF
 
 		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 14L, null, "제목", "본문");
 
-		verify(quietAwarePushSender, times(1))
-				.send(Map.of(1L, List.of("token-1"), 2L, List.of("token-2")), any());
-		verify(pushGateway, never()).send(any(), any());
-	}
-```
-
-`Map.of(...)` 와 `any()` 를 한 `verify` 안에 섞을 수 없으므로(Mockito 는 matcher 를 섞으면
-`InvalidUseOfMatchersException` 을 던진다) 아래처럼 캡처로 바꾼다:
-
-```java
 		ArgumentCaptor<Map<Long, List<String>>> byMember = ArgumentCaptor.forClass(Map.class);
 		verify(quietAwarePushSender, times(1)).send(byMember.capture(), any());
 		assertThat(byMember.getValue())
 				.containsExactlyInAnyOrderEntriesOf(Map.of(1L, List.of("token-1"), 2L, List.of("token-2")));
 		verify(pushGateway, never()).send(any(), any());
+	}
 ```
 
 import 추가: `java.util.Map`.
