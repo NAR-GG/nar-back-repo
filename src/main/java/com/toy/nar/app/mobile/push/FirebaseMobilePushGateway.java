@@ -24,7 +24,7 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 
 	private static final int MAX_MULTICAST_TOKENS = 500;
 
-	/** Android 무음 발송용 저importance 채널. 플러터가 같은 id 로 채널을 만든다. */
+	/** Android 무음 발송용 중요도 낮은 채널. 플러터가 같은 id 로 채널을 만든다. */
 	private static final String QUIET_CHANNEL_ID = "warding_quiet";
 
 	private final ObjectProvider<FirebaseMessaging> firebaseMessagingProvider;
@@ -82,9 +82,9 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 
 	/**
 	 * Android O+ 는 채널 설정이 payload 보다 우선한다 — priority 만 낮춰선 소리가 그대로 난다.
-	 * 그래서 무음은 저importance 채널을 따로 지정해야 한다. 채널은 앱이 만든다.
+	 * 그래서 무음은 중요도 낮은 채널을 따로 지정해야 한다. 채널은 앱이 만든다.
 	 */
-	private AndroidConfig androidConfig(MobilePushMessage message) {
+	AndroidConfig androidConfig(MobilePushMessage message) {
 		AndroidConfig.Builder builder = AndroidConfig.builder()
 				.setPriority(message.silent() ? AndroidConfig.Priority.NORMAL : AndroidConfig.Priority.HIGH);
 		if (message.silent()) {
@@ -96,7 +96,7 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 	}
 
 	/** iOS 무음은 서버만으로 된다 — sound 를 비우고 passive 로 보내면 배너 없이 알림함에만 남는다. */
-	private ApnsConfig apnsConfig(MobilePushMessage message) {
+	ApnsConfig apnsConfig(MobilePushMessage message) {
 		Aps.Builder aps = Aps.builder();
 		if (message.silent()) {
 			aps.putCustomData("interruption-level", "passive");
