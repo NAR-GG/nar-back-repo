@@ -27,9 +27,6 @@ public class PlayerSoloRankPushService {
 
 	private static final String PUSH_TYPE = "PLAYER_SOLO_RANK_STARTED";
 
-	/** '전체 선수 솔랭 알림'(앱에서 구독하는 FCM 토픽) — 모바일과 이름이 일치해야 한다. */
-	private static final String ALL_SOLO_RANK_TOPIC = "all_solo_rank";
-
 	private final MemberDeviceRepository deviceRepository;
 	private final PlayerSoloRankPushDeliveryRepository deliveryRepository;
 	private final MobilePushGateway pushGateway;
@@ -76,10 +73,6 @@ public class PlayerSoloRankPushService {
 	}
 
 	private void dispatch(Player player, String gameId, MobilePushMessage message) {
-
-		// 전체 선수 솔랭 알림 토픽 구독자에게 발송 (구독 여부와 무관). 게임당 1회.
-		sendToAllSoloRankTopic(player, gameId, message);
-
 		try {
 			fanOutBatched(
 					deviceRepository.findActiveDevicesBySubscribedPlayerId(player.getId()),
@@ -89,18 +82,6 @@ public class PlayerSoloRankPushService {
 		} catch (Exception e) {
 			log.warn(
 					"Failed to prepare player solo rank pushes playerId={} gameId={}",
-					player.getId(),
-					gameId,
-					e);
-		}
-	}
-
-	private void sendToAllSoloRankTopic(Player player, String gameId, MobilePushMessage message) {
-		try {
-			pushGateway.sendToTopic(ALL_SOLO_RANK_TOPIC, message);
-		} catch (Exception e) {
-			log.warn(
-					"Failed to send all-solo-rank topic push playerId={} gameId={}",
 					player.getId(),
 					gameId,
 					e);

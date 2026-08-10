@@ -1,12 +1,12 @@
 package com.toy.nar.app.mobile.push;
 
 import com.google.firebase.messaging.AndroidConfig;
+import com.google.firebase.messaging.AndroidNotification;
 import com.google.firebase.messaging.ApnsConfig;
 import com.google.firebase.messaging.Aps;
 import com.google.firebase.messaging.BatchResponse;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingException;
-import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.MulticastMessage;
 import com.google.firebase.messaging.Notification;
@@ -23,6 +23,9 @@ import java.util.List;
 public class FirebaseMobilePushGateway implements MobilePushGateway {
 
 	private static final int MAX_MULTICAST_TOKENS = 500;
+
+	/** Android 무음 발송용 저importance 채널. 플러터가 같은 id 로 채널을 만든다. */
+	private static final String QUIET_CHANNEL_ID = "warding_quiet";
 
 	private final ObjectProvider<FirebaseMessaging> firebaseMessagingProvider;
 
@@ -56,35 +59,6 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 				successCount, failureCount, List.copyOf(invalidTokens), List.copyOf(successTokens));
 	}
 
-	@Override
-	public void sendToTopic(String topic, MobilePushMessage message) {
-		FirebaseMessaging firebaseMessaging = firebaseMessagingProvider.getIfAvailable();
-		if (firebaseMessaging == null) {
-			throw new IllegalStateException("FCM 발송이 비활성화되어 있습니다.");
-		}
-		Message topicMessage = Message.builder()
-				.setNotification(Notification.builder()
-						.setTitle(message.title())
-						.setBody(message.body())
-						.build())
-				.putAllData(message.data())
-				.setAndroidConfig(AndroidConfig.builder()
-						.setPriority(AndroidConfig.Priority.HIGH)
-						.build())
-				.setApnsConfig(ApnsConfig.builder()
-						.setAps(Aps.builder()
-								.setSound("default")
-								.build())
-						.build())
-				.setTopic(topic)
-				.build();
-		try {
-			firebaseMessaging.send(topicMessage);
-		} catch (FirebaseMessagingException e) {
-			throw new IllegalStateException("FCM 토픽 발송에 실패했습니다.", e);
-		}
-	}
-
 	private BatchResponse sendBatch(
 			FirebaseMessaging firebaseMessaging,
 			List<String> tokens,
@@ -95,14 +69,8 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 						.setBody(message.body())
 						.build())
 				.putAllData(message.data())
-				.setAndroidConfig(AndroidConfig.builder()
-						.setPriority(AndroidConfig.Priority.HIGH)
-						.build())
-				.setApnsConfig(ApnsConfig.builder()
-						.setAps(Aps.builder()
-								.setSound("default")
-								.build())
-						.build())
+				.setAndroidConfig(androidConfig(message))
+				.setApnsConfig(apnsConfig(message))
 				.addAllTokens(tokens)
 				.build();
 		try {
@@ -110,6 +78,32 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 		} catch (FirebaseMessagingException e) {
 			throw new IllegalStateException("FCM 멀티캐스트 발송에 실패했습니다.", e);
 		}
+	}
+
+	/**
+	 * Android O+ 는 채널 설정이 payload 보다 우선한다 — priority 만 낮춰선 소리가 그대로 난다.
+	 * 그래서 무음은 저importance 채널을 따로 지정해야 한다. 채널은 앱이 만든다.
+	 */
+	private AndroidConfig androidConfig(MobilePushMessage message) {
+		AndroidConfig.Builder builder = AndroidConfig.builder()
+				.setPriority(message.silent() ? AndroidConfig.Priority.NORMAL : AndroidConfig.Priority.HIGH);
+		if (message.silent()) {
+			builder.setNotification(AndroidNotification.builder()
+					.setChannelId(QUIET_CHANNEL_ID)
+					.build());
+		}
+		return builder.build();
+	}
+
+	/** iOS 무음은 서버만으로 된다 — sound 를 비우고 passive 로 보내면 배너 없이 알림함에만 남는다. */
+	private ApnsConfig apnsConfig(MobilePushMessage message) {
+		Aps.Builder aps = Aps.builder();
+		if (message.silent()) {
+			aps.putCustomData("interruption-level", "passive");
+		} else {
+			aps.setSound("default");
+		}
+		return ApnsConfig.builder().setAps(aps.build()).build();
 	}
 
 	/** 여러 구독자의 토큰을 한 번에 보낼 때, 누가 받았는지 되돌리려면 성공 토큰이 필요하다. */

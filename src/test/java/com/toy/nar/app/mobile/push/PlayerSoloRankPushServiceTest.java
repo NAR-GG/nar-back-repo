@@ -19,9 +19,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,32 +64,6 @@ class PlayerSoloRankPushServiceTest {
 		verify(deliveryRepository).markSentAll(List.of(7L), 10L, "game-1");
 		verify(deliveryRepository).markFailedAll(List.of(8L), 10L, "game-1", "FCM 전송 성공 기기가 없습니다.");
 		verify(deviceRepository).deactivateByFcmTokenIn(List.of("token-2"));
-	}
-
-	@Test
-	void sendsToAllSoloRankTopicOncePerGame() {
-		Player player = player(10L, "Faker");
-		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of());
-
-		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
-
-		verify(pushGateway, times(1)).sendToTopic(eq("all_solo_rank"), any());
-	}
-
-	@Test
-	void topicSendFailureDoesNotBlockSubscriberPush() {
-		Player player = player(10L, "Faker");
-		MemberDevice device = device(1L, member(7L), "token");
-		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L)).thenReturn(List.of(device));
-		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"))).thenReturn(List.of(7L));
-		when(pushGateway.send(any(), any()))
-				.thenReturn(new MobilePushResult(1, 0, List.of(), List.of("token")));
-		doThrow(new IllegalStateException("topic down"))
-				.when(pushGateway).sendToTopic(any(), any());
-
-		assertThatCode(() -> service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1"))
-				.doesNotThrowAnyException();
-		verify(deliveryRepository).markSentAll(List.of(7L), 10L, "game-1");
 	}
 
 	@Test
