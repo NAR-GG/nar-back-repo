@@ -63,7 +63,7 @@ class QuietHoursResolverTest {
 				new MemberQuietHours(2L, true, LocalTime.of(13, 0), LocalTime.of(14, 0))));
 		QuietHoursResolver resolver = new QuietHoursResolver(memberRepository, fixedAt(2, 30));
 
-		assertThat(resolver.quietMemberIds(Set.of(1L, 2L))).containsExactly(1L);
+		assertThat(resolver.quietMemberIds(Set.of(1L, 2L))).containsExactlyInAnyOrder(1L);
 	}
 
 	@Test

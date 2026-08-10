@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -17,6 +18,9 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 public class QuietHoursResolver {
+
+	/** 잠자기 판정은 KST 기준이다. 주입된 시계의 존이 무엇이든 여기서 고정한다. */
+	private static final ZoneId KOREA = ZoneId.of("Asia/Seoul");
 
 	private final MemberRepository memberRepository;
 	private final Clock clock;
@@ -31,7 +35,7 @@ public class QuietHoursResolver {
 		if (memberIds.isEmpty()) {
 			return Set.of();
 		}
-		LocalTime now = LocalTime.now(clock);
+		LocalTime now = LocalTime.now(clock.withZone(KOREA));
 		try {
 			return memberRepository.findQuietHoursByMemberIds(memberIds).stream()
 					.filter(quiet -> isWithin(now, quiet.startTime(), quiet.endTime()))
