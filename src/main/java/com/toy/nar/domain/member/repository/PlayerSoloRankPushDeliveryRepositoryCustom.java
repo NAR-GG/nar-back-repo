@@ -22,5 +22,12 @@ public interface PlayerSoloRankPushDeliveryRepositoryCustom {
 
 	int markSentAll(Collection<Long> memberIds, Long playerId, String gameId);
 
+	/**
+	 * 알림 잠자기라 푸시를 보내지 않고 알림함에만 남긴 건을 마감한다.
+	 *
+	 * <p>재예약 대상(FAILED·stale PENDING)이 아니어야 잠자기가 끝난 뒤 뒤늦은 푸시가 안 나간다.</p>
+	 */
+	int markSkippedQuietAll(Collection<Long> memberIds, Long playerId, String gameId);
+
 	int markFailedAll(Collection<Long> memberIds, Long playerId, String gameId, String errorMessage);
 }

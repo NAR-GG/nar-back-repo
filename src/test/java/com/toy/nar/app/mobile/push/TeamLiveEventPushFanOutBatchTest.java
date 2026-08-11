@@ -76,7 +76,7 @@ class TeamLiveEventPushFanOutBatchTest {
 		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
 				.thenReturn(List.of(1L, 2L, 3L));
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(3, 0, List.of(), List.of("token-1", "token-2", "token-3")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(3, 0, List.of(), List.of("token-1", "token-2", "token-3")), List.of()));
 
 		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 10L, null, "제목", "본문");
 
@@ -101,7 +101,7 @@ class TeamLiveEventPushFanOutBatchTest {
 				.thenReturn(List.of(1L, 2L));
 		// token-2 만 성공
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(1, 1, List.of(), List.of("token-2")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 1, List.of(), List.of("token-2")), List.of()));
 
 		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 11L, null, "제목", "본문");
 
@@ -116,7 +116,7 @@ class TeamLiveEventPushFanOutBatchTest {
 		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
 				.thenReturn(List.of(2L));
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(1, 0, List.of(), List.of("token-2")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 0, List.of(), List.of("token-2")), List.of()));
 
 		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 12L, null, "제목", "본문");
 
@@ -145,7 +145,7 @@ class TeamLiveEventPushFanOutBatchTest {
 		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
 				.thenReturn(List.of(1L, 2L));
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(2, 0, List.of(), List.of("token-1", "token-2")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(2, 0, List.of(), List.of("token-1", "token-2")), List.of()));
 
 		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 14L, null, "제목", "본문");
 

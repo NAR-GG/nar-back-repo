@@ -84,7 +84,7 @@ class TeamLiveEventPushServiceBestOfTest {
 				.thenReturn(List.of(1L));
 		when(pushGateway.isAvailable()).thenReturn(true);
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(1, 0, List.of(), List.of("token-1")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 0, List.of(), List.of("token-1")), List.of()));
 	}
 
 	private LeagueMatch match(Integer bestOf, int blueScore, int redScore) {

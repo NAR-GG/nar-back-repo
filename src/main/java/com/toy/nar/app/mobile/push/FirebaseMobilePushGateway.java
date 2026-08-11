@@ -1,7 +1,6 @@
 package com.toy.nar.app.mobile.push;
 
 import com.google.firebase.messaging.AndroidConfig;
-import com.google.firebase.messaging.AndroidNotification;
 import com.google.firebase.messaging.ApnsConfig;
 import com.google.firebase.messaging.Aps;
 import com.google.firebase.messaging.BatchResponse;
@@ -23,9 +22,6 @@ import java.util.List;
 public class FirebaseMobilePushGateway implements MobilePushGateway {
 
 	private static final int MAX_MULTICAST_TOKENS = 500;
-
-	/** Android 무음 발송용 중요도 낮은 채널. 플러터가 같은 id 로 채널을 만든다. */
-	private static final String QUIET_CHANNEL_ID = "warding_quiet";
 
 	private final ObjectProvider<FirebaseMessaging> firebaseMessagingProvider;
 
@@ -69,8 +65,8 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 						.setBody(message.body())
 						.build())
 				.putAllData(message.data())
-				.setAndroidConfig(androidConfig(message))
-				.setApnsConfig(apnsConfig(message))
+				.setAndroidConfig(androidConfig())
+				.setApnsConfig(apnsConfig())
 				.addAllTokens(tokens)
 				.build();
 		try {
@@ -81,29 +77,19 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 	}
 
 	/**
-	 * Android O+ 는 채널 설정이 payload 보다 우선한다 — priority 만 낮춰선 소리가 그대로 난다.
-	 * 그래서 무음은 중요도 낮은 채널을 따로 지정해야 한다. 채널은 앱이 만든다.
+	 * 알림 잠자기는 무음 발송이 아니라 <b>발송 자체를 건너뛰는</b> 방식이라
+	 * (QuietAwarePushSender 참고) 게이트웨이는 소리 나는 발송만 만든다.
 	 */
-	AndroidConfig androidConfig(MobilePushMessage message) {
-		AndroidConfig.Builder builder = AndroidConfig.builder()
-				.setPriority(message.silent() ? AndroidConfig.Priority.NORMAL : AndroidConfig.Priority.HIGH);
-		if (message.silent()) {
-			builder.setNotification(AndroidNotification.builder()
-					.setChannelId(QUIET_CHANNEL_ID)
-					.build());
-		}
-		return builder.build();
+	AndroidConfig androidConfig() {
+		return AndroidConfig.builder()
+				.setPriority(AndroidConfig.Priority.HIGH)
+				.build();
 	}
 
-	/** iOS 무음은 서버만으로 된다 — sound 를 비우고 passive 로 보내면 배너 없이 알림함에만 남는다. */
-	ApnsConfig apnsConfig(MobilePushMessage message) {
-		Aps.Builder aps = Aps.builder();
-		if (message.silent()) {
-			aps.putCustomData("interruption-level", "passive");
-		} else {
-			aps.setSound("default");
-		}
-		return ApnsConfig.builder().setAps(aps.build()).build();
+	ApnsConfig apnsConfig() {
+		return ApnsConfig.builder()
+				.setAps(Aps.builder().setSound("default").build())
+				.build();
 	}
 
 	/** 여러 구독자의 토큰을 한 번에 보낼 때, 누가 받았는지 되돌리려면 성공 토큰이 필요하다. */

@@ -113,6 +113,26 @@ public class MemberTeamEventPushDeliveryRepositoryImpl
 	}
 
 	@Override
+	public int markSkippedQuietAll(
+			Collection<Long> memberIds,
+			String matchId,
+			int setNumber,
+			String eventType,
+			long eventOrder) {
+		int updated = 0;
+		for (List<Long> chunk : chunk(memberIds)) {
+			updated += jdbcTemplate.update(
+					"UPDATE member_team_event_push_delivery"
+							+ " SET status = 'SKIPPED_QUIET', error_message = NULL,"
+							+ "     sent_at = NULL, updated_at = NOW()"
+							+ " WHERE match_id = ? AND set_number = ? AND event_type = ? AND event_order = ?"
+							+ " AND member_id IN (" + placeholders(chunk.size()) + ")",
+					args(matchId, setNumber, eventType, eventOrder, chunk));
+		}
+		return updated;
+	}
+
+	@Override
 	public int markFailedAll(
 			Collection<Long> memberIds,
 			String matchId,
