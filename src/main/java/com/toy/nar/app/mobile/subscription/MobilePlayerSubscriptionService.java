@@ -75,7 +75,11 @@ public class MobilePlayerSubscriptionService {
 			int size) {
 		requireMember(memberId);
 		int safePage = Math.max(0, page);
-		int safeSize = Math.max(1, Math.min(size, 100));
+		// 상한 300: 구독 가능 선수(2026 LCK 출전자 ∪ 솔랭 계정 보유자)가 100명을 넘어서
+		// 기존 상한 100이면 로스터가 두 페이지로 쪼개졌다. 앱이 목록을 클라이언트에서
+		// 정렬하는데 페이지가 나뉘면 뒤늦게 도착한 선수가 정렬 결과를 흔든다.
+		// 온보딩(AuthController.ONBOARDING_PLAYER_PAGE)이 이미 200으로 같은 쿼리를 통째로 받는다.
+		int safeSize = Math.max(1, Math.min(size, 300));
 		String normalizedQuery = query == null || query.isBlank() ? null : query.trim();
 		Set<Long> subscribedPlayerIds = subscriptionRepository.findPlayerIdsByMemberId(memberId);
 		Page<PlayerRepository.LckPlayerOption> players = playerRepository.findLckPlayerOptions(
