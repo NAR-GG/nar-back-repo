@@ -33,6 +33,18 @@ public interface MemberTeamEventPushDeliveryRepositoryCustom {
 			String eventType,
 			long eventOrder);
 
+	/**
+	 * 알림 잠자기라 푸시를 보내지 않고 알림함에만 남긴 구독자를 한 번에 마감한다.
+	 *
+	 * <p>재예약 대상(FAILED·stale PENDING)이 아니어야 잠자기가 끝난 뒤 뒤늦은 푸시가 안 나간다.</p>
+	 */
+	int markSkippedQuietAll(
+			Collection<Long> memberIds,
+			String matchId,
+			int setNumber,
+			String eventType,
+			long eventOrder);
+
 	/** 발송 실패 구독자를 한 번에 FAILED 로 마감한다. */
 	int markFailedAll(
 			Collection<Long> memberIds,

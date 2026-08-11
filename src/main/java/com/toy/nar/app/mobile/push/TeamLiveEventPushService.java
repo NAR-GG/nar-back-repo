@@ -383,10 +383,10 @@ public class TeamLiveEventPushService {
 		}
 
 		List<String> allTokens = tokensByMember.values().stream().flatMap(List::stream).toList();
-		MobilePushResult result;
+		QuietAwarePushSender.Outcome outcome;
 		try {
-			// 잠자기 회원은 무음으로 갈린다. 회원별로 쪼개지 않고 2그룹 멀티캐스트.
-			result = quietAwarePushSender.send(tokensByMember, message);
+			// 잠자기 회원은 발송에서 빠지고 알림함에만 남는다. 나머지는 한 번에 멀티캐스트.
+			outcome = quietAwarePushSender.send(tokensByMember, message);
 		} catch (Exception e) {
 			// 발송 자체가 실패하면 예약한 구독자 전원을 FAILED 로 남긴다(재예약 대상이 된다).
 			markFailedAll(tokensByMember.keySet(), matchId, setNumber, eventType, eventOrder,
@@ -396,15 +396,23 @@ public class TeamLiveEventPushService {
 			return;
 		}
 
+		MobilePushResult result = outcome.result();
 		Set<String> successTokens = new HashSet<>(result.successTokens());
 		List<Long> delivered = new ArrayList<>();
 		List<Long> undelivered = new ArrayList<>();
-		tokensByMember.forEach((memberId, tokens) ->
-				(tokens.stream().anyMatch(successTokens::contains) ? delivered : undelivered).add(memberId));
+		tokensByMember.forEach((memberId, tokens) -> {
+			// 잠자기로 건너뛴 구독자는 발송 성공/실패 어느 쪽도 아니다.
+			if (outcome.isSkipped(memberId)) {
+				return;
+			}
+			(tokens.stream().anyMatch(successTokens::contains) ? delivered : undelivered).add(memberId);
+		});
 
 		markSentAll(delivered, matchId, setNumber, eventType, eventOrder);
+		markSkippedQuietAll(outcome.skippedMemberIds(), matchId, setNumber, eventType, eventOrder);
 		markFailedAll(undelivered, matchId, setNumber, eventType, eventOrder, "FCM 전송 성공 기기가 없습니다.");
-		recordFeedAll(delivered, eventType, message);
+		// 건너뛴 구독자도 알림함에는 남는다 — 앱을 열면 밤에 무슨 알림이 있었는지 보인다.
+		recordFeedAll(concat(delivered, outcome.skippedMemberIds()), eventType, message);
 
 		if (!result.invalidTokens().isEmpty()) {
 			deactivateInvalidTokens(result.invalidTokens(), matchId, eventType);
@@ -423,6 +431,29 @@ public class TeamLiveEventPushService {
 			log.warn("Failed to mark team live event pushes sent eventType={} matchId={} setNumber={} members={}",
 					eventType, matchId, setNumber, memberIds.size(), e);
 		}
+	}
+
+	private void markSkippedQuietAll(
+			List<Long> memberIds, String matchId, int setNumber, String eventType, long eventOrder) {
+		if (memberIds.isEmpty()) {
+			return;
+		}
+		try {
+			deliveryRepository.markSkippedQuietAll(memberIds, matchId, setNumber, eventType, eventOrder);
+		} catch (Exception e) {
+			log.warn("Failed to mark team live event pushes quiet-skipped eventType={} matchId={} setNumber={} members={}",
+					eventType, matchId, setNumber, memberIds.size(), e);
+		}
+	}
+
+	/** 발송 성공 구독자 + 잠자기로 건너뛴 구독자를 합친다. 둘 다 알림함에는 남는다. */
+	private static List<Long> concat(List<Long> delivered, List<Long> skipped) {
+		if (skipped.isEmpty()) {
+			return delivered;
+		}
+		List<Long> all = new ArrayList<>(delivered);
+		all.addAll(skipped);
+		return all;
 	}
 
 	private void markFailedAll(

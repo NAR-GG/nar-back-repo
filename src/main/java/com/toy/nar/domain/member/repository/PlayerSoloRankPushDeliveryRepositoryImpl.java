@@ -96,6 +96,21 @@ public class PlayerSoloRankPushDeliveryRepositoryImpl
 	}
 
 	@Override
+	public int markSkippedQuietAll(Collection<Long> memberIds, Long playerId, String gameId) {
+		int updated = 0;
+		for (List<Long> chunk : chunk(memberIds)) {
+			updated += jdbcTemplate.update(
+					"UPDATE player_solo_rank_push_delivery"
+							+ " SET status = 'SKIPPED_QUIET', error_message = NULL,"
+							+ "     sent_at = NULL, updated_at = NOW()"
+							+ " WHERE player_id = ? AND game_id = ?"
+							+ " AND member_id IN (" + placeholders(chunk.size()) + ")",
+					args(playerId, gameId, chunk));
+		}
+		return updated;
+	}
+
+	@Override
 	public int markFailedAll(
 			Collection<Long> memberIds,
 			Long playerId,

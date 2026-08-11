@@ -61,7 +61,7 @@ class PlayerSoloRankPushServiceTest {
 				.thenReturn(List.of(first, second));
 		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"))).thenReturn(List.of(7L, 8L));
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(1, 1, List.of("token-2"), List.of("token-1")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 1, List.of("token-2"), List.of("token-1")), List.of()));
 
 		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
 
@@ -80,7 +80,7 @@ class PlayerSoloRankPushServiceTest {
 				.thenReturn(List.of(first, second));
 		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"))).thenReturn(List.of(7L, 8L));
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(2, 0, List.of(), List.of("token-1", "token-2")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(2, 0, List.of(), List.of("token-1", "token-2")), List.of()));
 
 		service.notifySubscribers(player, "game-1", "아리", "ahri.png", "솔로 랭크", "https://www.op.gg/summoners/kr/Faker-KR1");
 

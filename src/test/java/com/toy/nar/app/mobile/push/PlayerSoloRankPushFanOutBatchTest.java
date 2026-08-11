@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collection;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -60,6 +61,28 @@ class PlayerSoloRankPushFanOutBatchTest {
 	}
 
 	@Test
+	@DisplayName("잠자기로 건너뛴 구독자는 알림함에만 남고 SKIPPED_QUIET 로 마감된다")
+	void 잠자기_구독자는_알림함에만_남는다() {
+		givenSubscribers(device(1L, member(7L), "token-1"), device(2L, member(8L), "token-2"));
+		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID)))
+				.thenReturn(List.of(7L, 8L));
+		// 8번 회원은 잠자기라 발송에서 빠졌다.
+		when(quietAwarePushSender.send(any(), any())).thenReturn(new QuietAwarePushSender.Outcome(
+				new MobilePushResult(1, 0, List.of(), List.of("token-1")), List.of(8L)));
+
+		notifyGame();
+
+		verify(deliveryRepository).markSentAll(List.of(7L), PLAYER_ID, GAME_ID);
+		verify(deliveryRepository).markSkippedQuietAll(List.of(8L), PLAYER_ID, GAME_ID);
+		// FAILED 로 남으면 재예약돼서 잠자기가 끝난 뒤 뒤늦은 푸시가 나간다.
+		verify(deliveryRepository, never()).markFailedAll(any(), any(), any(), any());
+		// 알림함에는 발송 성공 회원과 건너뛴 회원이 모두 남아야 한다.
+		ArgumentCaptor<Collection<Long>> feed = ArgumentCaptor.forClass(Collection.class);
+		verify(notificationService).recordAll(feed.capture(), any(), anyString(), any(), any());
+		assertThat(feed.getValue()).containsExactlyInAnyOrder(7L, 8L);
+	}
+
+	@Test
 	@DisplayName("구독자 3명이어도 발송 1회·예약 1회·마감 1회로 끝낸다")
 	void 구독자_수와_무관하게_호출_횟수가_상수다() {
 		givenSubscribers(device(1L, member(7L), "token-1"),
@@ -68,7 +91,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID)))
 				.thenReturn(List.of(7L, 8L, 9L));
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(3, 0, List.of(), List.of("token-1", "token-2", "token-3")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(3, 0, List.of(), List.of("token-1", "token-2", "token-3")), List.of()));
 
 		notifyGame();
 
@@ -90,7 +113,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(7L, 8L));
 		// token-2 만 성공
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(1, 1, List.of(), List.of("token-2")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 1, List.of(), List.of("token-2")), List.of()));
 
 		notifyGame();
 
@@ -108,7 +131,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 		givenSubscribers(device(1L, member(7L), "token-1"), device(2L, member(8L), "token-2"));
 		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(8L));
 		when(quietAwarePushSender.send(any(), any()))
-				.thenReturn(new MobilePushResult(1, 0, List.of(), List.of("token-2")));
+				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 0, List.of(), List.of("token-2")), List.of()));
 
 		notifyGame();
 
