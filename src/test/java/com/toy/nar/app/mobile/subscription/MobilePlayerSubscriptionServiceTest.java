@@ -98,6 +98,24 @@ class MobilePlayerSubscriptionServiceTest {
 	}
 
 	@Test
+	@DisplayName("size 상한은 300 — 로스터 100명 초과분이 두 페이지로 쪼개지지 않는다")
+	void allowsPageSizeAboveHundred() {
+		Member member = member(7L);
+		PageRequest capped = PageRequest.of(0, 300);
+		PlayerRepository.LckPlayerOption faker = option(10L, "Faker", 1L, "T1", "T1");
+
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(subscriptionRepository.findPlayerIdsByMemberId(7L)).thenReturn(Set.of());
+		when(playerRepository.findLckPlayerOptions("LCK", 2026, null, null, capped))
+				.thenReturn(new PageImpl<>(List.of(faker), capped, 1));
+
+		PlayerSubscriptionPageResponse response = service.getAvailablePlayers(7L, null, null, 0, 500);
+
+		assertThat(response.size()).isEqualTo(300);
+		assertThat(response.totalPages()).isEqualTo(1);
+	}
+
+	@Test
 	void subscribesLckPlayerAndReturnsExistingSubscriptionIdempotently() {
 		Member member = member(7L);
 		Player faker = player(10L, "Faker");
