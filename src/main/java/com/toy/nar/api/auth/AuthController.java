@@ -50,7 +50,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -68,6 +70,9 @@ import static org.springframework.http.HttpStatus.*;
 public class AuthController {
 
     private static final int DEFAULT_ONBOARDING_YEAR = 2026;
+
+    /** 리프레시 회전 grace — 구 토큰이 이 시간만큼 더 살아 동시 리프레시의 늦은 쪽도 성공한다. */
+    private static final Duration ROTATION_GRACE = Duration.ofSeconds(60);
 
     /** 온보딩 선수 목록은 페이징 없이 전체를 쓴다. LCK 로스터는 한 시즌 100명 미만이라 상한 200이면 충분하다. */
     private static final org.springframework.data.domain.PageRequest ONBOARDING_PLAYER_PAGE =
@@ -262,7 +267,8 @@ public class AuthController {
                 .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "유효하지 않은 리프레시 토큰"));
 
         if (stored.isExpired()) {
-            refreshTokenRepository.delete(stored);
+            // 벌크 삭제 — 엔티티 삭제는 같은 만료 토큰의 동시 요청에서 row count 0 500 을 낸다.
+            refreshTokenRepository.deleteByToken(refreshToken);
             throw new ResponseStatusException(UNAUTHORIZED, "만료된 리프레시 토큰");
         }
 
@@ -270,9 +276,14 @@ public class AuthController {
         String newAccessToken = jwtTokenProvider.createAccessToken(member.getId(), member.isOnboarded(), member.getRole().name());
         String newRefreshToken = jwtTokenProvider.createRefreshToken(member.getId());
 
-        // 벌크 삭제 — 동시 리프레시의 늦은 쪽이 이미 지워진 행을 만나도(0건 삭제) 예외 없이
-        // 자기 토큰을 커밋한다. 두 클라이언트 모두 유효한 토큰을 받는다.
-        refreshTokenRepository.deleteByToken(refreshToken);
+        // 회전 grace — 구 토큰을 즉시 지우면 동시 리프레시의 늦은 쪽이 findByToken 에서 401 을
+        // 받아 클라이언트가 강제 로그아웃된다(실측 2026-08-11 20:17: 매치 종료 푸시 유입으로
+        // 커넥션 풀 대기가 3~5.7초로 벌어지자 레이스가 실제 발생, 로그아웃 2건). 즉시 삭제 대신
+        // 만료를 짧게 단축해 그 사이 늦은 쪽도 자기 토큰을 발급받게 한다. 재사용 창이 grace 만큼
+        // 생기지만 도난 토큰은 어차피 14일 유효했으므로 순손실이 아니다.
+        refreshTokenRepository.shortenExpiryByToken(refreshToken, LocalDateTime.now().plus(ROTATION_GRACE));
+        // grace 가 남기는 짧은 수명 행이 쌓이지 않게 이 회원의 만료분을 함께 청소한다.
+        refreshTokenRepository.deleteExpiredByMemberId(member.getId(), LocalDateTime.now());
         refreshTokenRepository.save(RefreshToken.builder()
                 .member(member)
                 .token(newRefreshToken)
