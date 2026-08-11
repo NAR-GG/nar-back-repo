@@ -80,7 +80,7 @@ class SocialLoginServiceTest {
 		assertThat(tokens.isOnboarded()).isFalse();
 
 		verify(memberRepository, never()).save(any());
-		verify(refreshTokenRepository).deleteByMemberId(7L);
+		verify(refreshTokenRepository, never()).deleteByMemberId(7L);
 		verify(refreshTokenRepository).save(any(RefreshToken.class));
 	}
 
@@ -116,7 +116,7 @@ class SocialLoginServiceTest {
 		assertThat(socialCaptor.getValue().getProvider()).isEqualTo(OAuthProvider.KAKAO);
 		assertThat(socialCaptor.getValue().getProviderId()).isEqualTo("67890");
 		assertThat(socialCaptor.getValue().getMember().getEmail()).isEqualTo("new-user@example.com");
-		verify(refreshTokenRepository).deleteByMemberId(11L);
+		verify(refreshTokenRepository, never()).deleteByMemberId(11L);
 	}
 
 	@Test
