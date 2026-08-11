@@ -115,7 +115,11 @@ public class Player {
 		this.realName = realName;
 		this.birthDate = birthDate;
 		this.age = age;
-		this.role = role;
+		// 크롤러가 Role 필드를 못 읽어도 기존 포지션을 지우지 않는다.
+		// (V66 백필로 채운 role 이 프로필 크롤 성공 + Role 누락 시 NULL 로 되돌아가는 구멍)
+		if (role != null) {
+			this.role = role;
+		}
 		if (!gameAccountsLocked) {
 			this.gameAccounts = gameAccounts;
 		}

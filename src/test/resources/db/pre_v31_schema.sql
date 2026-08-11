@@ -6,11 +6,13 @@ CREATE TABLE teams (
     team_image_url VARCHAR(255)
 );
 
+-- role: 프로덕션에는 V12(베이스라인 이전)부터 존재. V66 포지션 백필이 참조한다.
 CREATE TABLE players (
     player_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     player_origin_id VARCHAR(255),
     player_name VARCHAR(100) NOT NULL UNIQUE,
-    image_url VARCHAR(255)
+    image_url VARCHAR(255),
+    role VARCHAR(20)
 );
 
 CREATE TABLE champions (
