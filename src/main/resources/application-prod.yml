@@ -8,6 +8,11 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
+      # 기본값 10이 매치 종료 푸시 직후 동시 유입을 못 받는다. 실측 2026-08-11 20:17
+      # (DNS vs HLE 종료): 분당 2,259 요청, 1,034건이 커넥션 대기 3~14초 — SQL 자체는
+      # 5~65ms. refresh 까지 5초씩 대기해 동시 리프레시 레이스로 강제 로그아웃 유발.
+      # DB(MySQL) max_connections=151, 역대 최대 사용 48 — 30으로 올려도 여유.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:30}
       data-source-properties:
         rewriteBatchedStatements: true
 
