@@ -22,6 +22,9 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 @RequiredArgsConstructor
 public class SocialLoginService {
 
+	/** 계정당 동시 세션(리프레시 토큰) 상한. 초과 시 가장 오래된 세션부터 밀려난다. */
+	static final int MAX_SESSIONS = 5;
+
 	private final JwtTokenProvider jwtTokenProvider;
 	private final NicknameGenerator nicknameGenerator;
 	private final MemberRepository memberRepository;
@@ -71,7 +74,15 @@ public class SocialLoginService {
 		String accessToken = jwtTokenProvider.createAccessToken(member.getId(), member.isOnboarded(), member.getRole().name());
 		String refreshTokenValue = jwtTokenProvider.createRefreshToken(member.getId());
 
-		refreshTokenRepository.deleteByMemberId(member.getId());
+		// 로그인마다 전량 삭제(deleteByMemberId)하면 같은 계정의 다른 기기·세션이 다음
+		// 리프레시에서 401 로 강제 로그아웃된다. 세션을 공존시키되 상한으로 증식만 막는다 —
+		// 만료분을 청소한 뒤 상한을 넘는 만큼 가장 오래된 것(만료 임박 순)부터 지운다.
+		refreshTokenRepository.deleteExpiredByMemberId(member.getId(), java.time.LocalDateTime.now());
+		java.util.List<RefreshToken> active =
+				refreshTokenRepository.findByMemberIdOrderByExpiresAtDesc(member.getId());
+		if (active.size() >= MAX_SESSIONS) {
+			refreshTokenRepository.deleteAllInBatch(active.subList(MAX_SESSIONS - 1, active.size()));
+		}
 		refreshTokenRepository.save(RefreshToken.builder()
 				.member(member)
 				.token(refreshTokenValue)
