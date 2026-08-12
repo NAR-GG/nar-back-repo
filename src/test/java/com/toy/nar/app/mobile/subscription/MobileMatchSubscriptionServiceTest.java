@@ -30,12 +30,16 @@ class MobileMatchSubscriptionServiceTest {
 	@Mock
 	private LeagueMatchRepository leagueMatchRepository;
 
+	@Mock
+	private com.toy.nar.app.mobile.push.LiveActivityCatchUpService liveActivityCatchUpService;
+
 	private MobileMatchSubscriptionService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new MobileMatchSubscriptionService(
-				subscriptionRepository, memberRepository, leagueMatchRepository);
+				subscriptionRepository, memberRepository, leagueMatchRepository,
+				liveActivityCatchUpService);
 	}
 
 	@Test
