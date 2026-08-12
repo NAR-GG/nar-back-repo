@@ -140,6 +140,11 @@ public class LiveActivityPushService {
 	 *
 	 * <p>{@link #startCards} 는 세트 첫 프레임 관측 때 1회만 돌기 때문에, 세트 진행 중에 구독한
 	 * 사람은 다음 세트 시작까지(마지막 세트였다면 경기 내내) 카드가 없다. 그 구멍만 메운다.</p>
+	 *
+	 * <p>발행 전에 그 회원의 이전 카드를 닫는다. 사용자가 잠금화면에서 카드를 지워도 서버는
+	 * 모르므로(앱에 해제 호출 경로가 없다) 갱신 토큰이 유령으로 남아 중복 방지 조건에 걸려
+	 * 재신청해도 카드가 다시 뜨지 않았다 — 실측 2026-08-12 DK vs KT: 카드 삭제 뒤 구독
+	 * 해제·재신청에도 발송 0건. 이전 카드가 실제로 살아있었다면 닫히므로 두 장이 되지 않는다.</p>
 	 */
 	public void startCardForMember(
 			String matchId,
@@ -152,6 +157,7 @@ public class LiveActivityPushService {
 				|| matchId == null || matchId.isBlank()) {
 			return;
 		}
+		closePreviousCard(matchId, memberId, setNumber, blueScore, redScore);
 		List<LiveActivityStartTokenRepository.StartTargetRow> targets;
 		try {
 			targets = startTokenRepository.findStartTargetsForMember(matchId, memberId);
@@ -161,6 +167,45 @@ public class LiveActivityPushService {
 			return;
 		}
 		sendStarts(matchId, setNumber, blueScore, redScore, attributes, targets);
+	}
+
+	/**
+	 * 이 회원의 이 경기 카드를 즉시 닫고 갱신 토큰을 비활성화한다. 카드가 이미 없으면
+	 * APNs 가 200 을 주고 아무 일도 일어나지 않으므로(유령 토큰) 무해하다.
+	 *
+	 * <p>발송 성공 여부와 무관하게 토큰을 정리한다 — 유령 토큰이 남아 재발행을 계속 막는 쪽이
+	 * 카드가 잠깐 두 장 보이는 것보다 나쁘다. 정리는 새 카드 대상 조회보다 먼저 끝나야 한다
+	 * (조회의 중복 방지 조건이 이 토큰을 보고 대상에서 제외한다).</p>
+	 */
+	private void closePreviousCard(
+			String matchId, Long memberId, int setNumber, Integer blueScore, Integer redScore) {
+		List<String> previousTokens;
+		try {
+			previousTokens = tokenRepository.findActivePushTokensByMemberIdAndMatchId(memberId, matchId);
+		} catch (Exception e) {
+			log.warn("이전 카드 토큰 조회 실패 matchId={} memberId={}: {}", matchId, memberId, e.getMessage());
+			return;
+		}
+		if (previousTokens.isEmpty()) {
+			return;
+		}
+		Map<String, Object> state = contentState(PHASE_PLAYING, setNumber, blueScore, redScore, "", null);
+		for (String pushToken : previousTokens) {
+			try {
+				// dismissal-date 를 지금으로 둬 카드가 바로 사라지게 한다. 새 카드가 곧 뜨므로
+				// 매치 종료(30분 유지)와 달리 남겨둘 이유가 없다.
+				apnsClient.sendEndAsync(pushToken, state, Duration.ZERO).join();
+			} catch (Exception e) {
+				log.warn("이전 카드 닫기 실패 matchId={} memberId={}: {}", matchId, memberId, e.getMessage());
+			}
+		}
+		try {
+			tokenRepository.deactivateByPushTokenIn(previousTokens);
+		} catch (Exception e) {
+			log.warn("이전 카드 토큰 비활성화 실패 matchId={} memberId={}: {}", matchId, memberId, e.getMessage());
+		}
+		log.info("[live-activity] 재발행 위해 이전 카드 닫음 matchId={} memberId={} 토큰={}건",
+				matchId, memberId, previousTokens.size());
 	}
 
 	/** 대상 산정만 다르고 발송·죽은 토큰 정리는 같다. */
