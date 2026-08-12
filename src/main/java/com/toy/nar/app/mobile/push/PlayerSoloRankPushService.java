@@ -135,6 +135,17 @@ public class PlayerSoloRankPushService {
 			return;
 		}
 
+		// 알림함(마이구독 피드)은 발송 '전에' 남긴다. 예전엔 멀티캐스트와 마감 뒤에 기록해서,
+		// 푸시를 받고 바로 마이구독을 열면 아직 행이 없었다 — 2026-08-11 프로덕션 실측
+		// (Zeus 구독 1,440명): 예약 00:12:23 → 발송 완료 00:12:33 → 피드 INSERT 00:12:53 로
+		// 기기 수신부터 약 29초. 그 화면은 진입·복귀 때만 다시 읽기 때문에 한 번 비면
+		// 나갔다 들어오기 전까지 계속 비어 있었다. 구독자가 많은 선수일수록 확실히 터진다.
+		//
+		// ponytail: 발송이 실패한 회원도 피드에 남는다(실측 6,181건 중 FAILED 1건). 재예약된
+		// 재시도라면 같은 알림이 두 줄 남을 수 있는데, 그 빈도가 위 지연보다 훨씬 낮아
+		// dedup 장치는 두지 않는다. 필요해지면 (member, playerId, gameId) 유니크로 막는다.
+		recordFeedAll(tokensByMember.keySet(), message);
+
 		List<String> allTokens = tokensByMember.values().stream().flatMap(List::stream).toList();
 		QuietAwarePushSender.Outcome outcome;
 		try {
@@ -166,10 +177,9 @@ public class PlayerSoloRankPushService {
 		});
 
 		markSentAll(delivered, player.getId(), gameId);
+		// 잠자기로 건너뛴 회원은 발송 없이 마감만 한다 — 알림함에는 위에서 이미 남겼다.
 		markSkippedQuietAll(outcome.skippedMemberIds(), player.getId(), gameId);
 		markFailedAll(undelivered, player.getId(), gameId, "FCM 전송 성공 기기가 없습니다.");
-		// 건너뛴 회원도 알림함에는 남는다 — 앱을 열면 밤에 무슨 알림이 있었는지 보인다.
-		recordFeedAll(concat(delivered, outcome.skippedMemberIds()), message);
 
 		if (!result.invalidTokens().isEmpty()) {
 			deactivateInvalidTokens(result.invalidTokens(), player.getId(), gameId);
@@ -221,16 +231,6 @@ public class PlayerSoloRankPushService {
 					memberIds.size(),
 					e);
 		}
-	}
-
-	/** 발송 성공 회원 + 잠자기로 건너뛴 회원을 합친다. 둘 다 알림함에는 남는다. */
-	private static List<Long> concat(List<Long> delivered, List<Long> skipped) {
-		if (skipped.isEmpty()) {
-			return delivered;
-		}
-		List<Long> all = new ArrayList<>(delivered);
-		all.addAll(skipped);
-		return all;
 	}
 
 	private void markFailedAll(
