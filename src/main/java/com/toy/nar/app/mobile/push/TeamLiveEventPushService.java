@@ -382,6 +382,10 @@ public class TeamLiveEventPushService {
 			return;
 		}
 
+		// 알림함(마이구독 피드)은 발송 '전에' 남긴다 — 근거는 PlayerSoloRankPushService 의
+		// 같은 지점 주석 참고(발송 뒤에 기록하면 푸시 받고 바로 마이구독을 열었을 때 비어 있다).
+		recordFeedAll(List.copyOf(tokensByMember.keySet()), eventType, message);
+
 		List<String> allTokens = tokensByMember.values().stream().flatMap(List::stream).toList();
 		QuietAwarePushSender.Outcome outcome;
 		try {
@@ -409,10 +413,9 @@ public class TeamLiveEventPushService {
 		});
 
 		markSentAll(delivered, matchId, setNumber, eventType, eventOrder);
+		// 잠자기로 건너뛴 구독자는 발송 없이 마감만 한다 — 알림함에는 위에서 이미 남겼다.
 		markSkippedQuietAll(outcome.skippedMemberIds(), matchId, setNumber, eventType, eventOrder);
 		markFailedAll(undelivered, matchId, setNumber, eventType, eventOrder, "FCM 전송 성공 기기가 없습니다.");
-		// 건너뛴 구독자도 알림함에는 남는다 — 앱을 열면 밤에 무슨 알림이 있었는지 보인다.
-		recordFeedAll(concat(delivered, outcome.skippedMemberIds()), eventType, message);
 
 		if (!result.invalidTokens().isEmpty()) {
 			deactivateInvalidTokens(result.invalidTokens(), matchId, eventType);
@@ -444,16 +447,6 @@ public class TeamLiveEventPushService {
 			log.warn("Failed to mark team live event pushes quiet-skipped eventType={} matchId={} setNumber={} members={}",
 					eventType, matchId, setNumber, memberIds.size(), e);
 		}
-	}
-
-	/** 발송 성공 구독자 + 잠자기로 건너뛴 구독자를 합친다. 둘 다 알림함에는 남는다. */
-	private static List<Long> concat(List<Long> delivered, List<Long> skipped) {
-		if (skipped.isEmpty()) {
-			return delivered;
-		}
-		List<Long> all = new ArrayList<>(delivered);
-		all.addAll(skipped);
-		return all;
 	}
 
 	private void markFailedAll(
