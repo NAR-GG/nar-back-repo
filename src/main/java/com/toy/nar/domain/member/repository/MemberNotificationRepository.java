@@ -12,7 +12,8 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-public interface MemberNotificationRepository extends JpaRepository<MemberNotification, Long> {
+public interface MemberNotificationRepository
+		extends JpaRepository<MemberNotification, Long>, MemberNotificationRepositoryCustom {
 
 	Page<MemberNotification> findByMember_IdOrderByCreatedAtDesc(Long memberId, Pageable pageable);
 

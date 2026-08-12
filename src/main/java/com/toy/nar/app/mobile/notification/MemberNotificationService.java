@@ -17,9 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 @Slf4j
 @Service
@@ -51,9 +49,12 @@ public class MemberNotificationService {
 	/**
 	 * 여러 구독자에게 같은 알림을 한 번에 기록한다.
 	 *
-	 * <p>fan-out 에서 구독자마다 {@link #record} 를 부르면 INSERT 왕복이 구독자 수만큼 난다.
-	 * saveAll 로 넘기면 {@code hibernate.jdbc.batch_size}(50) 단위로 묶이고,
-	 * prod 는 {@code rewriteBatchedStatements=true} 라 다중 VALUES 로 다시 쓰인다.</p>
+	 * <p>다중 VALUES INSERT 로 직접 넣는다({@code insertAll}). {@code saveAll} 은 이 엔티티에서
+	 * 배치가 안 된다 — id 가 {@code GenerationType.IDENTITY} 라 Hibernate 가 INSERT 배치를
+	 * 비활성화하고, 그러면 왕복이 구독자 수만큼 난다({@code hibernate.jdbc.batch_size} 무관).
+	 * 프로덕션은 앱(EC2 서울)과 DB(OCI 춘천)가 떨어져 있어 왕복당 10ms 대이고, 실측
+	 * 2026-08-11 Zeus 구독 1,440명 적재가 약 20초였다. 팬아웃이 발송 전에 피드를 남기므로
+	 * 이 시간이 그대로 푸시 지연이 된다.</p>
 	 */
 	@Transactional
 	public void recordAll(
@@ -62,16 +63,7 @@ public class MemberNotificationService {
 			String title,
 			String body,
 			Map<String, String> data) {
-		if (memberIds == null || memberIds.isEmpty() || type == null || title == null) {
-			return;
-		}
-		List<MemberNotification> notifications = memberIds.stream()
-				.filter(Objects::nonNull)
-				.distinct()
-				.map(memberId -> new MemberNotification(
-						memberRepository.getReferenceById(memberId), type, title, body, data))
-				.toList();
-		notificationRepository.saveAll(notifications);
+		notificationRepository.insertAll(memberIds, type, title, body, data);
 	}
 
 	public MemberNotificationListResponse getNotifications(
