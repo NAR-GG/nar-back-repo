@@ -132,6 +132,45 @@ public class LiveActivityPushService {
 			log.warn("push-to-start 대상 조회 실패 matchId={}: {}", matchId, e.getMessage());
 			return;
 		}
+		sendStarts(matchId, setNumber, blueScore, redScore, attributes, targets);
+	}
+
+	/**
+	 * 회원 한 명에게만 카드를 새로 띄운다 — 진행 중인 경기를 구독한 직후의 따라잡기용.
+	 *
+	 * <p>{@link #startCards} 는 세트 첫 프레임 관측 때 1회만 돌기 때문에, 세트 진행 중에 구독한
+	 * 사람은 다음 세트 시작까지(마지막 세트였다면 경기 내내) 카드가 없다. 그 구멍만 메운다.</p>
+	 */
+	public void startCardForMember(
+			String matchId,
+			Long memberId,
+			int setNumber,
+			Integer blueScore,
+			Integer redScore,
+			MatchCardAttributes attributes) {
+		if (!isEnabled() || !pushToStartEnabled || memberId == null
+				|| matchId == null || matchId.isBlank()) {
+			return;
+		}
+		List<LiveActivityStartTokenRepository.StartTargetRow> targets;
+		try {
+			targets = startTokenRepository.findStartTargetsForMember(matchId, memberId);
+		} catch (Exception e) {
+			log.warn("push-to-start 대상 조회 실패 matchId={} memberId={}: {}",
+					matchId, memberId, e.getMessage());
+			return;
+		}
+		sendStarts(matchId, setNumber, blueScore, redScore, attributes, targets);
+	}
+
+	/** 대상 산정만 다르고 발송·죽은 토큰 정리는 같다. */
+	private void sendStarts(
+			String matchId,
+			int setNumber,
+			Integer blueScore,
+			Integer redScore,
+			MatchCardAttributes attributes,
+			List<LiveActivityStartTokenRepository.StartTargetRow> targets) {
 		if (targets.isEmpty()) {
 			return;
 		}

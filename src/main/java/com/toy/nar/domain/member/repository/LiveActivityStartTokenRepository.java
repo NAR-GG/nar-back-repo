@@ -64,6 +64,32 @@ public interface LiveActivityStartTokenRepository extends JpaRepository<LiveActi
 			@Param("blueTeamId") Long blueTeamId,
 			@Param("redTeamId") Long redTeamId);
 
+	/**
+	 * 회원 한 명에게 이 경기 카드를 띄워 줄 대상(없으면 빈 목록).
+	 *
+	 * <p>{@link #findStartTargets} 와 달리 구독 조건을 다시 보지 않는다 — 호출 근거가
+	 * "이 회원이 방금 이 경기를 구독했다"는 액션 자체이고, 그 구독 행은 아직 같은 트랜잭션
+	 * 안에 있어(커밋 전) 이 쿼리로는 보이지 않을 수도 있다.</p>
+	 *
+	 * <p>이미 카드가 떠 있는 회원을 제외하는 조건은 그대로 둔다. 같은 경기 카드가 두 장 뜨는 것을
+	 * 막는 유일한 장치다.</p>
+	 */
+	@Query("""
+			SELECT t.pushToken AS pushToken, m.id AS memberId, ft.code AS favoriteTeamCode
+			FROM LiveActivityStartToken t
+			JOIN t.member m
+			LEFT JOIN m.favoriteTeam ft
+			WHERE t.active = true
+			  AND m.id = :memberId
+			  AND NOT EXISTS (
+				  SELECT a.id FROM LiveActivityToken a
+				  WHERE a.member = m AND a.matchId = :matchId AND a.active = true
+			  )
+			""")
+	List<StartTargetRow> findStartTargetsForMember(
+			@Param("matchId") String matchId,
+			@Param("memberId") Long memberId);
+
 	/** APNs 가 거절한(410 등) 토큰은 더 쓰지 않는다. */
 	@Transactional
 	@Modifying(clearAutomatically = true, flushAutomatically = true)

@@ -2,6 +2,7 @@ package com.toy.nar.app.mobile.notification;
 
 import com.toy.nar.app.mobile.notification.dto.TeamNotificationSubscriptionResponse;
 import com.toy.nar.app.mobile.notification.dto.TeamNotificationUpdateRequest;
+import com.toy.nar.app.mobile.push.LiveActivityCatchUpService;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.MemberTeamNotificationSubscription;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -30,6 +31,7 @@ public class MobileTeamNotificationService {
 	private final MemberRepository memberRepository;
 	private final TeamRepository teamRepository;
 	private final MemberTeamNotificationSubscriptionRepository subscriptionRepository;
+	private final LiveActivityCatchUpService liveActivityCatchUpService;
 
 	public List<TeamNotificationSubscriptionResponse> getSubscriptions(Long memberId) {
 		Member member = requireMember(memberId);
@@ -69,10 +71,18 @@ public class MobileTeamNotificationService {
 	public TeamNotificationSubscriptionResponse subscribe(Long memberId, Long teamId) {
 		Member member = requireMember(memberId);
 		Team team = requireLckTeam(teamId);
+		boolean[] created = { false };
 		MemberTeamNotificationSubscription subscription = subscriptionRepository
 				.findByMember_IdAndTeam_Id(memberId, teamId)
-				.orElseGet(() -> subscriptionRepository.save(
-						new MemberTeamNotificationSubscription(member, team)));
+				.orElseGet(() -> {
+					created[0] = true;
+					return subscriptionRepository.save(
+							new MemberTeamNotificationSubscription(member, team));
+				});
+		// 새로 구독한 경우에만 따라잡는다. 이미 구독 중이면 카드는 이미 받았거나 사용자가 지운 것이다.
+		if (created[0] && subscription.isSetStartEnabled()) {
+			liveActivityCatchUpService.catchUpTeam(memberId, team.getCode());
+		}
 		return toResponse(member, subscription);
 	}
 
@@ -86,10 +96,15 @@ public class MobileTeamNotificationService {
 				.findByMember_IdAndTeam_Id(memberId, teamId)
 				.orElseThrow(() -> new ResponseStatusException(
 						HttpStatus.NOT_FOUND, "팀 알림 구독을 찾을 수 없습니다."));
+		boolean turnedOn = !subscription.isSetStartEnabled() && request.setStartEnabled();
 		subscription.update(
 				request.setStartEnabled(),
 				request.setEndEnabled(),
 				request.liveEventEnabled());
+		// 껐다 켠 것도 "이제부터 보겠다"는 의사표시다. 켜는 전환에서만 따라잡아 재호출로 카드가 쌓이지 않게 한다.
+		if (turnedOn) {
+			liveActivityCatchUpService.catchUpTeam(memberId, subscription.getTeam().getCode());
+		}
 		return toResponse(member, subscription);
 	}
 
