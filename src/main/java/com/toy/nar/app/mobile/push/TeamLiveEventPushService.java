@@ -58,6 +58,7 @@ public class TeamLiveEventPushService {
 	private final com.toy.nar.app.lolesports.WorldsService worldsService;
 	private final com.toy.nar.app.lolesports.NaverEsportsScoreClient naverEsportsScoreClient;
 	private final QuietAwarePushSender quietAwarePushSender;
+	private final com.toy.nar.app.lolesports.LeagueMatchService leagueMatchService;
 
 	@Value("${live.notification.fcm.enabled:false}")
 	private boolean fcmNotificationEnabled;
@@ -220,12 +221,12 @@ public class TeamLiveEventPushService {
 					naverUsable = naver != null;
 					int[] fresh = freshOrNull(naver, endedSetNumber);
 					if (fresh != null) {
-						return new ResolvedMatchScore(match, fresh);
+						return new ResolvedMatchScore(match, writeBack(matchId, fresh));
 					}
 				}
 				int[] fresh = freshOrNull(worldsService.fetchMatchGameWins(matchId), endedSetNumber);
 				if (fresh != null) {
-					return new ResolvedMatchScore(match, fresh);
+					return new ResolvedMatchScore(match, writeBack(matchId, fresh));
 				}
 			}
 			log.warn("Set-end score still stale after retries. matchId={} endedSet={} dbScore={}:{}",
@@ -238,6 +239,25 @@ public class TeamLiveEventPushService {
 			log.warn("Failed to load match score for set-end push matchId={}", matchId, e);
 			return ResolvedMatchScore.EMPTY;
 		}
+	}
+
+	/**
+	 * 재조회로 얻은 신선 스코어를 DB 에 선반영하고 그 스코어를 그대로 돌려준다.
+	 *
+	 * <p>이 값이 여기서 끝나면 잠금화면 카드가 곤란해진다 — 카드는 이 푸시 직후 DB 를 그대로
+	 * 읽어(LivePollingScheduler.pushLiveActivitySetEnd) 폴링 선반영이 닿기 전 옛 스코어를
+	 * 싣는다(실측 2026-08-13 KRX vs BFX 세트2: 카드 18:29:16 에 1:0, 선반영 18:29:28 에 1:1).
+	 * 카드 라벨은 프레임 신호라 맞고 숫자만 한 세트 뒤처져 다음 세트 시작까지 남았다.</p>
+	 *
+	 * <p>선반영 실패가 푸시를 막으면 안 된다 — 문구는 이미 정확한 값을 들고 있으므로 흡수한다.</p>
+	 */
+	private int[] writeBack(String matchId, int[] fresh) {
+		try {
+			leagueMatchService.applyFreshScore(matchId, fresh);
+		} catch (Exception e) {
+			log.warn("세트 종료 신선 스코어 선반영 실패. matchId={}: {}", matchId, e.getMessage());
+		}
+		return fresh;
 	}
 
 	/** 스코어 합이 방금 끝난 세트 수 이상(=신선)일 때만 그 스코어, 아니면 null. */

@@ -66,7 +66,8 @@ class TeamLiveEventPushServiceBestOfTest {
 		service = new TeamLiveEventPushService(
 				deviceRepository, deliveryRepository, teamExternalIdentityRepository,
 				leagueMatchRepository, pushGateway, notificationService, worldsService,
-				naverEsportsScoreClient, quietAwarePushSender);
+				naverEsportsScoreClient, quietAwarePushSender,
+				org.mockito.Mockito.mock(com.toy.nar.app.lolesports.LeagueMatchService.class));
 		ReflectionTestUtils.setField(service, "fcmNotificationEnabled", true);
 		ReflectionTestUtils.setField(service, "scoreRetryAttempts", 1);
 		ReflectionTestUtils.setField(service, "scoreRetryDelayMs", 0L);

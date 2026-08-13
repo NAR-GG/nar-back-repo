@@ -64,7 +64,8 @@ class TeamLiveEventPushFanOutBatchTest {
 				notificationService,
 				mock(WorldsService.class),
 				mock(NaverEsportsScoreClient.class),
-				quietAwarePushSender);
+				quietAwarePushSender,
+				mock(com.toy.nar.app.lolesports.LeagueMatchService.class));
 		ReflectionTestUtils.setField(service, "fcmNotificationEnabled", true);
 		when(pushGateway.isAvailable()).thenReturn(true);
 	}

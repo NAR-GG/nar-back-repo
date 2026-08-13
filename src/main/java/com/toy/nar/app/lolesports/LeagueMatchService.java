@@ -190,6 +190,21 @@ public class LeagueMatchService {
 	 * state 는 건드리지 않는다 — 되돌림 클래스(#354/#355)와 무관하게 유지.
 	 * 실패해도 종료 확정 흐름을 깨면 안 되므로 흡수한다.
 	 */
+	/**
+	 * 세트 종료 푸시가 재조회로 얻은 신선 스코어를 DB 에 선반영한다.
+	 *
+	 * <p>SET_END 푸시는 스코어를 직접 재조회하지만 그 결과를 문구에만 썼다. 잠금화면 카드는 그
+	 * 직후 DB 를 읽으므로(LivePollingScheduler.pushLiveActivitySetEnd) 아직 폴링 선반영이 닿지
+	 * 않은 옛 스코어가 카드에 실렸다 — 실측 2026-08-13 KRX vs BFX 세트2: 카드 18:29:16(1:0),
+	 * 선반영 18:29:28(1:1). 여기서 먼저 써두면 같은 값을 카드도 읽는다.</p>
+	 */
+	public void applyFreshScore(String matchId, int[] score) {
+		if (matchId == null || score == null) {
+			return;
+		}
+		overlayScoreOnlyIfAhead(leagueMatchRepository.findById(matchId).orElse(null), score);
+	}
+
 	private void overlayScoreOnlyIfAhead(LeagueMatch existing, int[] naverScore) {
 		try {
 			int[] ahead = scoreOnlyOverlay(existing, naverScore);
