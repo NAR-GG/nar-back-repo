@@ -348,6 +348,53 @@ public class LeagueMatchService {
 		return !isCompleted(incoming);
 	}
 
+	/**
+	 * 진행 중 경기의 스코어·상태 후퇴를 막는다 — 각각 앞선 값으로 {@code incoming} 을 고쳐 놓는다.
+	 *
+	 * <p>{@link #isResultRegression} 은 completed 결과만 지켜서, 아직 진행 중인 경기는 30분 주기
+	 * 전체 동기화가 업스트림 stale 값으로 조건 없이 덮어썼다 — 실측 2026-08-12 DNS vs GEN:
+	 * 19:04 에 1:0 inProgress 였던 매치가 19:30 크론에 unstarted 0:0 으로 되돌아가고 19:30:33
+	 * 네이버 선반영이 스코어만 복구했다. 매시 :00/:30 마다 리스트·상세가 0:0 으로 깜빡이고
+	 * state 는 세트 사이 unstarted 로 고착했다.</p>
+	 *
+	 * <p>업스트림 gameWins 는 다음 세트 픽밴에야 뒤집혀 몇 분간 뒤처지고(네이버 오버레이가 항상
+	 * 앞선다), 세트가 끝난 뒤 스코어가 줄어들 이유는 없다. 정정은 completed 갱신이 담당한다 —
+	 * 그 경로를 막지 않으므로 네이버 wrong-high 도 최종값으로 self-heal 된다.</p>
+	 */
+	static void preserveLiveProgress(LeagueMatch existing, LeagueMatch incoming) {
+		if (isCompleted(existing) || isCompleted(incoming)) {
+			return;
+		}
+		boolean scoreBehind = scoreSum(incoming) < scoreSum(existing);
+		boolean stateBehind = stateRank(incoming) < stateRank(existing);
+		if (!scoreBehind && !stateBehind) {
+			return;
+		}
+		log.info("업스트림이 진행 중 매치를 되돌려 앞선 값을 유지한다. matchId={} 유지={}:{}({}) 수신={}:{}({})",
+				existing.getId(),
+				scoreBehind ? existing.getBlueScore() : incoming.getBlueScore(),
+				scoreBehind ? existing.getRedScore() : incoming.getRedScore(),
+				stateBehind ? existing.getState() : incoming.getState(),
+				incoming.getBlueScore(), incoming.getRedScore(), incoming.getState());
+		incoming.restoreResult(
+				stateBehind ? existing.getState() : incoming.getState(),
+				scoreBehind ? existing.getBlueScore() : incoming.getBlueScore(),
+				scoreBehind ? existing.getRedScore() : incoming.getRedScore());
+	}
+
+	/** 경기 진행 단계. 뒤로 가는 갱신을 판정하는 데만 쓴다 — 미상 상태는 최하위로 본다. */
+	private static int stateRank(LeagueMatch match) {
+		String state = match.getState();
+		if (state == null) {
+			return 0;
+		}
+		return switch (state.toLowerCase()) {
+			case "completed" -> 2;
+			case "inprogress" -> 1;
+			default -> 0;
+		};
+	}
+
 	private static int scoreSum(LeagueMatch match) {
 		int blue = match.getBlueScore() == null ? 0 : match.getBlueScore();
 		int red = match.getRedScore() == null ? 0 : match.getRedScore();
@@ -1040,6 +1087,9 @@ public class LeagueMatchService {
 							existing.getId(), existing.getBlueScore(), existing.getRedScore(), existing.getState(),
 							incoming.getBlueScore(), incoming.getRedScore(), incoming.getState());
 					incoming.restoreResult(existing.getState(), existing.getBlueScore(), existing.getRedScore());
+				} else {
+					// 진행 중 매치도 되돌림을 막는다 — 위 가드는 completed 결과만 지킨다.
+					preserveLiveProgress(existing, incoming);
 				}
 
 				if (!hasRealtimeRelevantChange(existing, incoming)) {
