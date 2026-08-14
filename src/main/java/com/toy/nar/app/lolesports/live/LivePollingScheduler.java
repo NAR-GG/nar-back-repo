@@ -90,10 +90,11 @@ public class LivePollingScheduler {
 	private final java.util.Set<String> startNotifiedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
 	/**
-	 * 세트 종료 카드로 마지막에 보낸 스코어("blue:red"). 폴링 tick 마다 같은 값을 다시 쏘지 않게 한다.
+	 * 세트 종료 카드로 마지막에 보낸 스코어 {blue, red}. 폴링 tick 마다 같은 값을 다시 쏘거나
+	 * 후퇴한 값을 쏘지 않게 한다.
 	 * ponytail: {@link #naverFinalizedMatchIds} 와 같은 이유로 프로세스 생애 동안 누적된다 — 하루 수십 건이라 무해.
 	 */
-	private final java.util.Map<String, String> lastSetEndCardScoreByGame =
+	private final java.util.Map<String, int[]> lastSetEndCardScoreByGame =
 			new java.util.concurrent.ConcurrentHashMap<>();
 
 	// 매치 종료 카드 발송 여부는 LiveActivityPushService 가 공유 상태로 관리한다
@@ -563,11 +564,23 @@ public class LivePollingScheduler {
 				return;
 			}
 
-			// 스코어가 그대로면 tick 마다 같은 카드를 다시 쏘게 되므로 변화가 있을 때만 보낸다.
-			String scoreKey = blue + ":" + red;
-			if (scoreKey.equals(lastSetEndCardScoreByGame.put(activeGame.gameId(), scoreKey))) {
-				return;
+			// 매 tick 도는 자리라 발송 조건을 좁힌다(폴링은 단일 스레드라 get→put 사이 경합이 없다).
+			int[] previous = lastSetEndCardScoreByGame.get(activeGame.gameId());
+			if (previous != null) {
+				// 같은 스코어를 다시 쏘면 APNs 왕복만 늘어난다.
+				if (previous[0] == blue && previous[1] == red) {
+					return;
+				}
+				// 후퇴는 무시한다. 세트가 끝난 뒤 스코어가 줄어들 이유가 없고, 30분 전체 sync 가
+				// 진행 중 경기를 업스트림 stale 값으로 되돌리는 구간이 있다(isResultRegression 은
+				// completed 만 지킨다). 그걸 카드에 반영하면 잠금화면 숫자가 왕복한다.
+				if (blue + red < previous[0] + previous[1]) {
+					log.info("[live-activity] 세트 종료 카드 스코어 후퇴 무시 matchId={} {}:{} -> {}:{}",
+							activeGame.matchId(), previous[0], previous[1], blue, red);
+					return;
+				}
 			}
+			lastSetEndCardScoreByGame.put(activeGame.gameId(), new int[] { blue, red });
 			log.info("[live-activity] 세트 종료 카드 matchId={} set={} score={}:{}",
 					activeGame.matchId(), setNumber, blue, red);
 			applicationTaskExecutor.execute(() -> liveActivityPushService.notifySetEnd(

@@ -784,6 +784,30 @@ class LivePollingSchedulerTest {
 	}
 
 	@Test
+	void setEndCardIgnoresScoreRegression() {
+		// 30분 전체 sync 가 진행 중 경기를 업스트림 stale 값으로 되돌리는 구간이 있다
+		// (isResultRegression 은 completed 만 지킨다). 그걸 카드에 반영하면 잠금화면 숫자가 왕복한다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		java.util.concurrent.atomic.AtomicInteger redScore = new java.util.concurrent.atomic.AtomicInteger(1);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService,
+				new LiveFrameStallTracker(180_000L), matchRepositoryWithMutableRedScore(redScore));
+		var activityPush = liveActivityPushService(scheduler);
+		when(activityPush.isEnabled()).thenReturn(true);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+
+		scheduler.pollActiveGames();   // 1:1 발송
+		redScore.set(0);               // 크론이 1:0 으로 되돌림
+		scheduler.pollActiveGames();
+
+		verify(activityPush, times(1)).notifySetEnd("match-1", 2, 1, 1, false, null);
+		verify(activityPush, never()).notifySetEnd("match-1", 2, 1, 0, false, null);
+	}
+
+	@Test
 	void matchEndCardIsNotSentTwiceWhenScoreWasAlreadyFresh() {
 		// 세트 종료 시점에 이미 스코어가 맞으면 편승 경로가 매치 종료를 보내고,
 		// 복구 경로는 같은 매치에 두 번 쏘지 않아야 한다.
