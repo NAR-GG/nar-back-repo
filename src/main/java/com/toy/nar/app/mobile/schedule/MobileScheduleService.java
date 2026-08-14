@@ -187,6 +187,15 @@ public class MobileScheduleService {
 	 * 파라미터를 따로 두지 않았다.</p>
 	 *
 	 * <p>커서 값은 (matchDate, id) 그대로라 방향을 담지 않는다. 방향은 어떤 파라미터로 보냈는지가 정한다.</p>
+	 *
+	 * <p><b>정렬 파라미터(sort)를 받지 않는 건 의도된 선택이다.</b> 앱의 정렬 3개 중 서버 조건이
+	 * 바뀌는 건 '오늘 이후'({@code from}) 하나뿐이다 — 최근순과 오래된 순은 서버에 같은 요청을 보내고
+	 * {@code ListView.reverse} 로 표시 방향만 뒤집는다(2026-08-14 앱 코드 확인). 그리고 세 정렬 모두
+	 * 오늘로 스크롤하므로 "오늘 중심"이 확정된 UX고, 정렬은 표시 선택이다. 서버 파라미터는 데이터
+	 * 범위({@code from})나 진입 지점({@code around})이 바뀔 때만 필요하다.</p>
+	 *
+	 * <p>역으로 sort=ASC 를 서버에서 지원하면 오래된 순만 시즌 첫 경기부터 받게 되어 오늘까지
+	 * 16페이지를 당겨야 한다(2026-08 시즌 ALL, size=50 기준). sort 는 문제를 만드는 쪽이다.</p>
 	 */
 	public MobileMatchPageResponse getMatchPage(
 			String league,
