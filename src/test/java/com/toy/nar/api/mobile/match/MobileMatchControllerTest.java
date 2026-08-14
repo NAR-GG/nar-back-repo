@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -64,8 +65,8 @@ class MobileMatchControllerTest {
 
 	@Test
 	void getMatchesReturnsCursorPageShape() throws Exception {
-		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20, null))
-				.thenReturn(new MobileMatchPageResponse(
+		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20, null, null, null))
+				.thenReturn(MobileMatchPageResponse.forward(
 						"LCK",
 						null,
 						List.of(new MobileScheduleListResponse.MobileMatchSummary(
@@ -81,8 +82,7 @@ class MobileMatchControllerTest {
 								List.of(),
 								3,
 								List.of(new MobileScheduleListResponse.MobileGameSummary(1, "game-1", 100L, "ENDED", null, "GEN")))),
-						"cursor-token",
-						true));
+						"cursor-token"));
 
 		mockMvc.perform(get("/api/mobile/matches").param("league", "LCK"))
 				.andExpect(status().isOk())
@@ -98,14 +98,58 @@ class MobileMatchControllerTest {
 
 	@Test
 	void getMatchesBindsFromAsLocalDate() throws Exception {
-		when(mobileScheduleService.getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9)))
-				.thenReturn(new MobileMatchPageResponse("ALL", null, List.of(), null, false));
+		when(mobileScheduleService.getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9), null, null))
+				.thenReturn(MobileMatchPageResponse.forward("ALL", null, List.of(), null));
 
 		mockMvc.perform(get("/api/mobile/matches").param("league", "ALL").param("from", "2026-08-09"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.league").value("ALL"));
 
-		verify(mobileScheduleService).getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9));
+		verify(mobileScheduleService).getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9), null, null);
+	}
+
+	@Test
+	void getMatchesBindsAroundAsLocalDateAndExposesPrevFields() throws Exception {
+		when(mobileScheduleService.getMatchPage(
+				"ALL", null, null, null, null, 50, null, LocalDate.of(2026, 8, 14), null))
+				.thenReturn(new MobileMatchPageResponse(
+						"ALL", null, List.of(), "next-token", true, "prev-token", true));
+
+		mockMvc.perform(get("/api/mobile/matches")
+						.param("league", "ALL")
+						.param("size", "50")
+						.param("around", "2026-08-14"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.prevCursor").value("prev-token"))
+				.andExpect(jsonPath("$.hasPrev").value(true))
+				.andExpect(jsonPath("$.nextCursor").value("next-token"))
+				.andExpect(jsonPath("$.hasNext").value(true));
+
+		verify(mobileScheduleService).getMatchPage(
+				"ALL", null, null, null, null, 50, null, LocalDate.of(2026, 8, 14), null);
+	}
+
+	@Test
+	void getMatchesBindsBeforeCursor() throws Exception {
+		when(mobileScheduleService.getMatchPage("ALL", null, null, null, null, 20, null, null, "prev-token"))
+				.thenReturn(new MobileMatchPageResponse("ALL", null, List.of(), null, false, null, false));
+
+		mockMvc.perform(get("/api/mobile/matches").param("league", "ALL").param("before", "prev-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.hasPrev").value(false));
+
+		verify(mobileScheduleService).getMatchPage("ALL", null, null, null, null, 20, null, null, "prev-token");
+	}
+
+	@Test
+	void getMatchesKeepsPrevFieldsFalseOnLegacyCall() throws Exception {
+		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20, null, null, null))
+				.thenReturn(MobileMatchPageResponse.forward("LCK", null, List.of(), null));
+
+		mockMvc.perform(get("/api/mobile/matches").param("league", "LCK"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.prevCursor").value(nullValue()))
+				.andExpect(jsonPath("$.hasPrev").value(false));
 	}
 
 	@Test

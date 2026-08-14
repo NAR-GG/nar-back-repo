@@ -247,6 +247,172 @@ class MobileScheduleServiceTest {
 	}
 
 	@Test
+	void getMatchPageWithoutAroundLeavesPastSideEmpty() {
+		when(leagueMatchRepository.findMobileMatchPage("LCK", null, null, null, null, PageRequest.of(0, 21)))
+				.thenReturn(List.of(match("match-1", "LCK", LocalDateTime.of(2026, 4, 1, 9, 0), "T1", "GEN", "completed")));
+
+		MobileMatchPageResponse response = service.getMatchPage("LCK", null, null, null, null, null, null);
+
+		assertThat(response.prevCursor()).isNull();
+		assertThat(response.hasPrev()).isFalse();
+	}
+
+	@Test
+	void getMatchPageAroundMergesPastAndFutureHalvesIntoAscendingOrder() {
+		// around=2026-08-14(KST 00:00) → UTC 2026-08-13T15:00 이 앵커.
+		LocalDateTime anchorUtc = LocalDateTime.of(2026, 8, 13, 15, 0);
+		// 과거쪽은 내림차순으로 받는다(오버플로 1건 포함 → hasPrev).
+		when(leagueMatchRepository.findMobileMatchPage(
+				"LCK", null, null, anchorUtc, "0", PageRequest.of(0, 3)))
+				.thenReturn(List.of(
+						match("match-13", "LCK", LocalDateTime.of(2026, 8, 12, 9, 0), "T1", "GEN", "completed"),
+						match("match-12", "LCK", LocalDateTime.of(2026, 8, 11, 9, 0), "DK", "HLE", "completed"),
+						match("match-11", "LCK", LocalDateTime.of(2026, 8, 10, 9, 0), "KT", "NS", "completed")));
+		// 미래쪽은 앵커 이후 오름차순(오버플로 1건 포함 → hasNext).
+		when(leagueMatchRepository.findMobileMatchPageAsc(
+				"LCK", null, null, anchorUtc, null, null, PageRequest.of(0, 3)))
+				.thenReturn(List.of(
+						match("match-14", "LCK", LocalDateTime.of(2026, 8, 14, 9, 0), "T1", "DK", "unstarted"),
+						match("match-15", "LCK", LocalDateTime.of(2026, 8, 15, 9, 0), "GEN", "HLE", "unstarted"),
+						match("match-16", "LCK", LocalDateTime.of(2026, 8, 16, 9, 0), "KT", "T1", "unstarted")));
+
+		MobileMatchPageResponse response = service.getMatchPage(
+				"LCK", null, null, null, null, 4, null, LocalDate.of(2026, 8, 14), null);
+
+		// size=4 → 과거 2 + 미래 2, 그리고 과거→미래 한 줄로 이어진다.
+		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
+				.containsExactly("match-12", "match-13", "match-14", "match-15");
+		assertThat(response.hasPrev()).isTrue();
+		assertThat(response.hasNext()).isTrue();
+		assertThat(decodeCursor(response.prevCursor())).isEqualTo("2026-08-11T09:00:00|match-12");
+		assertThat(decodeCursor(response.nextCursor())).isEqualTo("2026-08-15T09:00:00|match-15");
+	}
+
+	@Test
+	void getMatchPageAroundGivesOddSlotToFutureSide() {
+		LocalDateTime anchorUtc = LocalDateTime.of(2026, 8, 13, 15, 0);
+		when(leagueMatchRepository.findMobileMatchPage(
+				"LCK", null, null, anchorUtc, "0", PageRequest.of(0, 3)))
+				.thenReturn(List.of());
+		when(leagueMatchRepository.findMobileMatchPageAsc(
+				"LCK", null, null, anchorUtc, null, null, PageRequest.of(0, 4)))
+				.thenReturn(List.of());
+
+		service.getMatchPage("LCK", null, null, null, null, 5, null, LocalDate.of(2026, 8, 14), null);
+
+		// size=5 → 미래 3(+1) / 과거 2(+1). 남는 한 자리는 앞으로 볼 경기에 준다.
+		verify(leagueMatchRepository).findMobileMatchPageAsc(
+				"LCK", null, null, anchorUtc, null, null, PageRequest.of(0, 4));
+		verify(leagueMatchRepository).findMobileMatchPage(
+				"LCK", null, null, anchorUtc, "0", PageRequest.of(0, 3));
+	}
+
+	@Test
+	void getMatchPageAroundReportsNoNeighborsWhenBothSidesFit() {
+		LocalDateTime anchorUtc = LocalDateTime.of(2026, 8, 13, 15, 0);
+		when(leagueMatchRepository.findMobileMatchPage(
+				"LCK", null, null, anchorUtc, "0", PageRequest.of(0, 2)))
+				.thenReturn(List.of(match("match-13", "LCK", LocalDateTime.of(2026, 8, 12, 9, 0), "T1", "GEN", "completed")));
+		when(leagueMatchRepository.findMobileMatchPageAsc(
+				"LCK", null, null, anchorUtc, null, null, PageRequest.of(0, 2)))
+				.thenReturn(List.of(match("match-14", "LCK", LocalDateTime.of(2026, 8, 14, 9, 0), "T1", "DK", "unstarted")));
+
+		MobileMatchPageResponse response = service.getMatchPage(
+				"LCK", null, null, null, null, 2, null, LocalDate.of(2026, 8, 14), null);
+
+		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
+				.containsExactly("match-13", "match-14");
+		assertThat(response.hasPrev()).isFalse();
+		assertThat(response.prevCursor()).isNull();
+		assertThat(response.hasNext()).isFalse();
+		assertThat(response.nextCursor()).isNull();
+	}
+
+	@Test
+	void getMatchPageAroundUsesTeamFilterOnBothSides() {
+		LocalDateTime anchorUtc = LocalDateTime.of(2026, 8, 13, 15, 0);
+		when(teamRepository.findById(1L)).thenReturn(Optional.of(team(1L, "T1", "T1", "https://example.com/t1.png")));
+		when(leagueMatchRepository.findMobileTeamMatchPage(
+				"LCK", "T1", "T1", null, null, anchorUtc, "0", PageRequest.of(0, 11)))
+				.thenReturn(List.of());
+		when(leagueMatchRepository.findMobileTeamMatchPageAsc(
+				"LCK", "T1", "T1", null, null, anchorUtc, null, null, PageRequest.of(0, 11)))
+				.thenReturn(List.of());
+
+		service.getMatchPage("LCK", 1L, null, null, null, 20, null, LocalDate.of(2026, 8, 14), null);
+
+		verify(leagueMatchRepository).findMobileTeamMatchPage(
+				"LCK", "T1", "T1", null, null, anchorUtc, "0", PageRequest.of(0, 11));
+		verify(leagueMatchRepository).findMobileTeamMatchPageAsc(
+				"LCK", "T1", "T1", null, null, anchorUtc, null, null, PageRequest.of(0, 11));
+	}
+
+	@Test
+	void getMatchPageBeforeReturnsPastRowsInAscendingOrder() {
+		String before = encodeCursor("2026-08-14T09:00:00|match-14");
+		when(leagueMatchRepository.findMobileMatchPage(
+				"LCK", null, null, LocalDateTime.of(2026, 8, 14, 9, 0), "match-14", PageRequest.of(0, 3)))
+				.thenReturn(List.of(
+						match("match-13", "LCK", LocalDateTime.of(2026, 8, 12, 9, 0), "T1", "GEN", "completed"),
+						match("match-12", "LCK", LocalDateTime.of(2026, 8, 11, 9, 0), "DK", "HLE", "completed"),
+						match("match-11", "LCK", LocalDateTime.of(2026, 8, 10, 9, 0), "KT", "NS", "completed")));
+
+		MobileMatchPageResponse response = service.getMatchPage(
+				"LCK", null, null, null, null, 2, null, null, before);
+
+		// 내림차순으로 받아 뒤집어 내린다 — 호출자가 기존 목록 앞에 그대로 붙일 수 있어야 한다.
+		assertThat(response.matches()).extracting(MobileScheduleListResponse.MobileMatchSummary::matchId)
+				.containsExactly("match-12", "match-13");
+		assertThat(response.hasPrev()).isTrue();
+		assertThat(decodeCursor(response.prevCursor())).isEqualTo("2026-08-11T09:00:00|match-12");
+	}
+
+	@Test
+	void getMatchPageBeforeReportsNoMorePastWhenPageFits() {
+		String before = encodeCursor("2026-08-14T09:00:00|match-14");
+		when(leagueMatchRepository.findMobileMatchPage(
+				"LCK", null, null, LocalDateTime.of(2026, 8, 14, 9, 0), "match-14", PageRequest.of(0, 3)))
+				.thenReturn(List.of(match("match-13", "LCK", LocalDateTime.of(2026, 8, 12, 9, 0), "T1", "GEN", "completed")));
+
+		MobileMatchPageResponse response = service.getMatchPage(
+				"LCK", null, null, null, null, 2, null, null, before);
+
+		assertThat(response.matches()).hasSize(1);
+		assertThat(response.hasPrev()).isFalse();
+		assertThat(response.prevCursor()).isNull();
+	}
+
+	@Test
+	void getMatchPageRejectsMixedEntryParameters() {
+		String cursor = encodeCursor("2026-08-14T09:00:00|match-14");
+
+		assertThatThrownBy(() -> service.getMatchPage(
+				"LCK", null, null, null, cursor, 20, null, LocalDate.of(2026, 8, 14), null))
+				.isInstanceOf(CustomException.class)
+				.hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT_VALUE);
+		assertThatThrownBy(() -> service.getMatchPage(
+				"LCK", null, null, null, cursor, 20, null, null, cursor))
+				.isInstanceOf(CustomException.class)
+				.hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT_VALUE);
+		assertThatThrownBy(() -> service.getMatchPage(
+				"LCK", null, null, null, null, 20, null, LocalDate.of(2026, 8, 14), cursor))
+				.isInstanceOf(CustomException.class)
+				.hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT_VALUE);
+		verifyNoInteractions(leagueMatchRepository);
+	}
+
+	private String encodeCursor(String raw) {
+		return java.util.Base64.getUrlEncoder().withoutPadding()
+				.encodeToString(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+	}
+
+	private String decodeCursor(String cursor) {
+		return new String(
+				java.util.Base64.getUrlDecoder().decode(cursor),
+				java.nio.charset.StandardCharsets.UTF_8);
+	}
+
+	@Test
 	void getMatchPageUsesTeamFilterWhenTeamIdExists() {
 		Team t1 = team(1L, "T1", "T1", "https://example.com/t1.png");
 		when(teamRepository.findById(1L)).thenReturn(Optional.of(t1));

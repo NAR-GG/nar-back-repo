@@ -30,6 +30,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.function.Function;
 import java.util.LinkedHashMap;
@@ -59,6 +60,16 @@ public class MobileScheduleService {
 	private static final String CURSOR_DELIMITER = "|";
 	private static final int DEFAULT_PAGE_SIZE = 20;
 	private static final int MAX_PAGE_SIZE = 50;
+	/**
+	 * {@code around} 과거쪽 경계 커서의 matchId 자리.
+	 *
+	 * <p>커서 조건이 {@code matchDate < :cursorDate OR (matchDate = :cursorDate AND id < :cursorId)} 라
+	 * cursorId 가 null 이면 커서 조건 전체가 무시된다. 앵커 시각 "이전"만 뽑으려면 값이 필요하고,
+	 * 실제 matchDate 가 앵커와 같은 행은 미래쪽이 담아야 하므로 <b>어떤 matchId 보다도 작은</b> 값을 준다.
+	 * league_match.id 는 전부 18자리 숫자 문자열이고 최소값이 {@code 109466537707382618} 이라
+	 * 문자열 비교에서 {@code "0"} 보다 항상 크다(2026-08-14 프로덕션 확인).</p>
+	 */
+	private static final String PAST_BOUNDARY_MATCH_ID = "0";
 	private static final com.fasterxml.jackson.databind.ObjectMapper VOD_MAPPER =
 			new com.fasterxml.jackson.databind.ObjectMapper();
 
@@ -144,14 +155,9 @@ public class MobileScheduleService {
 	}
 
 	/**
-	 * 경기 리스트 커서 페이지.
+	 * 경기 리스트 커서 페이지 (기존 시그니처).
 	 *
-	 * <p>{@code from} 이 있으면 그 날짜(KST 00:00) 이후 경기를 오름차순(과거→미래)으로,
-	 * 없으면 기존대로 최신→과거 내림차순으로 내린다. 정렬 방향을 따로 받지 않는 건 의도된 선택이다 —
-	 * "이 날짜부터 앞으로"라는 의미에 정렬이 딸려온다.</p>
-	 *
-	 * <p>커서 값은 (matchDate, id) 그대로라 방향과 무관하다. 단, DESC 페이지의 커서를 from 과 함께
-	 * 되던지면 그 지점부터 미래로 읽는다 — 방향을 섞은 호출은 앱이 하지 않는다.</p>
+	 * <p>ponytail: {@code around}/{@code before} 없는 호출이 대부분이라 위임 오버로드로 남긴다.</p>
 	 */
 	public MobileMatchPageResponse getMatchPage(
 			String league,
@@ -161,6 +167,45 @@ public class MobileScheduleService {
 			String cursor,
 			Integer size,
 			LocalDate from) {
+		return getMatchPage(league, teamId, seasonYear, seasonSplit, cursor, size, from, null, null);
+	}
+
+	/**
+	 * 경기 리스트 커서 페이지.
+	 *
+	 * <p>진입 방식이 셋이고 서로 배타적이다.</p>
+	 * <ul>
+	 *   <li>{@code around}: 그 날짜(KST 00:00)를 기준으로 <b>과거 절반 + 미래 절반</b>을 한 번에 내린다.
+	 *       "오늘로 진입" 용도 — 앱이 시즌 첫 경기부터 오늘까지 페이지를 당기지 않아도 된다.</li>
+	 *   <li>{@code before}: 그 커서보다 <b>과거</b>를 내린다(위로 스크롤). 결과는 과거→미래 순이라
+	 *       호출자가 기존 목록 앞에 그대로 붙일 수 있다.</li>
+	 *   <li>{@code cursor}(+{@code from}): 기존 경로. {@code from} 이 있으면 오름차순, 없으면 내림차순.</li>
+	 * </ul>
+	 *
+	 * <p>{@code around} 로 시작한 뒤 미래 방향으로 더 받을 때는 {@code from=around 날짜} 를 유지한 채
+	 * {@code cursor=nextCursor} 를 보내면 같은 오름차순 축에서 이어진다 — 그래서 미래 방향 전용
+	 * 파라미터를 따로 두지 않았다.</p>
+	 *
+	 * <p>커서 값은 (matchDate, id) 그대로라 방향을 담지 않는다. 방향은 어떤 파라미터로 보냈는지가 정한다.</p>
+	 */
+	public MobileMatchPageResponse getMatchPage(
+			String league,
+			Long teamId,
+			Integer seasonYear,
+			String seasonSplit,
+			String cursor,
+			Integer size,
+			LocalDate from,
+			LocalDate around,
+			String before) {
+		boolean hasAround = around != null;
+		boolean hasBefore = before != null && !before.isBlank();
+		boolean hasCursor = cursor != null && !cursor.isBlank();
+		// 진입 방식이 섞이면 어느 방향인지 서버가 임의로 골라야 한다 — 조용히 고르지 않고 거절한다.
+		if ((hasAround && (hasBefore || hasCursor)) || (hasBefore && hasCursor)) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
 		String normalizedLeague = normalizeLeague(league);
 		String leagueParam = leagueParam(normalizedLeague);
 		TeamFilter teamFilter = resolveTeamFilter(teamId);
@@ -168,38 +213,155 @@ public class MobileScheduleService {
 		int pageSize = size == null
 				? DEFAULT_PAGE_SIZE
 				: Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+
+		if (hasAround) {
+			return matchPageAround(
+					normalizedLeague, leagueParam, teamId, teamFilter, seasonYear, normalizedSplit, pageSize, around);
+		}
+		if (hasBefore) {
+			return matchPageBefore(
+					normalizedLeague, leagueParam, teamId, teamFilter, seasonYear, normalizedSplit, pageSize, before);
+		}
+
 		MatchCursor matchCursor = decodeCursor(cursor);
-		PageRequest fetchLimit = PageRequest.of(0, pageSize + 1);
 		LocalDateTime cursorDate = matchCursor != null ? matchCursor.matchDate() : null;
 		String cursorId = matchCursor != null ? matchCursor.matchId() : null;
 		// matchDate 는 UTC 저장이라 KST 기준 그날 00:00 을 UTC 로 옮겨 비교한다.
 		LocalDateTime fromUtc = from == null ? null : toUtc(from.atStartOfDay());
 
-		List<LeagueMatch> fetched;
-		if (fromUtc == null) {
-			fetched = teamFilter == null
-					? leagueMatchRepository.findMobileMatchPage(
-							leagueParam, seasonYear, normalizedSplit, cursorDate, cursorId, fetchLimit)
-					: leagueMatchRepository.findMobileTeamMatchPage(
-							leagueParam, teamFilter.name(), teamFilter.code(), seasonYear, normalizedSplit,
-							cursorDate, cursorId, fetchLimit);
-		} else {
-			fetched = teamFilter == null
-					? leagueMatchRepository.findMobileMatchPageAsc(
-							leagueParam, seasonYear, normalizedSplit, fromUtc, cursorDate, cursorId, fetchLimit)
-					: leagueMatchRepository.findMobileTeamMatchPageAsc(
-							leagueParam, teamFilter.name(), teamFilter.code(), seasonYear, normalizedSplit,
-							fromUtc, cursorDate, cursorId, fetchLimit);
-		}
+		List<LeagueMatch> fetched = fromUtc == null
+				? fetchDesc(leagueParam, teamFilter, seasonYear, normalizedSplit, cursorDate, cursorId, pageSize + 1)
+				: fetchAsc(leagueParam, teamFilter, seasonYear, normalizedSplit, fromUtc, cursorDate, cursorId,
+						pageSize + 1);
 
 		List<LeagueMatch> page = fetched.size() > pageSize ? fetched.subList(0, pageSize) : fetched;
-		Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId = loadGames(page);
-		List<MobileScheduleListResponse.MobileMatchSummary> matches = page.stream()
-				.map(match -> toMatchSummary(match, gamesByMatchId))
-				.toList();
 		String nextCursor = fetched.size() > pageSize ? encodeCursor(page.getLast()) : null;
 
-		return new MobileMatchPageResponse(normalizedLeague, teamId, matches, nextCursor, nextCursor != null);
+		return MobileMatchPageResponse.forward(normalizedLeague, teamId, toMatchSummaries(page), nextCursor);
+	}
+
+	/**
+	 * {@code around} 진입 — 앵커 날짜(KST 00:00) 기준으로 과거 절반과 미래 절반을 각각 뽑아 이어 붙인다.
+	 *
+	 * <p>홀수는 미래쪽에 한 자리를 더 준다. 앵커가 "오늘"인 진입에서는 앞으로 볼 경기가 지난 경기보다
+	 * 중요하다.</p>
+	 *
+	 * <p>앵커 정각(00:00)에 시작하는 경기는 미래쪽에 포함된다 — 과거쪽 경계 커서의 id 가
+	 * {@link #PAST_BOUNDARY_MATCH_ID} 라 {@code matchDate = 앵커} 인 행은 과거 조건에 걸리지 않고,
+	 * 미래쪽은 {@code matchDate >= 앵커} 라 그대로 담긴다. 양쪽에 중복되거나 빠지는 행이 없다.</p>
+	 */
+	private MobileMatchPageResponse matchPageAround(
+			String normalizedLeague,
+			String leagueParam,
+			Long teamId,
+			TeamFilter teamFilter,
+			Integer seasonYear,
+			String seasonSplit,
+			int pageSize,
+			LocalDate around) {
+		LocalDateTime anchorUtc = toUtc(around.atStartOfDay());
+		int futureSize = pageSize / 2 + pageSize % 2;
+		int pastSize = pageSize - futureSize;
+
+		// 과거쪽: 앵커 이전을 내림차순으로 받아 뒤집는다(응답은 과거→미래 한 줄).
+		List<LeagueMatch> pastDesc = pastSize == 0
+				? List.of()
+				: fetchDesc(leagueParam, teamFilter, seasonYear, seasonSplit,
+						anchorUtc, PAST_BOUNDARY_MATCH_ID, pastSize + 1);
+		boolean hasPrev = pastDesc.size() > pastSize;
+		List<LeagueMatch> past = new ArrayList<>(hasPrev ? pastDesc.subList(0, pastSize) : pastDesc);
+		Collections.reverse(past);
+
+		List<LeagueMatch> futureAsc = fetchAsc(leagueParam, teamFilter, seasonYear, seasonSplit,
+				anchorUtc, null, null, futureSize + 1);
+		boolean hasNext = futureAsc.size() > futureSize;
+		List<LeagueMatch> future = hasNext ? futureAsc.subList(0, futureSize) : futureAsc;
+
+		List<LeagueMatch> page = new ArrayList<>(past);
+		page.addAll(future);
+
+		return new MobileMatchPageResponse(
+				normalizedLeague,
+				teamId,
+				toMatchSummaries(page),
+				hasNext && !page.isEmpty() ? encodeCursor(page.getLast()) : null,
+				hasNext,
+				hasPrev && !page.isEmpty() ? encodeCursor(page.getFirst()) : null,
+				hasPrev);
+	}
+
+	/**
+	 * {@code before} 진입 — 커서보다 과거를 내림차순으로 받아 뒤집어 과거→미래 순으로 내린다.
+	 *
+	 * <p>미래쪽({@code nextCursor}/{@code hasNext})은 호출자가 이미 들고 있는 구간이다. 값은 채워 주지만
+	 * 그대로 되던지면 이미 받은 페이지를 다시 받게 되므로, 위로 스크롤할 때는 {@code prevCursor} 만 쓴다.</p>
+	 */
+	private MobileMatchPageResponse matchPageBefore(
+			String normalizedLeague,
+			String leagueParam,
+			Long teamId,
+			TeamFilter teamFilter,
+			Integer seasonYear,
+			String seasonSplit,
+			int pageSize,
+			String before) {
+		MatchCursor cursor = decodeCursor(before);
+		List<LeagueMatch> fetched = fetchDesc(leagueParam, teamFilter, seasonYear, seasonSplit,
+				cursor.matchDate(), cursor.matchId(), pageSize + 1);
+		boolean hasPrev = fetched.size() > pageSize;
+		List<LeagueMatch> page = new ArrayList<>(hasPrev ? fetched.subList(0, pageSize) : fetched);
+		Collections.reverse(page);
+
+		return new MobileMatchPageResponse(
+				normalizedLeague,
+				teamId,
+				toMatchSummaries(page),
+				page.isEmpty() ? null : encodeCursor(page.getLast()),
+				!page.isEmpty(),
+				hasPrev ? encodeCursor(page.getFirst()) : null,
+				hasPrev);
+	}
+
+	private List<LeagueMatch> fetchDesc(
+			String leagueParam,
+			TeamFilter teamFilter,
+			Integer seasonYear,
+			String seasonSplit,
+			LocalDateTime cursorDate,
+			String cursorId,
+			int limit) {
+		PageRequest fetchLimit = PageRequest.of(0, limit);
+		return teamFilter == null
+				? leagueMatchRepository.findMobileMatchPage(
+						leagueParam, seasonYear, seasonSplit, cursorDate, cursorId, fetchLimit)
+				: leagueMatchRepository.findMobileTeamMatchPage(
+						leagueParam, teamFilter.name(), teamFilter.code(), seasonYear, seasonSplit,
+						cursorDate, cursorId, fetchLimit);
+	}
+
+	private List<LeagueMatch> fetchAsc(
+			String leagueParam,
+			TeamFilter teamFilter,
+			Integer seasonYear,
+			String seasonSplit,
+			LocalDateTime fromUtc,
+			LocalDateTime cursorDate,
+			String cursorId,
+			int limit) {
+		PageRequest fetchLimit = PageRequest.of(0, limit);
+		return teamFilter == null
+				? leagueMatchRepository.findMobileMatchPageAsc(
+						leagueParam, seasonYear, seasonSplit, fromUtc, cursorDate, cursorId, fetchLimit)
+				: leagueMatchRepository.findMobileTeamMatchPageAsc(
+						leagueParam, teamFilter.name(), teamFilter.code(), seasonYear, seasonSplit,
+						fromUtc, cursorDate, cursorId, fetchLimit);
+	}
+
+	private List<MobileScheduleListResponse.MobileMatchSummary> toMatchSummaries(List<LeagueMatch> page) {
+		Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId = loadGames(page);
+		return page.stream()
+				.map(match -> toMatchSummary(match, gamesByMatchId))
+				.toList();
 	}
 
 	/**
