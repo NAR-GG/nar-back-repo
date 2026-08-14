@@ -735,6 +735,55 @@ class LivePollingSchedulerTest {
 	}
 
 	@Test
+	void lateScoreRefreshesSetEndCard() {
+		// 매치가 안 끝난 세트 종료에도 늦게 온 스코어를 카드에 반영해야 한다.
+		// 지금까지는 매치 종료(retryMatchEndCard)만 복구 대상이라, 세트 종료 카드는 발송 시점
+		// 스코어로 고착해 다음 세트 시작까지 한 세트 뒤처졌다 — 실측 2026-08-14 DK vs T1 세트1:
+		// 감지 17:39:47, 스코어 확정 17:41:36. 카드는 감지 즉시 나가고 스코어를 뒤따라야 한다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		// bo5 로 둬 1:0 → 1:1 이 매치 종료 조건에 닿지 않게 한다(세트 종료만 검증).
+		java.util.concurrent.atomic.AtomicInteger redScore = new java.util.concurrent.atomic.AtomicInteger(0);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService,
+				new LiveFrameStallTracker(180_000L), matchRepositoryWithMutableRedScore(redScore));
+		var activityPush = liveActivityPushService(scheduler);
+		when(activityPush.isEnabled()).thenReturn(true);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+
+		scheduler.pollActiveGames();   // 감지 즉시 — DB 는 아직 1:0 (직전 세트 값)
+		redScore.set(1);               // 네이버 선반영으로 1:1 도착
+		scheduler.pollActiveGames();
+
+		verify(activityPush, times(1)).notifySetEnd("match-1", 2, 1, 0, false, null);
+		verify(activityPush, times(1)).notifySetEnd("match-1", 2, 1, 1, false, null);
+	}
+
+	@Test
+	void setEndCardIsNotResentWhileScoreIsUnchanged() {
+		// 폴링 tick 마다 같은 스코어를 다시 쏘면 APNs 왕복만 늘어난다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		java.util.concurrent.atomic.AtomicInteger redScore = new java.util.concurrent.atomic.AtomicInteger(0);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService,
+				new LiveFrameStallTracker(180_000L), matchRepositoryWithMutableRedScore(redScore));
+		var activityPush = liveActivityPushService(scheduler);
+		when(activityPush.isEnabled()).thenReturn(true);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("finished"));
+
+		scheduler.pollActiveGames();
+		scheduler.pollActiveGames();
+		scheduler.pollActiveGames();
+
+		verify(activityPush, times(1)).notifySetEnd("match-1", 2, 1, 0, false, null);
+	}
+
+	@Test
 	void matchEndCardIsNotSentTwiceWhenScoreWasAlreadyFresh() {
 		// 세트 종료 시점에 이미 스코어가 맞으면 편승 경로가 매치 종료를 보내고,
 		// 복구 경로는 같은 매치에 두 번 쏘지 않아야 한다.
@@ -802,6 +851,20 @@ class LivePollingSchedulerTest {
 		when(match.getBlueScore()).thenAnswer(invocation -> blueScore.get());
 		when(match.getRedScore()).thenReturn(0);
 		when(match.getBestOf()).thenReturn(3);
+		when(match.getBlueTeamCode()).thenReturn("KT");
+		when(match.getRedTeamCode()).thenReturn("HLE");
+		var repository = mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class);
+		when(repository.findById("match-1")).thenReturn(java.util.Optional.of(match));
+		return repository;
+	}
+
+	/** blue 1 고정, red 만 움직인다 — bo5 라 1:1 까지는 매치 종료에 닿지 않는다. */
+	private com.toy.nar.app.lolesports.repository.LeagueMatchRepository matchRepositoryWithMutableRedScore(
+			java.util.concurrent.atomic.AtomicInteger redScore) {
+		var match = mock(com.toy.nar.app.lolesports.repository.LeagueMatch.class);
+		when(match.getBlueScore()).thenReturn(1);
+		when(match.getRedScore()).thenAnswer(invocation -> redScore.get());
+		when(match.getBestOf()).thenReturn(5);
 		when(match.getBlueTeamCode()).thenReturn("KT");
 		when(match.getRedTeamCode()).thenReturn("HLE");
 		var repository = mock(com.toy.nar.app.lolesports.repository.LeagueMatchRepository.class);
