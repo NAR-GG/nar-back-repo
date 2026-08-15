@@ -13,20 +13,20 @@ import java.util.Optional;
 
 public interface LivePlayerRatingRepository extends JpaRepository<LivePlayerRating, Long> {
 
-	Optional<LivePlayerRating> findByMatchIdAndPlayerRefAndMember_Id(
-			String matchId,
-			String playerRef,
+	Optional<LivePlayerRating> findByLiveGameIdAndLiveParticipantIdAndMember_Id(
+			String liveGameId,
+			Integer liveParticipantId,
 			Long memberId);
 
-	List<LivePlayerRating> findByMatchIdAndMember_Id(String matchId, Long memberId);
+	List<LivePlayerRating> findByLiveGameIdAndMember_Id(String liveGameId, Long memberId);
 
 	@EntityGraph(attributePaths = "player")
 	Page<LivePlayerRating> findByMember_IdOrderByCreatedAtDesc(Long memberId, Pageable pageable);
 
 	@EntityGraph(attributePaths = {"member", "member.favoriteTeam"})
-	Page<LivePlayerRating> findByMatchIdAndPlayerRefOrderByCreatedAtDesc(
-			String matchId,
-			String playerRef,
+	Page<LivePlayerRating> findByLiveGameIdAndLiveParticipantIdOrderByCreatedAtDesc(
+			String liveGameId,
+			Integer liveParticipantId,
 			Pageable pageable);
 
 	/**
@@ -64,29 +64,29 @@ public interface LivePlayerRatingRepository extends JpaRepository<LivePlayerRati
 			Pageable pageable);
 
 	@Query("""
-			SELECT r.playerRef AS playerRef,
+			SELECT r.liveParticipantId AS participantId,
 			       AVG(r.rating) AS averageRating,
 			       COUNT(r.id) AS ratingCount
 			FROM LivePlayerRating r
-			WHERE r.matchId = :matchId
-			GROUP BY r.playerRef
+			WHERE r.liveGameId = :liveGameId
+			GROUP BY r.liveParticipantId
 			""")
-	List<PlayerRatingAggregate> aggregateByMatchId(@Param("matchId") String matchId);
+	List<PlayerRatingAggregate> aggregateByGameId(@Param("liveGameId") String liveGameId);
 
 	@Query("""
 			SELECT r.rating AS rating,
 			       COUNT(r.id) AS ratingCount
 			FROM LivePlayerRating r
-			WHERE r.matchId = :matchId
-			  AND r.playerRef = :playerRef
+			WHERE r.liveGameId = :liveGameId
+			  AND r.liveParticipantId = :liveParticipantId
 			GROUP BY r.rating
 			""")
 	List<RatingDistributionAggregate> distribution(
-			@Param("matchId") String matchId,
-			@Param("playerRef") String playerRef);
+			@Param("liveGameId") String liveGameId,
+			@Param("liveParticipantId") Integer liveParticipantId);
 
 	interface PlayerRatingAggregate {
-		String getPlayerRef();
+		Integer getParticipantId();
 		Double getAverageRating();
 		Long getRatingCount();
 	}

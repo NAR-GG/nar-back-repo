@@ -114,7 +114,7 @@ class LivePlayerRatingSearchTest {
 	}
 
 	private static LivePlayerRating rating(String matchId, String playerName, Member member, int rating, String comment) {
-		return new LivePlayerRating(matchId, matchId + "-1", 1, playerName, member, null,
+		return new LivePlayerRating(matchId, matchId + "-1", 1, member, null,
 				"blue", "MID", playerName, playerName, "Ahri", rating, comment);
 	}
 

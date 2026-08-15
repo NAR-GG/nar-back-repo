@@ -59,16 +59,15 @@ public class MobileLivePlayerRatingService {
 
 	public LivePlayerRatingListResponse getRatings(String gameId, String teamSide, Long memberId) {
 		LiveGameState state = requireState(gameId);
-		String matchId = state.matchId();
-		Map<String, LivePlayerRatingRepository.PlayerRatingAggregate> aggregates = ratingRepository
-				.aggregateByMatchId(matchId).stream()
+		Map<Integer, LivePlayerRatingRepository.PlayerRatingAggregate> aggregates = ratingRepository
+				.aggregateByGameId(gameId).stream()
 				.collect(Collectors.toMap(
-						LivePlayerRatingRepository.PlayerRatingAggregate::getPlayerRef,
+						LivePlayerRatingRepository.PlayerRatingAggregate::getParticipantId,
 						Function.identity()));
-		Map<String, Integer> myRatings = memberId == null
+		Map<Integer, Integer> myRatings = memberId == null
 				? Map.of()
-				: ratingRepository.findByMatchIdAndMember_Id(matchId, memberId).stream()
-						.collect(Collectors.toMap(LivePlayerRating::getPlayerRef, LivePlayerRating::getRating,
+				: ratingRepository.findByLiveGameIdAndMember_Id(gameId, memberId).stream()
+						.collect(Collectors.toMap(LivePlayerRating::getLiveParticipantId, LivePlayerRating::getRating,
 								(left, right) -> left));
 		Map<Integer, Player> players = resolvePlayers(state.participants());
 
@@ -76,8 +75,8 @@ public class MobileLivePlayerRatingService {
 				.filter(participant -> teamSide == null
 						|| "ALL".equalsIgnoreCase(teamSide)
 						|| teamSide.equalsIgnoreCase(participant.teamSide()))
-				.map(participant -> toSummary(participant, aggregates.get(playerRef(participant)),
-						players.get(participant.participantId()), myRatings.get(playerRef(participant))))
+				.map(participant -> toSummary(participant, aggregates.get(participant.participantId()),
+						players.get(participant.participantId()), myRatings.get(participant.participantId())))
 				.toList();
 
 		return new LivePlayerRatingListResponse(
@@ -95,19 +94,17 @@ public class MobileLivePlayerRatingService {
 			int size) {
 		LiveGameState state = requireState(gameId);
 		LiveParticipantState participant = requireParticipant(state, participantId);
-		String matchId = state.matchId();
-		String playerRef = playerRef(participant);
 		Player player = resolvePlayer(participant).orElse(null);
 		int safePage = Math.max(0, page);
 		int safeSize = Math.max(1, Math.min(size, 100));
 		Page<LivePlayerRating> ratings = ratingRepository
-				.findByMatchIdAndPlayerRefOrderByCreatedAtDesc(
-						matchId,
-						playerRef,
+				.findByLiveGameIdAndLiveParticipantIdOrderByCreatedAtDesc(
+						gameId,
+						participantId,
 						PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt")));
 		long total = ratings.getTotalElements();
 		List<LivePlayerRatingRepository.RatingDistributionAggregate> distributionValues =
-				ratingRepository.distribution(matchId, playerRef);
+				ratingRepository.distribution(gameId, participantId);
 		double average = averageFromDistribution(distributionValues);
 		Map<Integer, Long> distribution = distributionValues.stream()
 				.collect(Collectors.toMap(
@@ -115,7 +112,7 @@ public class MobileLivePlayerRatingService {
 						LivePlayerRatingRepository.RatingDistributionAggregate::getRatingCount));
 		LivePlayerRatingDetailResponse.MyRating myRating = memberId == null
 				? null
-				: ratingRepository.findByMatchIdAndPlayerRefAndMember_Id(matchId, playerRef, memberId)
+				: ratingRepository.findByLiveGameIdAndLiveParticipantIdAndMember_Id(gameId, participantId, memberId)
 						.map(this::toMyRating)
 						.orElse(null);
 
@@ -156,19 +153,16 @@ public class MobileLivePlayerRatingService {
 		// 라이브 경기 중에도 평가 허용(세트 종료 제한 해제). 평가는 라이브 상태가 존재하면 언제든 가능.
 		LiveGameState state = requireState(gameId);
 		LiveParticipantState participant = requireParticipant(state, participantId);
-		String matchId = state.matchId();
-		String playerRef = playerRef(participant);
 		Member member = memberRepository.findById(memberId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다."));
 		Player player = resolvePlayer(participant).orElse(null);
 
 		LivePlayerRating rating = ratingRepository
-				.findByMatchIdAndPlayerRefAndMember_Id(matchId, playerRef, memberId)
+				.findByLiveGameIdAndLiveParticipantIdAndMember_Id(gameId, participantId, memberId)
 				.orElseGet(() -> new LivePlayerRating(
-						matchId,
+						state.matchId(),
 						gameId,
 						participantId,
-						playerRef,
 						member,
 						player,
 						participant.teamSide(),
@@ -223,9 +217,9 @@ public class MobileLivePlayerRatingService {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
 		}
 		LiveGameState state = requireState(gameId);
-		LiveParticipantState participant = requireParticipant(state, participantId);
+		requireParticipant(state, participantId);
 		LivePlayerRating rating = ratingRepository
-				.findByMatchIdAndPlayerRefAndMember_Id(state.matchId(), playerRef(participant), memberId)
+				.findByLiveGameIdAndLiveParticipantIdAndMember_Id(gameId, participantId, memberId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "내 평가를 찾을 수 없습니다."));
 		ratingRepository.delete(rating);
 	}
@@ -274,14 +268,6 @@ public class MobileLivePlayerRatingService {
 		return Optional.empty();
 	}
 
-	private String playerRef(LiveParticipantState participant) {
-		String esportsPlayerId = participant.esportsPlayerId();
-		if (esportsPlayerId != null && !esportsPlayerId.isBlank()) {
-			return esportsPlayerId;
-		}
-		return "name:" + participant.playerName();
-	}
-
 	private LivePlayerRatingListResponse.PlayerRatingSummary toSummary(
 			LiveParticipantState participant,
 			LivePlayerRatingRepository.PlayerRatingAggregate aggregate,
@@ -302,13 +288,13 @@ public class MobileLivePlayerRatingService {
 
 	private List<LivePlayerRatingListResponse.TeamRatingSummary> buildTeamSummaries(
 			LiveGameState state,
-			Map<String, LivePlayerRatingRepository.PlayerRatingAggregate> aggregates) {
+			Map<Integer, LivePlayerRatingRepository.PlayerRatingAggregate> aggregates) {
 		Map<String, TeamAccumulator> bySide = new LinkedHashMap<>();
 		for (LiveParticipantState participant : state.participants()) {
 			TeamAccumulator accumulator = bySide.computeIfAbsent(
 					participant.teamSide(),
 					side -> new TeamAccumulator(side, teamName(state, side)));
-			LivePlayerRatingRepository.PlayerRatingAggregate aggregate = aggregates.get(playerRef(participant));
+			LivePlayerRatingRepository.PlayerRatingAggregate aggregate = aggregates.get(participant.participantId());
 			if (aggregate != null) {
 				accumulator.ratingSum += aggregate.getAverageRating() * aggregate.getRatingCount();
 				accumulator.ratingCount += aggregate.getRatingCount();
