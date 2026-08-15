@@ -74,6 +74,9 @@ public class AuthController {
     /** 리프레시 회전 grace — 구 토큰이 이 시간만큼 더 살아 동시 리프레시의 늦은 쪽도 성공한다. */
     private static final Duration ROTATION_GRACE = Duration.ofSeconds(60);
 
+    /** 잔여 수명이 이보다 길면 회전하지 않는다. 만료 14일 기준 기기당 7일에 한 번만 회전한다. */
+    private static final Duration ROTATION_SKIP_THRESHOLD = Duration.ofDays(7);
+
     /** 온보딩 선수 목록은 페이징 없이 전체를 쓴다. LCK 로스터는 한 시즌 100명 미만이라 상한 200이면 충분하다. */
     private static final org.springframework.data.domain.PageRequest ONBOARDING_PLAYER_PAGE =
             org.springframework.data.domain.PageRequest.of(0, 200);
@@ -274,6 +277,24 @@ public class AuthController {
 
         Member member = stored.getMember();
         String newAccessToken = jwtTokenProvider.createAccessToken(member.getId(), member.isOnboarded(), member.getRole().name());
+
+        // 잔여 수명이 넉넉하면 회전하지 않고 같은 리프레시 토큰을 그대로 돌려준다.
+        //
+        // 회전이 남기는 구멍은 grace 로 다 못 막는다. 앱은 재발급 200 을 받은 뒤 새 토큰을
+        // Keychain 에 쓰는데, 기기 잠금(-25308) 등으로 이 쓰기가 실패하면 앱은 구 토큰을 계속
+        // 들고 있고 서버는 이미 회전을 마친 상태가 된다. grace 60초가 지나는 순간 그 구 토큰은
+        // 401 이고, 클라이언트는 이를 '토큰 무효 확정'으로 읽어 강제 로그아웃한다.
+        //
+        // 회전을 유지할 이유도 약하다. 회전의 보안 이득은 구 토큰 재사용 탐지인데 우리는 그
+        // 탐지를 하지 않는다(오히려 grace 가 재사용을 정상 처리한다). 즉 이득은 안 챙기고
+        // 레이스 비용만 내고 있었다. 만료가 임박한 토큰만 회전시켜 갱신 경로는 남긴다.
+        //
+        // 클라이언트 호환: 앱은 응답의 refreshToken 을 그대로 저장하므로 같은 값이 와도 무해하다
+        // (구버전 포함 — 이 동작은 최초 릴리즈부터 동일하다).
+        if (stored.getExpiresAt().isAfter(LocalDateTime.now().plus(ROTATION_SKIP_THRESHOLD))) {
+            return ResponseEntity.ok(new TokenResponse(newAccessToken, refreshToken, member.isOnboarded()));
+        }
+
         String newRefreshToken = jwtTokenProvider.createRefreshToken(member.getId());
 
         // 회전 grace — 구 토큰을 즉시 지우면 동시 리프레시의 늦은 쪽이 findByToken 에서 401 을

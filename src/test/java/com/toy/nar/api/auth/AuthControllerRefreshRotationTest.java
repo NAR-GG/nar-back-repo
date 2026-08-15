@@ -69,9 +69,26 @@ class AuthControllerRefreshRotationTest {
 			null);
 
 	@Test
+	@DisplayName("잔여 수명이 넉넉하면 회전하지 않고 같은 토큰을 돌려준다 — 앱의 토큰 저장 실패가 로그아웃으로 이어지지 않게")
+	void longLivedTokenIsReturnedAsIsWithoutRotation() {
+		RefreshToken stored = storedToken("rt-fresh", LocalDateTime.now().plusDays(13));
+		when(refreshTokenRepository.findByToken("rt-fresh")).thenReturn(Optional.of(stored));
+		when(jwtTokenProvider.createAccessToken(anyLong(), any(Boolean.class), any())).thenReturn("at-new");
+
+		var response = controller.refresh("rt-fresh");
+
+		assertThat(response.getStatusCode().value()).isEqualTo(200);
+		assertThat(response.getBody().refreshToken()).isEqualTo("rt-fresh");
+		verify(jwtTokenProvider, never()).createRefreshToken(anyLong());
+		verify(refreshTokenRepository, never()).shortenExpiryByToken(any(), any());
+		verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+	}
+
+	@Test
 	@DisplayName("회전은 구 토큰을 삭제하지 않고 만료를 단축한다 — 늦은 동시 리프레시도 성공해야 한다")
 	void rotationShortensExpiryInsteadOfDelete() {
-		RefreshToken stored = storedToken("rt-old", false);
+		// 만료 임박(회전 임계값 안쪽)이라야 회전 경로를 탄다.
+		RefreshToken stored = storedToken("rt-old", LocalDateTime.now().plusDays(3));
 		when(refreshTokenRepository.findByToken("rt-old")).thenReturn(Optional.of(stored));
 		when(jwtTokenProvider.createAccessToken(anyLong(), any(Boolean.class), any())).thenReturn("at-new");
 		when(jwtTokenProvider.createRefreshToken(anyLong())).thenReturn("rt-new");
@@ -88,7 +105,7 @@ class AuthControllerRefreshRotationTest {
 	@Test
 	@DisplayName("만료된 토큰은 벌크 삭제 후 401 — 엔티티 삭제는 동시 요청에서 row count 0 500을 낸다")
 	void expiredTokenIsBulkDeletedThen401() {
-		RefreshToken stored = storedToken("rt-expired", true);
+		RefreshToken stored = storedToken("rt-expired", LocalDateTime.now().minusMinutes(1));
 		when(refreshTokenRepository.findByToken("rt-expired")).thenReturn(Optional.of(stored));
 
 		assertThatThrownBy(() -> controller.refresh("rt-expired"))
@@ -108,7 +125,7 @@ class AuthControllerRefreshRotationTest {
 				.hasFieldOrPropertyWithValue("statusCode", HttpStatus.UNAUTHORIZED);
 	}
 
-	private RefreshToken storedToken(String token, boolean expired) {
+	private RefreshToken storedToken(String token, LocalDateTime expiresAt) {
 		Member member = Member.builder()
 				.email("user@example.com")
 				.name("유저")
@@ -118,7 +135,7 @@ class AuthControllerRefreshRotationTest {
 		return RefreshToken.builder()
 				.member(member)
 				.token(token)
-				.expiresAt(expired ? LocalDateTime.now().minusMinutes(1) : LocalDateTime.now().plusDays(7))
+				.expiresAt(expiresAt)
 				.build();
 	}
 }
