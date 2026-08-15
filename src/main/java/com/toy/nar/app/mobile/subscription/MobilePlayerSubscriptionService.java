@@ -7,16 +7,18 @@ import com.toy.nar.domain.member.entity.MemberFavoritePlayer;
 import com.toy.nar.domain.member.repository.MemberFavoritePlayerRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.PlayerRoleOrder;
-import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -102,19 +104,54 @@ public class MobilePlayerSubscriptionService {
 				players.getTotalPages());
 	}
 
-	@Transactional
+	/**
+	 * 선수를 구독한다. 몇 번을 호출하든 결과가 같다.
+	 *
+	 * <p>예전엔 {@code findByMember_IdAndPlayer_Id().orElseGet(save)} 였다. 이 SELECT 는 락을
+	 * 잡지 않으므로 같은 (member, player) 요청이 동시에 들어오면 전부 "구독 없음" 으로 보고
+	 * 다 같이 INSERT 했고, 유니크 인덱스 {@code uq_member_favorite_player} 에서
+	 * duplicate(1062) 또는 deadlock(1213) 이 나 500 으로 떨어졌다
+	 * (실측 2026-08-15 10:58:19, member 5711 / player 80 이 600ms 안에 4연타 — 1213 한 번,
+	 * 1062 세 번). 500 을 받은 클라이언트가 재시도하면서 경합을 더 키우는 자기증폭 루프였다.</p>
+	 *
+	 * <p>중복(1062)은 upsert 한 문장으로 없앴다. 판정은 유니크 제약이 하고 앱은 결과만 받는다.</p>
+	 *
+	 * <p>deadlock(1213)은 문법으로는 못 없앤다. 3세션 동시 INSERT 재현에서
+	 * {@code INSERT}/{@code INSERT IGNORE}/{@code ON DUPLICATE KEY UPDATE} 가 <b>똑같이</b>
+	 * 1213 을 냈다 — 락 순환은 중복을 어떻게 처리하느냐가 아니라 InnoDB 가 유니크 인덱스에
+	 * gap 락을 잡는 방식에서 나오기 때문이다. 그래서 예방이 아니라 재시도로 받는다.
+	 * MySQL 이 에러 메시지에 직접 그렇게 답한다 — {@code try restarting transaction}.</p>
+	 *
+	 * <p>{@code NOT_SUPPORTED} 인 이유: 재시도하려면 실패한 트랜잭션이 이미 닫혀 있어야 한다.
+	 * 쓰기를 {@code insertIfAbsent} 자신의 트랜잭션에 가둬야 여기서 잡고 다시 부를 수 있다.
+	 * 이 메서드까지 트랜잭션으로 감싸면 첫 실패가 그 트랜잭션을 rollback-only 로 만들어
+	 * 재시도가 무의미해진다. 앞선 조회들은 서로 독립적인 검증이라 한 트랜잭션에 묶을 이유가 없다.</p>
+	 */
+	@Transactional(propagation = Propagation.NOT_SUPPORTED)
 	public PlayerSubscriptionResponse subscribe(Long memberId, Long playerId) {
-		Member member = requireMember(memberId);
-		Player player = playerRepository.findById(playerId)
+		requireMember(memberId);
+		playerRepository.findById(playerId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "선수를 찾을 수 없습니다."));
 		PlayerRepository.LckPlayerOption playerOption = requireLckPlayer(playerId);
 
-		subscriptionRepository.findByMember_IdAndPlayer_Id(memberId, playerId)
-				.orElseGet(() -> subscriptionRepository.save(MemberFavoritePlayer.builder()
-						.member(member)
-						.player(player)
-						.build()));
+		insertWithDeadlockRetry(memberId, playerId);
 		return PlayerSubscriptionResponse.from(playerOption, true);
+	}
+
+	/**
+	 * deadlock 은 재시도가 정답인 에러다. 희생자로 뽑힌 쪽은 롤백돼 있으므로 그냥 다시 넣으면 된다 —
+	 * 상대가 이미 커밋했으면 이번엔 중복이라 조용히 0행이고, 상대도 롤백했으면 이번엔 들어간다.
+	 *
+	 * <p>재시도는 한 번뿐이다. 두 번 연속 락 순환에 걸리는 건 이 테이블의 정상 부하가 아니라
+	 * 다른 사고이므로 삼키지 않고 올린다.</p>
+	 */
+	private void insertWithDeadlockRetry(Long memberId, Long playerId) {
+		try {
+			subscriptionRepository.insertIfAbsent(memberId, playerId, LocalDateTime.now());
+		}
+		catch (CannotAcquireLockException e) {
+			subscriptionRepository.insertIfAbsent(memberId, playerId, LocalDateTime.now());
+		}
 	}
 
 	@Transactional
