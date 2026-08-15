@@ -77,7 +77,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))"
+          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))"
         }
       ],
       "fieldConfig": {
@@ -160,7 +160,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\",uri!~\"/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
+          "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\",uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
         }
       ],
       "fieldConfig": {
@@ -195,7 +195,14 @@
             "lastNotNull"
           ]
         }
-      }
+      },
+      "links": [
+        {
+          "title": "이 구간 ERROR 로그 보기",
+          "url": "/explore?schemaVersion=1&orgId=1&panes=%7B%22log%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22expr%22%3A%22%7Bhost%3D%5C%22nar-app%5C%22%2C%20container%3D~%5C%22nar-gg-.%2A%5C%22%7D%20%7C%20detected_level%3D%5C%22error%5C%22%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 5,
@@ -270,7 +277,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
         }
       ],
       "fieldConfig": {
@@ -330,7 +337,7 @@
         {
           "refId": "B",
           "legendFormat": "웹",
-          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))"
+          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))"
         },
         {
           "refId": "C",
@@ -372,7 +379,14 @@
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "links": [
+        {
+          "title": "이 구간 로그 보기",
+          "url": "/explore?schemaVersion=1&orgId=1&panes=%7B%22log%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22expr%22%3A%22%7Bhost%3D%5C%22nar-app%5C%22%2C%20container%3D~%5C%22nar-gg-.%2A%5C%22%7D%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 11,
@@ -393,17 +407,17 @@
         {
           "refId": "A",
           "legendFormat": "p50",
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
         },
         {
           "refId": "B",
           "legendFormat": "p95",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
         },
         {
           "refId": "C",
           "legendFormat": "p99",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
         }
       ],
       "fieldConfig": {
@@ -430,7 +444,14 @@
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "links": [
+        {
+          "title": "이 구간 느린 요청 보기",
+          "url": "/explore?schemaVersion=1&orgId=1&panes=%7B%22log%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22expr%22%3A%22%7Bhost%3D%5C%22nar-app%5C%22%2C%20container%3D~%5C%22nar-gg-.%2A%5C%22%7D%20%7C%3D%20%5C%22%5BEND%5D%5C%22%20%7C%20pattern%20%5C%22%3C_%3EDuration%3A%20%3Cdur%3Ems%5C%22%20%7C%20dur%20%3E%201000%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 20,
@@ -460,7 +481,7 @@
         {
           "refId": "C",
           "legendFormat": "웹 5xx",
-          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
+          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
         }
       ],
       "fieldConfig": {
@@ -487,7 +508,14 @@
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "links": [
+        {
+          "title": "이 구간 ERROR 로그 보기",
+          "url": "/explore?schemaVersion=1&orgId=1&panes=%7B%22log%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22expr%22%3A%22%7Bhost%3D%5C%22nar-app%5C%22%2C%20container%3D~%5C%22nar-gg-.%2A%5C%22%7D%20%7C%20detected_level%3D%5C%22error%5C%22%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 21,
@@ -507,7 +535,7 @@
         {
           "refId": "A",
           "legendFormat": "{{uri}}",
-          "expr": "topk(5, histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))))"
+          "expr": "topk(5, histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))))"
         }
       ],
       "fieldConfig": {
