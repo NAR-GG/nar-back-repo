@@ -16,6 +16,21 @@ server:
     enabled: true
     min-response-size: 1KB
 
+# Prometheus 스크랩용 메트릭 노출. actuator 와 micrometer-registry-prometheus 는 이미
+# 의존성에 있었고 노출 목록만 기본값(health)이라 /actuator/prometheus 가 404 였다.
+#
+# 접근 제어는 앱이 아니라 nginx 가 한다 — SecurityConfig 는 /actuator/** 를 permitAll 로 둔다.
+# api.nar.kr 은 /actuator/ 를 404 로 막고, 9105 포트(conf.d/nar-metrics.conf)만
+# Tailscale 대역(100.64.0.0/10)에 열어 스크랩을 받는다. 메트릭에는 내부 엔드포인트 경로와
+# 커넥션 풀·스케줄러 상태가 그대로 드러나므로 공개 도메인으로 새면 안 된다.
+#
+# 앞단 nginx 가 없는 환경(예: k8s)으로 옮기면 이 전제가 깨진다. 그때는 접근 제어를 앱으로 가져와야 한다.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
