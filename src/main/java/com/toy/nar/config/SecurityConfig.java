@@ -58,6 +58,12 @@ public class SecurityConfig {
                                 "/api/mobile/me/notification-subscriptions/**",
                                 "/api/mobile/me/notifications/**",
                                 "/api/mobile/me/match-subscriptions/**",
+                                // 여기 없으면 아래 /api/** permitAll 에 걸려 서비스까지 들어간다.
+                                // 그러면 @Transactional 이 커넥션을 먼저 잡은 뒤에야 memberId null 을
+                                // 발견해 401 을 던진다 — 쿼리 한 줄 없이 풀만 점유한다. 실측
+                                // 2026-08-15 17:12 HLE vs KT 시작 때 start-token 110건이 401 이었고,
+                                // 그 중 71건이 SQL 0건 상태로 커넥션을 중앙값 849ms 씩 기다렸다.
+                                "/api/mobile/me/live-activities/**",
                                 "/api/mobile/me/quiet-hours"
                         ).authenticated()
                         .requestMatchers(

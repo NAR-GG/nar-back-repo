@@ -1,6 +1,7 @@
 package com.toy.nar.api.mobile.schedule;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toy.nar.app.mobile.schedule.MobileScheduleCacheableService;
 import com.toy.nar.app.mobile.schedule.MobileScheduleService;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleCalendarResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleFilterResponse;
@@ -24,20 +25,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class MobileScheduleControllerTest {
 
 	private MobileScheduleService mobileScheduleService;
+	private MobileScheduleCacheableService mobileScheduleCacheableService;
 	private MockMvc mockMvc;
 
 	@BeforeEach
 	void setUp() {
 		mobileScheduleService = mock(MobileScheduleService.class);
+		mobileScheduleCacheableService = mock(MobileScheduleCacheableService.class);
 		mockMvc = MockMvcBuilders
-				.standaloneSetup(new MobileScheduleController(mobileScheduleService))
+				.standaloneSetup(new MobileScheduleController(mobileScheduleService, mobileScheduleCacheableService))
 				.setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper()))
 				.build();
 	}
 
 	@Test
 	void getFiltersReturnsMobileFilterShape() throws Exception {
-		when(mobileScheduleService.getFilters("LCK")).thenReturn(new MobileScheduleFilterResponse(
+		when(mobileScheduleCacheableService.getFilters("LCK")).thenReturn(new MobileScheduleFilterResponse(
 				"LCK",
 				List.of(new MobileScheduleFilterResponse.LeagueOption("LCK", "LCK")),
 				List.of(new MobileScheduleFilterResponse.TeamOption(1L, "T1", "T1", "https://example.com/t1.png")),
@@ -56,7 +59,7 @@ class MobileScheduleControllerTest {
 
 	@Test
 	void getCalendarReturnsMobileCalendarShape() throws Exception {
-		when(mobileScheduleService.getCalendar(YearMonth.of(2026, 4), List.of("LCK"), List.of(1L)))
+		when(mobileScheduleCacheableService.getCalendar(YearMonth.of(2026, 4), List.of("LCK"), List.of(1L)))
 				.thenReturn(new MobileScheduleCalendarResponse(
 						"2026-04",
 						"LCK",
