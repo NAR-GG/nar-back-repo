@@ -1,7 +1,14 @@
 package com.toy.nar.app.mobile.schedule;
 
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,6 +97,46 @@ class MobileScheduleCacheableServiceTest {
 		// 월이 다르면 마찬가지.
 		cacheable.getCalendar(YearMonth.of(2026, 9), List.of("LCK"), null);
 		verify(delegate, times(1)).getCalendar(YearMonth.of(2026, 9), List.of("LCK"), null);
+	}
+
+	/**
+	 * 경기 시작 유입은 캐시가 채워지기 전에 몰려든다. {@code sync = true} 가 없으면 조회와 저장이
+	 * 원자적이지 않아 이 구간이 통째로 미스나고, 캐시를 붙인 의미가 사라진다.
+	 */
+	@Test
+	void concurrentMissesOnSameKeyLoadOnce() throws Exception {
+		int threads = 16;
+		CountDownLatch ready = new CountDownLatch(threads);
+		CountDownLatch go = new CountDownLatch(1);
+		AtomicInteger loads = new AtomicInteger();
+		YearMonth august = YearMonth.of(2026, 8);
+
+		when(delegate.getCalendar(august, List.of("LCK"), null)).thenAnswer(invocation -> {
+			loads.incrementAndGet();
+			Thread.sleep(50); // 실측 조립 시간(317ms)을 축소해 재현한다.
+			return calendarResponse();
+		});
+
+		ExecutorService pool = Executors.newFixedThreadPool(threads);
+		try {
+			List<Future<?>> futures = new ArrayList<>();
+			for (int i = 0; i < threads; i++) {
+				futures.add(pool.submit(() -> {
+					ready.countDown();
+					go.await();
+					return cacheable.getCalendar(august, List.of("LCK"), null);
+				}));
+			}
+			assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+			go.countDown();
+			for (Future<?> future : futures) {
+				future.get(5, TimeUnit.SECONDS);
+			}
+		} finally {
+			pool.shutdownNow();
+		}
+
+		assertThat(loads.get()).isEqualTo(1);
 	}
 
 	@Test
