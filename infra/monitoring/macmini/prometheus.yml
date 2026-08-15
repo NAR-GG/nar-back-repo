@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: nar-app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['100.88.94.95:9105']
+        labels:
+          instance: nar-app
+
+  - job_name: mysql
+    static_configs:
+      - targets: ['100.101.232.109:9104']
+        labels:
+          instance: nargg-vnic
