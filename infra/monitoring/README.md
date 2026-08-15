@@ -191,6 +191,27 @@ jvm_memory_used_bytes{area="heap"}
 hikaricp_connections_active
 ```
 
+```promql
+# 잡이 멎었나 — 마지막 성공 이후 경과 시간
+time() - nar_scheduler_last_success_epoch_seconds
+
+# 30분 주기인 MATCH_SYNC 가 한 시간 넘게 성공 못 함
+time() - nar_scheduler_last_success_epoch_seconds{job="MATCH_SYNC"} > 3600
+
+# 재시작 후 한 번도 못 돈 잡 (시리즈 자체가 없으므로 absent 로 잡는다)
+absent(nar_scheduler_last_success_epoch_seconds{job="MATCH_SYNC"})
+
+# 상류 CSV 정체 — 신규 게임 0건 연속
+nar_scheduler_zero_new_games_streak > 3
+
+# 잡별 실패율
+sum by (job) (rate(nar_scheduler_runs_total{outcome="failure"}[30m]))
+  / sum by (job) (rate(nar_scheduler_runs_total[30m]))
+
+# 잡 소요 시간 p95
+histogram_quantile(0.95, sum by (le, job) (rate(nar_scheduler_duration_seconds_bucket[30m])))
+```
+
 ```logql
 {container="nar-gg-blue"} | detected_level="error"
 
