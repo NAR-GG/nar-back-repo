@@ -183,7 +183,18 @@
                 "value": 0.02
               }
             ]
-          }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "에러 없음",
+                  "index": 0
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },
@@ -207,7 +218,7 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "커넥션 대기",
+      "title": "DB 커넥션 대기 (HikariCP pending)",
       "description": "HikariCP 에서 커넥션을 못 얻고 기다리는 스레드 수. 0 이 아니면 이미 병목이다. 과거 이 값이 쌓여 세트 종료 푸시가 6분 밀린 적이 있다.",
       "datasource": {
         "type": "prometheus",
@@ -245,7 +256,18 @@
                 "value": 5
               }
             ]
-          }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "대기 없음",
+                  "index": 0
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },
@@ -362,7 +384,8 @@
             "lineWidth": 2,
             "fillOpacity": 8,
             "showPoints": "never"
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -391,7 +414,7 @@
     {
       "id": 11,
       "type": "timeseries",
-      "title": "응답시간 분포 (p50 / p95 / p99)",
+      "title": "HTTP 응답시간 분포 (p50 / p95 / p99)",
       "description": "노이즈·actuator 제외 전체. Warding 앱이 트래픽의 90% 이상이라 사실상 앱 지연이다.",
       "datasource": {
         "type": "prometheus",
@@ -427,7 +450,8 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never"
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -491,7 +515,8 @@
             "lineWidth": 2,
             "fillOpacity": 10,
             "showPoints": "never"
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -520,7 +545,7 @@
     {
       "id": 21,
       "type": "timeseries",
-      "title": "느린 엔드포인트 TOP 5 (p95)",
+      "title": "느린 엔드포인트 TOP 5 (HTTP p95)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -545,7 +570,8 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never"
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -566,7 +592,7 @@
     {
       "id": 30,
       "type": "timeseries",
-      "title": "JVM 힙",
+      "title": "JVM 힙 사용량",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -596,7 +622,8 @@
             "lineWidth": 2,
             "fillOpacity": 8,
             "showPoints": "never"
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -613,7 +640,7 @@
     {
       "id": 31,
       "type": "timeseries",
-      "title": "HikariCP 커넥션",
+      "title": "DB 커넥션 풀 (HikariCP)",
       "description": "pending 이 0 을 벗어나면 풀이 부족하다는 뜻이다.",
       "datasource": {
         "type": "prometheus",
@@ -654,7 +681,8 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never"
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -757,5 +785,37 @@
         "enableLogDetails": true
       }
     }
-  ]
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "orange",
+        "name": "배포",
+        "target": {
+          "refId": "Anno",
+          "expr": "{container=~\"nar-gg-.*\"} |= \"Started NarApplication\""
+        },
+        "titleFormat": "배포 완료",
+        "textFormat": "{{container}}"
+      }
+    ]
+  }
 }
