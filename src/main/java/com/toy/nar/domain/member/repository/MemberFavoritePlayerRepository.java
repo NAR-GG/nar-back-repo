@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -31,6 +32,25 @@ public interface MemberFavoritePlayerRepository extends JpaRepository<MemberFavo
 			WHERE favorite.member.id = :memberId
 			""")
 	Set<Long> findPlayerIdsByMemberId(@Param("memberId") Long memberId);
+
+	/**
+	 * 구독을 추가한다. 이미 있으면 조용히 무시한다 — 중복 판정을 유니크 제약
+	 * {@code uq_member_favorite_player} 에 맡긴다.
+	 *
+	 * <p>"SELECT 로 있는지 보고 없으면 save" 는 동시 요청에서 깨진다. SELECT 는 락을 잡지 않아
+	 * 같은 (member, player) 를 노리는 트랜잭션들이 전부 "없음" 으로 보고 다 같이 INSERT 하고,
+	 * 유니크 인덱스에서 duplicate(1062) 나 deadlock(1213) 이 터졌다. 자세한 경위는
+	 * {@code MobilePlayerSubscriptionService#subscribe} 주석 참고.</p>
+	 */
+	@Modifying
+	@Query(value = """
+			INSERT IGNORE INTO member_favorite_player (member_id, player_id, created_at)
+			VALUES (:memberId, :playerId, :createdAt)
+			""", nativeQuery = true)
+	void insertIgnore(
+			@Param("memberId") Long memberId,
+			@Param("playerId") Long playerId,
+			@Param("createdAt") LocalDateTime createdAt);
 
 	// 백오피스 구독 탭: 특정 선수를 구독한 회원 목록(최근 구독순). 페이징.
 	@Query(value = """

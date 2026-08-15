@@ -7,7 +7,6 @@ import com.toy.nar.domain.member.entity.MemberFavoritePlayer;
 import com.toy.nar.domain.member.repository.MemberFavoritePlayerRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.PlayerRoleOrder;
-import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -17,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -102,18 +102,27 @@ public class MobilePlayerSubscriptionService {
 				players.getTotalPages());
 	}
 
+	/**
+	 * 선수를 구독한다. 몇 번을 호출하든 결과가 같다.
+	 *
+	 * <p>예전엔 {@code findByMember_IdAndPlayer_Id().orElseGet(save)} 였다. 이 SELECT 는 락을
+	 * 잡지 않으므로 같은 (member, player) 요청이 동시에 들어오면 전부 "구독 없음" 으로 보고
+	 * 다 같이 INSERT 했고, 유니크 인덱스 {@code uq_member_favorite_player} 에서
+	 * duplicate(1062) 또는 deadlock(1213) 이 나 500 으로 떨어졌다
+	 * (실측 2026-08-15 10:58:19, member 5711 / player 80 이 600ms 안에 4연타).
+	 * 그리고 500 을 받은 클라이언트가 재시도하면서 경합을 더 키우는 자기증폭 루프였다.</p>
+	 *
+	 * <p>지금은 INSERT IGNORE 한 문장으로 끝낸다. 중복은 예외가 아니라 무시되고, 쓰기가 단일
+	 * statement 라 앞선 조회들과 INSERT 사이의 경합 창도 사라진다.</p>
+	 */
 	@Transactional
 	public PlayerSubscriptionResponse subscribe(Long memberId, Long playerId) {
-		Member member = requireMember(memberId);
-		Player player = playerRepository.findById(playerId)
+		requireMember(memberId);
+		playerRepository.findById(playerId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "선수를 찾을 수 없습니다."));
 		PlayerRepository.LckPlayerOption playerOption = requireLckPlayer(playerId);
 
-		subscriptionRepository.findByMember_IdAndPlayer_Id(memberId, playerId)
-				.orElseGet(() -> subscriptionRepository.save(MemberFavoritePlayer.builder()
-						.member(member)
-						.player(player)
-						.build()));
+		subscriptionRepository.insertIgnore(memberId, playerId, LocalDateTime.now());
 		return PlayerSubscriptionResponse.from(playerOption, true);
 	}
 
