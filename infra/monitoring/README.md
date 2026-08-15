@@ -83,19 +83,15 @@ Tailscale 안에서만 닿는다.
 
 2026-08-15 실측 비율은 Warding 91%, 인증 나머지 대부분, 웹 7%, 백오피스 0 이다.
 
-응답시간 패널은 **평균**이다. Spring Boot 가 기본으로 히스토그램 버킷을 내보내지 않아
-`histogram_quantile` 을 쓸 수 없다. p95/p99 로 바꾸려면 앱에 아래 설정이 필요하다.
+응답시간은 **p50/p95/p99** 로 본다. 평균은 꼬리를 감춘다 — 요청 1%가 5초 걸려도 평균은 거의
+안 움직인다.
 
-```yaml
-management:
-  metrics:
-    distribution:
-      percentiles-histogram:
-        http.server.requests: true
-      # 버킷 수를 줄여 카디널리티를 억제한다
-      minimum-expected-value: { http.server.requests: 10ms }
-      maximum-expected-value: { http.server.requests: 10s }
-```
+이게 되려면 앱이 히스토그램 버킷(`_bucket` 시리즈)을 내보내야 한다. Spring Boot 기본값은
+`_count` 와 `_sum` 뿐이라 평균밖에 못 구한다. `application.yml` 의
+`management.metrics.distribution` 블록이 그 설정이고, **이 설정 없이는 응답시간 패널이 전부 빈다.**
+
+버킷은 시리즈 수를 곱하므로 기대 범위를 10ms~10s 로 좁혀 카디널리티를 억제했다.
+10ms 미만은 구분할 실익이 없고 10s 를 넘으면 어차피 다 같은 장애다.
 
 ## 재구축
 

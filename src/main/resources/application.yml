@@ -31,6 +31,22 @@ management:
       exposure:
         include: health,prometheus
 
+  # 응답시간 히스토그램. 기본값은 _count 와 _sum 만 내보내서 평균밖에 못 구하는데,
+  # 평균은 꼬리를 감춘다 — 요청 1%가 5초 걸려도 평균은 거의 안 움직인다.
+  # _bucket 시리즈가 생겨야 PromQL 의 histogram_quantile 로 p95/p99 를 뽑을 수 있고,
+  # 여러 엔드포인트를 합산한 서비스 단위 p95 도 그때 비로소 계산이 맞는다.
+  #
+  # 버킷은 시리즈 수를 그대로 곱하므로 기대 범위를 좁혀 카디널리티를 억제한다.
+  # 10ms 미만은 구분할 실익이 없고, 10s 를 넘으면 어차피 다 같은 장애다.
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      minimum-expected-value:
+        http.server.requests: 10ms
+      maximum-expected-value:
+        http.server.requests: 10s
+
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
