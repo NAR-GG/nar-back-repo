@@ -56,7 +56,7 @@ class TeamLiveEventPushServiceScoreLineTest {
 		service = new TeamLiveEventPushService(
 				deviceRepository, deliveryRepository, teamExternalIdentityRepository,
 				leagueMatchRepository, pushGateway, notificationService, worldsService,
-				naverEsportsScoreClient, mock(QuietAwarePushSender.class));
+				naverEsportsScoreClient, mock(QuietAwarePushSender.class), mock(com.toy.nar.app.lolesports.LeagueMatchService.class));
 		// 테스트에서 재시도 대기 없이 즉시 진행
 		ReflectionTestUtils.setField(service, "scoreRetryAttempts", 3);
 		ReflectionTestUtils.setField(service, "scoreRetryDelayMs", 0L);

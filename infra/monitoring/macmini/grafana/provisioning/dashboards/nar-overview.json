@@ -1,0 +1,761 @@
+{
+  "uid": "nar-overview",
+  "title": "NAR 서비스 개요",
+  "description": "지금 정상인가를 30초 안에 판단하는 대시보드. 백엔드는 단일 배포지만 URI 로 Warding 앱 / 웹 / 백오피스를 나눠서 본다.",
+  "tags": [
+    "nar",
+    "overview"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Warding 앱 요청/s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "웹 요청/s",
+      "description": "mobile·admin·auth·actuator 와 매칭 실패 노이즈(UNKNOWN, REDIRECTION, /**)를 뺀 나머지. 인증(/api/auth)은 앱 사용자가 대부분이라 웹으로 세면 웹 트래픽이 4배로 부풀려진다. 그래서 별도 분류로 뺐다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 3,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "백오피스 요청/s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/admin/.*\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 3,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "5xx 에러율",
+      "description": "노이즈 경로를 제외한 전체 기준. 0.5% 넘으면 주황, 2% 넘으면 빨강.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\",uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.005
+              },
+              {
+                "color": "red",
+                "value": 0.02
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "links": [
+        {
+          "title": "이 구간 ERROR 로그 보기",
+          "url": "/explore?schemaVersion=1&orgId=1&panes=%7B%22log%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22expr%22%3A%22%7Bhost%3D%5C%22nar-app%5C%22%2C%20container%3D~%5C%22nar-gg-.%2A%5C%22%7D%20%7C%20detected_level%3D%5C%22error%5C%22%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "커넥션 대기",
+      "description": "HikariCP 에서 커넥션을 못 얻고 기다리는 스레드 수. 0 이 아니면 이미 병목이다. 과거 이 값이 쌓여 세트 종료 푸시가 6분 밀린 적이 있다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(hikaricp_connections_pending)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "p95 응답시간",
+      "description": "노이즈·actuator 를 제외한 전체 기준. 평균이 아니라 상위 5% 요청이 얼마나 걸리는지를 본다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "서비스별 요청량",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "Warding 앱",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\"}[5m]))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "웹",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "인증(앱·웹 공통)",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/auth/.*\"}[5m]))"
+        },
+        {
+          "refId": "D",
+          "legendFormat": "백오피스",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/admin/.*\"}[5m]))"
+        },
+        {
+          "refId": "E",
+          "legendFormat": "노이즈(크롤러·미매칭)",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "links": [
+        {
+          "title": "이 구간 로그 보기",
+          "url": "/explore?schemaVersion=1&orgId=1&panes=%7B%22log%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22expr%22%3A%22%7Bhost%3D%5C%22nar-app%5C%22%2C%20container%3D~%5C%22nar-gg-.%2A%5C%22%7D%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "응답시간 분포 (p50 / p95 / p99)",
+      "description": "노이즈·actuator 제외 전체. Warding 앱이 트래픽의 90% 이상이라 사실상 앱 지연이다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "links": [
+        {
+          "title": "이 구간 느린 요청 보기",
+          "url": "/explore?schemaVersion=1&orgId=1&panes=%7B%22log%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22expr%22%3A%22%7Bhost%3D%5C%22nar-app%5C%22%2C%20container%3D~%5C%22nar-gg-.%2A%5C%22%7D%20%7C%3D%20%5C%22%5BEND%5D%5C%22%20%7C%20pattern%20%5C%22%3C_%3EDuration%3A%20%3Cdur%3Ems%5C%22%20%7C%20dur%20%3E%201000%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "서비스별 에러율 (4xx / 5xx)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "앱 5xx",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\"}[5m])), 0.001)"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "앱 4xx",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\",status=~\"4..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\"}[5m])), 0.001)"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "웹 5xx",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "links": [
+        {
+          "title": "이 구간 ERROR 로그 보기",
+          "url": "/explore?schemaVersion=1&orgId=1&panes=%7B%22log%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22expr%22%3A%22%7Bhost%3D%5C%22nar-app%5C%22%2C%20container%3D~%5C%22nar-gg-.%2A%5C%22%7D%20%7C%20detected_level%3D%5C%22error%5C%22%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "느린 엔드포인트 TOP 5 (p95)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{uri}}",
+          "expr": "topk(5, histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "JVM 힙",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "사용",
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\"})"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "최대",
+          "expr": "sum(jvm_memory_max_bytes{area=\"heap\"})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "HikariCP 커넥션",
+      "description": "pending 이 0 을 벗어나면 풀이 부족하다는 뜻이다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 20
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "active",
+          "expr": "sum(hikaricp_connections_active)"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "idle",
+          "expr": "sum(hikaricp_connections_idle)"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "pending",
+          "expr": "sum(hikaricp_connections_pending)"
+        },
+        {
+          "refId": "D",
+          "legendFormat": "max",
+          "expr": "sum(hikaricp_connections_max)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "MySQL 버퍼풀 히트율",
+      "description": "누적값이 아니라 5분 구간 기준. 버퍼풀이 128MB 뿐이라 이 값이 떨어지는 시간대를 찾는 게 목적이다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 20
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "히트율",
+          "expr": "1 - (rate(mysql_global_status_innodb_buffer_pool_reads[5m]) / clamp_min(rate(mysql_global_status_innodb_buffer_pool_read_requests[5m]), 0.001))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0.9,
+          "max": 1,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.98
+              },
+              {
+                "color": "green",
+                "value": 0.995
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 40,
+      "type": "logs",
+      "title": "최근 ERROR 로그",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{host=\"nar-app\", container=~\"nar-gg-.*\"} | detected_level=\"error\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
+    }
+  ]
+}

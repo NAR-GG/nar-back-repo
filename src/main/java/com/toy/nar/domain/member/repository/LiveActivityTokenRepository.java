@@ -17,6 +17,18 @@ public interface LiveActivityTokenRepository extends JpaRepository<LiveActivityT
 	@Query("select t.pushToken from LiveActivityToken t where t.matchId = :matchId and t.active = true")
 	List<String> findActivePushTokensByMatchId(@Param("matchId") String matchId);
 
+	/**
+	 * 회원 한 명이 이 경기에 대해 들고 있는 살아있는 카드 토큰.
+	 *
+	 * <p>구독 액션으로 카드를 다시 띄울 때 이전 카드를 먼저 닫기 위해 쓴다. 사용자가 잠금화면에서
+	 * 카드를 지워도 서버는 모르므로(앱에 해제 호출 경로가 없다) 이 토큰이 유령으로 남아
+	 * 재생성을 막는다.</p>
+	 */
+	@Query("select t.pushToken from LiveActivityToken t "
+			+ "where t.member.id = :memberId and t.matchId = :matchId and t.active = true")
+	List<String> findActivePushTokensByMemberIdAndMatchId(
+			@Param("memberId") Long memberId, @Param("matchId") String matchId);
+
 	/** 살아있는 카드가 있는 매치 목록. 스윕이 "끝난 매치의 카드"를 찾는 출발점이다. */
 	@Query("select distinct t.matchId from LiveActivityToken t where t.active = true")
 	List<String> findDistinctActiveMatchIds();

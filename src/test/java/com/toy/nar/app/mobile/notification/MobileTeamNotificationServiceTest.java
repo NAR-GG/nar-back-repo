@@ -36,7 +36,9 @@ class MobileTeamNotificationServiceTest {
 		memberRepository = mock(MemberRepository.class);
 		teamRepository = mock(TeamRepository.class);
 		subscriptionRepository = mock(MemberTeamNotificationSubscriptionRepository.class);
-		service = new MobileTeamNotificationService(memberRepository, teamRepository, subscriptionRepository);
+		service = new MobileTeamNotificationService(
+				memberRepository, teamRepository, subscriptionRepository,
+				mock(com.toy.nar.app.mobile.push.LiveActivityCatchUpService.class));
 	}
 
 	@Test

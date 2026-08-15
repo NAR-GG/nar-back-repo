@@ -1,6 +1,7 @@
 package com.toy.nar.app.mobile.subscription;
 
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
+import com.toy.nar.app.mobile.push.LiveActivityCatchUpService;
 import com.toy.nar.common.error.ErrorCode;
 import com.toy.nar.common.error.exception.CustomException;
 import com.toy.nar.domain.member.entity.Member;
@@ -25,6 +26,7 @@ public class MobileMatchSubscriptionService {
 	private final MemberMatchSubscriptionRepository subscriptionRepository;
 	private final MemberRepository memberRepository;
 	private final LeagueMatchRepository leagueMatchRepository;
+	private final LiveActivityCatchUpService liveActivityCatchUpService;
 
 	/** 내가 구독한 경기 matchId 목록. 앱이 리스트에서 벨 상태를 그리는 데 쓴다. */
 	public List<String> getSubscribedMatchIds(Long memberId) {
@@ -48,6 +50,10 @@ public class MobileMatchSubscriptionService {
 				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
 		subscriptionRepository.save(new MemberMatchSubscription(
 				member, matchId, setStartEnabled, setEndEnabled, liveEventEnabled));
+		if (setStartEnabled) {
+			// 진행 중인 경기를 지금 구독했으면 잠금화면 카드는 다음 세트까지 안 뜬다 — 따라잡는다.
+			liveActivityCatchUpService.catchUpMatch(memberId, matchId);
+		}
 	}
 
 	@Transactional

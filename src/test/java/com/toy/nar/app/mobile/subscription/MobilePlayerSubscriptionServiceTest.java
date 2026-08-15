@@ -14,11 +14,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -26,6 +28,8 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -98,7 +102,26 @@ class MobilePlayerSubscriptionServiceTest {
 	}
 
 	@Test
-	void subscribesLckPlayerAndReturnsExistingSubscriptionIdempotently() {
+	@DisplayName("size 상한은 300 — 로스터 100명 초과분이 두 페이지로 쪼개지지 않는다")
+	void allowsPageSizeAboveHundred() {
+		Member member = member(7L);
+		PageRequest capped = PageRequest.of(0, 300);
+		PlayerRepository.LckPlayerOption faker = option(10L, "Faker", 1L, "T1", "T1");
+
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(subscriptionRepository.findPlayerIdsByMemberId(7L)).thenReturn(Set.of());
+		when(playerRepository.findLckPlayerOptions("LCK", 2026, null, null, capped))
+				.thenReturn(new PageImpl<>(List.of(faker), capped, 1));
+
+		PlayerSubscriptionPageResponse response = service.getAvailablePlayers(7L, null, null, 0, 500);
+
+		assertThat(response.size()).isEqualTo(300);
+		assertThat(response.totalPages()).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("subscribe: 중복 판정을 유니크 제약에 맡기고 upsert 로만 쓴다(선체크 SELECT 없음)")
+	void subscribesLckPlayerWithoutCheckThenInsertRace() {
 		Member member = member(7L);
 		Player faker = player(10L, "Faker");
 		PlayerRepository.LckPlayerOption option = option(10L, "Faker", 1L, "T1", "T1");
@@ -106,22 +129,76 @@ class MobilePlayerSubscriptionServiceTest {
 		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
 		when(playerRepository.findById(10L)).thenReturn(Optional.of(faker));
 		when(playerRepository.findLckPlayerOption("LCK", 2026, 10L)).thenReturn(List.of(option));
-		when(subscriptionRepository.findByMember_IdAndPlayer_Id(7L, 10L)).thenReturn(Optional.empty());
-		when(subscriptionRepository.save(any(MemberFavoritePlayer.class)))
-				.thenAnswer(invocation -> invocation.getArgument(0));
 
 		PlayerSubscriptionResponse created = service.subscribe(7L, 10L);
 
 		assertThat(created.subscribed()).isTrue();
-		verify(subscriptionRepository).save(any(MemberFavoritePlayer.class));
+		verify(subscriptionRepository).insertIfAbsent(eq(7L), eq(10L), any(LocalDateTime.class));
+		// 이 SELECT 가 남아 있으면 동시 요청이 다시 다 같이 INSERT 하게 된다.
+		verify(subscriptionRepository, never()).findByMember_IdAndPlayer_Id(7L, 10L);
+		verify(subscriptionRepository, never()).save(any());
+	}
 
-		MemberFavoritePlayer existing = MemberFavoritePlayer.builder().member(member).player(faker).build();
-		when(subscriptionRepository.findByMember_IdAndPlayer_Id(7L, 10L)).thenReturn(Optional.of(existing));
+	@Test
+	@DisplayName("subscribe: deadlock(1213) 은 한 번 재시도해서 살려낸다 — 락 순환은 문법으로 못 막는다")
+	void retriesOnceWhenInsertHitsDeadlock() {
+		Member member = member(7L);
+		Player faker = player(10L, "Faker");
+		PlayerRepository.LckPlayerOption option = option(10L, "Faker", 1L, "T1", "T1");
 
-		PlayerSubscriptionResponse duplicated = service.subscribe(7L, 10L);
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(playerRepository.findById(10L)).thenReturn(Optional.of(faker));
+		when(playerRepository.findLckPlayerOption("LCK", 2026, 10L)).thenReturn(List.of(option));
+		doThrow(new CannotAcquireLockException("Deadlock found when trying to get lock"))
+				.doNothing()
+				.when(subscriptionRepository).insertIfAbsent(eq(7L), eq(10L), any(LocalDateTime.class));
 
-		assertThat(duplicated.playerId()).isEqualTo(10L);
-		verify(subscriptionRepository).save(any(MemberFavoritePlayer.class));
+		PlayerSubscriptionResponse response = service.subscribe(7L, 10L);
+
+		assertThat(response.subscribed()).isTrue();
+		verify(subscriptionRepository, org.mockito.Mockito.times(2))
+				.insertIfAbsent(eq(7L), eq(10L), any(LocalDateTime.class));
+	}
+
+	@Test
+	@DisplayName("subscribe: 재시도까지 deadlock 이면 삼키지 않고 올린다 — 연속 2회는 정상 부하가 아니다")
+	void propagatesWhenRetryAlsoDeadlocks() {
+		Member member = member(7L);
+		Player faker = player(10L, "Faker");
+		// 응답까지 못 가고 예외로 끝나므로 옵션의 필드는 읽히지 않는다 — 빈 mock 이면 충분하다.
+		PlayerRepository.LckPlayerOption option = org.mockito.Mockito.mock(PlayerRepository.LckPlayerOption.class);
+
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(playerRepository.findById(10L)).thenReturn(Optional.of(faker));
+		when(playerRepository.findLckPlayerOption("LCK", 2026, 10L)).thenReturn(List.of(option));
+		doThrow(new CannotAcquireLockException("Deadlock found when trying to get lock"))
+				.when(subscriptionRepository).insertIfAbsent(eq(7L), eq(10L), any(LocalDateTime.class));
+
+		assertThatThrownBy(() -> service.subscribe(7L, 10L))
+				.isInstanceOf(CannotAcquireLockException.class);
+
+		verify(subscriptionRepository, org.mockito.Mockito.times(2))
+				.insertIfAbsent(eq(7L), eq(10L), any(LocalDateTime.class));
+	}
+
+	@Test
+	@DisplayName("subscribe: 이미 구독 중이어도 같은 200 응답 — 중복 호출이 예외가 되지 않는다")
+	void subscribeIsIdempotentOnRepeatedCalls() {
+		Member member = member(7L);
+		Player faker = player(10L, "Faker");
+		PlayerRepository.LckPlayerOption option = option(10L, "Faker", 1L, "T1", "T1");
+
+		when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+		when(playerRepository.findById(10L)).thenReturn(Optional.of(faker));
+		when(playerRepository.findLckPlayerOption("LCK", 2026, 10L)).thenReturn(List.of(option));
+
+		PlayerSubscriptionResponse first = service.subscribe(7L, 10L);
+		PlayerSubscriptionResponse second = service.subscribe(7L, 10L);
+
+		assertThat(second.playerId()).isEqualTo(first.playerId());
+		assertThat(second.subscribed()).isTrue();
+		verify(subscriptionRepository, org.mockito.Mockito.times(2))
+				.insertIfAbsent(eq(7L), eq(10L), any(LocalDateTime.class));
 	}
 
 	@Test
@@ -138,7 +215,7 @@ class MobilePlayerSubscriptionServiceTest {
 				.isInstanceOf(ResponseStatusException.class)
 				.hasMessageContaining("구독 가능한");
 
-		verify(subscriptionRepository, never()).save(any());
+		verify(subscriptionRepository, never()).insertIfAbsent(any(), any(), any());
 	}
 
 	@Test
@@ -195,14 +272,11 @@ class MobilePlayerSubscriptionServiceTest {
 		when(playerRepository.findLckPlayerOption("LCK", 2026, 9L)).thenReturn(List.of());
 		when(playerRepository.findSoloRankPlayerOptionsByPlayerIds(Set.of(9L)))
 				.thenReturn(List.of(soloOption));
-		when(subscriptionRepository.findByMember_IdAndPlayer_Id(7L, 9L)).thenReturn(Optional.empty());
-		when(subscriptionRepository.save(any(MemberFavoritePlayer.class)))
-				.thenAnswer(invocation -> invocation.getArgument(0));
 
 		PlayerSubscriptionResponse response = service.subscribe(7L, 9L);
 
 		assertThat(response.playerName()).isEqualTo("Deft");
-		verify(subscriptionRepository).save(any(MemberFavoritePlayer.class));
+		verify(subscriptionRepository).insertIfAbsent(eq(7L), eq(9L), any(LocalDateTime.class));
 	}
 
 	@Test

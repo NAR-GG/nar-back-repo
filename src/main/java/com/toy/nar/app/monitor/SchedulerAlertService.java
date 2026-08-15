@@ -1,6 +1,8 @@
 package com.toy.nar.app.monitor;
 
 import com.toy.nar.app.data.source.NotificationService;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +17,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
@@ -23,7 +27,11 @@ public class SchedulerAlertService {
 
 	private static final String DEFAULT_ZONE = "Asia/Seoul";
 
+	// 디스코드 알림·일일 요약과 별개로 Prometheus 지표를 같이 남긴다.
+	// 알림은 "터졌을 때 알려주는" 용도고 지표는 "언제부터 이상했는지" 를 되짚는 용도라 역할이 다르다.
+	// 잡마다 계측을 흩뿌리지 않고 모든 잡이 이미 거쳐가는 이 지점 한 곳에서만 기록한다.
 	private final NotificationService notificationService;
+	private final MeterRegistry meterRegistry;
 
 	@Value("${notification.scheduler.summary-enabled:true}")
 	private boolean summaryEnabled;
@@ -45,9 +53,17 @@ public class SchedulerAlertService {
 	private final Map<String, Instant> lastWarningAlertAt = new ConcurrentHashMap<>();
 	private final Map<String, Integer> zeroNewGamesStreakByJob = new ConcurrentHashMap<>();
 
+	// Gauge 는 값 소유자를 밖에 두고 참조만 넘기는 구조라, 잡별 홀더를 여기 붙잡아 둔다.
+	private final Map<String, AtomicLong> lastSuccessEpochByJob = new ConcurrentHashMap<>();
+	private final Map<String, AtomicLong> zeroNewGamesStreakGaugeByJob = new ConcurrentHashMap<>();
+
 	public void recordSuccess(String jobKey, String jobName, long durationMs) {
 		JobDailyStats stats = getStats(jobKey, jobName);
 		stats.recordSuccess(durationMs);
+
+		meterRegistry.counter("nar.scheduler.runs", "job", jobKey, "outcome", "success").increment();
+		meterRegistry.timer("nar.scheduler.duration", "job", jobKey).record(durationMs, TimeUnit.MILLISECONDS);
+		lastSuccessEpoch(jobKey).set(Instant.now().getEpochSecond());
 	}
 
 	public void recordFailure(String jobKey, String jobName, Exception e, String detail) {
@@ -58,6 +74,9 @@ public class SchedulerAlertService {
 	public void recordFailure(String jobKey, String jobName, String reason, String detail) {
 		JobDailyStats stats = getStats(jobKey, jobName);
 		stats.recordFailure(reason);
+
+		// reason 은 라벨로 쓰지 않는다. 예외 메시지가 그대로 들어와 카디널리티가 터진다.
+		meterRegistry.counter("nar.scheduler.runs", "job", jobKey, "outcome", "failure").increment();
 
 		String cooldownKey = jobKey + "|" + sanitize(reason);
 		if (!shouldSend(lastFailureAlertAt, cooldownKey, failureCooldownMinutes)) {
@@ -73,16 +92,21 @@ public class SchedulerAlertService {
 	public void trackZeroNewGames(String jobKey, String jobName, int newGamesAdded, long totalRowsProcessed) {
 		if (newGamesAdded > 0) {
 			zeroNewGamesStreakByJob.remove(jobKey);
+			zeroNewGamesStreak(jobKey).set(0);
 			return;
 		}
 
 		int streak = zeroNewGamesStreakByJob.merge(jobKey, 1, Integer::sum);
+		// 임계 도달 전에도 지표는 올린다. 디스코드 알림은 3회 연속부터지만,
+		// 상류 CSV 가 언제부터 밀리기 시작했는지는 1회째부터 그래프에 남아야 되짚을 수 있다.
+		zeroNewGamesStreak(jobKey).set(streak);
 		if (streak < zeroNewGamesThreshold) {
 			return;
 		}
 
 		JobDailyStats stats = getStats(jobKey, jobName);
 		stats.recordWarning("신규 게임 0건 연속");
+		meterRegistry.counter("nar.scheduler.runs", "job", jobKey, "outcome", "warning").increment();
 
 		String cooldownKey = jobKey + "|ZERO_NEW_GAMES";
 		if (!shouldSend(lastWarningAlertAt, cooldownKey, warningCooldownMinutes)) {
@@ -97,6 +121,8 @@ public class SchedulerAlertService {
 	public void recordWarning(String jobKey, String jobName, String detail) {
 		JobDailyStats stats = getStats(jobKey, jobName);
 		stats.recordWarning(detail);
+
+		meterRegistry.counter("nar.scheduler.runs", "job", jobKey, "outcome", "warning").increment();
 
 		String cooldownKey = jobKey + "|" + sanitize(detail);
 		if (!shouldSend(lastWarningAlertAt, cooldownKey, warningCooldownMinutes)) {
@@ -128,6 +154,38 @@ public class SchedulerAlertService {
 
 		String summary = buildSummaryMessage(snapshots);
 		notificationService.sendSchedulerSummaryNotification(targetDate.toString(), summary);
+	}
+
+	/**
+	 * 잡이 마지막으로 성공한 시각(epoch seconds).
+	 * <p>
+	 * 실행 횟수 카운터보다 이 값이 중요하다. 잡이 죽으면 카운터는 그냥 안 늘어서 눈에 띄지 않지만,
+	 * 이 게이지는 {@code time() - 값} 이 계속 커져서 임계치를 자동으로 넘긴다.
+	 * <p>
+	 * 첫 성공 전에는 시리즈 자체가 없다. 재시작 후 한 번도 못 돈 잡은 {@code absent()} 로 잡아야 한다.
+	 */
+	private AtomicLong lastSuccessEpoch(String jobKey) {
+		return lastSuccessEpochByJob.computeIfAbsent(jobKey, key -> {
+			AtomicLong holder = new AtomicLong();
+			Gauge.builder("nar.scheduler.last.success.epoch", holder, AtomicLong::get)
+					.tag("job", key)
+					.description("잡이 마지막으로 성공한 시각")
+					.baseUnit("seconds")
+					.register(meterRegistry);
+			return holder;
+		});
+	}
+
+	/** 신규 게임 0건이 연속으로 몇 번 나왔는지. 상류 CSV 정체를 그래프로 되짚기 위한 값이다. */
+	private AtomicLong zeroNewGamesStreak(String jobKey) {
+		return zeroNewGamesStreakGaugeByJob.computeIfAbsent(jobKey, key -> {
+			AtomicLong holder = new AtomicLong();
+			Gauge.builder("nar.scheduler.zero.new.games.streak", holder, AtomicLong::get)
+					.tag("job", key)
+					.description("신규 게임 0건 연속 횟수")
+					.register(meterRegistry);
+			return holder;
+		});
 	}
 
 	private JobDailyStats getStats(String jobKey, String jobName) {

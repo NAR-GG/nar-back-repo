@@ -58,6 +58,7 @@ public class TeamLiveEventPushService {
 	private final com.toy.nar.app.lolesports.WorldsService worldsService;
 	private final com.toy.nar.app.lolesports.NaverEsportsScoreClient naverEsportsScoreClient;
 	private final QuietAwarePushSender quietAwarePushSender;
+	private final com.toy.nar.app.lolesports.LeagueMatchService leagueMatchService;
 
 	@Value("${live.notification.fcm.enabled:false}")
 	private boolean fcmNotificationEnabled;
@@ -220,12 +221,12 @@ public class TeamLiveEventPushService {
 					naverUsable = naver != null;
 					int[] fresh = freshOrNull(naver, endedSetNumber);
 					if (fresh != null) {
-						return new ResolvedMatchScore(match, fresh);
+						return new ResolvedMatchScore(match, writeBack(matchId, fresh));
 					}
 				}
 				int[] fresh = freshOrNull(worldsService.fetchMatchGameWins(matchId), endedSetNumber);
 				if (fresh != null) {
-					return new ResolvedMatchScore(match, fresh);
+					return new ResolvedMatchScore(match, writeBack(matchId, fresh));
 				}
 			}
 			log.warn("Set-end score still stale after retries. matchId={} endedSet={} dbScore={}:{}",
@@ -238,6 +239,25 @@ public class TeamLiveEventPushService {
 			log.warn("Failed to load match score for set-end push matchId={}", matchId, e);
 			return ResolvedMatchScore.EMPTY;
 		}
+	}
+
+	/**
+	 * 재조회로 얻은 신선 스코어를 DB 에 선반영하고 그 스코어를 그대로 돌려준다.
+	 *
+	 * <p>이 값이 여기서 끝나면 잠금화면 카드가 곤란해진다 — 카드는 이 푸시 직후 DB 를 그대로
+	 * 읽어(LivePollingScheduler.pushLiveActivitySetEnd) 폴링 선반영이 닿기 전 옛 스코어를
+	 * 싣는다(실측 2026-08-13 KRX vs BFX 세트2: 카드 18:29:16 에 1:0, 선반영 18:29:28 에 1:1).
+	 * 카드 라벨은 프레임 신호라 맞고 숫자만 한 세트 뒤처져 다음 세트 시작까지 남았다.</p>
+	 *
+	 * <p>선반영 실패가 푸시를 막으면 안 된다 — 문구는 이미 정확한 값을 들고 있으므로 흡수한다.</p>
+	 */
+	private int[] writeBack(String matchId, int[] fresh) {
+		try {
+			leagueMatchService.applyFreshScore(matchId, fresh);
+		} catch (Exception e) {
+			log.warn("세트 종료 신선 스코어 선반영 실패. matchId={}: {}", matchId, e.getMessage());
+		}
+		return fresh;
 	}
 
 	/** 스코어 합이 방금 끝난 세트 수 이상(=신선)일 때만 그 스코어, 아니면 null. */
@@ -382,6 +402,10 @@ public class TeamLiveEventPushService {
 			return;
 		}
 
+		// 알림함(마이구독 피드)은 발송 '전에' 남긴다 — 근거는 PlayerSoloRankPushService 의
+		// 같은 지점 주석 참고(발송 뒤에 기록하면 푸시 받고 바로 마이구독을 열었을 때 비어 있다).
+		recordFeedAll(List.copyOf(tokensByMember.keySet()), eventType, message);
+
 		List<String> allTokens = tokensByMember.values().stream().flatMap(List::stream).toList();
 		QuietAwarePushSender.Outcome outcome;
 		try {
@@ -409,10 +433,9 @@ public class TeamLiveEventPushService {
 		});
 
 		markSentAll(delivered, matchId, setNumber, eventType, eventOrder);
+		// 잠자기로 건너뛴 구독자는 발송 없이 마감만 한다 — 알림함에는 위에서 이미 남겼다.
 		markSkippedQuietAll(outcome.skippedMemberIds(), matchId, setNumber, eventType, eventOrder);
 		markFailedAll(undelivered, matchId, setNumber, eventType, eventOrder, "FCM 전송 성공 기기가 없습니다.");
-		// 건너뛴 구독자도 알림함에는 남는다 — 앱을 열면 밤에 무슨 알림이 있었는지 보인다.
-		recordFeedAll(concat(delivered, outcome.skippedMemberIds()), eventType, message);
 
 		if (!result.invalidTokens().isEmpty()) {
 			deactivateInvalidTokens(result.invalidTokens(), matchId, eventType);
@@ -444,16 +467,6 @@ public class TeamLiveEventPushService {
 			log.warn("Failed to mark team live event pushes quiet-skipped eventType={} matchId={} setNumber={} members={}",
 					eventType, matchId, setNumber, memberIds.size(), e);
 		}
-	}
-
-	/** 발송 성공 구독자 + 잠자기로 건너뛴 구독자를 합친다. 둘 다 알림함에는 남는다. */
-	private static List<Long> concat(List<Long> delivered, List<Long> skipped) {
-		if (skipped.isEmpty()) {
-			return delivered;
-		}
-		List<Long> all = new ArrayList<>(delivered);
-		all.addAll(skipped);
-		return all;
 	}
 
 	private void markFailedAll(

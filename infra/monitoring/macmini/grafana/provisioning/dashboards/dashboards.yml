@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: nar
+    orgId: 1
+    folder: NAR
+    type: file
+    disableDeletion: false
+    # 파일이 진실의 원천이다. GUI 에서 고쳐도 다음 스캔에 덮인다.
+    # 바꿀 때는 GUI 에서 실험한 뒤 Export JSON 해서 이 파일을 갱신한다.
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

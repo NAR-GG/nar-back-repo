@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collection;
@@ -23,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -76,7 +78,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 		verify(deliveryRepository).markSkippedQuietAll(List.of(8L), PLAYER_ID, GAME_ID);
 		// FAILED 로 남으면 재예약돼서 잠자기가 끝난 뒤 뒤늦은 푸시가 나간다.
 		verify(deliveryRepository, never()).markFailedAll(any(), any(), any(), any());
-		// 알림함에는 발송 성공 회원과 건너뛴 회원이 모두 남아야 한다.
+		// 알림함에는 발송 성공 회원과 건너뛴 회원이 모두 남아야 한다(발송 전에 예약자 전원으로 기록).
 		ArgumentCaptor<Collection<Long>> feed = ArgumentCaptor.forClass(Collection.class);
 		verify(notificationService).recordAll(feed.capture(), any(), anyString(), any(), any());
 		assertThat(feed.getValue()).containsExactlyInAnyOrder(7L, 8L);
@@ -119,10 +121,11 @@ class PlayerSoloRankPushFanOutBatchTest {
 
 		assertThat(capturedIds(sentCaptor())).containsExactly(8L);
 		assertThat(capturedIds(failedCaptor())).containsExactly(7L);
-		// 발송 기록도 성공한 구독자만
+		// 알림함은 발송 전에 예약자 전원으로 남긴다 — FCM 실패자(7번)도 포함된다.
+		// 발송 결과를 기다리면 푸시를 받고 바로 마이구독을 열었을 때 비어 있다.
 		ArgumentCaptor<Collection<Long>> recorded = ArgumentCaptor.forClass(Collection.class);
 		verify(notificationService).recordAll(recorded.capture(), any(), anyString(), any(), any());
-		assertThat(recorded.getValue()).containsExactly(8L);
+		assertThat(recorded.getValue()).containsExactlyInAnyOrder(7L, 8L);
 	}
 
 	@Test
@@ -166,6 +169,25 @@ class PlayerSoloRankPushFanOutBatchTest {
 				.markFailedAll(failed.capture(), eq(PLAYER_ID), eq(GAME_ID), eq("firebase down"));
 		assertThat(failed.getValue()).containsExactly(7L, 8L);
 		verify(deliveryRepository, never()).markSentAll(any(), anyLong(), anyString());
+		// FCM 이 죽어도 알림함에는 남는다 — 앱을 열면 무슨 알림이 있었는지는 보여야 한다.
+		verify(notificationService).recordAll(any(), any(), anyString(), any(), any());
+	}
+
+	@Test
+	@DisplayName("알림함 기록이 FCM 발송보다 먼저 일어난다")
+	void 피드를_발송_전에_남긴다() {
+		givenSubscribers(device(1L, member(7L), "token-1"));
+		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(7L));
+		when(quietAwarePushSender.send(any(), any())).thenReturn(new QuietAwarePushSender.Outcome(
+				new MobilePushResult(1, 0, List.of(), List.of("token-1")), List.of()));
+
+		notifyGame();
+
+		// 발송 뒤에 기록하면 푸시를 받고 바로 마이구독을 열었을 때 그 알림이 없다.
+		// 실측 2026-08-11(Zeus 구독 1,440명): 기기 수신 → 피드 INSERT 까지 약 29초.
+		InOrder order = inOrder(notificationService, quietAwarePushSender);
+		order.verify(notificationService).recordAll(any(), any(), anyString(), any(), any());
+		order.verify(quietAwarePushSender).send(any(), any());
 	}
 
 	private void notifyGame() {
