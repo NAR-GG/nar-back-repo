@@ -396,7 +396,7 @@
         {
           "refId": "A",
           "legendFormat": "{{scheduler_job}}",
-          "expr": "topk(10, time() - nar_scheduler_last_success_epoch_seconds)"
+          "expr": "topk(10, time() - nar_scheduler_last_success_epoch_seconds{scheduler_job=~\".+\"})"
         }
       ],
       "fieldConfig": {
@@ -950,12 +950,17 @@
         "hide": false,
         "iconColor": "orange",
         "name": "배포",
+        "expr": "{container=~\"nar-gg-.*\"} |= \"Started NarApplication\"",
+        "queryType": "range",
+        "instant": false,
+        "maxLines": 50,
+        "titleFormat": "배포",
+        "textFormat": "{{container}}",
         "target": {
           "refId": "Anno",
-          "expr": "{container=~\"nar-gg-.*\"} |= \"Started NarApplication\""
-        },
-        "titleFormat": "배포 완료",
-        "textFormat": "{{container}}"
+          "expr": "{container=~\"nar-gg-.*\"} |= \"Started NarApplication\"",
+          "queryType": "range"
+        }
       }
     ]
   }
