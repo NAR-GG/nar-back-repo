@@ -43,7 +43,7 @@ class SchedulerAlertServiceMetricsTest {
 		service.recordSuccess(JOB_KEY, JOB_NAME, 1_500L);
 
 		assertThat(runs("success")).isEqualTo(1.0);
-		assertThat(registry.timer("nar.scheduler.duration", "job", JOB_KEY).count()).isEqualTo(1L);
+		assertThat(registry.timer("nar.scheduler.duration", "scheduler_job", JOB_KEY).count()).isEqualTo(1L);
 		assertThat(lastSuccessEpoch()).isGreaterThanOrEqualTo(before);
 	}
 
@@ -85,14 +85,14 @@ class SchedulerAlertServiceMetricsTest {
 	}
 
 	private double runs(String outcome) {
-		return registry.counter("nar.scheduler.runs", "job", JOB_KEY, "outcome", outcome).count();
+		return registry.counter("nar.scheduler.runs", "scheduler_job", JOB_KEY, "outcome", outcome).count();
 	}
 
 	private double lastSuccessEpoch() {
-		return registry.get("nar.scheduler.last.success.epoch").tag("job", JOB_KEY).gauge().value();
+		return registry.get("nar.scheduler.last.success.epoch").tag("scheduler_job", JOB_KEY).gauge().value();
 	}
 
 	private double zeroNewGamesStreak() {
-		return registry.get("nar.scheduler.zero.new.games.streak").tag("job", JOB_KEY).gauge().value();
+		return registry.get("nar.scheduler.zero.new.games.streak").tag("scheduler_job", JOB_KEY).gauge().value();
 	}
 }
