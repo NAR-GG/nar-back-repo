@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import com.toy.nar.app.youtube.dto.YoutubeCommentResponse;
 import com.toy.nar.app.youtube.dto.YoutubePlaylistResponse;
@@ -284,6 +285,14 @@ public class YoutubeSyncService {
 		for (Video video : recentVideos) {
 			try {
 				syncCommentsForVideo(video);
+			} catch (WebClientResponseException.NotFound | WebClientResponseException.Forbidden e) {
+				// 영상이 삭제·비공개됐거나(404) 댓글이 꺼져 있다(403). 다시 불러도 결과가 같으므로
+				// 스택트레이스 없이 한 줄만 남긴다. 24시간 창을 벗어나면 대상에서 자연히 빠진다.
+				//
+				// ERROR 로 두면 조치할 것이 없는데도 매시간 스택트레이스가 쌓여, 나중에 에러
+				// 발생률로 알림을 걸 때 항상 켜져 있는 오탐이 된다. 진짜 에러가 여기 묻힌다.
+				log.warn("댓글 동기화 건너뜀 — 영상 없음/접근 불가 ({}): {} (ID: {})",
+						e.getStatusCode().value(), video.getTitle(), video.getYoutubeVideoId());
 			} catch (Exception e) {
 				log.error("댓글 동기화 실패: {} (ID: {})", video.getTitle(), video.getYoutubeVideoId(), e);
 			}
