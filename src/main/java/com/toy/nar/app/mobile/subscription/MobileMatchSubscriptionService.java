@@ -3,6 +3,7 @@ package com.toy.nar.app.mobile.subscription;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.mobile.push.LiveActivityCatchUpService;
 import com.toy.nar.app.mobile.subscription.dto.MatchNotificationToggles;
+import com.toy.nar.app.mobile.subscription.dto.MatchSubscriptionResponse;
 import com.toy.nar.common.error.ErrorCode;
 import com.toy.nar.common.error.exception.CustomException;
 import com.toy.nar.domain.member.entity.Member;
@@ -66,6 +67,13 @@ public class MobileMatchSubscriptionService {
 	 * 구독을 유지한 채 알림 토글만 바꾼다. 지금까지 경로가 구독/해제뿐이라 앱이 토글 하나를
 	 * 끄려면 해제 후 재구독해야 했는데, 그러면 진행 중인 경기에서 카드가 다시 만들어진다.
 	 */
+	/** 경기 한 건의 알림 토글 상태. 구독 중이 아니면 기본값을 돌려준다. */
+	public MatchSubscriptionResponse getSubscription(Long memberId, String matchId) {
+		return subscriptionRepository.findByMemberIdAndMatchId(memberId, matchId)
+				.map(MatchSubscriptionResponse::from)
+				.orElseGet(() -> MatchSubscriptionResponse.notSubscribed(matchId));
+	}
+
 	@Transactional
 	public void updateToggles(Long memberId, String matchId, MatchNotificationToggles toggles) {
 		MemberMatchSubscription subscription = subscriptionRepository

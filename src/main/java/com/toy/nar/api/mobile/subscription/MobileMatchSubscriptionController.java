@@ -13,6 +13,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import com.toy.nar.app.mobile.subscription.dto.MatchSubscriptionResponse;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -44,6 +45,15 @@ public class MobileMatchSubscriptionController {
 			@Valid @RequestBody MatchSubscribeRequest request) {
 		subscriptionService.subscribe(memberId, request.matchId(), request.toggles());
 		return ResponseEntity.noContent().build();
+	}
+
+	@Operation(summary = "경기 예약 구독 알림 상태 조회",
+			description = "그 경기의 알림 토글 상태. 구독 중이 아니면 subscribed=false 와 기본값을 돌려준다.")
+	@GetMapping("/{matchId}")
+	public ResponseEntity<MatchSubscriptionResponse> getSubscription(
+			@AuthenticationPrincipal Long memberId,
+			@Parameter(description = "조회할 경기 ID") @PathVariable String matchId) {
+		return ResponseEntity.ok(subscriptionService.getSubscription(memberId, matchId));
 	}
 
 	@Operation(summary = "경기 예약 구독 알림 토글 변경",
