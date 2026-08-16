@@ -28,6 +28,9 @@ public class SchedulerAlertService {
 	private static final String DEFAULT_ZONE = "Asia/Seoul";
 
 	// 디스코드 알림·일일 요약과 별개로 Prometheus 지표를 같이 남긴다.
+	//
+	// 라벨 이름은 job 이 아니라 scheduler_job 이다. job 과 instance 는 Prometheus 가 스크랩
+	// 타깃에 붙이는 예약 라벨이라, 메트릭이 같은 이름을 쓰면 원본이 exported_job 으로 밀린다.
 	// 알림은 "터졌을 때 알려주는" 용도고 지표는 "언제부터 이상했는지" 를 되짚는 용도라 역할이 다르다.
 	// 잡마다 계측을 흩뿌리지 않고 모든 잡이 이미 거쳐가는 이 지점 한 곳에서만 기록한다.
 	private final NotificationService notificationService;
@@ -61,8 +64,8 @@ public class SchedulerAlertService {
 		JobDailyStats stats = getStats(jobKey, jobName);
 		stats.recordSuccess(durationMs);
 
-		meterRegistry.counter("nar.scheduler.runs", "job", jobKey, "outcome", "success").increment();
-		meterRegistry.timer("nar.scheduler.duration", "job", jobKey).record(durationMs, TimeUnit.MILLISECONDS);
+		meterRegistry.counter("nar.scheduler.runs", "scheduler_job", jobKey, "outcome", "success").increment();
+		meterRegistry.timer("nar.scheduler.duration", "scheduler_job", jobKey).record(durationMs, TimeUnit.MILLISECONDS);
 		lastSuccessEpoch(jobKey).set(Instant.now().getEpochSecond());
 	}
 
@@ -76,7 +79,7 @@ public class SchedulerAlertService {
 		stats.recordFailure(reason);
 
 		// reason 은 라벨로 쓰지 않는다. 예외 메시지가 그대로 들어와 카디널리티가 터진다.
-		meterRegistry.counter("nar.scheduler.runs", "job", jobKey, "outcome", "failure").increment();
+		meterRegistry.counter("nar.scheduler.runs", "scheduler_job", jobKey, "outcome", "failure").increment();
 
 		String cooldownKey = jobKey + "|" + sanitize(reason);
 		if (!shouldSend(lastFailureAlertAt, cooldownKey, failureCooldownMinutes)) {
@@ -106,7 +109,7 @@ public class SchedulerAlertService {
 
 		JobDailyStats stats = getStats(jobKey, jobName);
 		stats.recordWarning("신규 게임 0건 연속");
-		meterRegistry.counter("nar.scheduler.runs", "job", jobKey, "outcome", "warning").increment();
+		meterRegistry.counter("nar.scheduler.runs", "scheduler_job", jobKey, "outcome", "warning").increment();
 
 		String cooldownKey = jobKey + "|ZERO_NEW_GAMES";
 		if (!shouldSend(lastWarningAlertAt, cooldownKey, warningCooldownMinutes)) {
@@ -122,7 +125,7 @@ public class SchedulerAlertService {
 		JobDailyStats stats = getStats(jobKey, jobName);
 		stats.recordWarning(detail);
 
-		meterRegistry.counter("nar.scheduler.runs", "job", jobKey, "outcome", "warning").increment();
+		meterRegistry.counter("nar.scheduler.runs", "scheduler_job", jobKey, "outcome", "warning").increment();
 
 		String cooldownKey = jobKey + "|" + sanitize(detail);
 		if (!shouldSend(lastWarningAlertAt, cooldownKey, warningCooldownMinutes)) {
@@ -168,7 +171,7 @@ public class SchedulerAlertService {
 		return lastSuccessEpochByJob.computeIfAbsent(jobKey, key -> {
 			AtomicLong holder = new AtomicLong();
 			Gauge.builder("nar.scheduler.last.success.epoch", holder, AtomicLong::get)
-					.tag("job", key)
+					.tag("scheduler_job", key)
 					.description("잡이 마지막으로 성공한 시각")
 					.baseUnit("seconds")
 					.register(meterRegistry);
@@ -181,7 +184,7 @@ public class SchedulerAlertService {
 		return zeroNewGamesStreakGaugeByJob.computeIfAbsent(jobKey, key -> {
 			AtomicLong holder = new AtomicLong();
 			Gauge.builder("nar.scheduler.zero.new.games.streak", holder, AtomicLong::get)
-					.tag("job", key)
+					.tag("scheduler_job", key)
 					.description("신규 게임 0건 연속 횟수")
 					.register(meterRegistry);
 			return holder;
