@@ -1,0 +1,26 @@
+-- member_notification 을 created_at 기준으로 훑는 경로에 인덱스가 없다.
+-- 기존 인덱스는 셋 다 선두가 member_id 라(알림함 조회용) created_at·type 조건에 쓰이지 못한다.
+--
+-- 이 인덱스가 없으면 두 곳이 매번 172만 행 풀스캔을 한다(2026-08-16 프로덕션 실측).
+--
+--   1. 보존 정책의 청크 삭제
+--      DELETE ... WHERE type = ? AND created_at < ? LIMIT 5000
+--      EXPLAIN: type=ALL, possible_keys=NULL, rows=1,741,429
+--      청크 1회에 2초. 첫 실행 삭제 대상이 약 97만 행(194 청크)이라 10~20분 동안
+--      풀스캔이 반복된다. DB 서버가 RAM 1GB 라 감당하기 어렵다.
+--
+--   2. 백오피스 알림 통계
+--      SELECT TIMESTAMPDIFF(HOUR, '1970-01-01', created_at), COUNT(*) ... WHERE created_at >= ?
+--      실측 5.7초(워밍 후). p95 는 10초까지 나온다.
+--
+-- created_at 단독으로 둔 이유는 (type, created_at) 복합보다 훨씬 작기 때문이다.
+-- type 이 varchar(40) 이라 복합으로 만들면 인덱스가 140MB 를 넘는데, created_at 단독은
+-- 5바이트 + PK 8바이트로 20MB 대다. 버퍼풀이 128MB 뿐이라 이 차이가 크다.
+--
+-- DELETE 는 오래된 구간을 range scan 하며 type 을 필터링하게 된다. 그 구간에는 모든 타입이
+-- 섞여 있지만, 청크 하나를 채우는 데 훑을 행이 풀스캔과 비교가 되지 않는다.
+--
+-- created_at 은 단조증가라 신규 INSERT 는 B-tree 오른쪽 끝에만 붙는다. 하루 6만 건이
+-- 들어오는 테이블이지만 쓰기 부담이 크지 않은 이유다.
+CREATE INDEX idx_member_notification_created_at
+    ON member_notification (created_at);
