@@ -60,7 +60,8 @@
                 "value": 7200
               }
             ]
-          }
+          },
+          "noValue": "실행 이력 없음"
         },
         "overrides": []
       },
@@ -126,7 +127,8 @@
                 "value": 6
               }
             ]
-          }
+          },
+          "noValue": "실행 이력 없음"
         },
         "overrides": []
       },
@@ -254,7 +256,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\",uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
+          "expr": "(sum(rate(http_server_requests_seconds_count{status=~\"5..\",uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
         }
       ],
       "fieldConfig": {
@@ -634,17 +636,17 @@
         {
           "refId": "A",
           "legendFormat": "앱 5xx",
-          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\"}[5m])), 0.001)"
+          "expr": "(sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\",status=~\"5..\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\"}[5m])), 0.001)"
         },
         {
           "refId": "B",
           "legendFormat": "앱 4xx",
-          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\",status=~\"4..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\"}[5m])), 0.001)"
+          "expr": "(sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\",status=~\"4..\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_server_requests_seconds_count{uri=~\"/api/mobile/.*\"}[5m])), 0.001)"
         },
         {
           "refId": "C",
           "legendFormat": "웹 5xx",
-          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
+          "expr": "(sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\",status=~\"5..\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])), 0.001)"
         }
       ],
       "fieldConfig": {
