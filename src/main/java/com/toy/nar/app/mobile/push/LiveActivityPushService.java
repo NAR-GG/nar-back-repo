@@ -46,6 +46,20 @@ public class LiveActivityPushService {
 	/** 앱의 ActivityAttributes 타입 이름. 다르면 APNs 는 200 을 주고 카드만 안 뜬다. */
 	private static final String ATTRIBUTES_TYPE = "MatchLiveAttributes";
 
+	/**
+	 * 같은 회원·같은 경기에 카드를 다시 만들어 주지 않는 시간.
+	 *
+	 * <p>기존 중복 방지는 {@code NOT EXISTS(active LiveActivityToken)} 하나뿐인데, 그 토큰은
+	 * 카드가 뜬 뒤 <b>앱이</b> 올려 준다. 실측 2026-08-16 매치 115548147900619033 에서
+	 * push-to-start 발송(19:45:11)과 토큰 등록(19:45:13~21) 사이가 2~10초였다. 그 창 안에
+	 * 두 번째 요청이 들어오면 가드가 통과해 카드가 두 장 뜬다 — 같은 매치에서 member 10 이
+	 * 17:07:37 / 17:07:39 두 번 catch-up 되고 "이전 카드 닫음" 로그 없이 2장이 됐다.
+	 *
+	 * <p>30초는 등록 지연 최대치의 3배다. 더 길게 잡으면 사용자가 카드를 지우고 다시 구독하는
+	 * 정상 경로(따라잡기)까지 막는다.
+	 */
+	private static final Duration RECENT_START_WINDOW = Duration.ofSeconds(30);
+
 	private final LiveActivityTokenRepository tokenRepository;
 	private final LiveActivityStartTokenRepository startTokenRepository;
 	private final ApnsLiveActivityClient apnsClient;
@@ -56,6 +70,19 @@ public class LiveActivityPushService {
 	 */
 	@Value("${apns.push-to-start.enabled:false}")
 	private boolean pushToStartEnabled;
+
+	/**
+	 * 방금 카드를 보낸 (매치, 회원). 서버가 자기 발송을 기억하는 유일한 즉시 신호다.
+	 *
+	 * <p>ponytail: 인메모리라 재기동하면 비고, 앱 인스턴스가 늘면 인스턴스별로 따로 센다.
+	 * 둘 다 최악이 "카드 한 장 더" 인 현재 동작으로 돌아가는 것뿐이라 테이블을 만들지 않았다.
+	 * 다중 인스턴스로 가면 Redis 나 발송 이력 테이블로 옮긴다.</p>
+	 */
+	private final com.github.benmanes.caffeine.cache.Cache<String, Boolean> recentStarts =
+			com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+					.expireAfterWrite(RECENT_START_WINDOW)
+					.maximumSize(10_000)
+					.build();
 
 	/**
 	 * 매치별로 마지막에 카드에 반영한 진행도. 뒤처진 이벤트를 걸러내는 워터마크다.
@@ -208,6 +235,18 @@ public class LiveActivityPushService {
 				matchId, memberId, previousTokens.size());
 	}
 
+	/**
+	 * 이 회원·이 경기에 지금 카드를 만들어도 되는지 표시하고 결과를 돌려준다.
+	 * {@link #RECENT_START_WINDOW} 안에 이미 보냈으면 false — 두 경로(세트 시작 일괄 발송,
+	 * 구독 직후 따라잡기)가 같은 창을 공유해야 서로 겹쳐도 두 장이 되지 않는다.
+	 */
+	private boolean claimStart(String matchId, Long memberId) {
+		if (memberId == null) {
+			return true;
+		}
+		return recentStarts.asMap().putIfAbsent(matchId + "#" + memberId, Boolean.TRUE) == null;
+	}
+
 	/** 대상 산정만 다르고 발송·죽은 토큰 정리는 같다. */
 	private void sendStarts(
 			String matchId,
@@ -216,6 +255,10 @@ public class LiveActivityPushService {
 			Integer redScore,
 			MatchCardAttributes attributes,
 			List<LiveActivityStartTokenRepository.StartTargetRow> targets) {
+		if (targets.isEmpty()) {
+			return;
+		}
+		targets = targets.stream().filter(target -> claimStart(matchId, target.getMemberId())).toList();
 		if (targets.isEmpty()) {
 			return;
 		}

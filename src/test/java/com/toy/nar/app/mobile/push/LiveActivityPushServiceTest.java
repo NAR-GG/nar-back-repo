@@ -391,6 +391,73 @@ class LiveActivityPushServiceTest {
 				anyString(), anyString());
 	}
 
+	/**
+	 * 중복 카드의 실제 원인. 카드가 뜬 뒤 앱이 갱신 토큰을 올리기까지 실측 2~10초 걸리는데,
+	 * 그 전에 두 번째 요청이 들어오면 {@code NOT EXISTS(active LiveActivityToken)} 가드가
+	 * 통과해 카드가 두 장 뜬다 — 2026-08-16 매치 115548147900619033 에서 member 10 이
+	 * 17:07:37 / 17:07:39 두 번 catch-up 되고 "이전 카드 닫음" 로그 없이 2장이 됐다.
+	 */
+	@Test
+	void 방금_카드를_보낸_회원에게는_다시_보내지_않는다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargetsForMember("match-1", 1L))
+				.thenReturn(List.of(startTarget("start-tok", 1L, "T1")));
+
+		service.startCardForMember("match-1", 1L, 1, 0, 0, attributes());
+		service.startCardForMember("match-1", 1L, 1, 0, 0, attributes());
+
+		verify(apnsClient, org.mockito.Mockito.times(1))
+				.sendStartAsync(anyString(), anyString(), any(), any(), anyString(), anyString());
+	}
+
+	@Test
+	void 다른_회원의_카드는_막지_않는다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargetsForMember("match-1", 1L))
+				.thenReturn(List.of(startTarget("tok-a", 1L, "T1")));
+		when(startTokenRepository.findStartTargetsForMember("match-1", 2L))
+				.thenReturn(List.of(startTarget("tok-b", 2L, "HLE")));
+
+		service.startCardForMember("match-1", 1L, 1, 0, 0, attributes());
+		service.startCardForMember("match-1", 2L, 1, 0, 0, attributes());
+
+		verify(apnsClient, org.mockito.Mockito.times(2))
+				.sendStartAsync(anyString(), anyString(), any(), any(), anyString(), anyString());
+	}
+
+	@Test
+	void 다른_경기의_카드는_막지_않는다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargetsForMember(anyString(), eq(1L)))
+				.thenReturn(List.of(startTarget("start-tok", 1L, "T1")));
+
+		service.startCardForMember("match-1", 1L, 1, 0, 0, attributes());
+		service.startCardForMember("match-2", 1L, 1, 0, 0, attributes());
+
+		verify(apnsClient, org.mockito.Mockito.times(2))
+				.sendStartAsync(anyString(), anyString(), any(), any(), anyString(), anyString());
+	}
+
+	/** 세트 시작 일괄 발송도 같은 창을 쓴다 — catch-up 직후 세트가 시작돼도 두 장이 되면 안 된다. */
+	@Test
+	void catch_up_직후_세트시작_일괄발송은_그_회원을_건너뛴다() {
+		enablePushToStart();
+		when(startTokenRepository.findStartTargetsForMember("match-1", 1L))
+				.thenReturn(List.of(startTarget("start-tok", 1L, "T1")));
+		when(startTokenRepository.findStartTargets("match-1", 10L, 20L)).thenReturn(List.of(
+				startTarget("start-tok", 1L, "T1"),
+				startTarget("tok-b", 2L, "HLE")));
+
+		service.startCardForMember("match-1", 1L, 1, 0, 0, attributes());
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		// member 1 은 방금 받았으므로 건너뛰고, member 2 만 새로 받는다.
+		verify(apnsClient, org.mockito.Mockito.times(1))
+				.sendStartAsync(eq("start-tok"), anyString(), any(), any(), anyString(), anyString());
+		verify(apnsClient, org.mockito.Mockito.times(1))
+				.sendStartAsync(eq("tok-b"), anyString(), any(), any(), anyString(), anyString());
+	}
+
 	private void enablePushToStart() {
 		when(apnsClient.isAvailable()).thenReturn(true);
 		org.springframework.test.util.ReflectionTestUtils.setField(service, "pushToStartEnabled", true);
