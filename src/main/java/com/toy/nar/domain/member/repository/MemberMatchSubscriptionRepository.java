@@ -15,6 +15,9 @@ public interface MemberMatchSubscriptionRepository
 
 	boolean existsByMemberIdAndMatchId(Long memberId, String matchId);
 
+	java.util.Optional<com.toy.nar.domain.member.entity.MemberMatchSubscription>
+			findByMemberIdAndMatchId(Long memberId, String matchId);
+
 	void deleteByMemberIdAndMatchId(Long memberId, String matchId);
 
 	@Query("""

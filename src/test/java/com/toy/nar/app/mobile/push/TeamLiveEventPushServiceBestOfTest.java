@@ -79,7 +79,7 @@ class TeamLiveEventPushServiceBestOfTest {
 				.fcmToken("token-1")
 				.platform(com.toy.nar.domain.member.entity.MobileDevicePlatform.IOS)
 				.build();
-		when(deviceRepository.findActiveDevicesBySubscribedMatchId(anyString(), anyString()))
+		when(deviceRepository.findActiveDevicesBySubscribedMatchId(anyString(), anyString(), any()))
 				.thenReturn(List.of(device));
 		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
 				.thenReturn(List.of(1L));

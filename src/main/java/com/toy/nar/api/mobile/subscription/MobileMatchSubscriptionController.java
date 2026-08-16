@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,10 +42,18 @@ public class MobileMatchSubscriptionController {
 	public ResponseEntity<Void> subscribe(
 			@AuthenticationPrincipal Long memberId,
 			@Valid @RequestBody MatchSubscribeRequest request) {
-		subscriptionService.subscribe(memberId, request.matchId(),
-				request.setStartEnabledOrDefault(),
-				request.setEndEnabledOrDefault(),
-				request.liveEventEnabledOrDefault());
+		subscriptionService.subscribe(memberId, request.matchId(), request.toggles());
+		return ResponseEntity.noContent().build();
+	}
+
+	@Operation(summary = "경기 예약 구독 알림 토글 변경",
+			description = "구독은 유지한 채 알림 종류만 켜고 끈다. 보내지 않은 필드는 기존 값을 유지한다.")
+	@PutMapping("/{matchId}")
+	public ResponseEntity<Void> updateToggles(
+			@AuthenticationPrincipal Long memberId,
+			@Parameter(description = "구독 중인 경기 ID") @PathVariable String matchId,
+			@RequestBody MatchSubscribeRequest request) {
+		subscriptionService.updateToggles(memberId, matchId, request.toggles());
 		return ResponseEntity.noContent().build();
 	}
 

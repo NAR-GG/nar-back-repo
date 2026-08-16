@@ -51,8 +51,24 @@ public class MemberMatchSubscription {
 	@Column(name = "set_end_enabled", nullable = false)
 	private boolean setEndEnabled = true;
 
+	/** 라이브 이벤트 마스터 스위치. 아래 종류별 토글과 AND 로 걸린다. */
 	@Column(name = "live_event_enabled", nullable = false)
 	private boolean liveEventEnabled = true;
+
+	@Column(name = "kill_enabled", nullable = false)
+	private boolean killEnabled = true;
+
+	@Column(name = "baron_enabled", nullable = false)
+	private boolean baronEnabled = true;
+
+	@Column(name = "dragon_enabled", nullable = false)
+	private boolean dragonEnabled = true;
+
+	@Column(name = "tower_enabled", nullable = false)
+	private boolean towerEnabled = true;
+
+	@Column(name = "inhibitor_enabled", nullable = false)
+	private boolean inhibitorEnabled = true;
 
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
@@ -65,6 +81,40 @@ public class MemberMatchSubscription {
 		this.setStartEnabled = setStartEnabled;
 		this.setEndEnabled = setEndEnabled;
 		this.liveEventEnabled = liveEventEnabled;
+	}
+
+	/**
+	 * 알림 토글을 갱신한다. null 인 값은 건드리지 않는다 — 구버전 앱이 모르는 필드를
+	 * 안 보내면 그 토글이 꺼진 것으로 오해하면 안 된다.
+	 */
+	public void updateToggles(
+			Boolean setStartEnabled, Boolean setEndEnabled, Boolean liveEventEnabled,
+			Boolean killEnabled, Boolean baronEnabled, Boolean dragonEnabled,
+			Boolean towerEnabled, Boolean inhibitorEnabled) {
+		if (setStartEnabled != null) {
+			this.setStartEnabled = setStartEnabled;
+		}
+		if (setEndEnabled != null) {
+			this.setEndEnabled = setEndEnabled;
+		}
+		if (liveEventEnabled != null) {
+			this.liveEventEnabled = liveEventEnabled;
+		}
+		if (killEnabled != null) {
+			this.killEnabled = killEnabled;
+		}
+		if (baronEnabled != null) {
+			this.baronEnabled = baronEnabled;
+		}
+		if (dragonEnabled != null) {
+			this.dragonEnabled = dragonEnabled;
+		}
+		if (towerEnabled != null) {
+			this.towerEnabled = towerEnabled;
+		}
+		if (inhibitorEnabled != null) {
+			this.inhibitorEnabled = inhibitorEnabled;
+		}
 	}
 
 	@PrePersist

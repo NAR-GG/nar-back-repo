@@ -111,6 +111,11 @@ class MobileTeamNotificationControllerTest {
 				subscribed,
 				setStartEnabled,
 				setEndEnabled,
-				liveEventEnabled);
+				liveEventEnabled,
+				true,
+				true,
+				true,
+				true,
+				true);
 	}
 }

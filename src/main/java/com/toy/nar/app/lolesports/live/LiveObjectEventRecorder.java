@@ -332,7 +332,7 @@ public class LiveObjectEventRecorder {
 		// [FCM #21] LIVE_EVENT 푸시. live.notification.fcm.enabled 플래그로 게이트.
 		// 멱등 키 event_order 는 킬/오브젝트 충돌을 막기 위해 저장된 이벤트의 전역 id 를 쓴다.
 		if (teamLiveEventPushService.isEnabled() && isNotifiableLeague(activeGame.leagueName())) {
-			fireLiveEventPush(activeGame, teamSide,
+			fireLiveEventPush(activeGame, teamSide, eventType,
 					objectEventTitle(activeGame, teamSide, eventType, eventSubType, valueAfter),
 					objectEventBody(activeGame, teamSide, eventType, valueAfter, opponentCurrentValue),
 					event.getId());
@@ -398,7 +398,7 @@ public class LiveObjectEventRecorder {
 
 		// [FCM #21] LIVE_EVENT(킬) 푸시. live.notification.fcm.enabled 플래그로 게이트.
 		if (teamLiveEventPushService.isEnabled() && isNotifiableLeague(activeGame.leagueName())) {
-			fireLiveEventPush(activeGame, killerSide,
+			fireLiveEventPush(activeGame, killerSide, EVENT_KILL,
 					killEventTitle(activeGame, killerSide, firstBlood,
 							killer == null ? null : killer.summonerName(),
 							victim == null ? null : victim.summonerName(),
@@ -521,8 +521,8 @@ public class LiveObjectEventRecorder {
 	}
 
 	/** [FCM #21] LIVE_EVENT 푸시 호출. 진영별 esportsTeamId(window 기준)로 이벤트를 일으킨 팀 구독자에게 발송. */
-	private void fireLiveEventPush(ActiveLiveGame activeGame, String teamSide, String title, String body,
-			long eventOrder) {
+	private void fireLiveEventPush(ActiveLiveGame activeGame, String teamSide, String eventType,
+			String title, String body, long eventOrder) {
 		try {
 			SideTeamIds sideIds = sideTeamIdsByGame.get(activeGame.gameId());
 			if (sideIds == null) {
@@ -537,6 +537,7 @@ public class LiveObjectEventRecorder {
 					activeGame.setNumber() != null ? activeGame.setNumber() : 0,
 					eventOrder,
 					actingEsportsTeamId,
+					eventType,
 					title,
 					body);
 		} catch (Exception e) {
