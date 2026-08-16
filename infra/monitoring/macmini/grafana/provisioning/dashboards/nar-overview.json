@@ -19,6 +19,128 @@
   },
   "panels": [
     {
+      "id": 100,
+      "type": "stat",
+      "title": "경기 데이터 수집 이후",
+      "description": "MATCH_SYNC 는 30분 주기다. 한 시간을 넘으면 잡이 멎었거나 상류가 막힌 것이다. 재시작 후 아직 한 번도 안 돈 잡은 시리즈가 없어 No data 로 나온다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - nar_scheduler_last_success_epoch_seconds{scheduler_job=\"MATCH_SYNC\"}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 3600
+              },
+              {
+                "color": "red",
+                "value": 7200
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 101,
+      "type": "stat",
+      "title": "신규 경기 0건 연속",
+      "description": "상류 CSV 가 밀리면 배치는 정상 성공하는데 새 경기만 안 들어온다. 잡 성공 여부로는 안 잡히는 종류의 정체다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(nar_scheduler_zero_new_games_streak)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "정상 수집",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 6
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
       "id": 1,
       "type": "stat",
       "title": "Warding 앱 요청/s",
@@ -29,7 +151,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 0,
+        "x": 8,
         "y": 0
       },
       "targets": [
@@ -60,10 +182,10 @@
       }
     },
     {
-      "id": 2,
+      "id": 6,
       "type": "stat",
-      "title": "웹 요청/s",
-      "description": "mobile·admin·auth·actuator 와 매칭 실패 노이즈(UNKNOWN, REDIRECTION, /**)를 뺀 나머지. 인증(/api/auth)은 앱 사용자가 대부분이라 웹으로 세면 웹 트래픽이 4배로 부풀려진다. 그래서 별도 분류로 뺐다.",
+      "title": "p95 응답시간",
+      "description": "노이즈·actuator 를 제외한 전체 기준. 평균이 아니라 상위 5% 요청이 얼마나 걸리는지를 본다.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -71,70 +193,42 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 4,
+        "x": 12,
         "y": 0
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/api/mobile/.*|/api/admin/.*|/api/auth/.*|/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m]))"
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
+          "unit": "s",
           "decimals": 3,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "green"
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
           }
         },
         "overrides": []
       },
       "options": {
         "graphMode": "area",
-        "colorMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
-    },
-    {
-      "id": 3,
-      "type": "stat",
-      "title": "백오피스 요청/s",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 8,
-        "y": 0
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/admin/.*\"}[5m]))"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "decimals": 3,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "purple"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "graphMode": "area",
-        "colorMode": "value",
+        "colorMode": "background",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -282,57 +376,102 @@
       }
     },
     {
-      "id": 6,
-      "type": "stat",
-      "title": "p95 응답시간",
-      "description": "노이즈·actuator 를 제외한 전체 기준. 평균이 아니라 상위 5% 요청이 얼마나 걸리는지를 본다.",
+      "id": 110,
+      "type": "timeseries",
+      "title": "잡별 마지막 성공 이후 경과",
+      "description": "일 1회 잡(TEAM_METADATA_SYNC 등)은 24시간까지 자연스럽게 올라간다. 주기 대비 얼마나 벗어났는지를 봐야지 절대값으로 보면 안 된다.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 12,
-        "y": 0
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 4
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator/.*|/v3/.*|/swagger-ui.*|UNKNOWN|REDIRECTION|/\\\\*\\\\*\"}[5m])))"
+          "legendFormat": "{{scheduler_job}}",
+          "expr": "topk(10, time() - nar_scheduler_last_success_epoch_seconds)"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "decimals": 3,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 0.5
-              },
-              {
-                "color": "red",
-                "value": 2
-              }
-            ]
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
           }
         },
         "overrides": []
       },
       "options": {
-        "graphMode": "area",
-        "colorMode": "background",
-        "reduceOptions": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
           "calcs": [
             "lastNotNull"
           ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 111,
+      "type": "timeseries",
+      "title": "잡 실행 결과 (성공 / 실패 / 경고)",
+      "description": "실패가 0 이어도 안심할 수 없다. 잡이 아예 안 돌면 어느 카운터도 늘지 않는다. 그건 왼쪽 패널로 본다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{outcome}}",
+          "expr": "sum by (outcome) (rate(nar_scheduler_runs_total[10m]) * 600)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
       }
     },
@@ -348,7 +487,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 4
+        "y": 11
       },
       "targets": [
         {
@@ -424,7 +563,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 4
+        "y": 11
       },
       "targets": [
         {
@@ -489,7 +628,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 12
+        "y": 19
       },
       "targets": [
         {
@@ -554,7 +693,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 12
+        "y": 19
       },
       "targets": [
         {
@@ -601,7 +740,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 20
+        "y": 27
       },
       "targets": [
         {
@@ -650,7 +789,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 20
+        "y": 27
       },
       "targets": [
         {
@@ -709,7 +848,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 20
+        "y": 27
       },
       "targets": [
         {
@@ -770,7 +909,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 34
       },
       "targets": [
         {
