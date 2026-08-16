@@ -17,17 +17,20 @@ public interface PlayerSoloRankPushDeliveryRepositoryCustom {
 	 *
 	 * <p>판정 규칙은 신규이거나 FAILED 이거나 PENDING 으로 5분 넘게 방치된 건만 통과이고,
 	 * SENT 는 제외된다(게임당 1회 발송).</p>
+	 *
+	 * <p>{@code eventType}(START/END)이 키에 들어간다. 없으면 시작 알림을 보낸 게임의 종료
+	 * 알림이 "이미 보냄"으로 걸려 영영 안 나간다.</p>
 	 */
-	List<Long> reserveAll(Collection<Long> memberIds, Long playerId, String gameId);
+	List<Long> reserveAll(Collection<Long> memberIds, Long playerId, String gameId, String eventType);
 
-	int markSentAll(Collection<Long> memberIds, Long playerId, String gameId);
+	int markSentAll(Collection<Long> memberIds, Long playerId, String gameId, String eventType);
 
 	/**
 	 * 알림 잠자기라 푸시를 보내지 않고 알림함에만 남긴 건을 마감한다.
 	 *
 	 * <p>재예약 대상(FAILED·stale PENDING)이 아니어야 잠자기가 끝난 뒤 뒤늦은 푸시가 안 나간다.</p>
 	 */
-	int markSkippedQuietAll(Collection<Long> memberIds, Long playerId, String gameId);
+	int markSkippedQuietAll(Collection<Long> memberIds, Long playerId, String gameId, String eventType);
 
-	int markFailedAll(Collection<Long> memberIds, Long playerId, String gameId, String errorMessage);
+	int markFailedAll(Collection<Long> memberIds, Long playerId, String gameId, String eventType, String errorMessage);
 }

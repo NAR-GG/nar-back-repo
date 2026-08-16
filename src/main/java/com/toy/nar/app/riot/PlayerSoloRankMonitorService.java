@@ -9,6 +9,7 @@ import com.toy.nar.app.riot.dto.PlayerSoloRankMonitorResult;
 import com.toy.nar.app.riot.dto.RiotCurrentGameResponse;
 import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
+import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
 import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,7 @@ public class PlayerSoloRankMonitorService {
 	private final PlayerSoloRankPushService playerSoloRankPushService;
 	private final SchedulerAlertService schedulerAlertService;
 	private final SoloRankGameHistoryRecorder soloRankGameHistoryRecorder;
+	private final SoloRankEndNotificationService endNotificationService;
 	private final TransactionTemplate transactionTemplate;
 
 	/**
@@ -88,6 +90,12 @@ public class PlayerSoloRankMonitorService {
 				checkedCount++;
 
 				if (currentGameOptional.isEmpty()) {
+					// IN_RANKED_SOLO -> OFFLINE 전이가 곧 "그 솔랭 게임이 끝났다"이다.
+					// lastCheckedMatchId 가 어느 게임인지 알려주고, markNoRecentMatch 는 그 값을
+					// 지우지 않으므로 상태를 바꾸기 전에 읽어야 한다.
+					if (account.getLiveStatus() == PlayerRiotAccountLiveStatus.IN_RANKED_SOLO) {
+						endNotificationService.onGameEnded(account, account.getLastCheckedMatchId());
+					}
 					account.markNoRecentMatch(checkedAt);
 					persist(account);
 					noRecentMatchCount++;

@@ -21,6 +21,11 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 	// 백오피스 회원 상세: 푸시 받을 수 있는 기기 수.
 	long countByMember_IdAndActiveTrue(Long memberId);
 
+	/**
+	 * 선수를 구독하고 해당 알림 토글이 켜진 회원들의 활성 기기 목록.
+	 *
+	 * @param eventType START(게임 시작) 또는 END(게임 종료)
+	 */
 	@EntityGraph(attributePaths = "member")
 	@Query("""
 			SELECT DISTINCT device
@@ -31,9 +36,15 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 				  FROM MemberFavoritePlayer favorite
 				  WHERE favorite.member = device.member
 				    AND favorite.player.id = :playerId
+				    AND (
+				        (:eventType = 'START' AND favorite.startEnabled = true)
+				        OR (:eventType = 'END' AND favorite.endEnabled = true)
+				    )
 			  )
 			""")
-	List<MemberDevice> findActiveDevicesBySubscribedPlayerId(@Param("playerId") Long playerId);
+	List<MemberDevice> findActiveDevicesBySubscribedPlayerId(
+			@Param("playerId") Long playerId,
+			@Param("eventType") String eventType);
 
 	/**
 	 * 특정 팀을 구독하고 해당 이벤트 토글이 켜진 회원들의 활성 기기 목록.

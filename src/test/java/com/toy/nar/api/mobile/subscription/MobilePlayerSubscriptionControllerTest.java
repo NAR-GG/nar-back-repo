@@ -90,6 +90,8 @@ class MobilePlayerSubscriptionControllerTest {
 				"T1",
 				"T1",
 				"t1.png",
-				subscribed);
+				subscribed,
+				true,
+				false);
 	}
 }

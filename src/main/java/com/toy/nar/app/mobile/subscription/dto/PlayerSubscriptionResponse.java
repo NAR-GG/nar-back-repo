@@ -11,11 +11,22 @@ public record PlayerSubscriptionResponse(
 		String teamCode,
 		String teamName,
 		String teamImageUrl,
-		boolean subscribed) {
+		boolean subscribed,
+		boolean startEnabled,
+		boolean endEnabled) {
 
+	/** 목록/구독 응답의 기본값 — 시작 ON, 종료 OFF. */
 	public static PlayerSubscriptionResponse from(
 			PlayerRepository.LckPlayerOption player,
 			boolean subscribed) {
+		return from(player, subscribed, true, false);
+	}
+
+	public static PlayerSubscriptionResponse from(
+			PlayerRepository.LckPlayerOption player,
+			boolean subscribed,
+			boolean startEnabled,
+			boolean endEnabled) {
 		return new PlayerSubscriptionResponse(
 				player.getPlayerId(),
 				player.getPlayerName(),
@@ -25,6 +36,8 @@ public record PlayerSubscriptionResponse(
 				player.getTeamCode(),
 				player.getTeamName(),
 				player.getTeamImageUrl(),
-				subscribed);
+				subscribed,
+				startEnabled,
+				endEnabled);
 	}
 }

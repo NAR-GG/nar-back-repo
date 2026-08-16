@@ -60,9 +60,13 @@ public class MobilePlayerSubscriptionService {
 				.forEach(option -> playerOptions.putIfAbsent(option.getPlayerId(), option));
 
 		return subscriptions.stream()
-				.map(subscription -> playerOptions.get(subscription.getPlayer().getId()))
-				.filter(option -> option != null)
-				.map(option -> PlayerSubscriptionResponse.from(option, true))
+				.map(subscription -> {
+					PlayerRepository.LckPlayerOption option =
+							playerOptions.get(subscription.getPlayer().getId());
+					return option == null ? null : PlayerSubscriptionResponse.from(
+							option, true, subscription.isStartEnabled(), subscription.isEndEnabled());
+				})
+				.filter(response -> response != null)
 				.sorted(Comparator
 						.comparingInt((PlayerSubscriptionResponse response) -> PlayerRoleOrder.of(response.role()))
 						.thenComparing(PlayerSubscriptionResponse::playerName, String.CASE_INSENSITIVE_ORDER))
@@ -152,6 +156,16 @@ public class MobilePlayerSubscriptionService {
 		catch (CannotAcquireLockException e) {
 			subscriptionRepository.insertIfAbsent(memberId, playerId, LocalDateTime.now());
 		}
+	}
+
+	/** 구독을 유지한 채 시작/종료 알림 토글만 바꾼다. null 인 값은 기존 값을 유지한다. */
+	@Transactional
+	public void updateToggles(Long memberId, Long playerId, Boolean startEnabled, Boolean endEnabled) {
+		requireMember(memberId);
+		MemberFavoritePlayer subscription = subscriptionRepository
+				.findByMember_IdAndPlayer_Id(memberId, playerId)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "선수 구독을 찾을 수 없습니다."));
+		subscription.updateToggles(startEnabled, endEnabled);
 	}
 
 	@Transactional

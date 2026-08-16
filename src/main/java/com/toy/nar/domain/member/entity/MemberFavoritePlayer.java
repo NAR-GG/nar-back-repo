@@ -36,8 +36,29 @@ public class MemberFavoritePlayer {
     @JoinColumn(name = "player_id", nullable = false)
     private Player player;
 
+    /** 선수가 솔랭을 시작했을 때 알림. 기존 구독의 동작이라 기본 ON. */
+    @Column(name = "start_enabled", nullable = false)
+    private boolean startEnabled = true;
+
+    /**
+     * 선수가 솔랭 한 판을 마쳤을 때 알림(승패·KDA 포함). 기본 OFF —
+     * 선수당 하루 여러 판이라 켜면 알림이 두 배가 된다.
+     */
+    @Column(name = "end_enabled", nullable = false)
+    private boolean endEnabled = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private java.time.LocalDateTime createdAt;
+
+    /** null 은 "안 보냈다" 이므로 기존 값을 유지한다(구버전 앱 호환). */
+    public void updateToggles(Boolean startEnabled, Boolean endEnabled) {
+        if (startEnabled != null) {
+            this.startEnabled = startEnabled;
+        }
+        if (endEnabled != null) {
+            this.endEnabled = endEnabled;
+        }
+    }
 
     @Builder
     public MemberFavoritePlayer(Member member, Player player) {
