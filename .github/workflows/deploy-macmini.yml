@@ -138,12 +138,20 @@ jobs:
             chmod 600 "${FIREBASE_SECRET_FILE}"
 
             # APNs 키가 없으면 설치·마운트를 건너뛰고 APNS_ENABLED=false 로 뜬다(발송 경로 전체 skip).
-            APNS_ARGS=""
+            #
+            # 위치 인자로 모은다. 문자열 변수에 담아 ${VAR} 로 펼치면 이 액션이 돌리는 셸에서
+            # 단어 분리가 일어나지 않아 통째로 한 인자가 된다(docker: "invalid mode: ro").
+            set --
             if [ -n "${APNS_KEY_BASE64:-}" ]; then
               printf '%s' "${APNS_KEY_BASE64}" | base64 --decode > "${APNS_SECRET_FILE}"
               chmod 600 "${APNS_SECRET_FILE}"
-              # 한 줄로 둔다. 여러 줄로 쓰면 docker 인자로 풀릴 때 -v 값이 깨진다("invalid mode: ro").
-              APNS_ARGS="-v ${APNS_SECRET_FILE}:/run/secrets/apns-auth-key.p8:ro -e APNS_ENABLED=true -e APNS_KEY_PATH=/run/secrets/apns-auth-key.p8 -e APNS_KEY_ID=${APNS_KEY_ID:-} -e APNS_TEAM_ID=${APNS_TEAM_ID:-} -e APNS_BUNDLE_ID=com.nar.wardingapp -e APNS_PUSH_TO_START_ENABLED=true"
+              set -- -v "${APNS_SECRET_FILE}:/run/secrets/apns-auth-key.p8:ro" \
+                     -e APNS_ENABLED=true \
+                     -e APNS_KEY_PATH=/run/secrets/apns-auth-key.p8 \
+                     -e "APNS_KEY_ID=${APNS_KEY_ID:-}" \
+                     -e "APNS_TEAM_ID=${APNS_TEAM_ID:-}" \
+                     -e APNS_BUNDLE_ID=com.nar.wardingapp \
+                     -e APNS_PUSH_TO_START_ENABLED=true
             else
               echo "APNS_KEY_BASE64 미설정 — Live Activity 푸시 비활성으로 배포"
               rm -f "${APNS_SECRET_FILE}"
@@ -226,7 +234,7 @@ jobs:
               -e JAVA_TOOL_OPTIONS="-Xmx2g --add-opens=java.base/java.lang=ALL-UNNAMED" \
               -e TZ=Asia/Seoul \
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
-              ${APNS_ARGS} \
+              "$@" \
               "${APP_IMAGE}"
 
             # 상한 120초. 맥미니는 EC2 보다 빨라 보통 15초 안에 뜬다.
