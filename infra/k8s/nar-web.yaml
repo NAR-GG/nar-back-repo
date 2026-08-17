@@ -1,0 +1,86 @@
+# 웹 파드. 아직 트래픽을 안 받는다 — Service·Ingress 가 없고, nginx 는 여전히
+# docker 컨테이너(8083)를 가리킨다. 트래픽 전환은 별도 단계다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nar-web
+  namespace: nar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nar-web
+  template:
+    metadata:
+      labels:
+        app: nar-web
+    spec:
+      containers:
+        - name: app
+          image: menten4859/nar-gg:59870c1d502c04169f39926b4561e32c3a5ef771
+          ports:
+            - containerPort: 8080
+
+          envFrom:
+            - secretRef:
+                name: nar-env
+
+          env:
+            # 시크릿 안의 DB_URL 은 docker 판에서 복사해온 값이라 host.docker.internal 이다.
+            # 파드에서는 그 이름이 안 풀린다. 맥OS 호스트는 Colima 네트워크의 192.168.5.2 다.
+            # 여기서 덮어쓰므로 시크릿 쪽 값은 파드에 영향이 없다.
+            - name: DB_URL
+              value: "jdbc:mysql://192.168.5.2:3306/nardb?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+
+            # docker 앱이 스케줄러를 돌리는 동안 여기서도 켜면 라이브 폴링·푸시가 이중으로 나간다.
+            # 트래픽을 넘길 때 docker 쪽을 끄고 이 값들을 켠다.
+            - name: APP_SCHEDULING_ENABLED
+              value: "false"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: RIOT_API_ENABLED
+              value: "false"
+            - name: RIOT_MONITOR_ENABLED
+              value: "false"
+            - name: LOL_LIVE_ENABLED
+              value: "false"
+            - name: FIREBASE_MESSAGING_ENABLED
+              value: "false"
+            - name: LIVE_NOTIFICATION_FCM_ENABLED
+              value: "false"
+            - name: APNS_ENABLED
+              value: "false"
+
+            # 그림자 인스턴스의 예외가 프로덕션 릴리스에 섞이면 회귀를 판별할 수 없다.
+            - name: SENTRY_DSN
+              value: ""
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xmx2g --add-opens=java.base/java.lang=ALL-UNNAMED"
+
+          resources:
+            requests:
+              # 실측 RSS 1318Mi (힙 미포화). 스케줄링 기준이므로 평상시 값으로 잡는다.
+              memory: "1536Mi"
+              cpu: "500m"
+            limits:
+              # 힙 2g 위에 메타스페이스·스레드 스택·다이렉트 버퍼가 얹힌다.
+              # 2Gi 로 잡으면 힙이 차는 순간 OOMKill 이다.
+              memory: "3Gi"
+              # CPU 한도는 두지 않는다. 한도는 스로틀링이라, 여유가 있어도 GC 와 기동이 느려진다.
+
+          # docker 판에 없던 것. 프로세스는 살아 있는데 응답을 못 하는 상태를
+          # `--restart unless-stopped` 는 못 잡는다(프로세스가 죽어야 반응).
+          readinessProbe:
+            httpGet:
+              path: /api/worlds/recent
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/worlds/recent
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            failureThreshold: 3
