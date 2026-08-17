@@ -2,9 +2,8 @@ name: Build and Deploy to 맥미니 홈서버
 
 # EC2 → 맥미니 이전용 배포 파이프라인.
 #
-# 지금은 workflow_dispatch 전용이라 저절로 돌지 않는다. 실서비스 배포는 여전히
-# deploy.yml(EC2)이 담당한다. 컷오버 때 이 파일에 push 트리거를 붙이고
-# deploy.yml 에서 떼어낸다.
+# 2026-08-17 컷오버 이후 이 워크플로가 실서비스 배포를 담당한다.
+# deploy.yml(EC2)은 push 트리거를 떼고 수동 전용으로 남겨뒀다 — 롤백 시 쓴다.
 #
 # EC2 판과 다른 점:
 #   - TLS 를 Cloudflare 가 종단한다. certbot·443 리스너가 없고 nginx 는 8081 평문이다.
@@ -14,6 +13,18 @@ name: Build and Deploy to 맥미니 홈서버
 #   - DB 가 같은 기계다. 쿼리 왕복이 4.03ms → 0.283ms 로 줄어든다(2026-08-17 실측).
 
 on:
+  push:
+    branches:
+      - main
+    # 문서·지식 번들만 바뀐 머지는 배포를 건너뛴다.
+    # infra/ 는 관측 스택·맥미니 설정 원본 보관소다. 서버에 복사해 반영하는 것이지
+    # 앱 바이너리와 무관하므로 여기만 바뀌면 빌드도 컨테이너 교체도 할 이유가 없다.
+    paths-ignore:
+      - 'nar-okf/**'
+      - 'docs/**'
+      - 'infra/**'
+      - '**.md'
+
   workflow_dispatch:
     inputs:
       skip_build:
