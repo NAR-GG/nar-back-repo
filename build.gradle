@@ -109,6 +109,10 @@ tasks.register('generateJooq', JavaExec) {
 
 tasks.named('test') {
 	useJUnitPlatform()
+
+	// 테스트가 CI 시간의 절반이었는데 JVM 하나로만 돌았다.
+	// 코어 수의 절반(최소 1)만 쓴다 — 전부 쓰면 컴파일·Gradle 자체와 경합한다.
+	maxParallelForks = Math.max(1, Runtime.runtime.availableProcessors().intdiv(2))
 	systemProperties System.properties.findAll { key, _ ->
 		key.startsWith('benchmark.') || key.startsWith('deadlock.') || key.startsWith('dataintegrity.')
 				|| key.startsWith('fullcontext.') || key.startsWith('apns.')
