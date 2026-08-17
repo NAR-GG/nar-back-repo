@@ -1,0 +1,273 @@
+name: Build and Deploy to 맥미니 홈서버
+
+# EC2 → 맥미니 이전용 배포 파이프라인.
+#
+# 지금은 workflow_dispatch 전용이라 저절로 돌지 않는다. 실서비스 배포는 여전히
+# deploy.yml(EC2)이 담당한다. 컷오버 때 이 파일에 push 트리거를 붙이고
+# deploy.yml 에서 떼어낸다.
+#
+# EC2 판과 다른 점:
+#   - TLS 를 Cloudflare 가 종단한다. certbot·443 리스너가 없고 nginx 는 8081 평문이다.
+#   - 맥미니는 공인 IP 가 없다. 러너를 tailnet 에 임시 노드로 넣어 SSH 한다.
+#   - sudo 비밀번호가 필요해 sudo 를 쓸 수 없다. nginx 는 brew 로 깔려 사용자 권한으로 재시작된다.
+#   - CloudWatch(awslogs) 와 WhaTap 을 쓰지 않는다. 로그는 맥미니 Loki 로 간다.
+#   - DB 가 같은 기계다. 쿼리 왕복이 4.03ms → 0.283ms 로 줄어든다(2026-08-17 실측).
+
+on:
+  # 임시: 이 브랜치에 푸시하면 돈다. workflow_dispatch 는 기본 브랜치에 있어야 동작하므로
+  # 병합 전 검증용으로만 둔다. PR 올리기 전에 지운다.
+  push:
+    branches:
+      - ci/deploy-macmini
+  workflow_dispatch:
+    inputs:
+      skip_build:
+        description: '빌드를 건너뛰고 마지막 이미지로 배포만 (재기동 검증용)'
+        type: boolean
+        default: false
+
+# EC2 판과 같은 이유로 순차 실행. 블루-그린은 ACTIVE_PORT 를 읽어 반대편을 고르므로
+# 두 실행이 겹치면 같은 포트를 골라 서로의 컨테이너를 죽인다.
+concurrency:
+  group: deploy-macmini
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Make gradlew executable
+        if: ${{ !inputs.skip_build }}
+        run: chmod +x ./gradlew
+
+      - name: Create service-account-key.json from Secrets and move to resources
+        if: ${{ !inputs.skip_build }}
+        run: |
+          cat <<EOF > service-account-key.json
+          ${{ secrets.SERVICE_ACCOUNT_KEY }}
+          EOF
+          mkdir -p src/main/resources
+          mv service-account-key.json src/main/resources/service-account-key.json
+
+      - name: Build with Gradle
+        if: ${{ !inputs.skip_build }}
+        run: ./gradlew clean build -x test
+
+      - name: Set up Docker Buildx
+        if: ${{ !inputs.skip_build }}
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: ${{ !inputs.skip_build }}
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and Push Docker image
+        if: ${{ !inputs.skip_build }}
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          # 맥미니(M1)도 EC2 t4g 와 같은 arm64 다. 이미지가 그대로 재사용된다.
+          platforms: linux/arm64
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
+            ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
+
+      # 맥미니는 Tailscale 안에서만 닿는다. 러너를 tag:ci 짜리 임시 노드로 조인시킨다.
+      # ACL 에서 tag:ci 는 맥미니 22 번 포트만 허용된다(DB VM·EC2 에는 못 닿는다).
+      # 잡이 끝나면 ephemeral 노드라 자동으로 사라진다.
+      - name: Connect to tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy to 맥미니
+        uses: appleboy/ssh-action@v1
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+          APNS_KEY_BASE64: ${{ secrets.APNS_KEY_BASE64 }}
+          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+          APNS_TEAM_ID: ${{ secrets.APNS_TEAM_ID }}
+        with:
+          host: 100.111.167.92
+          username: changha
+          key: ${{ secrets.MACMINI_SSH_KEY }}
+          command_timeout: 15m
+          envs: FIREBASE_SERVICE_ACCOUNT_BASE64,APNS_KEY_BASE64,APNS_KEY_ID,APNS_TEAM_ID
+          script: |
+            set -eu
+
+            # ssh 로 들어오면 .zshenv 만 읽힌다. brew PATH 가 없으면 docker 부터 못 찾는다.
+            export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+
+            APP_IMAGE="${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}"
+            SECRET_DIR="$HOME/nar/secrets"
+            FIREBASE_SECRET_FILE="${SECRET_DIR}/firebase-service-account.json"
+            APNS_SECRET_FILE="${SECRET_DIR}/apns-auth-key.p8"
+            UPSTREAM_CONF="/opt/homebrew/etc/nginx/servers/nar-upstream.conf"
+
+            # sudo 를 쓸 수 없어(비밀번호 필요) 홈 디렉토리에 둔다. 대신 권한을 좁힌다.
+            mkdir -p "${SECRET_DIR}" && chmod 700 "${SECRET_DIR}"
+
+            : "${FIREBASE_SERVICE_ACCOUNT_BASE64:?FIREBASE_SERVICE_ACCOUNT_BASE64 secret is required}"
+            printf '%s' "${FIREBASE_SERVICE_ACCOUNT_BASE64}" | base64 --decode > "${FIREBASE_SECRET_FILE}"
+            chmod 600 "${FIREBASE_SECRET_FILE}"
+
+            # APNs 키가 없으면 설치·마운트를 건너뛰고 APNS_ENABLED=false 로 뜬다(발송 경로 전체 skip).
+            APNS_ARGS=""
+            if [ -n "${APNS_KEY_BASE64:-}" ]; then
+              printf '%s' "${APNS_KEY_BASE64}" | base64 --decode > "${APNS_SECRET_FILE}"
+              chmod 600 "${APNS_SECRET_FILE}"
+              APNS_ARGS="-v ${APNS_SECRET_FILE}:/run/secrets/apns-auth-key.p8:ro
+                -e APNS_ENABLED=true
+                -e APNS_KEY_PATH=/run/secrets/apns-auth-key.p8
+                -e APNS_KEY_ID=${APNS_KEY_ID:-}
+                -e APNS_TEAM_ID=${APNS_TEAM_ID:-}
+                -e APNS_BUNDLE_ID=com.nar.wardingapp
+                -e APNS_PUSH_TO_START_ENABLED=true"
+            else
+              echo "APNS_KEY_BASE64 미설정 — Live Activity 푸시 비활성으로 배포"
+              rm -f "${APNS_SECRET_FILE}"
+            fi
+
+            docker container prune -f || true
+
+            # 블루-그린. nginx upstream 이 가리키는 포트의 반대편에 새 컨테이너를 띄우고,
+            # 헬스체크를 통과한 뒤에 upstream 을 교체한다. 실패하면 구 컨테이너가 그대로 남는다.
+            ACTIVE_PORT=$(grep -oE '127\.0\.0\.1:[0-9]+' "${UPSTREAM_CONF}" | cut -d: -f2)
+            if [ "${ACTIVE_PORT}" = "8080" ]; then
+              NEW_PORT=8083; NEW_NAME=nar-gg-green; OLD_NAME=nar-gg-blue
+            else
+              NEW_PORT=8080; NEW_NAME=nar-gg-blue;  OLD_NAME=nar-gg-green
+            fi
+            echo "현재 ${ACTIVE_PORT} → ${NEW_NAME} 을 ${NEW_PORT} 에 배포"
+
+            docker rm -f "${NEW_NAME}" 2>/dev/null || true
+            docker pull "${APP_IMAGE}"
+
+            # 스케줄러·Flyway 스위치.
+            #
+            # 그림자 기간에는 둘 다 false 여야 한다:
+            #   - 스케줄러가 켜지면 EC2 와 동시에 라이브 폴링을 돌려 유저에게 푸시가 두 번 간다.
+            #   - Flyway 가 켜지면 복제본(read_only)에 마이그레이션을 시도한다. 실패하거나,
+            #     성공하면 원본과 스키마가 갈라져 복제가 깨진다.
+            #
+            # 컷오버 때 저장소 변수 두 개를 true 로 바꾼다. 파일은 안 고친다.
+            SCHEDULING="${{ vars.APP_SCHEDULING_ENABLED || 'false' }}"
+            FLYWAY="${{ vars.SPRING_FLYWAY_ENABLED || 'false' }}"
+            echo "스케줄러=${SCHEDULING}  Flyway=${FLYWAY}"
+
+            # 그림자 인스턴스의 예외가 프로덕션 릴리스에 섞이면 컷오버 후 회귀를 판별할 수 없다.
+            # 컷오버(SCHEDULING=true)와 함께 켠다.
+            if [ "${SCHEDULING}" = "true" ]; then
+              SENTRY="${{ secrets.SENTRY_DSN }}"
+            else
+              SENTRY=""
+            fi
+
+            docker run -d --name "${NEW_NAME}" -p 127.0.0.1:${NEW_PORT}:8080 \
+              --restart unless-stopped \
+              -m 3g \
+              -e SPRING_PROFILES_ACTIVE="prod" \
+              -e APP_SCHEDULING_ENABLED="${SCHEDULING}" \
+              -e SPRING_FLYWAY_ENABLED="${FLYWAY}" \
+              -e DISCORD_WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}" \
+              -e SENTRY_DSN="${SENTRY}" \
+              -e SENTRY_RELEASE="${{ github.sha }}" \
+              -e DB_URL="jdbc:mysql://host.docker.internal:3306/nardb?serverTimezone=Asia/Seoul&characterEncoding=UTF-8" \
+              -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
+              -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+              -e DB_POOL_MAX_SIZE=30 \
+              -e ELASTICSEARCH_URI="100.71.240.23:9200" \
+              -e GOOGLE_DRIVE_CSV_ID="${{ secrets.GOOGLE_DRIVE_CSV_ID }}" \
+              -e YOUTUBE_API_KEY="${{ secrets.YOUTUBE_API_KEY }}" \
+              -e LOL_ESPORTS_KEY="${{ secrets.LOL_ESPORTS_KEY }}" \
+              -e LOL_SYNC_CRON="0 0/30 * * * *" \
+              -e LOL_LIVE_ENABLED="${SCHEDULING}" \
+              -e LOL_TEAM_METADATA_CRON="0 15 4 * * *" \
+              -e DISCORD_PLAYER_WEBHOOK_URL="${{ secrets.DISCORD_PLAYER_WEBHOOK_URL }}" \
+              -e RIOT_API_KEY="${{ secrets.RIOT_API_KEY }}" \
+              -e RIOT_API_ENABLED="${SCHEDULING}" \
+              -e RIOT_MONITOR_ENABLED="${SCHEDULING}" \
+              -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              -e GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              -e GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+              -e KAKAO_CLIENT_ID="${{ secrets.KAKAO_CLIENT_ID }}" \
+              -e KAKAO_CLIENT_SECRET="${{ secrets.KAKAO_CLIENT_SECRET }}" \
+              -e NAVER_CLIENT_ID="${{ secrets.NAVER_CLIENT_ID }}" \
+              -e NAVER_CLIENT_SECRET="${{ secrets.NAVER_CLIENT_SECRET }}" \
+              -e FRONTEND_URL="${{ secrets.FRONTEND_URL }}" \
+              -e BACKOFFICE_URL="https://admin.nar.kr" \
+              -e CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
+              -e CLOUDINARY_API_KEY="${{ secrets.CLOUDINARY_API_KEY }}" \
+              -e CLOUDINARY_API_SECRET="${{ secrets.CLOUDINARY_API_SECRET }}" \
+              -e FIREBASE_MESSAGING_ENABLED="${SCHEDULING}" \
+              -e LIVE_NOTIFICATION_FCM_ENABLED="${SCHEDULING}" \
+              -e GOOGLE_APPLICATION_CREDENTIALS="/run/secrets/firebase-service-account.json" \
+              -e JAVA_TOOL_OPTIONS="-Xmx2g --add-opens=java.base/java.lang=ALL-UNNAMED" \
+              -e TZ=Asia/Seoul \
+              -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
+              ${APNS_ARGS} \
+              "${APP_IMAGE}"
+
+            # 상한 120초. 맥미니는 EC2 보다 빨라 보통 15초 안에 뜬다.
+            echo "포트 ${NEW_PORT} 검증 중..."
+            for i in $(seq 1 60); do
+              if curl -fsS "http://127.0.0.1:${NEW_PORT}/v3/api-docs" | grep -q '"leagues"'; then
+                echo "검증 성공"
+                break
+              fi
+              if [ "$i" -eq 60 ]; then
+                echo "검증 실패. 구 컨테이너가 그대로 트래픽을 받는다(무중단)."
+                docker logs --tail 200 "${NEW_NAME}" || true
+                docker rm -f "${NEW_NAME}" || true
+                exit 1
+              fi
+              sleep 2
+            done
+
+            # nginx 전환 전에 hot-path 첫 타를 배포 스크립트가 맞아 콜드스타트를 없앤다.
+            echo "워밍업..."
+            for ep in champions events ratings; do
+              curl -fsS "http://127.0.0.1:${NEW_PORT}/api/mobile/live/games/DUMMY/${ep}" -o /dev/null 2>&1 || true
+            done
+
+            echo "nginx upstream → ${NEW_PORT}"
+            printf 'upstream nar_backend {\n    server 127.0.0.1:%s;\n}\n' "${NEW_PORT}" > "${UPSTREAM_CONF}"
+            # brew nginx 는 사용자 권한으로 돌아 sudo 가 필요 없다.
+            nginx -t && nginx -s reload
+
+            # 구 컨테이너 정리는 백그라운드로 넘긴다. nginx 는 이미 전환됐으므로
+            # graceful stop 35초를 배포가 기다릴 이유가 없다.
+            echo "구 컨테이너 정리(백그라운드)"
+            nohup bash -c "
+              docker stop -t 35 '${OLD_NAME}' 2>/dev/null || true
+              docker rm '${OLD_NAME}' 2>/dev/null || true
+              docker image prune -af || true
+            " >/dev/null 2>&1 &
+
+            echo "배포 완료"
