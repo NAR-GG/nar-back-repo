@@ -76,6 +76,21 @@ public class LeagueMatchService {
 	private final com.toy.nar.app.schedule.CacheEvictionService cacheEvictionService;
 
 	// [Scheduler용] 특정 리그의 최신 경기를 가져와 DB에 저장 (1페이지)
+	/**
+	 * 주어진 매치 중 우리 DB 가 이미 completed 로 확정한 것들.
+	 *
+	 * <p>라이브 디스커버리가 "이미 종료 확정한 매치는 업스트림 flip 이 올 때까지 건드리지 않는다"
+	 * 는 판단에 쓴다. 이 상태를 프로세스 메모리에 들고 있으면 재기동 때 사라져서,
+	 * 이미 completed 인 매치를 다시 외부 API 로 찌르게 된다.
+	 */
+	@Transactional(readOnly = true)
+	public java.util.Set<String> findCompletedMatchIds(java.util.Collection<String> matchIds) {
+		if (matchIds == null || matchIds.isEmpty()) {
+			return java.util.Set.of();
+		}
+		return new java.util.HashSet<>(leagueMatchRepository.findCompletedIdsIn(matchIds));
+	}
+
 	public void syncMatches(String leagueSlug) {
 		syncMatches(leagueSlug, true);
 	}
