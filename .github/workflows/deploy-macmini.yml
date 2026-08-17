@@ -14,11 +14,6 @@ name: Build and Deploy to 맥미니 홈서버
 #   - DB 가 같은 기계다. 쿼리 왕복이 4.03ms → 0.283ms 로 줄어든다(2026-08-17 실측).
 
 on:
-  # 임시: 이 브랜치에 푸시하면 돈다. workflow_dispatch 는 기본 브랜치에 있어야 동작하므로
-  # 병합 전 검증용으로만 둔다. PR 올리기 전에 지운다.
-  push:
-    branches:
-      - ci/deploy-macmini
   workflow_dispatch:
     inputs:
       skip_build:
