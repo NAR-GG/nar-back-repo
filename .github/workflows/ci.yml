@@ -26,14 +26,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: ${{ runner.os }}-gradle-
+      # actions/cache 를 직접 쓰면 캐시가 갱신되지 않는다. 키가 정확히 맞으면
+      # 실행 끝에 저장을 건너뛰는데, 우리 키는 build.gradle 이 바뀔 때만 변해서
+      # 사실상 고정이다. 그래서 매번 같은 스냅샷을 복원만 하고 이번 실행이 만든
+      # 빌드 캐시 항목은 버려졌다 — org.gradle.caching=true 가 CI 에서 무효였다.
+      #
+      # 공식 액션은 build-cache 를 브랜치별로 write-back 해준다.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
