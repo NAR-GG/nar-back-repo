@@ -62,10 +62,21 @@ public class LiveActivityStartToken {
 		this.active = true;
 	}
 
-	/** 앱이 같은 토큰을 다시 올린 경우(재설치·기기 이전 등)에 소유자를 갱신하고 되살린다. */
+	/**
+	 * 앱이 같은 토큰을 다시 올린 경우(재설치·기기 이전 등)에 소유자를 갱신하고 되살린다.
+	 *
+	 * <p>updatedAt 을 직접 건드리는 이유는 "이 토큰이 마지막으로 살아있던 시각"을 남기기 위해서다.
+	 * 소유자도 active 도 그대로면 JPA 가 변경을 감지하지 못해 UPDATE 가 나가지 않고,
+	 * @PreUpdate 도 안 돈다. 그러면 앱이 매 실행마다 재전송해도 updatedAt 이 옛날에 멈춰 있어
+	 * 살아있는 토큰과 로테이션으로 버려진 토큰을 구분할 수 없다.
+	 *
+	 * <p>push-to-start 토큰은 앱 설치(기기) 단위라 한 회원이 여러 개를 갖는 것이 정상이다.
+	 * 그래서 "회원당 하나"로 줄일 수는 없고, 대신 생존 시각으로 걸러내야 한다.
+	 */
 	public void reactivate(Member member) {
 		this.member = Objects.requireNonNull(member, "member must not be null");
 		this.active = true;
+		this.updatedAt = LocalDateTime.now();
 	}
 
 	public void deactivate() {

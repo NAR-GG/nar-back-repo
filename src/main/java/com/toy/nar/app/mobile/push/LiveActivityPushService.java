@@ -296,6 +296,15 @@ public class LiveActivityPushService {
 		log.info("[live-activity] push-to-start matchId={} set={} 발송 {}건, 죽은 토큰 {}건",
 				matchId, setNumber, targets.size(), deadTokens.size());
 
+		// 죽은 토큰의 주인을 남긴다. 개수만 남기면 "카드가 안 뜬다" 는 제보가 왔을 때
+		// 그 회원이 죽은 토큰 때문이었는지 확인할 방법이 없다(2026-08-17 실제로 겪었다).
+		if (!deadTokens.isEmpty()) {
+			targets.stream()
+					.filter(t -> deadTokens.contains(t.getPushToken()))
+					.forEach(t -> log.warn("[live-activity] 죽은 start token memberId={} token={}…",
+							t.getMemberId(), t.getPushToken().substring(0, Math.min(12, t.getPushToken().length()))));
+		}
+
 		if (!deadTokens.isEmpty()) {
 			try {
 				startTokenRepository.deactivateByPushTokenIn(deadTokens);
