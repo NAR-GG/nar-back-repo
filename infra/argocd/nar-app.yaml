@@ -1,0 +1,22 @@
+# ArgoCD 가 `infra/k8s` 를 보고 클러스터를 맞춘다.
+#
+# 자동 동기화는 아직 안 켠다. 지금은 이미지 태그를 저장소에 쓰는 배포 파이프라인이
+# 없어서, 자동으로 켜면 ArgoCD 가 Git 의 낡은 태그로 되돌려 버린다.
+# CI 가 태그를 저장소에 쓰게 만든 다음 켠다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nar
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:NAR-GG/nar-back-repo.git
+    targetRevision: main
+    path: infra/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nar
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
