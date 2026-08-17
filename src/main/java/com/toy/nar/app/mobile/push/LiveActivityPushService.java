@@ -268,6 +268,9 @@ public class LiveActivityPushService {
 		// 문구는 SET_START FCM 배너와 겹치므로 최소한으로 — 시스템이 상황 따라 워치 등에만 쓴다.
 		String alertTitle = attributes.teamAName() + " vs " + attributes.teamBName();
 		String alertBody = setNumber + "세트 시작";
+		// 발송 건수만 남기면 일시 실패가 성공으로 집계돼 로그가 거짓말을 한다
+		// (2026-08-17: "발송 1228건" 중 228건이 APNs 동시 스트림 한도로 죽어 있었다).
+		long failuresBefore = apnsClient.transientFailureCount();
 		Map<String, CompletableFuture<Boolean>> inFlight = new LinkedHashMap<>();
 		for (LiveActivityStartTokenRepository.StartTargetRow target : targets) {
 			// 응원 팀 하트는 회원마다 달라 payload 를 회원별로 만든다.
@@ -293,8 +296,9 @@ public class LiveActivityPushService {
 				deadTokens.add(token);
 			}
 		});
-		log.info("[live-activity] push-to-start matchId={} set={} 발송 {}건, 죽은 토큰 {}건",
-				matchId, setNumber, targets.size(), deadTokens.size());
+		log.info("[live-activity] push-to-start matchId={} set={} 발송 {}건, 일시 실패 {}건, 죽은 토큰 {}건",
+				matchId, setNumber, targets.size(),
+				apnsClient.transientFailureCount() - failuresBefore, deadTokens.size());
 
 		// 죽은 토큰의 주인을 남긴다. 개수만 남기면 "카드가 안 뜬다" 는 제보가 왔을 때
 		// 그 회원이 죽은 토큰 때문이었는지 확인할 방법이 없다(2026-08-17 실제로 겪었다).
@@ -497,6 +501,7 @@ public class LiveActivityPushService {
 		// 토큰마다 동기 발송하면 왕복이 직렬로 쌓여, 카드가 많은 경기에서 마지막 사람은
 		// 세트가 끝난 뒤에야 카드가 갱신된다(FCM 쪽 실사고와 같은 모양 — ApnsLiveActivityClient 참고).
 		// HTTP/2 다중화를 살리려면 전부 띄운 뒤 한 번에 기다려야 한다.
+		long failuresBefore = apnsClient.transientFailureCount();
 		Map<String, CompletableFuture<Boolean>> inFlight = new LinkedHashMap<>();
 		for (String token : tokens) {
 			inFlight.put(token, end
@@ -518,8 +523,9 @@ public class LiveActivityPushService {
 				deadTokens.add(token);
 			}
 		});
-		log.info("[live-activity] matchId={} end={} 발송 {}건, 죽은 토큰 {}건",
-				matchId, end, tokens.size(), deadTokens.size());
+		log.info("[live-activity] matchId={} end={} 발송 {}건, 일시 실패 {}건, 죽은 토큰 {}건",
+				matchId, end, tokens.size(),
+				apnsClient.transientFailureCount() - failuresBefore, deadTokens.size());
 
 		// 매치가 끝났으면 이 카드들은 더 갱신되지 않는다 — 토큰을 함께 정리한다.
 		// 매치 단위 정리는 조건으로 지우는 편이 낫다. 토큰을 IN 절로 넘기면 카드 수만큼
