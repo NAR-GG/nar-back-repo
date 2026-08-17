@@ -491,6 +491,10 @@ class LivePollingSchedulerTest {
 				.thenReturn(List.of("KESPA"));
 		when(leagueMatchService.syncCompletedMatchFromNaver(
 				org.mockito.ArgumentMatchers.any(), anyString())).thenReturn(true);
+		// 종료 확정 여부는 이제 프로세스 메모리가 아니라 DB 상태로 판단한다.
+		// 첫 사이클엔 아직 completed 가 아니고, 동기화가 성공한 뒤엔 completed 다.
+		when(leagueMatchService.findCompletedMatchIds(org.mockito.ArgumentMatchers.any()))
+				.thenReturn(java.util.Set.of(), java.util.Set.of("kespa-match-1"));
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), new LiveStateStore(),
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
@@ -770,6 +774,10 @@ class LivePollingSchedulerTest {
 				.thenReturn(List.of("LCK"));
 		when(leagueMatchService.syncCompletedMatchFromNaver(
 				org.mockito.ArgumentMatchers.any(), anyString())).thenReturn(true);
+		// 종료 확정 여부는 이제 프로세스 메모리가 아니라 DB 상태로 판단한다.
+		// 첫 사이클엔 아직 completed 가 아니고, 동기화가 성공한 뒤엔 completed 다.
+		when(leagueMatchService.findCompletedMatchIds(org.mockito.ArgumentMatchers.any()))
+				.thenReturn(java.util.Set.of(), java.util.Set.of("match-1"));
 		LivePollingScheduler scheduler = schedulerWith(
 				liveStateStore, mock(TeamLiveEventPushService.class), worldsService, leagueMatchService);
 		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));

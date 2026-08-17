@@ -73,14 +73,6 @@ public class LivePollingScheduler {
 	 */
 	private final java.util.Set<String> frameFinishedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-	/**
-	 * 네이버 종료 확정으로 이미 completed 를 쓴 matchId. 업스트림 flip 이 오기까지(실측 17분+)
-	 * 매 사이클 네이버를 다시 찌르지 않게 막는다. 확정 실패(세트 사이)면 등록하지 않아 다음 사이클에 재시도한다.
-	 * ponytail: 프로세스 생애 동안 누적된다 — 하루 수백 건이라 무해. 커지면 stale 제거 시점에 같이 비운다.
-	 * 재기동으로 이 집합이 비면 이미 completed 인 매치에 대해 flip 까지 네이버를 다시 찌른다(최대 ~17분,
-	 * 10초 주기). 콜 수가 문제되면 DB state 조회로 게이트한다.
-	 */
-	private final java.util.Set<String> naverFinalizedMatchIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
 	/**
 	 * 시작 알림(디스코드+SET_START 푸시)을 이미 보낸 gameId. 업스트림 eventDetails 는
@@ -126,6 +118,14 @@ public class LivePollingScheduler {
 		for (String league : leaguesToPoll) {
 			try {
 				MatchResponseWrapper response = worldsService.getWorldsMatches(null, league);
+				// 우리 DB 가 이미 completed 로 확정한 매치들. 예전에는 이 정보를 프로세스 메모리
+				// (naverFinalizedMatchIds)에 들고 있어서, 재기동하면 비어 있는 바람에 이미 끝난
+				// 매치를 업스트림 flip 이 올 때까지(실측 최대 17분) 10초 주기로 다시 찔렀다.
+				Set<String> ourCompletedMatchIds = leagueMatchService.findCompletedMatchIds(
+						response.getMatches().stream()
+								.map(MatchResultDto::getMatchId)
+								.filter(java.util.Objects::nonNull)
+								.toList());
 				for (MatchResultDto match : response.getMatches()) {
 					// 업스트림(lolesports)이 EWC 등 일부 대회는 라이브 중에도 경기 state 를 unstarted 로 방치한다.
 					// 스케줄 state 로 못 잡으므로, 시작 시각이 지난 unstarted 경기는 매 사이클 livestats 피드를 직접 찔러
@@ -143,7 +143,7 @@ public class LivePollingScheduler {
 					// 프로브도 sync 도 스킵한다 — 업스트림 원본(inProgress/unstarted)으로 sync 하면
 					// DB 의 completed 가 되돌아간다. flip 이 도착하면 state 가 completed 라 이 게이트를 지나
 					// 아래 recentlyCompleted 경로로 최종 스코어가 덮어써진다(self-heal).
-					if (naverFinalizedMatchIds.contains(match.getMatchId())
+					if (ourCompletedMatchIds.contains(match.getMatchId())
 							&& !"completed".equalsIgnoreCase(match.getState())) {
 						continue;
 					}
@@ -159,7 +159,6 @@ public class LivePollingScheduler {
 					if (!"completed".equalsIgnoreCase(match.getState())
 							&& allTrackedGamesFinished(activeGames, match.getMatchId())
 							&& leagueMatchService.syncCompletedMatchFromNaver(match, league)) {
-						naverFinalizedMatchIds.add(match.getMatchId());
 						scheduleCacheDirty = true;
 						continue;
 					}
@@ -187,9 +186,8 @@ public class LivePollingScheduler {
 							// 대신 네이버가 매치 종료(RESULT)를 확인해주면 completed 를 직접 확정한다 —
 							// 업스트림 flip 은 실측 17분+ 늦게 온다(2026-07-27 KESPA T1 vs DNS).
 							// 네이버가 아직 진행 중이면(세트 사이) 기존대로 이 사이클을 건너뛴다.
-							if (!naverFinalizedMatchIds.contains(match.getMatchId())
+							if (!ourCompletedMatchIds.contains(match.getMatchId())
 									&& leagueMatchService.syncCompletedMatchFromNaver(match, league)) {
-								naverFinalizedMatchIds.add(match.getMatchId());
 								scheduleCacheDirty = true;
 							}
 							continue;

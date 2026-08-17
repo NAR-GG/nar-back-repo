@@ -32,6 +32,16 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 	@Query("SELECT m FROM LeagueMatch m WHERE m.leagueName = :leagueName AND m.matchDate < :olderThan ORDER BY m.matchDate DESC")
 	List<LeagueMatch> findByLeagueNameAndDateBefore(@Param("leagueName") String leagueName, @Param("olderThan") LocalDateTime olderThan, Pageable pageable);
 
+	/**
+	 * 주어진 매치 중 우리 DB 가 이미 completed 로 확정한 것들.
+	 *
+	 * <p>라이브 디스커버리가 "네이버로 종료를 확정한 매치는 업스트림 flip 이 올 때까지 건드리지 않는다"
+	 * 는 판단에 쓴다. 예전에는 이 상태를 프로세스 메모리(Set)에 들고 있어서, 재기동하면 비어 있는 바람에
+	 * 이미 completed 인 매치를 flip 까지 최대 17분 동안 10초 주기로 다시 찔렀다.
+	 */
+	@Query("SELECT m.id FROM LeagueMatch m WHERE m.id IN :ids AND LOWER(m.state) = 'completed'")
+	List<String> findCompletedIdsIn(@Param("ids") java.util.Collection<String> ids);
+
 	List<LeagueMatch> findTop3ByOrderByMatchDateDesc(); // 전체 리그 기준 최신 3개 (기본값용)
 
 	List<LeagueMatch> findTop3ByLeagueNameOrderByMatchDateDesc(String leagueName);
