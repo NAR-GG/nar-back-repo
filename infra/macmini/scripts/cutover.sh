@@ -101,7 +101,9 @@ done
 
 # 3. 맥미니를 주 DB 로. 설정 파일과 런타임을 같이 푼다 —
 #    한쪽만 하면 재기동 때 되돌아간다.
-mac "$MYSQL_MAC -u root -e 'STOP REPLICA; SET GLOBAL super_read_only=OFF; SET GLOBAL read_only=OFF;'"
+# RESET REPLICA ALL 까지 해야 승격이 끝난다. STOP 만 하면 옛 복제 설정이 남아
+# SHOW REPLICA STATUS 가 계속 응답하고, 복제 감시가 '복제본인데 멈춰 있다' 로 오탐한다.
+mac "$MYSQL_MAC -u root -e 'STOP REPLICA; RESET REPLICA ALL; SET GLOBAL super_read_only=OFF; SET GLOBAL read_only=OFF;'"
 mac "python3 - <<'PY'
 p='/opt/homebrew/etc/my.cnf'
 s=open(p).read()
@@ -132,8 +134,17 @@ IMAGE=$(mac "docker inspect $CUR_NAME --format '{{.Config.Image}}'" 2>/dev/null 
 if [ "$CUR_NAME" = "nar-gg-blue" ]; then NEW=nar-gg-green; PORT=8083; else NEW=nar-gg-blue; PORT=8080; fi
 echo "  $CUR_NAME → $NEW ($PORT), 이미지 $IMAGE"
 
+# env 는 파일로 넘긴다. -e 로 인라인 전개하면 값에 공백이 있는 항목
+# (JAVA_TOOL_OPTIONS="-Xmx2g --add-opens=...")에서 인자가 쪼개져 docker 가
+# 엉뚱한 토큰을 이미지 이름으로 읽는다. 2026-08-17 컷오버에서 실제로 터졌다.
+mac "docker inspect $CUR_NAME --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -v '^\$' > /tmp/cutover.env && chmod 600 /tmp/cutover.env"
+
+# 시크릿 볼륨도 같이 넘겨야 한다. env 만 복사하면 GOOGLE_APPLICATION_CREDENTIALS 가
+# 가리키는 파일이 없어 FirebaseApp 빈 생성에서 죽고 재시작 루프에 빠진다.
 mac "docker rm -f $NEW 2>/dev/null; docker run -d --name $NEW -p 127.0.0.1:${PORT}:8080 -m 3g --restart unless-stopped \
-  \$(docker inspect $CUR_NAME --format '{{range .Config.Env}}-e {{.}} {{end}}' | tr -d '\n') \
+  --env-file /tmp/cutover.env \
+  -v \$HOME/nar/secrets/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro \
+  -v \$HOME/nar/secrets/apns-auth-key.p8:/run/secrets/apns-auth-key.p8:ro \
   -e APP_SCHEDULING_ENABLED=true -e SPRING_FLYWAY_ENABLED=true \
   -e RIOT_API_ENABLED=true -e RIOT_MONITOR_ENABLED=true -e LOL_LIVE_ENABLED=true \
   -e FIREBASE_MESSAGING_ENABLED=true -e LIVE_NOTIFICATION_FCM_ENABLED=true \
@@ -151,7 +162,9 @@ ok "스케줄러 ON 인스턴스로 전환 완료"
 mac "python3 - <<'PY'
 p='/opt/homebrew/etc/cloudflared/config.yml'
 s=open(p).read()
-if 'api.nar.kr' not in s:
+# 주석에도 api.nar.kr 이 적혀 있어서 문자열 포함 검사로는 오판한다.
+# 실제 ingress 규칙이 있는지로 본다.
+if '- hostname: api.nar.kr' not in s:
     s=s.replace('  - hostname: home.nar.kr','  - hostname: api.nar.kr\n    service: http://127.0.0.1:8081\n\n  - hostname: home.nar.kr')
     open(p,'w').write(s)
 PY

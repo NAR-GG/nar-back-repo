@@ -12,7 +12,16 @@
 #
 # 사용법:
 #   ./cutover-reverse-repl.sh --check    전제 조건만 확인하고 아무것도 안 바꾼다
-#   ./cutover-reverse-repl.sh --apply    실제로 역방향 복제를 건다
+#   ./cutover-reverse-repl.sh --seed     맥미니를 덤프해 춘천에 적재하고 그 지점부터 건다
+#   ./cutover-reverse-repl.sh --apply    현재 위치부터 건다 (컷오버 직후 즉시일 때만)
+#
+# --apply 와 --seed 를 가르는 기준은 "컷오버 이후 맥미니에 쓰기가 있었는가" 다.
+#
+# 2026-08-17 컷오버에서 --apply 로 걸었다가 깨졌다. 컷오버와 설정 사이 14분간 들어온
+# 쓰기가 춘천에 없어서, 그 시기에 가입한 회원의 구독 INSERT 가 FK 위반으로 멈췄다:
+#   Could not execute Write_rows event on table nardb.member_favorite_player
+#   Cannot add or update a child row: a foreign key constraint fails ... Error_code: 1452
+# --apply 는 "지금 위치부터" 걸 뿐이라 그 공백을 메우지 못한다. 컷오버 직후가 아니면 --seed 다.
 set -euo pipefail
 
 MACMINI_SSH="changha@macmini"
@@ -22,6 +31,26 @@ CHUNCHEON_KEY="$HOME/.ssh/id_ed25519"
 MYSQL_MAC="/opt/homebrew/opt/mysql@8.4/bin/mysql"
 
 MODE="${1:---check}"
+
+# 컷오버 때 춘천을 super_read_only 로 잠근다. 그 상태로 DROP DATABASE 나 적재를 하면
+# ERROR 1290 으로 거부되는데, 파이프 중간에서 나면 놓치기 쉽다(실제로 놓쳤다).
+# 그래서 --seed 는 잠금을 명시적으로 풀고 시작한다.
+seed() {
+	echo "=== 맥미니 덤프 → 춘천 적재 ==="
+	chun "sudo mysql -e 'STOP REPLICA; RESET REPLICA ALL; SET GLOBAL super_read_only=OFF; SET GLOBAL read_only=OFF;'"
+	mac "$MYSQL_MAC -u root --single-transaction --source-data=2 --routines --triggers --events \
+		--hex-blob --no-tablespaces --set-gtid-purged=OFF --default-character-set=utf8mb4 nardb 2>/dev/null | gzip -1" \
+		| chun "cat > /tmp/mac-dump.sql.gz"
+	COORD=$(chun "gunzip -c /tmp/mac-dump.sql.gz | head -30 | grep -i 'CHANGE REPLICATION SOURCE'")
+	SEED_FILE=$(echo "$COORD" | sed -E "s/.*SOURCE_LOG_FILE='([^']+)'.*/\1/")
+	SEED_POS=$(echo  "$COORD" | sed -E 's/.*SOURCE_LOG_POS=([0-9]+).*/\1/')
+	[ -n "$SEED_FILE" ] || fail "덤프에서 좌표를 못 읽었다"
+	echo "  좌표: $SEED_FILE / $SEED_POS"
+	chun "sudo mysql -e 'DROP DATABASE IF EXISTS nardb; CREATE DATABASE nardb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'"
+	chun "gunzip -c /tmp/mac-dump.sql.gz | sudo mysql nardb"
+	chun "sudo mysql -e 'SET GLOBAL read_only=ON;'"   # 복제 적용은 read_only 를 우회한다
+	echo "  적재 완료"
+}
 
 mac()  { ssh -o ConnectTimeout=10 "$MACMINI_SSH" "$@"; }
 chun() { ssh -o ConnectTimeout=10 -i "$CHUNCHEON_KEY" "$CHUNCHEON_SSH" "$@" 2>/dev/null | grep -v "post-quantum\|store now\|may need to be upgraded\|^\*\*"; }
