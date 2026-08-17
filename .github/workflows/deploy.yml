@@ -6,22 +6,6 @@ on:
   # EC2 를 해지하면 이 파일도 지운다.
   workflow_dispatch:
 
-# 아래 paths-ignore 는 push 트리거가 있었을 때의 설정이다. 수동 실행에는 영향이 없다.
-# _disabled_push:
-#   branches:
-#     - main
-    # 문서·지식 번들만 바뀐 머지는 운영 배포를 건너뛴다.
-    # (변경 파일이 전부 아래 패턴에 매칭될 때만 스킵 — 코드와 섞이면 정상 배포)
-    #
-    # infra/ 는 관측 스택 설정(Prometheus·Loki·Grafana 대시보드) 원본 보관소다.
-    # 서버에 파일을 복사해 반영하는 것이지 앱 바이너리와 무관하므로, 여기만 바뀌면
-    # 빌드도 컨테이너 교체도 할 이유가 없다.
-    paths-ignore:
-      - 'nar-okf/**'
-      - 'docs/**'
-      - 'infra/**'
-      - '**.md'
-
 # 배포는 한 번에 하나만 돈다.
 #
 # 배포 스크립트는 nar-upstream.conf 에서 ACTIVE_PORT 를 읽어 그 반대편에 새 컨테이너를 띄운다.
