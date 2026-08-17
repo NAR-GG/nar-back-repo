@@ -9,7 +9,9 @@ name: Build and Deploy to 맥미니 홈서버
 #   - TLS 를 Cloudflare 가 종단한다. certbot·443 리스너가 없고 nginx 는 8081 평문이다.
 #   - 맥미니는 공인 IP 가 없다. 러너를 tailnet 에 임시 노드로 넣어 SSH 한다.
 #   - sudo 비밀번호가 필요해 sudo 를 쓸 수 없다. nginx 는 brew 로 깔려 사용자 권한으로 재시작된다.
-#   - CloudWatch(awslogs) 와 WhaTap 을 쓰지 않는다. 로그는 맥미니 Loki 로 간다.
+#   - CloudWatch(awslogs) 를 쓰지 않는다. 로그는 맥미니 Loki 로 간다.
+#   - WhaTap 은 에이전트를 ~/nar/whatap 에 두고 마운트한다(EC2 는 /opt/whatap 이었다).
+#     sudo 를 못 쓰므로 /opt 아래가 아니라 홈 디렉토리다.
 #   - DB 가 같은 기계다. 쿼리 왕복이 4.03ms → 0.283ms 로 줄어든다(2026-08-17 실측).
 
 on:
@@ -163,6 +165,19 @@ jobs:
               rm -f "${APNS_SECRET_FILE}"
             fi
 
+            # WhaTap Java APM. 에이전트 jar 은 최신 버전을 자동으로 고르므로
+            # 업데이트할 때 tar 만 다시 풀면 되고 이 워크플로는 안 고쳐도 된다.
+            # 에이전트가 자기 디렉토리에 로그를 쓰기 때문에 마운트는 읽기 전용이 아니다.
+            WHATAP_DIR="$HOME/nar/whatap"
+            WHATAP_ARGS=""
+            if [ -d "$WHATAP_DIR" ] && ls "$WHATAP_DIR"/whatap.agent-*.jar > /dev/null 2>&1; then
+              WHATAP_JAR=$(basename "$(ls "$WHATAP_DIR"/whatap.agent-*.jar | sort -V | tail -1)")
+              WHATAP_ARGS="-javaagent:/whatap/${WHATAP_JAR}"
+              echo "WhaTap 에이전트: ${WHATAP_JAR}"
+            else
+              echo "WhaTap 에이전트 없음 — APM 없이 배포한다"
+            fi
+
             docker container prune -f || true
 
             # 블루-그린. nginx upstream 이 가리키는 포트의 반대편에 새 컨테이너를 띄우고,
@@ -237,7 +252,7 @@ jobs:
               -e FIREBASE_MESSAGING_ENABLED="${SCHEDULING}" \
               -e LIVE_NOTIFICATION_FCM_ENABLED="${SCHEDULING}" \
               -e GOOGLE_APPLICATION_CREDENTIALS="/run/secrets/firebase-service-account.json" \
-              -e JAVA_TOOL_OPTIONS="-Xmx2g --add-opens=java.base/java.lang=ALL-UNNAMED" \
+              -e JAVA_TOOL_OPTIONS="-Xmx2g ${WHATAP_ARGS} --add-opens=java.base/java.lang=ALL-UNNAMED -Dwhatap.oname=${NEW_NAME}" \
               -e TZ=Asia/Seoul \
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
               "$@" \
