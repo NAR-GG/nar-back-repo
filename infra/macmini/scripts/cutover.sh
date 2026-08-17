@@ -101,7 +101,9 @@ done
 
 # 3. 맥미니를 주 DB 로. 설정 파일과 런타임을 같이 푼다 —
 #    한쪽만 하면 재기동 때 되돌아간다.
-mac "$MYSQL_MAC -u root -e 'STOP REPLICA; SET GLOBAL super_read_only=OFF; SET GLOBAL read_only=OFF;'"
+# RESET REPLICA ALL 까지 해야 승격이 끝난다. STOP 만 하면 옛 복제 설정이 남아
+# SHOW REPLICA STATUS 가 계속 응답하고, 복제 감시가 '복제본인데 멈춰 있다' 로 오탐한다.
+mac "$MYSQL_MAC -u root -e 'STOP REPLICA; RESET REPLICA ALL; SET GLOBAL super_read_only=OFF; SET GLOBAL read_only=OFF;'"
 mac "python3 - <<'PY'
 p='/opt/homebrew/etc/my.cnf'
 s=open(p).read()

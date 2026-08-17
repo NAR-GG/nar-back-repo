@@ -12,6 +12,12 @@
 #   무음화·에스컬레이션이 필요해지면 그때 Grafana 알림으로 올린다.
 set -u
 
+# 컷오버 후 감시 방향이 뒤집혔다. 맥미니는 이제 주 DB 라 SHOW REPLICA STATUS 가 비고,
+# 감시해야 할 것은 춘천이 맥미니를 잘 따라오는가(역방향 복제)다.
+# 춘천에는 SSH 키가 없어 직접 못 물어보므로, 이미 붙어 있는 mysqld_exporter 지표를
+# Prometheus 로 읽는다. 춘천은 MySQL 8.0 이라 지표 이름이 8.4 와 다르다
+# (slave_io_running / seconds_behind_master).
+PROM="http://localhost:9090/api/v1/query"
 M=/opt/homebrew/opt/mysql@8.4/bin/mysql
 WEBHOOK_FILE="$HOME/nar/.discord-webhook"
 STATE="$HOME/nar/.replication-state"   # ok | bad
@@ -25,10 +31,25 @@ notify() {
 
 prev=$(cat "$STATE" 2>/dev/null || echo ok)
 
+q() { docker exec prometheus wget -qO- "${PROM}?query=$1" 2>/dev/null \
+	| python3 -c "import json,sys; r=json.load(sys.stdin)['data']['result']; print(r[0]['value'][1] if r else '')" 2>/dev/null; }
+
+# 맥미니가 아직 복제본이면(컷오버 전) 기존 방식, 주 DB 면 역방향을 본다.
 STATUS=$("$M" -u root -e "SHOW REPLICA STATUS\G" 2>/dev/null)
 
 if [ -z "$STATUS" ]; then
-	problem="복제가 아예 설정돼 있지 않다 (SHOW REPLICA STATUS 가 비었다)"
+	# 컷오버 후. 춘천이 맥미니를 따라오는지 지표로 본다.
+	rio=$(q mysql_slave_status_slave_io_running)
+	rsql=$(q mysql_slave_status_slave_sql_running)
+	rlag=$(q mysql_slave_status_seconds_behind_master)
+	problem=""
+	if [ -z "$rio" ]; then
+		problem="역방향 복제 지표가 없다 (춘천 exporter 또는 Prometheus 확인)"
+	elif [ "$rio" != "1" ] || [ "$rsql" != "1" ]; then
+		problem="역방향 복제 정지 (춘천 io=${rio} sql=${rsql}) — 롤백해도 쓰기를 잃는다"
+	elif [ -n "$rlag" ] && [ "${rlag%.*}" -gt "$LAG_LIMIT" ] 2>/dev/null; then
+		problem="역방향 복제 지연 ${rlag}초"
+	fi
 else
 	io=$(echo "$STATUS"  | awk -F': ' '/Replica_IO_Running:/{print $2}'  | tr -d ' ')
 	sql=$(echo "$STATUS" | awk -F': ' '/Replica_SQL_Running:/{print $2}' | tr -d ' ')
