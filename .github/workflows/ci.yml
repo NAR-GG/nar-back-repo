@@ -7,6 +7,13 @@ on:
     branches:
       - main
 
+  # main 에서도 돌린다. setup-gradle 은 기본 브랜치에서 만든 캐시만 다른 브랜치가
+  # 읽을 수 있는데, 이 워크플로가 pull_request 에만 걸려 있어 main 캐시가 영영
+  # 만들어지지 않았다. 그래서 PR 은 늘 빈 캐시로 돌았다.
+  push:
+    branches:
+      - main
+
 # 같은 PR에서 새 커밋이 푸시되면 이전 실행은 취소한다.
 concurrency:
   group: ci-${{ github.ref }}
@@ -26,14 +33,18 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v4
+      # actions/cache 를 직접 쓰면 캐시가 갱신되지 않는다. 키가 정확히 맞으면
+      # 실행 끝에 저장을 건너뛰는데, 우리 키는 build.gradle 이 바뀔 때만 변해서
+      # 사실상 고정이다. 그래서 매번 같은 스냅샷을 복원만 하고 이번 실행이 만든
+      # 빌드 캐시 항목은 버려졌다 — org.gradle.caching=true 가 CI 에서 무효였다.
+      #
+      # 공식 액션은 build-cache 를 브랜치별로 write-back 해준다.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: ${{ runner.os }}-gradle-
+          # 기본값은 기본 브랜치에서만 캐시를 저장한다. PR 브랜치도 저장하게 해서
+          # 같은 PR 에 여러 번 푸시할 때 두 번째부터 이득을 본다.
+          cache-read-only: false
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
