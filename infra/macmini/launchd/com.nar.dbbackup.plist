@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  매일 04:25(KST) DB 백업.
+
+  cron 을 쓰지 않는 이유: 이 맥에서 crontab 항목이 발화하지 않는 것을 확인했다(2026-08-17).
+  macOS 의 cron 은 TCC 제약으로 조용히 안 도는 경우가 있어, 백업처럼 실패를 모르면
+  치명적인 작업에는 쓰지 않는다. launchd 는 Colima·nginx·cloudflared 도 쓰는 경로다.
+
+  춘천 원본 백업이 04:10 이라 15분 띄웠다. 서로 다른 기계라 겹쳐도 무방하지만,
+  버킷 업로드가 몰리지 않게 나눈다.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nar.dbbackup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/changha/nar/nar-db-backup.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>4</integer>
+        <key>Minute</key><integer>25</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/changha/nar/backup-launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/changha/nar/backup-launchd.log</string>
+</dict>
+</plist>
