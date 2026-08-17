@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 5분마다 복제 상태 확인. cron 은 이 기계에서 발화하지 않아 launchd 를 쓴다. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.nar.replcheck</string>
+    <key>ProgramArguments</key>
+    <array><string>/Users/changha/nar/nar-replication-check.sh</string></array>
+    <key>StartInterval</key><integer>300</integer>
+    <key>RunAtLoad</key><true/>
+    <key>StandardOutPath</key><string>/Users/changha/nar/replcheck.log</string>
+    <key>StandardErrorPath</key><string>/Users/changha/nar/replcheck.log</string>
+</dict>
+</plist>

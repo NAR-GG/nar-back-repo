@@ -2,6 +2,7 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
+  # EC2 앱 (컷오버 후 제거)
   - job_name: nar-app
     metrics_path: /actuator/prometheus
     static_configs:
@@ -9,8 +10,25 @@ scrape_configs:
         labels:
           instance: nar-app
 
+  # 맥미니 앱. nginx 9105 를 거치므로 블루-그린 포트 전환을 자동으로 따라간다.
+  - job_name: nar-macmini
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['host.docker.internal:9105']
+        labels:
+          instance: nar-macmini
+
+  # 춘천 MySQL (원본). 컷오버 후에는 복제본이 된다.
   - job_name: mysql
     static_configs:
       - targets: ['100.101.232.109:9104']
         labels:
           instance: nargg-vnic
+
+  # 맥미니 MySQL. 복제 지연 감시가 목적이다 — 복제가 조용히 끊기면
+  # 그림자 앱이 낡은 데이터를 읽고 백업이 "틀린 데이터의 정확한 사본"이 된다.
+  - job_name: mysql-macmini
+    static_configs:
+      - targets: ['mysqld-exporter:9104']
+        labels:
+          instance: macmini-db
