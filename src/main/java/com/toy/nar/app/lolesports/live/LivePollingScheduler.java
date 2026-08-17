@@ -220,6 +220,13 @@ public class LivePollingScheduler {
 						if (gameId == null || gameId.isBlank()) {
 							continue;
 						}
+						// 이미 종료가 확정된 세트는 다시 추적하지 않는다. livestats 는 세트가 끝난 뒤에도
+						// 마지막으로 살아 있던 프레임(퍼즈 구간 포함)을 계속 돌려주므로, 프로브는 그것을
+						// in_game 으로 읽어 종료된 세트를 무한히 되살린다(2026-08-17 KeSPA 2세트).
+						// discoveredGameIds 에도 넣지 않는다 — 넣으면 stale 제거까지 막힌다.
+						if (liveStateStore.isFinished(gameId)) {
+							continue;
+						}
 						discoveredGameIds.add(gameId);
 						ActiveLiveGame current = activeGames.get(gameId);
 						if (current == null) {
@@ -688,7 +695,10 @@ public class LivePollingScheduler {
 
 				// 세트 시작 판정: livestats 첫 프레임 도착 = 실제 인게임 시작.
 				// 첫 관측이 이미 finished 면(재기동 등) 시작 알림은 건너뛴다.
+				// 종료 확정된 세트에는 절대 시작 알림을 다시 쏘지 않는다 — 옛 프레임 재관측으로
+				// 이미 끝난 세트의 SET_START 와 라이브 카드가 다시 나갔다(2026-08-17 20:42 실측).
 				if (hasFrames(window) && !isFrameFinished(window)
+						&& !liveStateStore.isFinished(activeGame.gameId())
 						&& isNotifiableLeague(activeGame.leagueName())
 						&& startNotifiedGameIds.add(activeGame.gameId())) {
 					fireSetStartNotification(activeGame);
