@@ -188,6 +188,38 @@ class LivePollingSchedulerTest {
 	}
 
 	@Test
+	void stalledSetIsFinishedWhenLaterSetIsLive() throws InterruptedException {
+		// 업스트림이 세트 상태·스코어를 갱신하지 않는 리그(KeSPA: 종료 후에도 unstarted, 0:0)에서는
+		// stall+score 로 종료를 확정할 수 없어 앞 세트가 영구 LIVE 로 남는다. 뒤 세트가 라이브면
+		// 앞 세트는 끝난 것이다 — 2026-08-17 T1 vs DNS: 4세트가 도는 동안 2세트가 프레임 19:57 에
+		// 멈춘 채 2시간 반 넘게 LIVE.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		// 스코어 합 0 < setNumber(2) — 2차 판정은 성립할 수 없다.
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService,
+				new LiveFrameStallTracker(1L), matchRepositoryWithScore(0, 0));
+		liveStateStore.getActiveGames().put("game-2", lckGame("game-2"));
+		liveStateStore.getActiveGames().put("game-3", laterSetGame("game-3"));
+		// 2세트는 같은 프레임에 동결, 3세트는 매 폴마다 진전한다.
+		when(liveStatsClient(scheduler).getWindow(eq("game-2"), anyString()))
+				.thenReturn(windowAt("2026-08-17T10:57:36Z"));
+		when(liveStatsClient(scheduler).getWindow(eq("game-3"), anyString()))
+				.thenReturn(windowAt("2026-08-17T13:30:00Z"), windowAt("2026-08-17T13:30:10Z"));
+
+		scheduler.pollActiveGames();
+		Thread.sleep(10); // 정지 임계 1ms 를 넘긴다
+		scheduler.pollActiveGames();
+
+		assertThat(liveStateStore.isFinished("game-2")).isTrue();
+		assertThat(liveStateStore.isFinished("game-3")).isFalse();
+		// 지난 세트의 늦은 SET_END 는 쏘지 않는다 — 재기동으로 dedup 이 비면 중복 발송이 된다.
+		verify(pushService, never()).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_END),
+				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+	}
+
+	@Test
 	void finishedGameDoesNotFireSetStartAgain() {
 		// 재편입 방어선. 옛 프레임(in_game)이 다시 관측돼도 이미 끝난 세트면 시작 알림·카드가
 		// 나가면 안 된다(2026-08-17 20:42: 20:33 종료된 2세트의 SET_START 가 재발화).
@@ -905,6 +937,24 @@ class LivePollingSchedulerTest {
 				2,
 				"100",
 				"200");
+	}
+
+	/** 프레임 시각을 지정해 진전/정지를 구분할 수 있는 window. */
+	private com.fasterxml.jackson.databind.JsonNode windowAt(String frameTimestamp) {
+		try {
+			return new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+					"{\"frames\":[{\"rfc460Timestamp\":\"" + frameTimestamp
+							+ "\",\"gameState\":\"in_game\"}]}");
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/** lckGame 과 같은 매치의 다음 세트(3세트). */
+	private ActiveLiveGame laterSetGame(String gameId) {
+		return new ActiveLiveGame(
+				gameId, "match-1", "LCK", "KT", "HLE",
+				LocalDateTime.now(ZoneOffset.UTC), 0, 3, "100", "200");
 	}
 
 	private com.fasterxml.jackson.databind.JsonNode windowWithGameState(String gameState) {

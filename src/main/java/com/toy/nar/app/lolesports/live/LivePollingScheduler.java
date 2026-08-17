@@ -470,6 +470,37 @@ public class LivePollingScheduler {
 		}
 	}
 
+	/**
+	 * 같은 매치에서 이 게임보다 뒤 세트가 이번 패스에 프레임을 진전시켰는지.
+	 *
+	 * <p>세트는 순차로 치러지므로 뒤 세트가 돌고 있다는 것은 앞 세트가 끝났다는 뜻이다.
+	 * 판단을 패스 단위 관측({@code advancing})으로 하는 이유는 activeGames 순회 순서에
+	 * 결과가 좌우되지 않게 하기 위함이다 — 폴링 중간에 정지 여부를 물으면 같은 tick 에서도
+	 * 어느 게임을 먼저 봤는지에 따라 답이 달라진다.</p>
+	 */
+	private boolean laterSetAdvancing(ActiveLiveGame game, Map<String, Boolean> advancing) {
+		if (game.setNumber() == null || game.matchId() == null) {
+			return false;
+		}
+		return liveStateStore.getActiveGames().values().stream()
+				.anyMatch(other -> other.setNumber() != null
+						&& game.matchId().equals(other.matchId())
+						&& other.setNumber() > game.setNumber()
+						&& advancing.getOrDefault(other.gameId(), false));
+	}
+
+	/** 같은 매치에서 이 게임보다 뒤 세트가 추적 중(종료 확정 전)인지. 순서에 의존하지 않는다. */
+	private boolean laterSetTracked(ActiveLiveGame game) {
+		if (game.setNumber() == null || game.matchId() == null) {
+			return false;
+		}
+		return liveStateStore.getActiveGames().values().stream()
+				.anyMatch(other -> other.setNumber() != null
+						&& game.matchId().equals(other.matchId())
+						&& other.setNumber() > game.setNumber()
+						&& !liveStateStore.isFinished(other.gameId()));
+	}
+
 	/** window 응답의 마지막 프레임이 gameState=finished 인지. 프레임이 없으면 false. */
 	private boolean isFrameFinished(JsonNode windowResponse) {
 		if (windowResponse == null) {
@@ -685,6 +716,10 @@ public class LivePollingScheduler {
 			return;
 		}
 
+		// 세트 간 비교(3차 종료 판정)용 이번 패스 관측.
+		Map<String, Boolean> frameAdvancing = new java.util.HashMap<>();
+		List<ActiveLiveGame> stalledThisPass = new ArrayList<>();
+
 		for (ActiveLiveGame activeGame : activeGames) {
 			try {
 				String startingTime = computeStartingTime(activeGame.gameId());
@@ -697,6 +732,7 @@ public class LivePollingScheduler {
 				// 이미 끝난 세트의 SET_START 와 라이브 카드가 다시 나갔다(2026-08-17 20:42 실측).
 				if (hasFrames(window) && !isFrameFinished(window)
 						&& !liveStateStore.isFinished(activeGame.gameId())
+						&& !laterSetTracked(activeGame)
 						&& isNotifiableLeague(activeGame.leagueName())
 						&& startNotifiedGameIds.add(activeGame.gameId())) {
 					fireSetStartNotification(activeGame);
@@ -726,6 +762,13 @@ public class LivePollingScheduler {
 					}
 				}
 
+				// 3차 판정 재료. 이 패스의 관측이 다 모인 뒤 루프 밖에서 판단한다.
+				frameAdvancing.put(activeGame.gameId(),
+						hasFrames(window) && !isFrameFinished(window) && !frameStalled);
+				if (frameStalled && !isFrameFinished(window)) {
+					stalledThisPass.add(activeGame);
+				}
+
 				// 종료된 세트는 stale 제거(기본 3분) 전까지 매 tick 여기를 지난다. 그동안 스코어가
 				// 늦게 도착하면 매치 종료 카드를 복구한다.
 				if (frameFinishedGameIds.contains(activeGame.gameId())) {
@@ -745,6 +788,23 @@ public class LivePollingScheduler {
 				liveStateStore.getActiveGames().put(failed.gameId(), failed);
 				log.warn("Live polling failed for game {}: {}", failed.gameId(), e.getMessage());
 			}
+		}
+
+		// 3차 종료 판정: 프레임이 정지했고 같은 매치의 더 뒤 세트가 이번 패스에 진전했다.
+		// 뒤 세트가 돌고 있으면 앞 세트는 끝난 것이 확실하다 — 스코어에 의존하지 않으므로
+		// 업스트림이 세트 상태·스코어를 갱신하지 않는 리그(KeSPA: 종료 후에도 게임 전부
+		// unstarted / 0:0)에서도 성립한다. 실측 2026-08-17 T1 vs DNS: 4세트가 도는 동안
+		// 2세트가 프레임 19:57 에 멈춘 채 2시간 반 넘게 LIVE 로 남았다.
+		//
+		// 표시만 정정하고 SET_END 는 쏘지 않는다 — 이미 지난 세트의 늦은 종료 알림은 가치가
+		// 없고, 재기동으로 dedup 이 비어 있으면 중복 발송이 된다.
+		for (ActiveLiveGame stalled : stalledThisPass) {
+			if (liveStateStore.isFinished(stalled.gameId()) || !laterSetAdvancing(stalled, frameAdvancing)) {
+				continue;
+			}
+			log.info("[live-notify] 뒤 세트 진행으로 종료 확정 gameId={} matchId={} set={}",
+					stalled.gameId(), stalled.matchId(), stalled.setNumber());
+			liveStateStore.markFinished(stalled.gameId());
 		}
 	}
 
