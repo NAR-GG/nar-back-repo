@@ -142,13 +142,8 @@ jobs:
             if [ -n "${APNS_KEY_BASE64:-}" ]; then
               printf '%s' "${APNS_KEY_BASE64}" | base64 --decode > "${APNS_SECRET_FILE}"
               chmod 600 "${APNS_SECRET_FILE}"
-              APNS_ARGS="-v ${APNS_SECRET_FILE}:/run/secrets/apns-auth-key.p8:ro
-                -e APNS_ENABLED=true
-                -e APNS_KEY_PATH=/run/secrets/apns-auth-key.p8
-                -e APNS_KEY_ID=${APNS_KEY_ID:-}
-                -e APNS_TEAM_ID=${APNS_TEAM_ID:-}
-                -e APNS_BUNDLE_ID=com.nar.wardingapp
-                -e APNS_PUSH_TO_START_ENABLED=true"
+              # 한 줄로 둔다. 여러 줄로 쓰면 docker 인자로 풀릴 때 -v 값이 깨진다("invalid mode: ro").
+              APNS_ARGS="-v ${APNS_SECRET_FILE}:/run/secrets/apns-auth-key.p8:ro -e APNS_ENABLED=true -e APNS_KEY_PATH=/run/secrets/apns-auth-key.p8 -e APNS_KEY_ID=${APNS_KEY_ID:-} -e APNS_TEAM_ID=${APNS_TEAM_ID:-} -e APNS_BUNDLE_ID=com.nar.wardingapp -e APNS_PUSH_TO_START_ENABLED=true"
             else
               echo "APNS_KEY_BASE64 미설정 — Live Activity 푸시 비활성으로 배포"
               rm -f "${APNS_SECRET_FILE}"
