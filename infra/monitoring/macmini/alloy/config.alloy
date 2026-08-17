@@ -1,0 +1,38 @@
+// 맥미니 도커 컨테이너 로그를 Loki 로 보낸다.
+// EC2 판(/etc/alloy/config.alloy)과 같은 구조인데, Loki 가 같은 기계라 Tailscale 을 안 탄다.
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "15s"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // 블루-그린이라 이름이 nar-gg-blue ↔ nar-gg-green 으로 번갈아 바뀐다.
+  // 배포 전후를 구분해서 볼 때 이 라벨을 쓴다.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  // host 라벨로 EC2(nar-app)와 구분한다. 컷오버 후에도 이 라벨로 어느 기계 로그인지 안다.
+  labels     = { host = "macmini", env = "prod" }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

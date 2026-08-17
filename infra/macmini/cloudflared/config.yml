@@ -1,0 +1,20 @@
+# Cloudflare Tunnel (맥미니) — 로컬 관리형
+#
+# 대시보드가 아니라 이 파일이 진실의 원천이다. Zero Trust 구독(카드 등록) 없이
+# 쓰려고 로컬 관리형을 택했고, 덕분에 설정을 저장소에 커밋할 수 있다.
+#
+# 집에서 Cloudflare 로 나가는 아웃바운드 연결만 쓴다. 공유기 포트 개방도,
+# 고정 IP 도, DDNS 도 필요 없다.
+
+tunnel: c194bfaa-f127-4bd7-89a7-c71262c296f0
+credentials-file: /Users/changha/.cloudflared/c194bfaa-f127-4bd7-89a7-c71262c296f0.json
+
+ingress:
+  # 그림자 검증용 임시 호스트. 실트래픽(api.nar.kr)은 아직 EC2 로 간다.
+  # 컷오버 때 여기에 api.nar.kr 을 추가하고 CF DNS 를 터널로 돌린다.
+  - hostname: home.nar.kr
+    service: http://127.0.0.1:8081
+
+  # 위 규칙에 안 걸리는 요청은 버린다. 터널이 열려 있다고 해서
+  # 맥미니의 다른 포트가 노출되면 안 된다.
+  - service: http_status:404
