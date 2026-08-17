@@ -260,6 +260,7 @@ jobs:
               -e GOOGLE_APPLICATION_CREDENTIALS="/run/secrets/firebase-service-account.json" \
               -e JAVA_TOOL_OPTIONS="-Xmx2g ${WHATAP_ARGS} --add-opens=java.base/java.lang=ALL-UNNAMED -Dwhatap.oname=${NEW_NAME}" \
               -e TZ=Asia/Seoul \
+              -v "${WHATAP_DIR}:/whatap" \
               -v "${FIREBASE_SECRET_FILE}:/run/secrets/firebase-service-account.json:ro" \
               "$@" \
               "${APP_IMAGE}"
