@@ -40,16 +40,4 @@ public record MatchSubscribeRequest(
 				killEnabled, baronEnabled, dragonEnabled, towerEnabled, inhibitorEnabled);
 	}
 
-	// 구버전 앱(플래그 미전송) 호환: null 이면 기존처럼 3종 전부 ON.
-	public boolean setStartEnabledOrDefault() {
-		return setStartEnabled == null || setStartEnabled;
-	}
-
-	public boolean setEndEnabledOrDefault() {
-		return setEndEnabled == null || setEndEnabled;
-	}
-
-	public boolean liveEventEnabledOrDefault() {
-		return liveEventEnabled == null || liveEventEnabled;
-	}
 }

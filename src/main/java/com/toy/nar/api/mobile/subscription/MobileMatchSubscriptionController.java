@@ -13,6 +13,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import com.toy.nar.api.mobile.subscription.dto.MatchSubscriptionToggleRequest;
 import com.toy.nar.app.mobile.subscription.dto.MatchSubscriptionResponse;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -62,7 +63,7 @@ public class MobileMatchSubscriptionController {
 	public ResponseEntity<Void> updateToggles(
 			@AuthenticationPrincipal Long memberId,
 			@Parameter(description = "구독 중인 경기 ID") @PathVariable String matchId,
-			@RequestBody MatchSubscribeRequest request) {
+			@RequestBody MatchSubscriptionToggleRequest request) {
 		subscriptionService.updateToggles(memberId, matchId, request.toggles());
 		return ResponseEntity.noContent().build();
 	}

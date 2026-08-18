@@ -52,8 +52,10 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 	 * 기존 player 구독 쿼리(findActiveDevicesBySubscribedPlayerId)와 동일한 패턴이다.
 	 *
 	 * <p>{@code LIVE_EVENT} 는 마스터 스위치({@code liveEventEnabled})와 종류별 토글을 AND 로 본다.
-	 * {@code eventSubType} 이 null 이면 종류를 모르는 것이므로 마스터만 보고 보낸다 — 세분화 이전
-	 * 동작이고, 나중에 새 이벤트 종류(아타칸 등)가 컬럼 없이 들어와도 조용히 사라지지 않는다.
+	 *
+	 * <p>토글 컬럼이 있는 5종이 아니면(null 이거나 처음 보는 값) 마스터만 보고 보낸다.
+	 * 앞으로 아타칸·공허 유충 같은 종류가 추가될 때 컬럼이 없다는 이유로 알림이 조용히
+	 * 사라지면 안 된다 — 새 종류는 "일단 나가고" 컬럼은 나중에 붙이는 쪽이 맞다.
 	 *
 	 * @param eventSubType KILL/BARON/DRAGON/TOWER/INHIBITOR. LIVE_EVENT 가 아니면 무시된다
 	 */
@@ -72,6 +74,7 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 				        OR (:eventType = 'SET_END' AND subscription.setEndEnabled = true)
 				        OR (:eventType = 'LIVE_EVENT' AND subscription.liveEventEnabled = true AND (
 				            :eventSubType IS NULL
+				            OR :eventSubType NOT IN ('KILL', 'BARON', 'DRAGON', 'TOWER', 'INHIBITOR')
 				            OR (:eventSubType = 'KILL' AND subscription.killEnabled = true)
 				            OR (:eventSubType = 'BARON' AND subscription.baronEnabled = true)
 				            OR (:eventSubType = 'DRAGON' AND subscription.dragonEnabled = true)
@@ -105,6 +108,7 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 				        OR (:eventType = 'SET_END' AND subscription.setEndEnabled = true)
 				        OR (:eventType = 'LIVE_EVENT' AND subscription.liveEventEnabled = true AND (
 				            :eventSubType IS NULL
+				            OR :eventSubType NOT IN ('KILL', 'BARON', 'DRAGON', 'TOWER', 'INHIBITOR')
 				            OR (:eventSubType = 'KILL' AND subscription.killEnabled = true)
 				            OR (:eventSubType = 'BARON' AND subscription.baronEnabled = true)
 				            OR (:eventSubType = 'DRAGON' AND subscription.dragonEnabled = true)

@@ -16,11 +16,6 @@ public record MatchNotificationToggles(
 		Boolean towerEnabled,
 		Boolean inhibitorEnabled) {
 
-	/** 새 구독의 기본값 — 3종 전부 ON, 라이브 이벤트 하위도 전부 ON. */
-	public static MatchNotificationToggles allOn() {
-		return new MatchNotificationToggles(true, true, true, true, true, true, true, true);
-	}
-
 	public boolean setStartOrTrue() {
 		return setStartEnabled == null || setStartEnabled;
 	}
