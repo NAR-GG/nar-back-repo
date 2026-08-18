@@ -44,28 +44,16 @@ spec:
             - name: DB_URL
               value: "jdbc:mysql://192.168.5.2:3306/nardb?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
 
-            # docker 앱이 스케줄러를 돌리는 동안 여기서도 켜면 라이브 폴링·푸시가 이중으로 나간다.
-            # 트래픽을 넘길 때 docker 쪽을 끄고 이 값들을 켠다.
-            - name: APP_SCHEDULING_ENABLED
-              value: "false"
-            - name: SPRING_FLYWAY_ENABLED
-              value: "false"
-            - name: RIOT_API_ENABLED
-              value: "false"
-            - name: RIOT_MONITOR_ENABLED
-              value: "false"
-            - name: LOL_LIVE_ENABLED
-              value: "false"
-            - name: FIREBASE_MESSAGING_ENABLED
-              value: "false"
-            - name: LIVE_NOTIFICATION_FCM_ENABLED
-              value: "false"
-            - name: APNS_ENABLED
-              value: "false"
+            # 스케줄러·푸시·Flyway·Sentry 는 시크릿(nar-env)의 원래 값을 그대로 쓴다 —
+            # 전부 true 다. 그림자 시절엔 docker 와의 이중 발송을 막으려고 여기서
+            # false 로 덮었는데, 스케줄러 이관(2026-08-19)과 함께 오버라이드를 걷었다.
+            # ⚠️ 이 매니페스트가 적용되기 전에 docker 컨테이너가 꺼져 있어야 한다.
+            #    둘 다 켜지면 라이브 폴링·푸시가 이중으로 나간다.
 
-            # 그림자 인스턴스의 예외가 프로덕션 릴리스에 섞이면 회귀를 판별할 수 없다.
-            - name: SENTRY_DSN
-              value: ""
+            # JAVA_TOOL_OPTIONS 는 시크릿 값을 쓰면 안 된다. 시크릿에는 docker 시절의
+            # -javaagent:/whatap/... 가 박혀 있는데 파드에는 /whatap 마운트가 없어서
+            # 그 값으로는 JVM 이 아예 안 뜬다. WhaTap 은 파드에 붙이지 않기로 했다
+            # (이번 달 종료 예정 — Prometheus·Loki 가 관측을 대신한다).
             - name: JAVA_TOOL_OPTIONS
               value: "-Xmx2g --add-opens=java.base/java.lang=ALL-UNNAMED"
 
