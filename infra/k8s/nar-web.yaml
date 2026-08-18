@@ -84,3 +84,19 @@ spec:
             initialDelaySeconds: 90
             periodSeconds: 30
             failureThreshold: 3
+
+          # docker 판이 -v 로 넣어주던 파일들. 경로는 docker 와 똑같이 맞췄다
+          # (GOOGLE_APPLICATION_CREDENTIALS·APNS_KEY_PATH 가 시크릿에 그 값으로 들어 있다).
+          #
+          # 이게 없으면 FIREBASE_MESSAGING_ENABLED=true 인 순간 FirebaseApp 빈이
+          # 파일을 못 찾아 기동에 실패한다. 스케줄러를 켤 때 크래시루프로 나타난다.
+          volumeMounts:
+            - name: files
+              mountPath: /run/secrets
+              readOnly: true
+
+      volumes:
+        - name: files
+          secret:
+            secretName: nar-files
+            defaultMode: 0400

@@ -31,6 +31,51 @@ loki.source.docker "containers" {
   forward_to = [loki.write.local.receiver]
 }
 
+// ── k3s 파드 로그 ──
+//
+// 파드는 containerd 로 돌아 위의 discovery.docker 에 안 잡힌다. 앱을 파드로 옮기면
+// Loki 에서 앱 로그가 통째로 사라지므로, kubelet 이 남기는 파일을 직접 읽는다.
+//
+// 클러스터 API 를 안 쓴다(kubeconfig·RBAC 불필요). 대신 파일 경로에서 라벨을 캔다.
+// 경로 형식: /var/log/pods/<namespace>_<pod>_<uid>/<container>/0.log
+local.file_match "pods" {
+  path_targets = [{
+    __path__ = "/var/log/pods/*/*/*.log",
+    host     = "macmini",
+    env      = "prod",
+    source   = "k3s",
+  }]
+  sync_period = "15s"
+}
+
+loki.source.file "pods" {
+  targets    = local.file_match.pods.targets
+  forward_to = [loki.process.pods.receiver]
+}
+
+loki.process "pods" {
+  // CRI 형식이다: "2026-08-18T12:00:00.000000000Z stdout F 본문"
+  // 이걸 안 벗기면 타임스탬프가 로그 본문에 섞여 들어가고 시간축이 수집 시각이 된다.
+  stage.cri {}
+
+  // 경로에서 namespace/pod/container 를 뽑는다. 파드 이름은 롤아웃마다 바뀌므로
+  // 이 라벨이 없으면 앱 로그를 찾을 때 파일 경로를 정규식으로 뒤져야 한다.
+  stage.regex {
+    source     = "filename"
+    expression = "/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>.+)_[^/]+/(?P<container>[^/]+)/"
+  }
+
+  stage.labels {
+    values = {
+      namespace = "",
+      pod       = "",
+      container = "",
+    }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
 loki.write "local" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
