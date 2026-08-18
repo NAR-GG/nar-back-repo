@@ -14,7 +14,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import com.toy.nar.api.mobile.subscription.dto.PlayerSubscriptionToggleRequest;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -60,6 +62,17 @@ public class MobilePlayerSubscriptionController {
 			@AuthenticationPrincipal Long memberId,
 			@Valid @RequestBody PlayerSubscriptionRequest request) {
 		return ResponseEntity.ok(subscriptionService.subscribe(memberId, request.playerId()));
+	}
+
+	@Operation(summary = "선수 알림 토글 변경",
+			description = "구독은 유지한 채 솔랭 시작/종료 알림을 켜고 끈다. 보내지 않은 필드는 기존 값을 유지한다.")
+	@PutMapping("/{playerId}")
+	public ResponseEntity<Void> updateToggles(
+			@AuthenticationPrincipal Long memberId,
+			@PathVariable Long playerId,
+			@RequestBody PlayerSubscriptionToggleRequest request) {
+		subscriptionService.updateToggles(memberId, playerId, request.startEnabled(), request.endEnabled());
+		return ResponseEntity.noContent().build();
 	}
 
 	@Operation(summary = "선수 구독 해제")

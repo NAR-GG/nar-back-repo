@@ -11,6 +11,18 @@ public interface PlayerSoloRankGameRepository extends JpaRepository<PlayerSoloRa
 
 	boolean existsByPlayer_IdAndGameId(Long playerId, String gameId);
 
+	/** 종료 알림을 이미 낸 게임인지. 같은 게임에 Riot 조회를 두 번 태우지 않기 위한 게이트다. */
+	boolean existsByPlayer_IdAndGameIdAndEndNotifiedAtIsNotNull(Long playerId, String gameId);
+
+	@org.springframework.transaction.annotation.Transactional
+	@org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+	@Query("UPDATE PlayerSoloRankGame g SET g.endNotifiedAt = :notifiedAt"
+			+ " WHERE g.player.id = :playerId AND g.gameId = :gameId")
+	int markEndNotified(
+			@Param("playerId") Long playerId,
+			@Param("gameId") String gameId,
+			@Param("notifiedAt") java.time.LocalDateTime notifiedAt);
+
 	/** 선수의 최근 솔랭 게임(감지 최신순). 선수 카드 "최근 솔랭"용. */
 	List<PlayerSoloRankGame> findTop20ByPlayer_IdOrderByDetectedAtDesc(Long playerId);
 

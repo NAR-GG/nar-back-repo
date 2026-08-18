@@ -1,5 +1,7 @@
 package com.toy.nar.app.mobile.subscription;
 
+import com.toy.nar.app.mobile.subscription.dto.MatchNotificationToggles;
+
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.common.error.exception.CustomException;
 import com.toy.nar.domain.member.entity.Member;
@@ -49,7 +51,7 @@ class MobileMatchSubscriptionServiceTest {
 		when(memberRepository.findById(7L)).thenReturn(
 				Optional.of(Member.builder().name("nar").tag("0001").build()));
 
-		service.subscribe(7L, "m1", true, true, true);
+		service.subscribe(7L, "m1", new MatchNotificationToggles(true, true, true, null, null, null, null, null));
 
 		verify(subscriptionRepository).save(any(MemberMatchSubscription.class));
 	}
@@ -59,7 +61,7 @@ class MobileMatchSubscriptionServiceTest {
 		when(leagueMatchRepository.existsById("m1")).thenReturn(true);
 		when(subscriptionRepository.existsByMemberIdAndMatchId(7L, "m1")).thenReturn(true);
 
-		service.subscribe(7L, "m1", true, true, true);
+		service.subscribe(7L, "m1", new MatchNotificationToggles(true, true, true, null, null, null, null, null));
 
 		verify(subscriptionRepository, never()).save(any());
 	}
@@ -68,7 +70,7 @@ class MobileMatchSubscriptionServiceTest {
 	void subscribeRejectsUnknownMatch() {
 		when(leagueMatchRepository.existsById("nope")).thenReturn(false);
 
-		assertThatThrownBy(() -> service.subscribe(7L, "nope", true, true, true))
+		assertThatThrownBy(() -> service.subscribe(7L, "nope", new MatchNotificationToggles(true, true, true, null, null, null, null, null)))
 				.isInstanceOf(CustomException.class);
 		verify(subscriptionRepository, never()).save(any());
 	}

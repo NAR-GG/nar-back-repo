@@ -9,5 +9,10 @@ public record TeamNotificationSubscriptionResponse(
 		boolean subscribed,
 		boolean setStartEnabled,
 		boolean setEndEnabled,
-		boolean liveEventEnabled) {
+		boolean liveEventEnabled,
+		boolean killEnabled,
+		boolean baronEnabled,
+		boolean dragonEnabled,
+		boolean towerEnabled,
+		boolean inhibitorEnabled) {
 }

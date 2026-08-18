@@ -51,6 +51,7 @@ class PlayerSoloRankMonitorAccountWriteTest {
 			mock(PlayerSoloRankPushService.class),
 			mock(SchedulerAlertService.class),
 			mock(SoloRankGameHistoryRecorder.class),
+			mock(SoloRankEndNotificationService.class),
 			transactionTemplate);
 
 	@Test

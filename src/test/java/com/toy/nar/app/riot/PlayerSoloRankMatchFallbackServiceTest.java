@@ -88,9 +88,9 @@ class PlayerSoloRankMatchFallbackServiceTest {
 
 	@Test
 	void stripsPlatformPrefixFromMatchId() {
-		assertThat(PlayerSoloRankMatchFallbackService.normalizeGameId("KR_8292488921"))
+		assertThat(SoloRankMatchResultFormatter.normalizeGameId("KR_8292488921"))
 				.isEqualTo("8292488921");
-		assertThat(PlayerSoloRankMatchFallbackService.normalizeGameId("8292488921"))
+		assertThat(SoloRankMatchResultFormatter.normalizeGameId("8292488921"))
 				.isEqualTo("8292488921");
 	}
 

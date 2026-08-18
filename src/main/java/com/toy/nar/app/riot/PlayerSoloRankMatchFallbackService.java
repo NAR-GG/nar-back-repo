@@ -67,7 +67,7 @@ public class PlayerSoloRankMatchFallbackService {
 				checkedCount++;
 
 				for (String matchId : matchIds) {
-					String gameId = normalizeGameId(matchId);
+					String gameId = SoloRankMatchResultFormatter.normalizeGameId(matchId);
 					if (soloRankGameHistoryRecorder.exists(account.getPlayer().getId(), gameId)) {
 						continue;
 					}
@@ -78,7 +78,8 @@ public class PlayerSoloRankMatchFallbackService {
 						continue;
 					}
 
-					RiotMatchResponse.Participant tracked = findTrackedParticipant(match, account.getPuuid());
+					RiotMatchResponse.Participant tracked =
+							SoloRankMatchResultFormatter.findParticipant(match, account.getPuuid());
 					Champion champion = tracked == null || tracked.championId() == null
 							? null
 							: championDataService.findChampionByRiotKey(tracked.championId()).orElse(null);
@@ -124,7 +125,7 @@ public class PlayerSoloRankMatchFallbackService {
 			RiotMatchResponse.Participant tracked) {
 		String championName = champion == null ? null : champion.getChampionNameKr();
 		String championIconUrl = champion == null ? null : champion.getImageUrl();
-		String resultLine = buildResultLine(championName, tracked);
+		String resultLine = SoloRankMatchResultFormatter.resultLine(championName, tracked);
 
 		notificationService.sendPlayerGameNotification(
 				account.getPlayer().getName(),
@@ -144,36 +145,7 @@ public class PlayerSoloRankMatchFallbackService {
 				RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 	}
 
-	/** 예: "멜로 승리 · 4/2/8", "가렌으로 패배 · 1/5/9" — 정보 없으면 단계적으로 축약. */
-	private String buildResultLine(String championName, RiotMatchResponse.Participant tracked) {
-		String champion = championName == null || championName.isBlank() ? "솔로 랭크" : championName;
-		if (tracked == null) {
-			return champion + " 경기 종료";
-		}
-		StringBuilder line = new StringBuilder(champion);
-		if (tracked.win() != null) {
-			line.append(KoreanParticle.ro(champion)).append(" ").append(tracked.win() ? "승리" : "패배");
-		} else {
-			line.append(" 경기 종료");
-		}
-		if (tracked.kills() != null && tracked.deaths() != null && tracked.assists() != null) {
-			line.append(" · ")
-					.append(tracked.kills()).append("/")
-					.append(tracked.deaths()).append("/")
-					.append(tracked.assists());
-		}
-		return line.toString();
-	}
 
-	private RiotMatchResponse.Participant findTrackedParticipant(RiotMatchResponse match, String puuid) {
-		if (match.info().participants() == null) {
-			return null;
-		}
-		return match.info().participants().stream()
-				.filter(participant -> puuid.equals(participant.puuid()))
-				.findFirst()
-				.orElse(null);
-	}
 
 	private boolean isFresh(Long gameEndTimestampMs) {
 		if (gameEndTimestampMs == null) {
@@ -183,13 +155,5 @@ public class PlayerSoloRankMatchFallbackService {
 		return !age.isNegative() && age.toMinutes() <= properties.getAlertFreshnessMinutes();
 	}
 
-	/** match-v5 ID("KR_8292488921")를 spectator 게임 ID("8292488921") 형식으로 정규화. */
-	static String normalizeGameId(String matchId) {
-		if (matchId == null) {
-			return null;
-		}
-		int separatorIndex = matchId.indexOf('_');
-		return separatorIndex < 0 ? matchId : matchId.substring(separatorIndex + 1);
-	}
 
 }

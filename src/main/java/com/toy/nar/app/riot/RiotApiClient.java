@@ -6,6 +6,7 @@ import com.toy.nar.app.riot.dto.RiotLeagueEntryResponse;
 import com.toy.nar.app.riot.dto.RiotMatchResponse;
 import com.toy.nar.app.riot.dto.RiotSummonerResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class RiotApiClient {
 
@@ -158,7 +160,19 @@ public class RiotApiClient {
 									.map(Optional::<T>of);
 						}
 						if (statusCode.value() == 404) {
-							return Mono.just(Optional.<T>empty());
+							// 스트리머 모드 계정은 spectator-v5 가 404 "filtered" 를 준다(Riot 2025-10
+							// 익명성 정책). "지금 게임 중이 아님" 404 와 코드가 같아 지금은 구분이 안 되고,
+							// 그래서 라이브 감지가 영영 안 되는 계정이 몇 개인지도 모른다. 본문을 남겨
+							// 명단을 확보한다 — 폴백을 켤지 판단하는 근거다. 반환값은 그대로 empty 라
+							// 동작은 바뀌지 않는다.
+							return clientResponse.bodyToMono(String.class)
+									.defaultIfEmpty("")
+									.map(body -> {
+										if (body.contains("filtered")) {
+											log.info("[riot-404-filtered] {} body={}", uri, body);
+										}
+										return Optional.<T>empty();
+									});
 						}
 						return clientResponse.createException().flatMap(Mono::error);
 					})

@@ -94,7 +94,7 @@ class LiveObjectEventRecorderTest {
 		// 문구는 선수명(summonerName)만 쓴다 — 태그가 이미 포함되고 정식 팀명을 붙이면 중복돼 보인다.
 		ArgumentCaptor<String> title = ArgumentCaptor.forClass(String.class);
 		verify(pushService).notifyLiveEvent(
-				eq("match-2"), eq(4), anyLong(), eq("team-blg"), title.capture(), any());
+				eq("match-2"), eq(4), anyLong(), eq("team-blg"), eq("KILL"), title.capture(), any());
 		assertThat(title.getValue()).isEqualTo("ON님이 Zeus님을 처치했습니다");
 	}
 

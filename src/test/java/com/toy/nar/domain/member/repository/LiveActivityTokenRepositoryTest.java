@@ -90,8 +90,10 @@ class LiveActivityTokenRepositoryTest {
 		insertStartToken(1L, 1L, "start-1");
 		exec("INSERT INTO member_team_notification_subscription"
 				+ " (id, member_id, team_id, set_start_enabled, set_end_enabled,"
-				+ "  live_event_enabled, created_at, updated_at)"
-				+ " VALUES (1, 1, 10, false, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+				+ "  live_event_enabled, kill_enabled, baron_enabled, dragon_enabled,"
+				+ "  tower_enabled, inhibitor_enabled, created_at, updated_at)"
+				+ " VALUES (1, 1, 10, false, true, true, true, true, true, true, true,"
+				+ " CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
 		em.flush();
 		em.clear();
 
@@ -105,9 +107,11 @@ class LiveActivityTokenRepositoryTest {
 		for (long memberId = 1; memberId <= 2; memberId++) {
 			exec("INSERT INTO member_team_notification_subscription"
 					+ " (id, member_id, team_id, set_start_enabled, set_end_enabled,"
-					+ "  live_event_enabled, created_at, updated_at)"
+					+ "  live_event_enabled, kill_enabled, baron_enabled, dragon_enabled,"
+					+ "  tower_enabled, inhibitor_enabled, created_at, updated_at)"
 					+ " VALUES (" + memberId + ", " + memberId + ", 10,"
-					+ " true, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+					+ " true, true, true, true, true, true, true, true,"
+					+ " CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
 		}
 		em.flush();
 		em.clear();

@@ -109,7 +109,7 @@ public class TeamLiveEventPushService {
 		// dedup 키가 (member, matchId, ...) 라 팀+매치 양쪽 구독자여도 1회만 나간다.
 		MobilePushMessage matchMessage = buildMatchScopedMessage(
 				eventType, matchId, setNumber, blueTeamName, redTeamName, matchScoreLine, resolved);
-		fanOutToMatchSubscribers(eventType, matchId, setNumber, NO_EVENT_ORDER, matchMessage);
+		fanOutToMatchSubscribers(eventType, null, matchId, setNumber, NO_EVENT_ORDER, matchMessage);
 		if (bestOf == null) {
 			log.debug("bestOf 미확정 매치의 세트 이벤트. matchId={} eventType={}", matchId, eventType);
 		}
@@ -147,12 +147,14 @@ public class TeamLiveEventPushService {
 	/** 경기 예약 구독자 fan-out. 팀 구독 fanOut 과 동일하게 sendToMember(dedup) 를 태운다. */
 	private void fanOutToMatchSubscribers(
 			String eventType,
+			String eventSubType,
 			String matchId,
 			int setNumber,
 			long eventOrder,
 			MobilePushMessage message) {
 		try {
-			fanOutBatched(deviceRepository.findActiveDevicesBySubscribedMatchId(matchId, eventType),
+			fanOutBatched(
+					deviceRepository.findActiveDevicesBySubscribedMatchId(matchId, eventType, eventSubType),
 					eventType, matchId, setNumber, eventOrder, message);
 		} catch (Exception e) {
 			log.warn("Failed to prepare match-subscription pushes eventType={} matchId={} setNumber={}",
@@ -295,6 +297,7 @@ public class TeamLiveEventPushService {
 			int setNumber,
 			long eventOrder,
 			String actingEsportsTeamId,
+			String eventSubType,
 			String title,
 			String body) {
 		if (!isReady() || matchId == null || matchId.isBlank()) {
@@ -303,12 +306,28 @@ public class TeamLiveEventPushService {
 		// 문구(title/body)는 이벤트 상세(킬러/피해자·양팀 카운트)를 아는 LiveObjectEventRecorder 가 완성한다.
 		// 여기서는 구독 매칭용 발송만 담당한다.
 		MobilePushMessage message = new MobilePushMessage(
-				title, body, baseData(TYPE_LIVE_EVENT, matchId, setNumber));
+				title, body, liveEventData(matchId, setNumber, eventSubType));
 		// 팀 구독자: acting 팀이 LCK 로 해석될 때만. (비LCK 팀은 팀 구독 대상이 아니다)
 		resolveLckTeam(actingEsportsTeamId).ifPresent(team ->
-				fanOut(TYPE_LIVE_EVENT, matchId, setNumber, eventOrder, team.getId(), message));
+				fanOut(TYPE_LIVE_EVENT, eventSubType, matchId, setNumber, eventOrder, team.getId(), message));
 		// 경기 예약 구독자: 팀 무관. 비LCK 대진(예: 국제전)이라도 발송된다.
-		fanOutToMatchSubscribers(TYPE_LIVE_EVENT, matchId, setNumber, eventOrder, message);
+		fanOutToMatchSubscribers(TYPE_LIVE_EVENT, eventSubType, matchId, setNumber, eventOrder, message);
+	}
+
+	/**
+	 * 라이브 이벤트 payload.
+	 *
+	 * <p>{@code type} 은 {@code LIVE_EVENT} 로 고정한다 — 앱이 이 값으로 알림을 분류하는데
+	 * ({@code fcm_notification_types.dart}, {@code member_notification.dart}) 여기에 KILL 같은
+	 * 세부 종류를 넣으면 배포된 구버전이 알림을 분류하지 못한다. 세부 종류는 새 키로 실어 보내고
+	 * 앱은 준비될 때 읽으면 된다.
+	 */
+	private Map<String, String> liveEventData(String matchId, int setNumber, String eventSubType) {
+		Map<String, String> data = new LinkedHashMap<>(baseData(TYPE_LIVE_EVENT, matchId, setNumber));
+		if (eventSubType != null && !eventSubType.isBlank()) {
+			data.put("eventSubType", eventSubType);
+		}
+		return Map.copyOf(data);
 	}
 
 	private void notifyTeamSide(
@@ -333,18 +352,20 @@ public class TeamLiveEventPushService {
 		String red = blueSide ? opponent : displayName;
 		MobilePushMessage message = buildMatchEventMessage(
 				eventType, matchId, setNumber, displayName, blue, red, matchScoreLine, resolvedScore);
-		fanOut(eventType, matchId, setNumber, eventOrder, resolved.getId(), message);
+		fanOut(eventType, null, matchId, setNumber, eventOrder, resolved.getId(), message);
 	}
 
 	private void fanOut(
 			String eventType,
+			String eventSubType,
 			String matchId,
 			int setNumber,
 			long eventOrder,
 			Long teamId,
 			MobilePushMessage message) {
 		try {
-			fanOutBatched(deviceRepository.findActiveDevicesBySubscribedTeamId(teamId, eventType),
+			fanOutBatched(
+					deviceRepository.findActiveDevicesBySubscribedTeamId(teamId, eventType, eventSubType),
 					eventType, matchId, setNumber, eventOrder, message);
 		} catch (Exception e) {
 			log.warn("Failed to prepare team live event pushes eventType={} matchId={} setNumber={} teamId={}",

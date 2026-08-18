@@ -79,7 +79,7 @@ class TeamLiveEventPushFanOutBatchTest {
 		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(3, 0, List.of(), List.of("token-1", "token-2", "token-3")), List.of()));
 
-		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 10L, null, "제목", "본문");
+		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 10L, null, "KILL", "제목", "본문");
 
 		ArgumentCaptor<Map<Long, List<String>>> byMember = ArgumentCaptor.forClass(Map.class);
 		verify(quietAwarePushSender, times(1)).send(byMember.capture(), any());
@@ -104,7 +104,7 @@ class TeamLiveEventPushFanOutBatchTest {
 		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 1, List.of(), List.of("token-2")), List.of()));
 
-		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 11L, null, "제목", "본문");
+		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 11L, null, "KILL", "제목", "본문");
 
 		assertThat(capturedIds(sentCaptor())).containsExactly(2L);
 		assertThat(capturedIds(failedCaptor())).containsExactly(1L);
@@ -119,7 +119,7 @@ class TeamLiveEventPushFanOutBatchTest {
 		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 0, List.of(), List.of("token-2")), List.of()));
 
-		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 12L, null, "제목", "본문");
+		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 12L, null, "KILL", "제목", "본문");
 
 		ArgumentCaptor<Map<Long, List<String>>> byMember = ArgumentCaptor.forClass(Map.class);
 		verify(quietAwarePushSender).send(byMember.capture(), any());
@@ -134,7 +134,7 @@ class TeamLiveEventPushFanOutBatchTest {
 		when(deliveryRepository.reserveAll(any(), anyString(), anyInt(), anyString(), anyLong()))
 				.thenReturn(List.of());
 
-		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 13L, null, "제목", "본문");
+		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 13L, null, "KILL", "제목", "본문");
 
 		verify(quietAwarePushSender, never()).send(any(), any());
 	}
@@ -148,7 +148,7 @@ class TeamLiveEventPushFanOutBatchTest {
 		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(2, 0, List.of(), List.of("token-1", "token-2")), List.of()));
 
-		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 14L, null, "제목", "본문");
+		service.notifyLiveEvent(MATCH_ID, SET_NUMBER, 14L, null, "KILL", "제목", "본문");
 
 		ArgumentCaptor<Map<Long, List<String>>> byMember = ArgumentCaptor.forClass(Map.class);
 		verify(quietAwarePushSender, times(1)).send(byMember.capture(), any());
@@ -158,7 +158,7 @@ class TeamLiveEventPushFanOutBatchTest {
 	}
 
 	private void givenSubscribers(List<MemberDevice> devices) {
-		when(deviceRepository.findActiveDevicesBySubscribedMatchId(MATCH_ID, TeamLiveEventPushService.TYPE_LIVE_EVENT))
+		when(deviceRepository.findActiveDevicesBySubscribedMatchId(MATCH_ID, TeamLiveEventPushService.TYPE_LIVE_EVENT, "KILL"))
 				.thenReturn(devices);
 	}
 

@@ -25,6 +25,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PlayerSoloRankPushService {
 
+	/** 발송 시점 구분. 멱등 키와 구독 토글 조회에 함께 쓰인다. */
+	public static final String EVENT_START = "START";
+	public static final String EVENT_END = "END";
+
+
 	private static final String PUSH_TYPE = "PLAYER_SOLO_RANK_STARTED";
 
 	private final MemberDeviceRepository deviceRepository;
@@ -49,7 +54,7 @@ public class PlayerSoloRankPushService {
 				player.getName() + " 선수가 솔랭을 시작했어요",
 				normalizedChampion + KoreanParticle.ro(normalizedChampion) + " "
 						+ normalizeQueue(queueDisplayName) + " 플레이 중");
-		dispatch(player, gameId, message);
+		dispatch(player, gameId, EVENT_START, message);
 	}
 
 	/**
@@ -70,15 +75,16 @@ public class PlayerSoloRankPushService {
 				player, gameId, championName, championImageUrl, "솔로 랭크", opggUrl,
 				player.getName() + " 선수가 솔랭 한 판을 마쳤어요",
 				resultLine);
-		dispatch(player, gameId, message);
+		dispatch(player, gameId, EVENT_END, message);
 	}
 
-	private void dispatch(Player player, String gameId, MobilePushMessage message) {
+	private void dispatch(Player player, String gameId, String eventType, MobilePushMessage message) {
 		try {
 			fanOutBatched(
-					deviceRepository.findActiveDevicesBySubscribedPlayerId(player.getId()),
+					deviceRepository.findActiveDevicesBySubscribedPlayerId(player.getId(), eventType),
 					player,
 					gameId,
+					eventType,
 					message);
 		} catch (Exception e) {
 			log.warn(
@@ -105,6 +111,7 @@ public class PlayerSoloRankPushService {
 			List<MemberDevice> devices,
 			Player player,
 			String gameId,
+			String eventType,
 			MobilePushMessage message) {
 		Map<Long, List<MemberDevice>> devicesByMember = devices.stream()
 				.collect(Collectors.groupingBy(
@@ -118,7 +125,7 @@ public class PlayerSoloRankPushService {
 		// dedup: (member, playerId, gameId) 당 1회만 통과한다. 구독자 수만큼 왕복하지 않도록
 		// 한 번에 예약하고 발송 대상만 돌려받는다.
 		List<Long> reservedIds = deliveryRepository.reserveAll(
-				devicesByMember.keySet(), player.getId(), gameId);
+				devicesByMember.keySet(), player.getId(), gameId, eventType);
 		if (reservedIds.isEmpty()) {
 			return;
 		}
@@ -153,7 +160,8 @@ public class PlayerSoloRankPushService {
 			outcome = quietAwarePushSender.send(tokensByMember, message);
 		} catch (Exception e) {
 			// 발송 자체가 실패하면 예약한 구독자 전원을 FAILED 로 남긴다(재예약 대상이 된다).
-			markFailedAll(List.copyOf(tokensByMember.keySet()), player.getId(), gameId, truncate(e.getMessage()));
+			markFailedAll(List.copyOf(tokensByMember.keySet()), player.getId(), gameId, eventType,
+					truncate(e.getMessage()));
 			log.warn(
 					"Player solo rank multicast failed playerId={} gameId={} members={} tokens={}",
 					player.getId(),
@@ -176,10 +184,10 @@ public class PlayerSoloRankPushService {
 			(tokens.stream().anyMatch(successTokens::contains) ? delivered : undelivered).add(memberId);
 		});
 
-		markSentAll(delivered, player.getId(), gameId);
+		markSentAll(delivered, player.getId(), gameId, eventType);
 		// 잠자기로 건너뛴 회원은 발송 없이 마감만 한다 — 알림함에는 위에서 이미 남겼다.
-		markSkippedQuietAll(outcome.skippedMemberIds(), player.getId(), gameId);
-		markFailedAll(undelivered, player.getId(), gameId, "FCM 전송 성공 기기가 없습니다.");
+		markSkippedQuietAll(outcome.skippedMemberIds(), player.getId(), gameId, eventType);
+		markFailedAll(undelivered, player.getId(), gameId, eventType, "FCM 전송 성공 기기가 없습니다.");
 
 		if (!result.invalidTokens().isEmpty()) {
 			deactivateInvalidTokens(result.invalidTokens(), player.getId(), gameId);
@@ -201,12 +209,12 @@ public class PlayerSoloRankPushService {
 		}
 	}
 
-	private void markSentAll(Collection<Long> memberIds, Long playerId, String gameId) {
+	private void markSentAll(Collection<Long> memberIds, Long playerId, String gameId, String eventType) {
 		if (memberIds.isEmpty()) {
 			return;
 		}
 		try {
-			deliveryRepository.markSentAll(memberIds, playerId, gameId);
+			deliveryRepository.markSentAll(memberIds, playerId, gameId, eventType);
 		} catch (Exception e) {
 			log.warn(
 					"Failed to persist player push success playerId={} gameId={} members={}",
@@ -217,12 +225,12 @@ public class PlayerSoloRankPushService {
 		}
 	}
 
-	private void markSkippedQuietAll(Collection<Long> memberIds, Long playerId, String gameId) {
+	private void markSkippedQuietAll(Collection<Long> memberIds, Long playerId, String gameId, String eventType) {
 		if (memberIds.isEmpty()) {
 			return;
 		}
 		try {
-			deliveryRepository.markSkippedQuietAll(memberIds, playerId, gameId);
+			deliveryRepository.markSkippedQuietAll(memberIds, playerId, gameId, eventType);
 		} catch (Exception e) {
 			log.warn(
 					"Failed to persist quiet-skipped delivery playerId={} gameId={} members={}",
@@ -237,12 +245,13 @@ public class PlayerSoloRankPushService {
 			Collection<Long> memberIds,
 			Long playerId,
 			String gameId,
+			String eventType,
 			String errorMessage) {
 		if (memberIds.isEmpty()) {
 			return;
 		}
 		try {
-			deliveryRepository.markFailedAll(memberIds, playerId, gameId, errorMessage);
+			deliveryRepository.markFailedAll(memberIds, playerId, gameId, eventType, errorMessage);
 		} catch (Exception persistenceException) {
 			log.warn(
 					"Failed to persist player push failure playerId={} gameId={} members={}",
