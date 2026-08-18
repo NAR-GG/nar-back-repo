@@ -44,6 +44,10 @@ public class PlayerSoloRankPushDelivery {
 	@Column(name = "game_id", nullable = false, length = 64)
 	private String gameId;
 
+	/** START(게임 시작) 또는 END(게임 종료). 멱등 키의 일부다. */
+	@Column(name = "event_type", nullable = false, length = 16)
+	private String eventType = "START";
+
 	@Enumerated(EnumType.STRING)
 	@Column(name = "status", nullable = false, length = 20)
 	private PushDeliveryStatus status;

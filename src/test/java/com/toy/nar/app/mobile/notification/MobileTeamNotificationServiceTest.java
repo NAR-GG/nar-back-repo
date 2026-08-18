@@ -139,7 +139,7 @@ class MobileTeamNotificationServiceTest {
 		when(subscriptionRepository.findByMember_IdAndTeam_Id(7L, 1L))
 				.thenReturn(Optional.empty());
 		assertThatThrownBy(() -> service.update(
-				7L, 1L, new TeamNotificationUpdateRequest(true, true, false)))
+				7L, 1L, new TeamNotificationUpdateRequest(true, true, false, null, null, null, null, null)))
 				.isInstanceOf(ResponseStatusException.class)
 				.hasMessageContaining("404 NOT_FOUND");
 	}
@@ -153,7 +153,7 @@ class MobileTeamNotificationServiceTest {
 		when(subscriptionRepository.findByMember_IdAndTeam_Id(7L, 1L))
 				.thenReturn(Optional.of(subscription));
 
-		var updated = service.update(7L, 1L, new TeamNotificationUpdateRequest(false, true, true));
+		var updated = service.update(7L, 1L, new TeamNotificationUpdateRequest(false, true, true, null, null, null, null, null));
 		service.delete(7L, 1L);
 
 		assertThat(updated.favoriteTeam()).isTrue();

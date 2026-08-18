@@ -211,6 +211,19 @@ jobs:
             FLYWAY="${{ vars.SPRING_FLYWAY_ENABLED || 'false' }}"
             echo "스케줄러=${SCHEDULING}  Flyway=${FLYWAY}"
 
+            # 미완성 기능 스위치. 같은 이유로 파일이 아니라 저장소 변수로 켠다.
+            #
+            # SOLO_RANK_END: 선수 솔랭 종료 알림(승패·KDA). 켜도 사용자 토글
+            #   (member_favorite_player.end_enabled)이 전부 false 라 아무에게도 안 간다 —
+            #   그 토글을 바꾸는 PUT /player-subscriptions/{playerId} 를 부르는 앱 빌드가
+            #   아직 없다. 켜는 목적은 match-v5 발행 지연 실측이다: [solo-rank-end] 로그의
+            #   "종료 감지" 와 "종료 알림 발송" 시각 차이가 재시도 간격(현재 30초)의 근거가 된다.
+            # MATCH_FALLBACK: 스트리머 모드 계정용 match-v5 폴백. prod 에서 한 번도
+            #   돌아본 적 없는 경로라 아직 닫아 둔다.
+            SOLO_RANK_END="${{ vars.SOLO_RANK_END_NOTIFICATION_ENABLED || 'false' }}"
+            MATCH_FALLBACK="${{ vars.RIOT_MATCH_FALLBACK_ENABLED || 'false' }}"
+            echo "솔랭종료=${SOLO_RANK_END}  매치폴백=${MATCH_FALLBACK}"
+
             # 그림자 인스턴스의 예외가 프로덕션 릴리스에 섞이면 컷오버 후 회귀를 판별할 수 없다.
             # 컷오버(SCHEDULING=true)와 함께 켠다.
             if [ "${SCHEDULING}" = "true" ]; then
@@ -243,6 +256,8 @@ jobs:
               -e RIOT_API_KEY="${{ secrets.RIOT_API_KEY }}" \
               -e RIOT_API_ENABLED="${SCHEDULING}" \
               -e RIOT_MONITOR_ENABLED="${SCHEDULING}" \
+              -e RIOT_MATCH_FALLBACK_ENABLED="${MATCH_FALLBACK}" \
+              -e SOLO_RANK_END_NOTIFICATION_ENABLED="${SOLO_RANK_END}" \
               -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
               -e GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
               -e GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \

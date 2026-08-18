@@ -57,8 +57,9 @@ public interface MemberFavoritePlayerRepository extends JpaRepository<MemberFavo
 	@Modifying
 	@Transactional
 	@Query(value = """
-			INSERT INTO member_favorite_player (member_id, player_id, created_at)
-			VALUES (:memberId, :playerId, :createdAt)
+			INSERT INTO member_favorite_player
+			       (member_id, player_id, start_enabled, end_enabled, created_at)
+			VALUES (:memberId, :playerId, TRUE, FALSE, :createdAt)
 			ON DUPLICATE KEY UPDATE id = id
 			""", nativeQuery = true)
 	void insertIfAbsent(

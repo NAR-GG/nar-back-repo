@@ -55,6 +55,10 @@ public class PlayerSoloRankGame {
 	@Column(name = "detected_at", nullable = false)
 	private LocalDateTime detectedAt;
 
+	/** 종료 알림을 낸 시각. null 이면 아직 안 냈다는 뜻이라 재조회 게이트로 쓴다. */
+	@Column(name = "end_notified_at")
+	private LocalDateTime endNotifiedAt;
+
 	public PlayerSoloRankGame(Player player, String gameId, Champion champion, LocalDateTime detectedAt) {
 		this.player = player;
 		this.gameId = gameId;

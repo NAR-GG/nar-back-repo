@@ -25,25 +25,25 @@ public class PlayerSoloRankPushDeliveryRepositoryImpl
 	private final JdbcTemplate jdbcTemplate;
 
 	@Override
-	public List<Long> reserveAll(Collection<Long> memberIds, Long playerId, String gameId) {
+	public List<Long> reserveAll(Collection<Long> memberIds, Long playerId, String gameId, String eventType) {
 		List<Long> targets = new ArrayList<>();
 		for (List<Long> chunk : chunk(memberIds)) {
-			targets.addAll(reserveChunk(chunk, playerId, gameId));
+			targets.addAll(reserveChunk(chunk, playerId, gameId, eventType));
 		}
 		return targets;
 	}
 
-	private List<Long> reserveChunk(List<Long> memberIds, Long playerId, String gameId) {
+	private List<Long> reserveChunk(List<Long> memberIds, Long playerId, String gameId, String eventType) {
 		// 1) 기존 행을 한 번에 읽어 신규/재예약/제외를 자바에서 가른다.
 		//    단건 reserve 의 "INSERT IGNORE 실패 → 조건부 UPDATE" 판정을 그대로 재현한다.
 		List<Object[]> existing = jdbcTemplate.query(
 				"SELECT member_id, status, updated_at < DATE_SUB(NOW(), INTERVAL "
 						+ STALE_PENDING_MINUTES + " MINUTE) AS stale"
 						+ " FROM player_solo_rank_push_delivery"
-						+ " WHERE player_id = ? AND game_id = ?"
+						+ " WHERE player_id = ? AND game_id = ? AND event_type = ?"
 						+ " AND member_id IN (" + placeholders(memberIds.size()) + ")",
 				(rs, rowNum) -> new Object[] { rs.getLong(1), rs.getString(2), rs.getBoolean(3) },
-				args(playerId, gameId, memberIds));
+				args(playerId, gameId, eventType, memberIds));
 
 		Set<Long> existingIds = existing.stream()
 				.map(row -> (Long) row[0])
@@ -58,21 +58,21 @@ public class PlayerSoloRankPushDeliveryRepositoryImpl
 		if (!newIds.isEmpty()) {
 			jdbcTemplate.update(
 					"INSERT IGNORE INTO player_solo_rank_push_delivery"
-							+ " (member_id, player_id, game_id, status, created_at, updated_at) VALUES "
+							+ " (member_id, player_id, game_id, event_type, status, created_at, updated_at) VALUES "
 							+ newIds.stream()
-									.map(id -> "(?, ?, ?, 'PENDING', NOW(), NOW())")
+									.map(id -> "(?, ?, ?, ?, 'PENDING', NOW(), NOW())")
 									.collect(Collectors.joining(", ")),
 					newIds.stream()
-							.flatMap(id -> List.of((Object) id, playerId, gameId).stream())
+							.flatMap(id -> List.of((Object) id, playerId, gameId, eventType).stream())
 							.toArray());
 		}
 		if (!reactivateIds.isEmpty()) {
 			jdbcTemplate.update(
 					"UPDATE player_solo_rank_push_delivery"
 							+ " SET status = 'PENDING', error_message = NULL, updated_at = NOW()"
-							+ " WHERE player_id = ? AND game_id = ?"
+							+ " WHERE player_id = ? AND game_id = ? AND event_type = ?"
 							+ " AND member_id IN (" + placeholders(reactivateIds.size()) + ")",
-					args(playerId, gameId, reactivateIds));
+					args(playerId, gameId, eventType, reactivateIds));
 		}
 
 		List<Long> targets = new ArrayList<>(newIds);
@@ -81,31 +81,31 @@ public class PlayerSoloRankPushDeliveryRepositoryImpl
 	}
 
 	@Override
-	public int markSentAll(Collection<Long> memberIds, Long playerId, String gameId) {
+	public int markSentAll(Collection<Long> memberIds, Long playerId, String gameId, String eventType) {
 		int updated = 0;
 		for (List<Long> chunk : chunk(memberIds)) {
 			updated += jdbcTemplate.update(
 					"UPDATE player_solo_rank_push_delivery"
 							+ " SET status = 'SENT', error_message = NULL,"
 							+ "     sent_at = NOW(), updated_at = NOW()"
-							+ " WHERE player_id = ? AND game_id = ?"
+							+ " WHERE player_id = ? AND game_id = ? AND event_type = ?"
 							+ " AND member_id IN (" + placeholders(chunk.size()) + ")",
-					args(playerId, gameId, chunk));
+					args(playerId, gameId, eventType, chunk));
 		}
 		return updated;
 	}
 
 	@Override
-	public int markSkippedQuietAll(Collection<Long> memberIds, Long playerId, String gameId) {
+	public int markSkippedQuietAll(Collection<Long> memberIds, Long playerId, String gameId, String eventType) {
 		int updated = 0;
 		for (List<Long> chunk : chunk(memberIds)) {
 			updated += jdbcTemplate.update(
 					"UPDATE player_solo_rank_push_delivery"
 							+ " SET status = 'SKIPPED_QUIET', error_message = NULL,"
 							+ "     sent_at = NULL, updated_at = NOW()"
-							+ " WHERE player_id = ? AND game_id = ?"
+							+ " WHERE player_id = ? AND game_id = ? AND event_type = ?"
 							+ " AND member_id IN (" + placeholders(chunk.size()) + ")",
-					args(playerId, gameId, chunk));
+					args(playerId, gameId, eventType, chunk));
 		}
 		return updated;
 	}
@@ -115,6 +115,7 @@ public class PlayerSoloRankPushDeliveryRepositoryImpl
 			Collection<Long> memberIds,
 			Long playerId,
 			String gameId,
+			String eventType,
 			String errorMessage) {
 		int updated = 0;
 		for (List<Long> chunk : chunk(memberIds)) {
@@ -122,11 +123,12 @@ public class PlayerSoloRankPushDeliveryRepositoryImpl
 			params.add(errorMessage);
 			params.add(playerId);
 			params.add(gameId);
+			params.add(eventType);
 			params.addAll(chunk);
 			updated += jdbcTemplate.update(
 					"UPDATE player_solo_rank_push_delivery"
 							+ " SET status = 'FAILED', error_message = ?, updated_at = NOW()"
-							+ " WHERE player_id = ? AND game_id = ?"
+							+ " WHERE player_id = ? AND game_id = ? AND event_type = ?"
 							+ " AND member_id IN (" + placeholders(chunk.size()) + ")",
 					params.toArray());
 		}
@@ -149,10 +151,11 @@ public class PlayerSoloRankPushDeliveryRepositoryImpl
 		return String.join(", ", Collections.nCopies(count, "?"));
 	}
 
-	private Object[] args(Long playerId, String gameId, List<Long> memberIds) {
+	private Object[] args(Long playerId, String gameId, String eventType, List<Long> memberIds) {
 		List<Object> params = new ArrayList<>();
 		params.add(playerId);
 		params.add(gameId);
+		params.add(eventType);
 		params.addAll(memberIds);
 		return params.toArray();
 	}

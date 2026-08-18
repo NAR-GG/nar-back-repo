@@ -17,6 +17,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -145,14 +146,97 @@ class LivePollingSchedulerTest {
 	}
 
 	@Test
-	void removeGameClearsFinishedMark() {
+	void removeGameKeepsFinishedMark() {
+		// 종료는 게임 단위의 사실이다. 추적 제거와 함께 지우면 livestats 가 계속 돌려주는 옛
+		// 프레임에 재편입돼 끝난 세트가 다시 LIVE 로 뜬다(2026-08-17 KeSPA 2세트: 3세트와 동시 LIVE).
 		LiveStateStore liveStateStore = new LiveStateStore();
 		liveStateStore.markFinished("game-1");
-		assertThat(liveStateStore.isFinished("game-1")).isTrue();
 
 		liveStateStore.removeGame("game-1");
 
-		assertThat(liveStateStore.isFinished("game-1")).isFalse();
+		assertThat(liveStateStore.getActiveGames()).doesNotContainKey("game-1");
+		assertThat(liveStateStore.isFinished("game-1")).isTrue();
+	}
+
+	@Test
+	void finishedGameIsNotReTrackedByDiscovery() {
+		// 세트 종료 후에도 피드는 마지막으로 살아 있던 프레임을 계속 돌려주고 업스트림도 gameId 를
+		// liveGameIds 에 남긴다 — 그것으로 재편입되면 끝난 세트가 다시 LIVE 로 뜬다.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		WorldsService worldsService = mock(WorldsService.class);
+		LeagueMatchService leagueMatchService = mock(LeagueMatchService.class);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore,
+				mock(TeamLiveEventPushService.class), worldsService, leagueMatchService);
+		liveStateStore.markFinished("game-1");
+		MatchResultDto stillInProgress = MatchResultDto.builder()
+				.matchId("match-1")
+				.leagueName("LCK")
+				.state("inProgress")
+				.liveGameIds(List.of("game-1"))
+				.gameIds(List.of("game-0", "game-1"))
+				.build();
+		when(worldsService.getWorldsMatches(null, "LCK")).thenReturn(MatchResponseWrapper.builder()
+				.matches(List.of(stillInProgress))
+				.build());
+		// 디스커버리 대상 리그는 "추적 중 게임의 리그 + 오늘 ±1일 경기가 있는 리그" 다.
+		// 추적 중 게임이 없는 상태를 재현하므로 후자로 LCK 를 넣어야 실제로 순회한다.
+		when(leagueMatchService.findLeaguesWithMatchesBetween(any(), any())).thenReturn(List.of("LCK"));
+
+		scheduler.discoverLiveGames();
+
+		assertThat(liveStateStore.getActiveGames()).doesNotContainKey("game-1");
+	}
+
+	@Test
+	void stalledSetIsFinishedWhenLaterSetIsLive() throws InterruptedException {
+		// 업스트림이 세트 상태·스코어를 갱신하지 않는 리그(KeSPA: 종료 후에도 unstarted, 0:0)에서는
+		// stall+score 로 종료를 확정할 수 없어 앞 세트가 영구 LIVE 로 남는다. 뒤 세트가 라이브면
+		// 앞 세트는 끝난 것이다 — 2026-08-17 T1 vs DNS: 4세트가 도는 동안 2세트가 프레임 19:57 에
+		// 멈춘 채 2시간 반 넘게 LIVE.
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		// 스코어 합 0 < setNumber(2) — 2차 판정은 성립할 수 없다.
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService,
+				new LiveFrameStallTracker(1L), matchRepositoryWithScore(0, 0));
+		liveStateStore.getActiveGames().put("game-2", lckGame("game-2"));
+		liveStateStore.getActiveGames().put("game-3", laterSetGame("game-3"));
+		// 2세트는 같은 프레임에 동결, 3세트는 매 폴마다 진전한다.
+		when(liveStatsClient(scheduler).getWindow(eq("game-2"), anyString()))
+				.thenReturn(windowAt("2026-08-17T10:57:36Z"));
+		when(liveStatsClient(scheduler).getWindow(eq("game-3"), anyString()))
+				.thenReturn(windowAt("2026-08-17T13:30:00Z"), windowAt("2026-08-17T13:30:10Z"));
+
+		scheduler.pollActiveGames();
+		Thread.sleep(10); // 정지 임계 1ms 를 넘긴다
+		scheduler.pollActiveGames();
+
+		assertThat(liveStateStore.isFinished("game-2")).isTrue();
+		assertThat(liveStateStore.isFinished("game-3")).isFalse();
+		// 지난 세트의 늦은 SET_END 는 쏘지 않는다 — 재기동으로 dedup 이 비면 중복 발송이 된다.
+		verify(pushService, never()).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_END),
+				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+	}
+
+	@Test
+	void finishedGameDoesNotFireSetStartAgain() {
+		// 재편입 방어선. 옛 프레임(in_game)이 다시 관측돼도 이미 끝난 세트면 시작 알림·카드가
+		// 나가면 안 된다(2026-08-17 20:42: 20:33 종료된 2세트의 SET_START 가 재발화).
+		LiveStateStore liveStateStore = new LiveStateStore();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		LivePollingScheduler scheduler = schedulerWith(liveStateStore, pushService);
+		liveStateStore.getActiveGames().put("game-1", lckGame("game-1"));
+		liveStateStore.markFinished("game-1");
+		when(liveStatsClient(scheduler).getWindow(anyString(), anyString()))
+				.thenReturn(windowWithGameState("in_game"));
+
+		scheduler.pollActiveGames();
+
+		verify(pushService, never()).notifyMatchEvent(
+				eq(TeamLiveEventPushService.TYPE_SET_START),
+				anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
 	}
 
 	@Test
@@ -853,6 +937,24 @@ class LivePollingSchedulerTest {
 				2,
 				"100",
 				"200");
+	}
+
+	/** 프레임 시각을 지정해 진전/정지를 구분할 수 있는 window. */
+	private com.fasterxml.jackson.databind.JsonNode windowAt(String frameTimestamp) {
+		try {
+			return new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+					"{\"frames\":[{\"rfc460Timestamp\":\"" + frameTimestamp
+							+ "\",\"gameState\":\"in_game\"}]}");
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/** lckGame 과 같은 매치의 다음 세트(3세트). */
+	private ActiveLiveGame laterSetGame(String gameId) {
+		return new ActiveLiveGame(
+				gameId, "match-1", "LCK", "KT", "HLE",
+				LocalDateTime.now(ZoneOffset.UTC), 0, 3, "100", "200");
 	}
 
 	private com.fasterxml.jackson.databind.JsonNode windowWithGameState(String gameState) {

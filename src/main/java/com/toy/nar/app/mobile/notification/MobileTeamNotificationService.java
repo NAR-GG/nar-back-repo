@@ -101,6 +101,12 @@ public class MobileTeamNotificationService {
 				request.setStartEnabled(),
 				request.setEndEnabled(),
 				request.liveEventEnabled());
+		subscription.updateLiveEventTypes(
+				request.killEnabled(),
+				request.baronEnabled(),
+				request.dragonEnabled(),
+				request.towerEnabled(),
+				request.inhibitorEnabled());
 		// 껐다 켠 것도 "이제부터 보겠다"는 의사표시다. 켜는 전환에서만 따라잡아 재호출로 카드가 쌓이지 않게 한다.
 		if (turnedOn) {
 			liveActivityCatchUpService.catchUpTeam(memberId, subscription.getTeam().getCode());
@@ -169,7 +175,12 @@ public class MobileTeamNotificationService {
 				true,
 				subscription.isSetStartEnabled(),
 				subscription.isSetEndEnabled(),
-				subscription.isLiveEventEnabled());
+				subscription.isLiveEventEnabled(),
+				subscription.isKillEnabled(),
+				subscription.isBaronEnabled(),
+				subscription.isDragonEnabled(),
+				subscription.isTowerEnabled(),
+				subscription.isInhibitorEnabled());
 	}
 
 	private TeamNotificationSubscriptionResponse defaultResponse(Member member, Team team) {
@@ -182,7 +193,12 @@ public class MobileTeamNotificationService {
 				false,
 				true,
 				true,
-				false);
+				false,
+				true,
+				true,
+				true,
+				true,
+				true);
 	}
 
 	private Long favoriteTeamId(Member member) {

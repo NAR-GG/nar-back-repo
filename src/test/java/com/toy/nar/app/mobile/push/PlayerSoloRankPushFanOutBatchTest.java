@@ -66,7 +66,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 	@DisplayName("잠자기로 건너뛴 구독자는 알림함에만 남고 SKIPPED_QUIET 로 마감된다")
 	void 잠자기_구독자는_알림함에만_남는다() {
 		givenSubscribers(device(1L, member(7L), "token-1"), device(2L, member(8L), "token-2"));
-		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID)))
+		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID), eq("START")))
 				.thenReturn(List.of(7L, 8L));
 		// 8번 회원은 잠자기라 발송에서 빠졌다.
 		when(quietAwarePushSender.send(any(), any())).thenReturn(new QuietAwarePushSender.Outcome(
@@ -74,10 +74,10 @@ class PlayerSoloRankPushFanOutBatchTest {
 
 		notifyGame();
 
-		verify(deliveryRepository).markSentAll(List.of(7L), PLAYER_ID, GAME_ID);
-		verify(deliveryRepository).markSkippedQuietAll(List.of(8L), PLAYER_ID, GAME_ID);
+		verify(deliveryRepository).markSentAll(List.of(7L), PLAYER_ID, GAME_ID, "START");
+		verify(deliveryRepository).markSkippedQuietAll(List.of(8L), PLAYER_ID, GAME_ID, "START");
 		// FAILED 로 남으면 재예약돼서 잠자기가 끝난 뒤 뒤늦은 푸시가 나간다.
-		verify(deliveryRepository, never()).markFailedAll(any(), any(), any(), any());
+		verify(deliveryRepository, never()).markFailedAll(any(), any(), any(), any(), any());
 		// 알림함에는 발송 성공 회원과 건너뛴 회원이 모두 남아야 한다(발송 전에 예약자 전원으로 기록).
 		ArgumentCaptor<Collection<Long>> feed = ArgumentCaptor.forClass(Collection.class);
 		verify(notificationService).recordAll(feed.capture(), any(), anyString(), any(), any());
@@ -90,7 +90,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 		givenSubscribers(device(1L, member(7L), "token-1"),
 				device(2L, member(8L), "token-2"),
 				device(3L, member(9L), "token-3"));
-		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID)))
+		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID), eq("START")))
 				.thenReturn(List.of(7L, 8L, 9L));
 		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(3, 0, List.of(), List.of("token-1", "token-2", "token-3")), List.of()));
@@ -103,8 +103,8 @@ class PlayerSoloRankPushFanOutBatchTest {
 				.containsExactly("token-1", "token-2", "token-3");
 		verify(pushGateway, never()).send(any(), any());
 
-		verify(deliveryRepository, times(1)).reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID));
-		verify(deliveryRepository, times(1)).markSentAll(any(), eq(PLAYER_ID), eq(GAME_ID));
+		verify(deliveryRepository, times(1)).reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID), eq("START"));
+		verify(deliveryRepository, times(1)).markSentAll(any(), eq(PLAYER_ID), eq(GAME_ID), eq("START"));
 		verify(notificationService, times(1)).recordAll(any(), any(), anyString(), any(), any());
 	}
 
@@ -112,7 +112,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 	@DisplayName("토큰별 결과로 구독자를 갈라 마감한다")
 	void 성공한_토큰의_구독자만_발송_기록한다() {
 		givenSubscribers(device(1L, member(7L), "token-1"), device(2L, member(8L), "token-2"));
-		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(7L, 8L));
+		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID), eq("START"))).thenReturn(List.of(7L, 8L));
 		// token-2 만 성공
 		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 1, List.of(), List.of("token-2")), List.of()));
@@ -132,7 +132,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 	@DisplayName("예약에서 빠진 구독자는 토큰에 포함하지 않는다")
 	void 예약되지_않은_구독자는_발송_대상에서_빠진다() {
 		givenSubscribers(device(1L, member(7L), "token-1"), device(2L, member(8L), "token-2"));
-		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(8L));
+		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID), eq("START"))).thenReturn(List.of(8L));
 		when(quietAwarePushSender.send(any(), any()))
 				.thenReturn(new QuietAwarePushSender.Outcome(new MobilePushResult(1, 0, List.of(), List.of("token-2")), List.of()));
 
@@ -148,7 +148,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 	@DisplayName("예약 대상이 없으면 발송하지 않는다")
 	void 예약_대상이_없으면_발송하지_않는다() {
 		givenSubscribers(device(1L, member(7L), "token-1"));
-		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of());
+		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID), eq("START"))).thenReturn(List.of());
 
 		notifyGame();
 
@@ -159,16 +159,16 @@ class PlayerSoloRankPushFanOutBatchTest {
 	@DisplayName("발송 자체가 실패하면 예약한 구독자 전원을 FAILED 로 남긴다")
 	void 발송_예외시_예약자_전원을_실패로_남긴다() {
 		givenSubscribers(device(1L, member(7L), "token-1"), device(2L, member(8L), "token-2"));
-		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(7L, 8L));
+		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID), eq("START"))).thenReturn(List.of(7L, 8L));
 		when(quietAwarePushSender.send(any(), any())).thenThrow(new IllegalStateException("firebase down"));
 
 		notifyGame();
 
 		ArgumentCaptor<Collection<Long>> failed = ArgumentCaptor.forClass(Collection.class);
 		verify(deliveryRepository)
-				.markFailedAll(failed.capture(), eq(PLAYER_ID), eq(GAME_ID), eq("firebase down"));
+				.markFailedAll(failed.capture(), eq(PLAYER_ID), eq(GAME_ID), eq("START"), eq("firebase down"));
 		assertThat(failed.getValue()).containsExactly(7L, 8L);
-		verify(deliveryRepository, never()).markSentAll(any(), anyLong(), anyString());
+		verify(deliveryRepository, never()).markSentAll(any(), anyLong(), anyString(), anyString());
 		// FCM 이 죽어도 알림함에는 남는다 — 앱을 열면 무슨 알림이 있었는지는 보여야 한다.
 		verify(notificationService).recordAll(any(), any(), anyString(), any(), any());
 	}
@@ -177,7 +177,7 @@ class PlayerSoloRankPushFanOutBatchTest {
 	@DisplayName("알림함 기록이 FCM 발송보다 먼저 일어난다")
 	void 피드를_발송_전에_남긴다() {
 		givenSubscribers(device(1L, member(7L), "token-1"));
-		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID))).thenReturn(List.of(7L));
+		when(deliveryRepository.reserveAll(any(), eq(PLAYER_ID), eq(GAME_ID), eq("START"))).thenReturn(List.of(7L));
 		when(quietAwarePushSender.send(any(), any())).thenReturn(new QuietAwarePushSender.Outcome(
 				new MobilePushResult(1, 0, List.of(), List.of("token-1")), List.of()));
 
@@ -195,18 +195,18 @@ class PlayerSoloRankPushFanOutBatchTest {
 	}
 
 	private void givenSubscribers(MemberDevice... devices) {
-		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(PLAYER_ID)).thenReturn(List.of(devices));
+		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(PLAYER_ID, "START")).thenReturn(List.of(devices));
 	}
 
 	private ArgumentCaptor<Collection<Long>> sentCaptor() {
 		ArgumentCaptor<Collection<Long>> captor = ArgumentCaptor.forClass(Collection.class);
-		verify(deliveryRepository).markSentAll(captor.capture(), eq(PLAYER_ID), eq(GAME_ID));
+		verify(deliveryRepository).markSentAll(captor.capture(), eq(PLAYER_ID), eq(GAME_ID), eq("START"));
 		return captor;
 	}
 
 	private ArgumentCaptor<Collection<Long>> failedCaptor() {
 		ArgumentCaptor<Collection<Long>> captor = ArgumentCaptor.forClass(Collection.class);
-		verify(deliveryRepository).markFailedAll(captor.capture(), eq(PLAYER_ID), eq(GAME_ID), anyString());
+		verify(deliveryRepository).markFailedAll(captor.capture(), eq(PLAYER_ID), eq(GAME_ID), eq("START"), anyString());
 		return captor;
 	}
 
