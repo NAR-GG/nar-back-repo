@@ -50,6 +50,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    # deploy 브랜치에 이미지 태그를 밀기 위해 필요하다. 기본값은 읽기 전용이다.
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -317,3 +321,42 @@ jobs:
             " >/dev/null 2>&1 &
 
             echo "배포 완료"
+
+      # ── GitOps: 방금 배포한 이미지 태그를 deploy 브랜치에 기록한다 ──
+      #
+      # ArgoCD 는 main 이 아니라 이 브랜치를 본다. main 은 PR 필수라 CI 가 직접 못 밀고,
+      # 바이패스용 PAT 을 CI 에 넣는 건 권한이 과하다.
+      #
+      # deploy 는 "main + 이미지 태그 한 줄" 이다. 매번 main 에서 새로 만들어 강제 푸시하므로
+      # 두 브랜치가 갈라지지 않는다. 대신 히스토리는 안 남는다 —
+      # 배포 이력은 ArgoCD 의 History and Rollback 에서 본다.
+      #
+      # **이 브랜치에 손으로 커밋하지 마라. 다음 배포에 날아간다.**
+      #
+      # 무한 루프는 안 난다. 이 워크플로의 paths-ignore 에 infra/** 가 있어서
+      # 매니페스트만 바뀐 커밋은 배포를 다시 트리거하지 않는다.
+      #
+      # 배포가 실패하면 여기까지 안 온다. 즉 deploy 브랜치는 "실제로 뜬 이미지" 만 가리킨다.
+      - name: deploy 브랜치에 이미지 태그 기록
+        run: |
+          set -euo pipefail
+          IMAGE="${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}"
+          MANIFEST=infra/k8s/nar-web.yaml
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main --depth=1
+          git checkout -B deploy FETCH_HEAD
+
+          # 태그만 갈아끼운다. 매니페스트의 나머지는 main 그대로다.
+          sed -i "s|^\( *image: \).*/nar-gg:.*|\1${IMAGE}|" "${MANIFEST}"
+
+          # sed 가 아무것도 못 바꿨는데 조용히 넘어가면, deploy 브랜치가 낡은 태그를
+          # 가리킨 채로 자동 동기화가 돈다. 이미지 줄 형식이 바뀌면 여기서 멈춘다.
+          grep -q "image: ${IMAGE}$" "${MANIFEST}" \
+            || { echo "이미지 줄을 못 바꿨다. ${MANIFEST} 의 형식을 확인하라."; exit 1; }
+
+          git commit -am "chore: 배포 이미지 ${GITHUB_SHA::7}"
+          git push -f origin deploy
+          echo "deploy 브랜치 갱신 → ${IMAGE}"
