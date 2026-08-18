@@ -15,6 +15,18 @@ spec:
       labels:
         app: nar-web
     spec:
+      # 이걸 켜두면 쿠버네티스가 서비스어카운트 토큰을
+      # /var/run/secrets/kubernetes.io/serviceaccount 에 마운트한다.
+      # /var/run 은 /run 심링크라, 아래에서 /run/secrets 를 읽기 전용으로 마운트하면
+      # 그 안에 디렉토리를 못 만들어 컨테이너가 아예 안 뜬다(CrashLoopBackOff).
+      #
+      #   mkdirat .../run/secrets/kubernetes.io: read-only file system
+      #
+      # 앱은 쿠버네티스 API 를 쓰지 않으므로 토큰이 필요 없다. 꺼서 경로 충돌을 없앤다.
+      # (docker 와 같은 /run/secrets 경로를 유지하려는 것 — 경로를 바꾸면 시크릿의
+      #  GOOGLE_APPLICATION_CREDENTIALS·APNS_KEY_PATH 도 같이 고쳐야 한다)
+      automountServiceAccountToken: false
+
       containers:
         - name: app
           image: menten4859/nar-gg:59870c1d502c04169f39926b4561e32c3a5ef771
