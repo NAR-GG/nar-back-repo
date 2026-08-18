@@ -57,6 +57,12 @@ spec:
             - name: JAVA_TOOL_OPTIONS
               value: "-Xmx2g --add-opens=java.base/java.lang=ALL-UNNAMED"
 
+            # 롤링 교체에서 옛 파드가 SIGTERM 을 받는 순간 Tomcat 이 처리 중이던
+            # 커넥션을 끊어 502 가 난다(#422 검증 배포에서 실제로 관측).
+            # graceful 이면 새 요청만 거절하고 진행 중인 요청은 마저 처리한다.
+            - name: SERVER_SHUTDOWN
+              value: "graceful"
+
           resources:
             requests:
               # 실측 RSS 1318Mi (힙 미포화). 스케줄링 기준이므로 평상시 값으로 잡는다.
@@ -84,6 +90,14 @@ spec:
             initialDelaySeconds: 90
             periodSeconds: 30
             failureThreshold: 3
+
+          # SIGTERM 과 동시에 Service 엔드포인트에서 빠지는 게 아니다 — 제거가
+          # kube-proxy 에 전파되는 데 몇 초 걸리고, 그동안 새 요청이 죽어가는
+          # 파드로 온다. SIGTERM 을 잠깐 늦춰 전파가 끝난 뒤 종료를 시작한다.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
 
           # docker 판이 -v 로 넣어주던 파일들. 경로는 docker 와 똑같이 맞췄다
           # (GOOGLE_APPLICATION_CREDENTIALS·APNS_KEY_PATH 가 시크릿에 그 값으로 들어 있다).
