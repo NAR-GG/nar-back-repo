@@ -33,6 +33,29 @@ services:
     ports:
       - "3000:3000"
 
+  # 맥미니 MySQL 복제 지연 감시. 호스트 MySQL 에 host.docker.internal 로 붙는다.
+  mysqld-exporter:
+    image: prom/mysqld-exporter:latest
+    container_name: mysqld-exporter
+    restart: unless-stopped
+    command:
+      - --config.my-cnf=/cfg/.my.cnf
+    volumes:
+      - ./mysqld-exporter/.my.cnf:/cfg/.my.cnf:ro
+
+  # 맥미니 컨테이너 로그 → Loki. EC2 는 자기 Alloy 가 Tailscale 로 밀어넣는다.
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+
 volumes:
   prom-data:
   loki-data:

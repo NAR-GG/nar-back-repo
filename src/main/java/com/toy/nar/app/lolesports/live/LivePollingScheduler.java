@@ -73,14 +73,6 @@ public class LivePollingScheduler {
 	 */
 	private final java.util.Set<String> frameFinishedGameIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-	/**
-	 * 네이버 종료 확정으로 이미 completed 를 쓴 matchId. 업스트림 flip 이 오기까지(실측 17분+)
-	 * 매 사이클 네이버를 다시 찌르지 않게 막는다. 확정 실패(세트 사이)면 등록하지 않아 다음 사이클에 재시도한다.
-	 * ponytail: 프로세스 생애 동안 누적된다 — 하루 수백 건이라 무해. 커지면 stale 제거 시점에 같이 비운다.
-	 * 재기동으로 이 집합이 비면 이미 completed 인 매치에 대해 flip 까지 네이버를 다시 찌른다(최대 ~17분,
-	 * 10초 주기). 콜 수가 문제되면 DB state 조회로 게이트한다.
-	 */
-	private final java.util.Set<String> naverFinalizedMatchIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
 	/**
 	 * 시작 알림(디스코드+SET_START 푸시)을 이미 보낸 gameId. 업스트림 eventDetails 는
@@ -126,6 +118,14 @@ public class LivePollingScheduler {
 		for (String league : leaguesToPoll) {
 			try {
 				MatchResponseWrapper response = worldsService.getWorldsMatches(null, league);
+				// 우리 DB 가 이미 completed 로 확정한 매치들. 예전에는 이 정보를 프로세스 메모리
+				// (naverFinalizedMatchIds)에 들고 있어서, 재기동하면 비어 있는 바람에 이미 끝난
+				// 매치를 업스트림 flip 이 올 때까지(실측 최대 17분) 10초 주기로 다시 찔렀다.
+				Set<String> ourCompletedMatchIds = leagueMatchService.findCompletedMatchIds(
+						response.getMatches().stream()
+								.map(MatchResultDto::getMatchId)
+								.filter(java.util.Objects::nonNull)
+								.toList());
 				for (MatchResultDto match : response.getMatches()) {
 					// 업스트림(lolesports)이 EWC 등 일부 대회는 라이브 중에도 경기 state 를 unstarted 로 방치한다.
 					// 스케줄 state 로 못 잡으므로, 시작 시각이 지난 unstarted 경기는 매 사이클 livestats 피드를 직접 찔러
@@ -143,7 +143,7 @@ public class LivePollingScheduler {
 					// 프로브도 sync 도 스킵한다 — 업스트림 원본(inProgress/unstarted)으로 sync 하면
 					// DB 의 completed 가 되돌아간다. flip 이 도착하면 state 가 completed 라 이 게이트를 지나
 					// 아래 recentlyCompleted 경로로 최종 스코어가 덮어써진다(self-heal).
-					if (naverFinalizedMatchIds.contains(match.getMatchId())
+					if (ourCompletedMatchIds.contains(match.getMatchId())
 							&& !"completed".equalsIgnoreCase(match.getState())) {
 						continue;
 					}
@@ -159,7 +159,6 @@ public class LivePollingScheduler {
 					if (!"completed".equalsIgnoreCase(match.getState())
 							&& allTrackedGamesFinished(activeGames, match.getMatchId())
 							&& leagueMatchService.syncCompletedMatchFromNaver(match, league)) {
-						naverFinalizedMatchIds.add(match.getMatchId());
 						scheduleCacheDirty = true;
 						continue;
 					}
@@ -187,9 +186,8 @@ public class LivePollingScheduler {
 							// 대신 네이버가 매치 종료(RESULT)를 확인해주면 completed 를 직접 확정한다 —
 							// 업스트림 flip 은 실측 17분+ 늦게 온다(2026-07-27 KESPA T1 vs DNS).
 							// 네이버가 아직 진행 중이면(세트 사이) 기존대로 이 사이클을 건너뛴다.
-							if (!naverFinalizedMatchIds.contains(match.getMatchId())
+							if (!ourCompletedMatchIds.contains(match.getMatchId())
 									&& leagueMatchService.syncCompletedMatchFromNaver(match, league)) {
-								naverFinalizedMatchIds.add(match.getMatchId());
 								scheduleCacheDirty = true;
 							}
 							continue;
@@ -218,6 +216,13 @@ public class LivePollingScheduler {
 					}
 					for (String gameId : liveGameIds) {
 						if (gameId == null || gameId.isBlank()) {
+							continue;
+						}
+						// 이미 종료가 확정된 세트는 다시 추적하지 않는다. livestats 는 세트가 끝난 뒤에도
+						// 마지막으로 살아 있던 프레임(퍼즈 구간 포함)을 계속 돌려주므로, 프로브는 그것을
+						// in_game 으로 읽어 종료된 세트를 무한히 되살린다(2026-08-17 KeSPA 2세트).
+						// discoveredGameIds 에도 넣지 않는다 — 넣으면 stale 제거까지 막힌다.
+						if (liveStateStore.isFinished(gameId)) {
 							continue;
 						}
 						discoveredGameIds.add(gameId);
@@ -465,6 +470,37 @@ public class LivePollingScheduler {
 		}
 	}
 
+	/**
+	 * 같은 매치에서 이 게임보다 뒤 세트가 이번 패스에 프레임을 진전시켰는지.
+	 *
+	 * <p>세트는 순차로 치러지므로 뒤 세트가 돌고 있다는 것은 앞 세트가 끝났다는 뜻이다.
+	 * 판단을 패스 단위 관측({@code advancing})으로 하는 이유는 activeGames 순회 순서에
+	 * 결과가 좌우되지 않게 하기 위함이다 — 폴링 중간에 정지 여부를 물으면 같은 tick 에서도
+	 * 어느 게임을 먼저 봤는지에 따라 답이 달라진다.</p>
+	 */
+	private boolean laterSetAdvancing(ActiveLiveGame game, Map<String, Boolean> advancing) {
+		if (game.setNumber() == null || game.matchId() == null) {
+			return false;
+		}
+		return liveStateStore.getActiveGames().values().stream()
+				.anyMatch(other -> other.setNumber() != null
+						&& game.matchId().equals(other.matchId())
+						&& other.setNumber() > game.setNumber()
+						&& advancing.getOrDefault(other.gameId(), false));
+	}
+
+	/** 같은 매치에서 이 게임보다 뒤 세트가 추적 중(종료 확정 전)인지. 순서에 의존하지 않는다. */
+	private boolean laterSetTracked(ActiveLiveGame game) {
+		if (game.setNumber() == null || game.matchId() == null) {
+			return false;
+		}
+		return liveStateStore.getActiveGames().values().stream()
+				.anyMatch(other -> other.setNumber() != null
+						&& game.matchId().equals(other.matchId())
+						&& other.setNumber() > game.setNumber()
+						&& !liveStateStore.isFinished(other.gameId()));
+	}
+
 	/** window 응답의 마지막 프레임이 gameState=finished 인지. 프레임이 없으면 false. */
 	private boolean isFrameFinished(JsonNode windowResponse) {
 		if (windowResponse == null) {
@@ -680,6 +716,10 @@ public class LivePollingScheduler {
 			return;
 		}
 
+		// 세트 간 비교(3차 종료 판정)용 이번 패스 관측.
+		Map<String, Boolean> frameAdvancing = new java.util.HashMap<>();
+		List<ActiveLiveGame> stalledThisPass = new ArrayList<>();
+
 		for (ActiveLiveGame activeGame : activeGames) {
 			try {
 				String startingTime = computeStartingTime(activeGame.gameId());
@@ -688,7 +728,11 @@ public class LivePollingScheduler {
 
 				// 세트 시작 판정: livestats 첫 프레임 도착 = 실제 인게임 시작.
 				// 첫 관측이 이미 finished 면(재기동 등) 시작 알림은 건너뛴다.
+				// 종료 확정된 세트에는 절대 시작 알림을 다시 쏘지 않는다 — 옛 프레임 재관측으로
+				// 이미 끝난 세트의 SET_START 와 라이브 카드가 다시 나갔다(2026-08-17 20:42 실측).
 				if (hasFrames(window) && !isFrameFinished(window)
+						&& !liveStateStore.isFinished(activeGame.gameId())
+						&& !laterSetTracked(activeGame)
 						&& isNotifiableLeague(activeGame.leagueName())
 						&& startNotifiedGameIds.add(activeGame.gameId())) {
 					fireSetStartNotification(activeGame);
@@ -718,6 +762,13 @@ public class LivePollingScheduler {
 					}
 				}
 
+				// 3차 판정 재료. 이 패스의 관측이 다 모인 뒤 루프 밖에서 판단한다.
+				frameAdvancing.put(activeGame.gameId(),
+						hasFrames(window) && !isFrameFinished(window) && !frameStalled);
+				if (frameStalled && !isFrameFinished(window)) {
+					stalledThisPass.add(activeGame);
+				}
+
 				// 종료된 세트는 stale 제거(기본 3분) 전까지 매 tick 여기를 지난다. 그동안 스코어가
 				// 늦게 도착하면 매치 종료 카드를 복구한다.
 				if (frameFinishedGameIds.contains(activeGame.gameId())) {
@@ -737,6 +788,23 @@ public class LivePollingScheduler {
 				liveStateStore.getActiveGames().put(failed.gameId(), failed);
 				log.warn("Live polling failed for game {}: {}", failed.gameId(), e.getMessage());
 			}
+		}
+
+		// 3차 종료 판정: 프레임이 정지했고 같은 매치의 더 뒤 세트가 이번 패스에 진전했다.
+		// 뒤 세트가 돌고 있으면 앞 세트는 끝난 것이 확실하다 — 스코어에 의존하지 않으므로
+		// 업스트림이 세트 상태·스코어를 갱신하지 않는 리그(KeSPA: 종료 후에도 게임 전부
+		// unstarted / 0:0)에서도 성립한다. 실측 2026-08-17 T1 vs DNS: 4세트가 도는 동안
+		// 2세트가 프레임 19:57 에 멈춘 채 2시간 반 넘게 LIVE 로 남았다.
+		//
+		// 표시만 정정하고 SET_END 는 쏘지 않는다 — 이미 지난 세트의 늦은 종료 알림은 가치가
+		// 없고, 재기동으로 dedup 이 비어 있으면 중복 발송이 된다.
+		for (ActiveLiveGame stalled : stalledThisPass) {
+			if (liveStateStore.isFinished(stalled.gameId()) || !laterSetAdvancing(stalled, frameAdvancing)) {
+				continue;
+			}
+			log.info("[live-notify] 뒤 세트 진행으로 종료 확정 gameId={} matchId={} set={}",
+					stalled.gameId(), stalled.matchId(), stalled.setNumber());
+			liveStateStore.markFinished(stalled.gameId());
 		}
 	}
 

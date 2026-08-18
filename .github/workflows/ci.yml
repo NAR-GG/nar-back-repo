@@ -19,14 +19,36 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 베이스와 diff 를 떠야 해서 전체 이력이 필요하다
+
+      # 코드가 안 바뀐 PR 까지 2분 30초를 쓰고 있었다. 실제로 오늘 올린 PR 9개 중
+      # Java 를 건드린 것은 하나뿐이고 나머지는 워크플로·infra·스크립트였다.
+      #
+      # paths 필터를 쓰지 않는 이유는 required check 때문이다. paths 로 잡을 통째로
+      # 건너뛰면 체크가 보고되지 않아 PR 이 "대기 중" 으로 멈춘다. 잡은 항상 돌리고
+      # 안쪽 단계만 건너뛴다.
+      - name: 코드 변경 여부 판정
+        id: changed
+        run: |
+          if git diff --name-only "origin/${{ github.base_ref || 'main' }}...HEAD" \
+              | grep -qE '^(src/|build\.gradle|settings\.gradle|gradle\.properties|gradle/|Dockerfile)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "빌드·테스트를 돌린다"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "코드 변경 없음 — 빌드·테스트를 건너뛴다"
+          fi
 
       - name: Set up JDK 17
+        if: steps.changed.outputs.code == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Cache Gradle dependencies
+        if: steps.changed.outputs.code == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -36,6 +58,7 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle-
 
       - name: Make gradlew executable
+        if: steps.changed.outputs.code == 'true'
         run: chmod +x ./gradlew
 
       # 컴파일 + 테스트 + 패키징까지 검증한다.
@@ -43,6 +66,7 @@ jobs:
       # -Dfullcontext.local.enabled 미지정 시 자동으로 건너뛴다.
       # MySQL 통합 테스트는 Testcontainers(러너의 Docker)로 구동된다.
       - name: Build and test
+        if: steps.changed.outputs.code == 'true'
         run: ./gradlew build
 
       - name: Upload test report on failure
