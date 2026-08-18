@@ -19,6 +19,13 @@ set -u
 # (slave_io_running / seconds_behind_master).
 PROM="http://localhost:9090/api/v1/query"
 M=/opt/homebrew/opt/mysql@8.4/bin/mysql
+
+# launchd 의 PATH 는 /usr/bin:/bin:/usr/sbin:/sbin 뿐이라 brew 의 docker 를 못 찾는다.
+# 그러면 지표 조회가 조용히 빈 문자열을 내고, 복제가 멀쩡한데도 "지표가 없다"로
+# bad 를 찍는다. 손으로 실행하면 PATH 가 있어서 잘 되기 때문에 알아채기 어렵다.
+# 절대경로로 박는다. (2026-08-18 실제로 이 이유로 하루 종일 오탐이었다)
+DOCKER=/opt/homebrew/bin/docker
+
 WEBHOOK_FILE="$HOME/nar/.discord-webhook"
 STATE="$HOME/nar/.replication-state"   # ok | bad
 LAG_LIMIT=300                          # 초. 평소 0 이라 5분이면 명백한 이상이다.
@@ -31,7 +38,7 @@ notify() {
 
 prev=$(cat "$STATE" 2>/dev/null || echo ok)
 
-q() { docker exec prometheus wget -qO- "${PROM}?query=$1" 2>/dev/null \
+q() { "$DOCKER" exec prometheus wget -qO- "${PROM}?query=$1" 2>/dev/null \
 	| python3 -c "import json,sys; r=json.load(sys.stdin)['data']['result']; print(r[0]['value'][1] if r else '')" 2>/dev/null; }
 
 # 맥미니가 아직 복제본이면(컷오버 전) 기존 방식, 주 DB 면 역방향을 본다.
