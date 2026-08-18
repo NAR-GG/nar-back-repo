@@ -10,9 +10,10 @@ tunnel: c194bfaa-f127-4bd7-89a7-c71262c296f0
 credentials-file: /Users/changha/.cloudflared/c194bfaa-f127-4bd7-89a7-c71262c296f0.json
 
 ingress:
-  # 실트래픽. 컷오버 이후 api.nar.kr 은 이 터널을 탄다.
+  # 실트래픽. Traefik(k3s NodePort)이 받아 파드로 넘긴다.
+  # 라우팅·인증·차단 규칙은 infra/k8s/traefik-routes.yaml — Git 이 원본이다.
   - hostname: api.nar.kr
-    service: http://127.0.0.1:8081
+    service: http://127.0.0.1:30082
 
   # ArgoCD 관리자 UI. **Cloudflare Access 가 앞에서 이메일 인증으로 막는다** —
   # 이 규칙만으로는 관리자 UI 가 공개 인터넷에 그대로 열린다.
@@ -27,7 +28,7 @@ ingress:
 
   # 컷오버 전 그림자 검증에 쓰던 호스트. 지금은 api.nar.kr 과 같은 곳을 가리킨다.
   - hostname: home.nar.kr
-    service: http://127.0.0.1:8081
+    service: http://127.0.0.1:30082
 
   # 위 규칙에 안 걸리는 요청은 버린다. 터널이 열려 있다고 해서
   # 맥미니의 다른 포트가 노출되면 안 된다.

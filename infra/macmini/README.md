@@ -19,9 +19,14 @@ EC2 비용을 없애려고 앱을 집 맥미니(M1 16GB)로 옮기는 중이다.
 
 | 호스트 | 가는 곳 |
 |---|---|
-| `api.nar.kr` | nginx :8081 → 앱 컨테이너. 실트래픽 |
+| `api.nar.kr` | Traefik :30082 → k3s 파드. 실트래픽 (2026-08-19 전환) |
 | `argocd.nar.kr` | k3s NodePort :30443 → ArgoCD. **Cloudflare Access 필수** |
-| `home.nar.kr` | 컷오버 전 그림자 검증용. 지금은 `api.nar.kr` 과 같은 곳 |
+| `home.nar.kr` | `api.nar.kr` 과 동일 |
+
+**웹 트래픽은 파드가, 스케줄러는 아직 docker 컨테이너가 돈다.** 스케줄러 이관 전까지
+docker 를 끄면 안 된다 — 라이브 폴링·푸시·동기화가 전부 멈춘다.
+nginx(8081)에 남은 역할은 Prometheus 메트릭 프록시(9105)뿐이다. 스케줄러 이관과
+Prometheus 타깃 변경이 끝나면 nginx 는 은퇴한다.
 
 춘천 MySQL 은 역방향 복제로 따라오는 롤백 안전망이다(`scripts/cutover-reverse-repl.sh`).
 
