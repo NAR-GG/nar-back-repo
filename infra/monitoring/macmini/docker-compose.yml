@@ -55,6 +55,10 @@ services:
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      # k3s 파드 로그. 파드는 containerd 로 돌아 docker.sock 에 안 잡힌다.
+      # 이걸 안 물리면 앱을 파드로 옮기는 순간 Loki 에서 앱 로그가 통째로 사라진다.
+      # (경로는 VM 안이다. alloy 도 같은 VM 의 docker 에서 돌아 그대로 보인다)
+      - /var/log/pods:/var/log/pods:ro
 
 volumes:
   prom-data:
