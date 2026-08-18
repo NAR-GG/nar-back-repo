@@ -63,6 +63,13 @@ spec:
             - name: SERVER_SHUTDOWN
               value: "graceful"
 
+            # 솔랭 종료 알림(#394). 시크릿(nar-env)은 docker 시절 값이라 이 키가 없고,
+            # GitHub Actions 변수로 켜둔 값은 옛 docker run 배포 경로에만 먹는다.
+            # 그래서 파드에서는 application.yml 기본값 false 로 떨어져
+            # 사용자가 앱에서 종료 알림을 켜도(현재 16구독) 전이 감지조차 안 됐다.
+            - name: SOLO_RANK_END_NOTIFICATION_ENABLED
+              value: "true"
+
           resources:
             requests:
               # 실측 RSS 1318Mi (힙 미포화). 스케줄링 기준이므로 평상시 값으로 잡는다.
