@@ -2,19 +2,18 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  # EC2 앱 (컷오버 후 제거)
-  - job_name: nar-app
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['100.88.94.95:9105']
-        labels:
-          instance: nar-app
-
-  # 맥미니 앱. nginx 9105 를 거치므로 블루-그린 포트 전환을 자동으로 따라간다.
+  # 맥미니 앱 (k3s 파드). NodePort 를 직접 스크랩한다 — 파드가 교체돼도 포트는
+  # Service 에 고정(30081)이라 타깃이 안 죽는다. 블루-그린용 nginx 9105 프록시는
+  # 블루-그린과 함께 은퇴했다.
+  #
+  # 172.17.0.1 은 docker 브리지 게이트웨이 = Colima VM 자신이다. NodePort 는 VM 의
+  # 모든 인터페이스에 리슨하므로 여기로 닿는다(실측). host.docker.internal 을 쓰면
+  # 호스트를 경유하는데, colima 의 portInterface 를 127.0.0.1 로 좁히는 순간 끊긴다.
+  # /actuator 는 Traefik 에서 차단하지만 이 경로는 Traefik 을 안 거친다.
   - job_name: nar-macmini
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['host.docker.internal:9105']
+      - targets: ['172.17.0.1:30081']
         labels:
           instance: nar-macmini
 
