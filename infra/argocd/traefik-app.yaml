@@ -1,0 +1,69 @@
+# Traefik — 클러스터 안 리버스 프록시. nginx 의 라우팅·인증·차단을 Git 으로 가져온다.
+#
+# k3s 내장 Traefik 을 다시 켜지 않고 ArgoCD Application 으로 설치한다.
+# 내장판은 k3s 가 관리해서 Git 밖이고, 버전도 k3s 릴리스에 묶인다.
+#
+# 이 파일은 infra/argocd 의 다른 것들처럼 손으로 한 번 적용한다(부트스트랩).
+# Traefik 자체의 상태는 그 뒤로 ArgoCD 가 이 선언과 맞춘다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://traefik.github.io/charts
+    chart: traefik
+    # 렌더 결과가 재현되도록 고정한다. 올릴 때는 이 줄만 바꾼다.
+    targetRevision: 41.2.0
+    helm:
+      valuesObject:
+        # TLS 는 Cloudflare 가 종단하고 cloudflared 가 평문으로 넘긴다.
+        # websecure(443) 는 쓸 일이 없다.
+        ports:
+          web:
+            nodePort: 30082
+            # cloudflared(호스트) → Lima 포워딩 → VM → 여기로 오는 동안 출발지가
+            # 전부 내부 주소다. 이 대역을 신뢰해야 X-Forwarded-For 의 실제 클라이언트
+            # IP(Cloudflare 가 넣어준 것)가 살아남는다. 안 하면 Traefik 이 헤더를
+            # 지우고 내부 IP 로 덮어서, 앱 로그의 클라이언트 IP 가 전부 내부 주소가 된다.
+            forwardedHeaders:
+              trustedIPs:
+                - 127.0.0.1/8      # 호스트 루프백 (Lima 포워딩)
+                - 10.42.0.0/16     # 파드 대역 (flannel)
+                - 192.168.5.0/24   # Colima VM ↔ 호스트 게이트웨이
+          websecure:
+            expose:
+              default: false
+        service:
+          # 호스트의 cloudflared 가 127.0.0.1:30082 로 붙는다. LoadBalancer 는
+          # 단일 노드 k3s(svclb)가 VM 80 포트를 먹으므로 NodePort 가 맞다.
+          # 경로 주의: 이 차트는 service.type 이 아니라 service.spec.type 이다.
+          # service.type 으로 넣으면 스키마 오류도 없이 조용히 무시되고 LoadBalancer 로 뜬다.
+          spec:
+            type: NodePort
+        # 대시보드는 안 연다. 라우팅 상태는 ArgoCD 와 kubectl 로 본다.
+        ingressRoute:
+          dashboard:
+            enabled: false
+        # 단일 노드라 복제본 1. 파드가 죽으면 k8s 가 다시 띄우는 것으로 충분하다.
+        deployment:
+          replicas: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            memory: 300Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+      # Traefik CRD 가 크다. ApplicationSet 때와 같은 어노테이션 256KB 초과를 피한다.
+      - ServerSideApply=true
