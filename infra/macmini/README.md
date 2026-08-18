@@ -4,19 +4,26 @@ EC2 비용을 없애려고 앱을 집 맥미니(M1 16GB)로 옮기는 중이다.
 설정 **원본 보관소**다. `infra/monitoring` 과 같은 규칙 — **자동 배포가 아니다.**
 서버 설정을 바꿨으면 여기에도 반영하고, 기계를 새로 세울 때는 여기서 복사한다.
 
-## 지금 상태 (2026-08-17)
+## 지금 상태 (2026-08-18)
 
-실서비스는 아직 EC2 다. 맥미니는 **그림자**로 돈다.
+컷오버 완료. **실서비스가 맥미니에서 돈다.** DB 도 맥미니가 원본이다.
 
 ```
-사용자 ──> Cloudflare ──> cloudflared(터널) ──> nginx :8081 ──> 앱 컨테이너
-                                                                    │
-                                        맥미니 MySQL 8.4 (복제본) <──┘
-                                                    ↑ 복제
-                                        춘천 MySQL 8.0 (원본, 실서비스)
+사용자 ──> Cloudflare ──> cloudflared(터널) ─┬─> nginx :8081 ──> 앱 컨테이너(docker)
+                                             │                        │
+                                             │      맥미니 MySQL 8.4 (원본) <┘
+                                             │
+                                             └─> :30443 ──> ArgoCD (k3s)
+                                                  ↑ Cloudflare Access 가 앞에서 막는다
 ```
 
-`home.nar.kr` 이 그림자, `api.nar.kr` 은 여전히 EC2 다.
+| 호스트 | 가는 곳 |
+|---|---|
+| `api.nar.kr` | nginx :8081 → 앱 컨테이너. 실트래픽 |
+| `argocd.nar.kr` | k3s NodePort :30443 → ArgoCD. **Cloudflare Access 필수** |
+| `home.nar.kr` | 컷오버 전 그림자 검증용. 지금은 `api.nar.kr` 과 같은 곳 |
+
+춘천 MySQL 은 역방향 복제로 따라오는 롤백 안전망이다(`scripts/cutover-reverse-repl.sh`).
 
 ## 파일
 
@@ -42,6 +49,43 @@ EC2 비용을 없애려고 앱을 집 맥미니(M1 16GB)로 옮기는 중이다.
 ~/nar/.reverse-repl-pw      역방향 복제 계정 (춘천에도 /root/.nar-reverse-repl-pw 로 배치)
 ~/.cloudflared/*.json       터널 자격증명
 ~/nar/secrets/              firebase-service-account.json, apns-auth-key.p8 (배포가 심는다)
+~/nar/.cf-api-token         Cloudflare API 토큰 (Access·DNS·Tunnel 편집)
+~/nar/.cf-account-id        계정 ID (토큰에 계정 조회 권한이 없어 따로 적어 둔다)
+~/nar/.cf-team-domain       nar-gg.cloudflareaccess.com
+~/nar/.cf-access-app-id     ArgoCD Access 앱 ID
+```
+
+## ArgoCD 를 공개한 방식 — Access 가 전부다
+
+`argocd.nar.kr` 은 공개 인터넷에 열려 있다. 관리자 UI 를 지키는 건 ArgoCD 로그인이
+아니라 **그 앞의 Cloudflare Access** 다. Access 앱을 지우거나 정책을 풀면 UI 가
+그대로 노출되므로, 그럴 때는 터널 ingress 에서 이 호스트도 같이 내려야 한다.
+
+```
+사용자 → Access(이메일 일회용 코드) → ArgoCD 로그인(admin) → UI
+```
+
+무인증 요청은 `/api/v1/session` 같은 API 경로까지 전부 302 로 튕긴다(검증함).
+
+**API 로 조직을 만들면 로그인 수단이 하나도 없다.** 대시보드로 만들 때와 달리
+One-time PIN 이 자동으로 붙지 않아서, 로그인 화면이
+`There are no login methods available for this account` 로 죽는다.
+`onetimepin` 타입 IdP 를 따로 만들어야 한다.
+
+```bash
+T=$(tr -d '[:space:]' < ~/nar/.cf-api-token); ACC=$(cat ~/nar/.cf-account-id)
+curl -s -X POST -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
+  "https://api.cloudflare.com/client/v4/accounts/$ACC/access/identity_providers" \
+  -d '{"name":"One-time PIN","type":"onetimepin","config":{}}'
+```
+
+### 백도어
+
+Cloudflare 쪽 설정을 잘못 건드려 못 들어가게 되면 Tailscale 로 우회한다.
+Access 와 무관한 경로다.
+
+```
+https://macmini.tail97b60c.ts.net     tailscale serve → 127.0.0.1:30443
 ```
 
 ## cron 을 쓰지 않는다

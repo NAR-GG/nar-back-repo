@@ -10,8 +10,22 @@ tunnel: c194bfaa-f127-4bd7-89a7-c71262c296f0
 credentials-file: /Users/changha/.cloudflared/c194bfaa-f127-4bd7-89a7-c71262c296f0.json
 
 ingress:
-  # 그림자 검증용 임시 호스트. 실트래픽(api.nar.kr)은 아직 EC2 로 간다.
-  # 컷오버 때 여기에 api.nar.kr 을 추가하고 CF DNS 를 터널로 돌린다.
+  # 실트래픽. 컷오버 이후 api.nar.kr 은 이 터널을 탄다.
+  - hostname: api.nar.kr
+    service: http://127.0.0.1:8081
+
+  # ArgoCD 관리자 UI. **Cloudflare Access 가 앞에서 이메일 인증으로 막는다** —
+  # 이 규칙만으로는 관리자 UI 가 공개 인터넷에 그대로 열린다.
+  # Access 앱을 지우거나 정책을 풀면 이 호스트도 같이 내려야 한다.
+  #
+  # 30443 은 k3s NodePort(argocd-server)다. ArgoCD 가 자체 서명 TLS 를 쓰므로
+  # noTLSVerify 가 필요하다. 이 구간은 맥미니 안이라 검증을 꺼도 외부 노출이 아니다.
+  - hostname: argocd.nar.kr
+    service: https://127.0.0.1:30443
+    originRequest:
+      noTLSVerify: true
+
+  # 컷오버 전 그림자 검증에 쓰던 호스트. 지금은 api.nar.kr 과 같은 곳을 가리킨다.
   - hostname: home.nar.kr
     service: http://127.0.0.1:8081
 
