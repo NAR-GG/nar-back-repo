@@ -1,0 +1,17 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  annotations:
+    sealedsecrets.bitnami.com/namespace-wide: "true"
+  name: docs-auth
+  namespace: nar
+spec:
+  encryptedData:
+    users: AgBlpYKtnrZcWFFts9OnvNTf0b0ZIZVZAtTluqokTMAa8Zh3crJIPkMndwGs6pKblGzNw5cvCi2W58wTeWph6TMqpksLG1Gw3TDy2+3dUDC5GycK82M5+P5Qmmat9prJNZITIwT/kJDc501BrPgeWvBV1XZqlXFgUcv5WlBRh65Uj/7g1hjFzR/xjS5BpDZWjO50UCT5leM9b9a7jbPyVTuIyDXMzWxrHwf3PSfT6fnKfxDG/QEb1K/CG1TX+4pjwnUNTn/tWJealqTNcwTrBuoKBKoBT1yzp6GykdYvrFu1hMaz/zdWiDx9CmaYk82wb7ERElVmIL3o87wCsPHbushsF4HF+uO9sn6FLInAZcDT9MI+QiS1ZG/SNZ5XLkoMujIs0xIe1VSdgsSTbxLitapXqnToBYhZT7pHYeFwpJuQNaE+B/MyidWNYdiwXo+sDY2ly+byYj/oWredIPI4jiykZvKM2licACPM4cdfycaqJ82CfAAOBo9ZWE2YW2Mj1C87EoE7QDOkXYtuYeIQ8O3rdYjssE6rAy3nRYsP4wglzvuTE02U6mSTPnTw3ORaqZ9xCbHhsw7fIkW/LU/SUK6HVdUWKNjoie8c4tBRJeAqQ6O0wH16vXF7nSBgI4tqvehrrudlOinkLmdWV1tRvei4DD6jdwoHSqovDuM6+NXAWgkTKhskw/dT3ww5VUEd+vYm6eIGjxZ2ac+D+6N5SeOZWbPQIF6BgdYbPRBWBc24bsija6uPU71Xnh1MpXvJ
+  template:
+    metadata:
+      annotations:
+        sealedsecrets.bitnami.com/namespace-wide: "true"
+      name: docs-auth
+      namespace: nar
