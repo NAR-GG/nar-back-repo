@@ -197,8 +197,8 @@ jobs:
               -e RIOT_API_KEY="${{ secrets.RIOT_API_KEY }}" \
               -e RIOT_API_ENABLED="true" \
               -e RIOT_MONITOR_ENABLED="true" \
-              -e RIOT_MATCH_FALLBACK_ENABLED="false" \
-              -e SOLO_RANK_END_NOTIFICATION_ENABLED="false" \
+              -e RIOT_MATCH_FALLBACK_ENABLED="${{ vars.RIOT_MATCH_FALLBACK_ENABLED || 'false' }}" \
+              -e SOLO_RANK_END_NOTIFICATION_ENABLED="${{ vars.SOLO_RANK_END_NOTIFICATION_ENABLED || 'false' }}" \
               -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
               -e GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
               -e GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
