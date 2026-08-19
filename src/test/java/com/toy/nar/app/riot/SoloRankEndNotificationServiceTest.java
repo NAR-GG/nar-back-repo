@@ -64,7 +64,7 @@ class SoloRankEndNotificationServiceTest {
 
 		assertThat(service.sweep()).isEqualTo(1);
 		verify(pushService).notifySubscribersPostGame(
-				any(), eq("8292488921"), any(), any(), anyString(), eq(true), eq("4/2/8"), any());
+				any(), eq("8292488921"), any(), any(), anyString(), eq(true), eq("4/2/8"), eq(1500), any());
 		verify(gameRepository).markEndNotified(eq(1L), eq("8292488921"), any());
 
 		// 두 번째 스윕에는 남은 대상이 없다.
@@ -80,7 +80,8 @@ class SoloRankEndNotificationServiceTest {
 		service.onGameEnded(account(), "8292488921");
 
 		assertThat(service.sweep()).isZero();
-		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any(), any(), any());
+		verify(pushService, never()).notifySubscribersPostGame(
+				any(), any(), any(), any(), any(), any(), any(), any(), any());
 
 		// 다음 스윕에서 발행됐으면 그때 보낸다.
 		givenFinishedMatch();
@@ -102,7 +103,8 @@ class SoloRankEndNotificationServiceTest {
 		// 포기 후에는 결과가 나와도 더 보지 않는다.
 		givenFinishedMatch();
 		assertThat(service.sweep()).isZero();
-		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any(), any(), any());
+		verify(pushService, never()).notifySubscribersPostGame(
+				any(), any(), any(), any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -114,7 +116,8 @@ class SoloRankEndNotificationServiceTest {
 		service.onGameEnded(account(), "8292488921");
 
 		assertThat(service.sweep()).isZero();
-		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any(), any(), any());
+		verify(pushService, never()).notifySubscribersPostGame(
+				any(), any(), any(), any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -127,7 +130,8 @@ class SoloRankEndNotificationServiceTest {
 		service.sweep();
 
 		verifyNoInteractions(riotApiClient);
-		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any(), any(), any());
+		verify(pushService, never()).notifySubscribersPostGame(
+				any(), any(), any(), any(), any(), any(), any(), any(), any());
 	}
 
 	private void givenFinishedMatch() {
@@ -137,8 +141,12 @@ class SoloRankEndNotificationServiceTest {
 	private RiotMatchResponse match(int queueId, Long gameEndTimestamp) {
 		RiotMatchResponse.Participant participant = new RiotMatchResponse.Participant(
 				"puuid-1", 1, true, 4, 2, 8);
+		// 경기 길이 25분(1,500초). 타임스탬프 차이로만 계산되므로 절대값은 상관없다.
 		RiotMatchResponse.Info info = new RiotMatchResponse.Info(
-				queueId, gameEndTimestamp, List.of(participant));
+				queueId,
+				gameEndTimestamp == null ? null : gameEndTimestamp - 1_500_000L,
+				gameEndTimestamp,
+				List.of(participant));
 		return new RiotMatchResponse(new RiotMatchResponse.Metadata("KR_8292488921"), info);
 	}
 
