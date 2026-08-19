@@ -155,7 +155,9 @@ public class SoloRankEndNotificationService {
 				champion == null ? null : champion.getChampionNameKr(),
 				champion == null ? null : champion.getImageUrl(),
 				SoloRankMatchResultFormatter.resultLine(
-						champion == null ? null : champion.getChampionNameKr(), tracked),
+						champion == null ? null : champion.getChampionNameKr(),
+						tracked,
+						match.info().durationSeconds()),
 				tracked == null ? null : tracked.win(),
 				SoloRankMatchResultFormatter.kda(tracked),
 				match.info().durationSeconds(),

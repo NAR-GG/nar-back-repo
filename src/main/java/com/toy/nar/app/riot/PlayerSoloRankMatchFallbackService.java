@@ -126,7 +126,8 @@ public class PlayerSoloRankMatchFallbackService {
 			Integer gameDurationSeconds) {
 		String championName = champion == null ? null : champion.getChampionNameKr();
 		String championIconUrl = champion == null ? null : champion.getImageUrl();
-		String resultLine = SoloRankMatchResultFormatter.resultLine(championName, tracked);
+		String resultLine = SoloRankMatchResultFormatter.resultLine(
+				championName, tracked, gameDurationSeconds);
 
 		notificationService.sendPlayerGameNotification(
 				account.getPlayer().getName(),
