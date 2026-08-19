@@ -83,7 +83,17 @@ public class ImageCdn {
 		if (originUrl == null || !enabled() || originUrl.contains(FETCH_MARKER) || !isFetchable(originUrl)) {
 			return originUrl;
 		}
-		return "https://res.cloudinary.com/" + properties.getCloudName() + FETCH_MARKER + transform + "/" + originUrl;
+		return "https://res.cloudinary.com/" + properties.getCloudName() + FETCH_MARKER + transform + "/"
+				+ toHttps(originUrl);
+	}
+
+	/**
+	 * lolesports 는 같은 자산을 http 로도 준다 — 선수 이미지 71건이 그렇게 저장돼 있었다.
+	 * 스킴만 다른 같은 자산이 두 벌로 갈리면 저장값도 캐시 키도 갈리므로 https 로 맞춘다
+	 * (같은 경로가 https 로도 200 인 것을 확인했다).
+	 */
+	private static String toHttps(String url) {
+		return url.startsWith("http://") ? "https://" + url.substring("http://".length()) : url;
 	}
 
 	/** 원본 URL 을 복원한다 — 언랩 SQL 과 같은 규칙. 래핑되지 않은 값은 그대로 돌려준다. */
