@@ -1,5 +1,6 @@
 package com.toy.nar.api.auth.dto;
 
+import com.toy.nar.app.image.CloudinaryUrls;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.MemberFavoritePlayer;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -42,7 +43,7 @@ public record MemberResponse(
                         .map(MemberFavoritePlayer::getPlayer)
                         .map(player -> player.getId())
                         .toList(),
-                member.getProfileImageUrl(),
+                CloudinaryUrls.with(member.getProfileImageUrl(), CloudinaryUrls.AVATAR),
                 member.isOnboarded()
         );
     }
