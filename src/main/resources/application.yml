@@ -51,6 +51,11 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
 
+  flyway:
+    placeholders:
+      # V72 가 기존 이미지 URL 을 감쌀 때 쓰는 cloud name. 비어 있으면 V72 는 아무 행도 건드리지 않는다.
+      cloudinaryCloudName: ${CLOUDINARY_CLOUD_NAME:}
+
   # 이미지 업로드(백오피스 공지 5MB·선수 2MB). 기본 1MB 면 서비스 검증 전에 스프링이 먼저 막는다.
   # 컨테이너 상한은 가장 큰 용도(공지 5MB)에 맞추고, 용도별 상한은 각 서비스 검증이 담당한다.
   servlet:
@@ -149,6 +154,9 @@ cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:}
   api-key: ${CLOUDINARY_API_KEY:}
   api-secret: ${CLOUDINARY_API_SECRET:}
+  # Riot 계열 원본(static.lolesports/ddragon/communitydragon)을 Cloudinary fetch 로 감싼다.
+  # Cloudinary 콘솔의 Allowed fetch domains 에 같은 3개가 등록돼 있어야 동작한다.
+  cdn-enabled: ${CLOUDINARY_CDN_ENABLED:true}
 
 # 모바일 소셜 로그인 설정.
 oauth:

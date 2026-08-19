@@ -15,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.Spy;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -38,6 +39,10 @@ class PlayerAdminServiceTest {
 	private ObjectMapper objectMapper;
 	@Mock
 	private PlayerRiotAccountSyncService playerRiotAccountSyncService;
+	// cloud name 이 비어 있어 원본 URL 을 그대로 통과시킨다 — 기존 기대값을 그대로 둘 수 있다.
+	@Spy
+	private com.toy.nar.app.image.ImageCdn imageCdn =
+			new com.toy.nar.app.image.ImageCdn(new com.toy.nar.config.CloudinaryProperties());
 	@InjectMocks
 	private PlayerAdminService playerAdminService;
 

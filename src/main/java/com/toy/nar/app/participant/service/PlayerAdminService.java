@@ -27,6 +27,7 @@ public class PlayerAdminService {
 
 	private static final String EDITABLE_LEAGUE = "LCK";
 
+	private final com.toy.nar.app.image.ImageCdn imageCdn;
 	private final PlayerRepository playerRepository;
 	private final TeamRepository teamRepository;
 	private final ObjectMapper objectMapper;
@@ -43,7 +44,7 @@ public class PlayerAdminService {
 		if (Boolean.TRUE.equals(unlockImage)) {
 			player.unlockImage();
 		} else if (imageUrl != null && !imageUrl.isBlank()) {
-			player.overrideImage(imageUrl.trim());
+			player.overrideImage(imageCdn.player(imageUrl.trim()));
 		}
 		if (Boolean.TRUE.equals(unlockGameAccounts)) {
 			player.unlockGameAccounts();
@@ -79,7 +80,7 @@ public class PlayerAdminService {
 		String resolvedRegion = region == null || region.isBlank() ? "KR" : region.trim().toUpperCase();
 		Player player = playerRepository.save(Player.builder()
 				.name(trimmedName)
-				.imageUrl(imageUrl == null || imageUrl.isBlank() ? null : imageUrl.trim())
+				.imageUrl(imageUrl == null || imageUrl.isBlank() ? null : imageCdn.player(imageUrl.trim()))
 				.build());
 		// serializeGameAccounts 재사용: Jackson ObjectMapper가 이스케이프를 보장한다.
 		player.overrideGameAccounts(serializeGameAccounts(List.of(
@@ -103,7 +104,7 @@ public class PlayerAdminService {
 		player.overrideGameAccounts(serializeGameAccounts(List.of(
 				new BackofficeController.GameAccountEntry(resolvedRegion, riotId, null))));
 		if (imageUrl != null && !imageUrl.isBlank()) {
-			player.setImageUrl(imageUrl.trim());
+			player.setImageUrl(imageCdn.player(imageUrl.trim()));
 		}
 		playerRiotAccountSyncService.resolveAndSaveInCurrentTransaction(
 				player, riotId, RiotPlatform.toPlatform(resolvedRegion));

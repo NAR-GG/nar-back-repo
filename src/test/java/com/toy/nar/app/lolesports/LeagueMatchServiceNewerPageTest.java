@@ -58,6 +58,7 @@ class LeagueMatchServiceNewerPageTest {
 	@BeforeEach
 	void setUp() {
 		leagueMatchService = new LeagueMatchService(
+				new com.toy.nar.app.image.ImageCdn(new com.toy.nar.config.CloudinaryProperties()),
 				leagueMatchRepository,
 				leagueMatchGameRepository,
 				leagueSeasonResolver,
