@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 @Transactional(readOnly = true)
 public class ChampionService {
 
+	private final com.toy.nar.app.image.ImageCdn imageCdn;
 	private final ChampionRepository championRepository;
 
 	public List<ChampionDto> getAllChampions() {
@@ -48,7 +49,7 @@ public class ChampionService {
 	public void updateChampionLoadingImage(Long championId, String imageUrl) {
 		Champion champion = championRepository.findById(championId)
 				.orElseThrow(() -> new IllegalArgumentException("Champion not found: " + championId));
-		champion.updateLoadingImageUrl(imageUrl);
+		champion.updateLoadingImageUrl(imageCdn.splash(imageUrl));
 	}
 
 	private ChampionDto convertToDto(Champion champion) {

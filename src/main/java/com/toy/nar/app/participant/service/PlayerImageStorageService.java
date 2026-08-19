@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.toy.nar.app.image.CloudinaryUploadClient;
+import com.toy.nar.app.image.CloudinaryUrls;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 
@@ -36,9 +37,6 @@ public class PlayerImageStorageService {
 			"image/png", "png",
 			"image/jpeg", "jpg");
 
-	/** 앱 선수 화면(목록·상세)에 충분한 폭 + 포맷/품질 자동. */
-	private static final String DELIVERY_TRANSFORM = "f_auto,q_auto,w_500,c_limit";
-
 	private final PlayerRepository playerRepository;
 	private final CloudinaryUploadClient uploadClient;
 
@@ -57,12 +55,7 @@ public class PlayerImageStorageService {
 		}
 
 		String secureUrl = uploadClient.upload(file, "players/" + playerId, true);
-		player.overrideImage(withDeliveryTransform(secureUrl));
+		player.overrideImage(CloudinaryUrls.with(secureUrl, CloudinaryUrls.PLAYER));
 		return player;
-	}
-
-	/** https://res.cloudinary.com/{cloud}/image/upload/... → /upload/{transform}/... */
-	private static String withDeliveryTransform(String secureUrl) {
-		return secureUrl.replaceFirst("/image/upload/", "/image/upload/" + DELIVERY_TRANSFORM + "/");
 	}
 }

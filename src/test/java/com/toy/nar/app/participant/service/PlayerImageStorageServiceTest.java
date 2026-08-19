@@ -58,7 +58,7 @@ class PlayerImageStorageServiceTest {
 		verify(uploadClient).upload(file, "players/860", true);
 		// 버전(/v.../)은 Cloudinary가 붙여 주고, 전송 최적화 변환이 끼워진다.
 		assertThat(player.getImageUrl())
-				.isEqualTo("https://res.cloudinary.com/nar/image/upload/f_auto,q_auto,w_500,c_limit/v1722500000/players/860.webp");
+				.isEqualTo("https://res.cloudinary.com/nar/image/upload/f_webp,q_auto,w_500,c_limit/v1722500000/players/860.webp");
 		assertThat(player.isImageLocked()).isTrue();
 	}
 

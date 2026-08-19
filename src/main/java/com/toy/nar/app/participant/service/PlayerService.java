@@ -25,6 +25,7 @@ public class PlayerService {
 
 	private final PlayerRepository playerRepository;
 	private final PlayerProfileCrawlerService playerProfileCrawlerService;
+	private final com.toy.nar.app.image.ImageCdn imageCdn;
 	private final LolesportsPlayerImageClient lolesportsPlayerImageClient;
 	private final ObjectMapper objectMapper;
 
@@ -32,7 +33,7 @@ public class PlayerService {
 	public void updatePlayerImage(Long playerId, String imageUrl) {
 		Player player = playerRepository.findById(playerId)
 				.orElseThrow(() -> new IllegalArgumentException("Player not found: " + playerId));
-		player.setImageUrl(imageUrl);
+		player.setImageUrl(imageCdn.player(imageUrl));
 	}
 
 	@Transactional
@@ -68,7 +69,7 @@ public class PlayerService {
 		for (Player player : players) {
 			String imageUrl = imagesByName.get(player.getName().trim().toLowerCase(Locale.ROOT));
 			if (imageUrl != null) {
-				player.setImageUrl(imageUrl);
+				player.setImageUrl(imageCdn.player(imageUrl));
 				successCount++;
 			} else {
 				failedPlayers.add(player.getName());
