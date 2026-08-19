@@ -62,6 +62,7 @@ public class LeagueMatchService {
 	private static final Map<String, Set<String>> GAME_LEAGUE_ALIASES = Map.of(
 			"WORLDS", Set.of("WORLDS", "WLDS"));
 
+	private final com.toy.nar.app.image.ImageCdn imageCdn;
 	private final LeagueMatchRepository leagueMatchRepository;
 	private final LeagueMatchGameRepository leagueMatchGameRepository;
 	private final com.toy.nar.app.lolesports.season.LeagueSeasonResolver leagueSeasonResolver;
@@ -1405,10 +1406,10 @@ public class LeagueMatchService {
 															// 가져오기
 				.blueTeamCode(dto.getBlueTeam().getCode()).blueTeamName(dto.getBlueTeam().getName())
 				.blueExternalTeamId(dto.getBlueTeam().getExternalTeamId())
-				.blueTeamImageUrl(dto.getBlueTeam().getImageUrl()).blueScore(dto.getBlueTeam().getWins())
+				.blueTeamImageUrl(imageCdn.team(dto.getBlueTeam().getImageUrl())).blueScore(dto.getBlueTeam().getWins())
 				.redTeamCode(dto.getRedTeam().getCode()).redTeamName(dto.getRedTeam().getName())
 				.redExternalTeamId(dto.getRedTeam().getExternalTeamId())
-				.redTeamImageUrl(dto.getRedTeam().getImageUrl()).redScore(dto.getRedTeam().getWins()).hasVod(hasVod)
+				.redTeamImageUrl(imageCdn.team(dto.getRedTeam().getImageUrl())).redScore(dto.getRedTeam().getWins()).hasVod(hasVod)
 				.bestOf(dto.getBestOf())
 				.matchDetailsJson(jsonDetails).lastUpdated(LocalDateTime.now()).build();
 	}
@@ -1835,8 +1836,10 @@ public class LeagueMatchService {
 			updated = true;
 		}
 
-		if (info.getImageUrl() != null && !info.getImageUrl().isEmpty() && !info.getImageUrl().equals(team.getImageUrl())) {
-			newImage = info.getImageUrl();
+		// 저장값은 CDN 래핑된 URL 이므로 들어온 원본도 감싼 뒤 비교한다 — 안 그러면 매 동기화가 변경으로 잡힌다.
+		String incomingImage = imageCdn.team(info.getImageUrl());
+		if (incomingImage != null && !incomingImage.isEmpty() && !incomingImage.equals(team.getImageUrl())) {
+			newImage = incomingImage;
 			updated = true;
 		}
 
@@ -1978,7 +1981,7 @@ public class LeagueMatchService {
 		Team team = Team.builder()
 				.name(NameNormalizer.normalizeTeamName(candidate.externalName()))
 				.code(candidate.externalCode())
-				.imageUrl(candidate.externalImageUrl())
+				.imageUrl(imageCdn.team(candidate.externalImageUrl()))
 				.build();
 		return teamRepository.save(team);
 	}

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import com.toy.nar.app.image.ImageCdn;
 import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.app.data.source.dto.ChampionApiResponse;
 import com.toy.nar.app.data.source.dto.ChampionData;
@@ -26,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ChampionDataService {
 
 	private final ChampionRepository championRepository;
+	private final ImageCdn imageCdn;
 	private final WebClient webClient; // WebClient 빈을 주입받습니다.
 
 	private static final String VERSION_URL = "https://ddragon.leagueoflegends.com/api/versions.json";
@@ -116,9 +118,12 @@ public class ChampionDataService {
 		for (ChampionData enChampionData : enResponse.data().values()) {
 			String normalizedName = NameNormalizer.normalizeChampionName(enChampionData.id());
 			String championKrName = krResponse.data().get(enChampionData.id()).name();
-			String imageUrl = versionedBaseUrl + "/img/champion/" + enChampionData.image().full();
+			// 여기서 CDN 래핑까지 끝낸다 — 아래 dirty 검사가 저장값(래핑됨)과 비교하므로,
+			// 감싸지 않은 채 비교하면 매 동기화마다 전량이 변경으로 잡힌다.
+			String imageUrl = imageCdn.champion(
+					versionedBaseUrl + "/img/champion/" + enChampionData.image().full());
 			// 세로 로딩 이미지는 CommunityDragon centered splash(고화질, numeric Riot key 사용)로 통일.
-			String loadingImageUrl = buildSplashImageUrl(enChampionData.key());
+			String loadingImageUrl = imageCdn.splash(buildSplashImageUrl(enChampionData.key()));
 
 			if (existingChampionNames.contains(normalizedName)) {
 				// 기존 챔피언이 있는 경우 이미지 URL 업데이트 확인
