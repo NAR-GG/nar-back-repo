@@ -111,7 +111,7 @@ class PlayerSoloRankMatchFallbackServiceTest {
 		assertThat(result.newGameCount()).isEqualTo(1);
 		assertThat(result.alertsSentCount()).isEqualTo(1);
 		verify(playerSoloRankPushService).notifySubscribersPostGame(
-				any(), eq("100"), any(), any(), eq("솔로 랭크로 승리 · 4/2/8"), anyString());
+				any(), eq("100"), any(), any(), eq("솔로 랭크로 승리 · 4/2/8"), eq(true), eq("4/2/8"), anyString());
 		verify(notificationService).sendPlayerGameNotification(
 				eq("SUPKING"), eq("SUPKING#1015"), eq("SUPKING"), eq("1015"),
 				eq("100"), eq("솔로 랭크 (경기 종료·폴백)"), any(), any());
@@ -134,7 +134,7 @@ class PlayerSoloRankMatchFallbackServiceTest {
 		assertThat(result.newGameCount()).isEqualTo(1);
 		assertThat(result.alertsSentCount()).isZero();
 		verify(playerSoloRankPushService, never()).notifySubscribersPostGame(
-				any(), anyString(), any(), any(), anyString(), anyString());
+				any(), anyString(), any(), any(), anyString(), any(), any(), anyString());
 	}
 
 	@Test
@@ -168,7 +168,7 @@ class PlayerSoloRankMatchFallbackServiceTest {
 
 		assertThat(result.alertsSentCount()).isZero();
 		verify(playerSoloRankPushService, never()).notifySubscribersPostGame(
-				any(), anyString(), any(), any(), anyString(), anyString());
+				any(), anyString(), any(), any(), anyString(), any(), any(), anyString());
 	}
 
 	private RiotMatchResponse match(int queueId, long gameEndTimestamp, RiotMatchResponse.Participant participant) {

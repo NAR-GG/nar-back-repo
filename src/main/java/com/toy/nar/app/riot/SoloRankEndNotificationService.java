@@ -156,6 +156,8 @@ public class SoloRankEndNotificationService {
 				champion == null ? null : champion.getImageUrl(),
 				SoloRankMatchResultFormatter.resultLine(
 						champion == null ? null : champion.getChampionNameKr(), tracked),
+				tracked == null ? null : tracked.win(),
+				SoloRankMatchResultFormatter.kda(tracked),
 				RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 
 		soloRankGameRepository.markEndNotified(player.getId(), target.gameId, LocalDateTime.now());

@@ -63,7 +63,8 @@ class SoloRankEndNotificationServiceTest {
 		service.onGameEnded(account(), "8292488921");
 
 		assertThat(service.sweep()).isEqualTo(1);
-		verify(pushService).notifySubscribersPostGame(any(), eq("8292488921"), any(), any(), anyString(), any());
+		verify(pushService).notifySubscribersPostGame(
+				any(), eq("8292488921"), any(), any(), anyString(), eq(true), eq("4/2/8"), any());
 		verify(gameRepository).markEndNotified(eq(1L), eq("8292488921"), any());
 
 		// 두 번째 스윕에는 남은 대상이 없다.
@@ -79,7 +80,7 @@ class SoloRankEndNotificationServiceTest {
 		service.onGameEnded(account(), "8292488921");
 
 		assertThat(service.sweep()).isZero();
-		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any());
+		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any(), any(), any());
 
 		// 다음 스윕에서 발행됐으면 그때 보낸다.
 		givenFinishedMatch();
@@ -101,7 +102,7 @@ class SoloRankEndNotificationServiceTest {
 		// 포기 후에는 결과가 나와도 더 보지 않는다.
 		givenFinishedMatch();
 		assertThat(service.sweep()).isZero();
-		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any());
+		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -113,7 +114,7 @@ class SoloRankEndNotificationServiceTest {
 		service.onGameEnded(account(), "8292488921");
 
 		assertThat(service.sweep()).isZero();
-		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any());
+		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -126,7 +127,7 @@ class SoloRankEndNotificationServiceTest {
 		service.sweep();
 
 		verifyNoInteractions(riotApiClient);
-		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any());
+		verify(pushService, never()).notifySubscribersPostGame(any(), any(), any(), any(), any(), any(), any(), any());
 	}
 
 	private void givenFinishedMatch() {
