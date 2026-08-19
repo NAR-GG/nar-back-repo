@@ -7,6 +7,9 @@ metadata:
   namespace: nar
 spec:
   replicas: 1
+  # 롤백은 Git 으로 한다(옛 SHA 재배포). kubectl rollout undo 를 쓸 일이 없으므로
+  # 옛 ReplicaSet 이력을 기본값 10개나 쌓아둘 이유가 없다 — ArgoCD 트리만 어지럽힌다.
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: nar-web

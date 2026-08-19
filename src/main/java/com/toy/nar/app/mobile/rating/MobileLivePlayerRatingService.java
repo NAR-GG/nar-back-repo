@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.rating;
 
+import com.toy.nar.app.image.CloudinaryUrls;
 import com.toy.nar.app.lolesports.live.LiveStateQueryService;
 import com.toy.nar.app.lolesports.live.dto.LiveGameState;
 import com.toy.nar.app.lolesports.live.dto.LiveParticipantState;
@@ -358,7 +359,7 @@ public class MobileLivePlayerRatingService {
 				rating.getComment(),
 				rating.getCreatedAt(),
 				rating.getUpdatedAt(),
-				member != null ? member.getProfileImageUrl() : null,
+				member != null ? CloudinaryUrls.with(member.getProfileImageUrl(), CloudinaryUrls.AVATAR) : null,
 				favoriteTeam != null ? favoriteTeam.getImageUrl() : null,
 				matchGame != null ? toMatchInfo(matchGame) : fallbackMatchInfo);
 	}
@@ -435,7 +436,7 @@ public class MobileLivePlayerRatingService {
 		return new LivePlayerRatingDetailResponse.Review(
 				rating.getId(),
 				member.getNickname(),
-				member.getProfileImageUrl(),
+				CloudinaryUrls.with(member.getProfileImageUrl(), CloudinaryUrls.AVATAR),
 				favoriteTeam != null ? favoriteTeam.getId() : null,
 				favoriteTeam != null ? favoriteTeam.getImageUrl() : null,
 				rating.getRating(),
