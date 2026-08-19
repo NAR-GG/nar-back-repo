@@ -50,12 +50,15 @@ spec:
             # ⚠️ 이 매니페스트가 적용되기 전에 docker 컨테이너가 꺼져 있어야 한다.
             #    둘 다 켜지면 라이브 폴링·푸시가 이중으로 나간다.
 
-            # JAVA_TOOL_OPTIONS 는 시크릿 값을 쓰면 안 된다. 시크릿에는 docker 시절의
-            # -javaagent:/whatap/... 가 박혀 있는데 파드에는 /whatap 마운트가 없어서
-            # 그 값으로는 JVM 이 아예 안 뜬다. WhaTap 은 파드에 붙이지 않기로 했다
-            # (이번 달 종료 예정 — Prometheus·Loki 가 관측을 대신한다).
+            # JAVA_TOOL_OPTIONS 는 시크릿 값을 쓰면 안 된다. 시크릿에는 docker 시절
+            # 값(-Dwhatap.oname=nar-gg-green 등)이 박혀 있어 여기서 덮는다.
+            #
+            # ── WhaTap: 이번 달까지만 ──
+            # 월말 해지 때 이 값에서 -javaagent 와 -Dwhatap.oname 을 지우고,
+            # 아래 whatap 볼륨(volumeMounts·volumes)도 함께 걷어낸다.
+            # 에이전트 jar 는 hostPath(~/nar/whatap)에 있고 oname 만 파드용으로 바꿨다.
             - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx2g --add-opens=java.base/java.lang=ALL-UNNAMED"
+              value: "-Xmx2g -javaagent:/whatap/whatap.agent-2.2.77.jar -Dwhatap.oname=nar-web --add-opens=java.base/java.lang=ALL-UNNAMED"
 
             # 롤링 교체에서 옛 파드가 SIGTERM 을 받는 순간 Tomcat 이 처리 중이던
             # 커넥션을 끊어 502 가 난다(#422 검증 배포에서 실제로 관측).
@@ -115,9 +118,19 @@ spec:
             - name: files
               mountPath: /run/secrets
               readOnly: true
+            # WhaTap 에이전트 (이번 달까지 — JAVA_TOOL_OPTIONS 주석 참고).
+            # 에이전트가 logs/ 에 쓰므로 readOnly 로 걸면 기동은 되는데 조용히 로그만 못 쓴다.
+            - name: whatap
+              mountPath: /whatap
 
       volumes:
         - name: files
           secret:
             secretName: nar-files
             defaultMode: 0400
+        # k3s 노드는 Colima VM 이다. VM 이 /Users/changha 를 마운트하고 있어
+        # 이 hostPath 가 맥 호스트의 ~/nar/whatap 으로 닿는다(실측 확인).
+        - name: whatap
+          hostPath:
+            path: /Users/changha/nar/whatap
+            type: Directory
