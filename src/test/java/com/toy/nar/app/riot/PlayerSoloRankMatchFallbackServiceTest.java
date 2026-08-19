@@ -111,7 +111,7 @@ class PlayerSoloRankMatchFallbackServiceTest {
 		assertThat(result.newGameCount()).isEqualTo(1);
 		assertThat(result.alertsSentCount()).isEqualTo(1);
 		verify(playerSoloRankPushService).notifySubscribersPostGame(
-				any(), eq("100"), any(), any(), eq("솔로 랭크로 승리 · 4/2/8"), eq(true), eq("4/2/8"),
+				any(), eq("100"), any(), any(), eq("솔로 랭크로 승리 · 4/2/8 · 25분"), eq(true), eq("4/2/8"),
 				eq(1500), anyString());
 		verify(notificationService).sendPlayerGameNotification(
 				eq("SUPKING"), eq("SUPKING#1015"), eq("SUPKING"), eq("1015"),

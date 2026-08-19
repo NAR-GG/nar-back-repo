@@ -12,7 +12,10 @@ public final class SoloRankMatchResultFormatter {
 	}
 
 	/** 예: "멜로 승리 · 4/2/8", "가렌으로 패배 · 1/5/9" — 정보가 없으면 단계적으로 축약한다. */
-	public static String resultLine(String championName, RiotMatchResponse.Participant tracked) {
+	public static String resultLine(
+			String championName,
+			RiotMatchResponse.Participant tracked,
+			Integer gameDurationSeconds) {
 		String champion = championName == null || championName.isBlank() ? "솔로 랭크" : championName;
 		if (tracked == null) {
 			return champion + " 경기 종료";
@@ -28,6 +31,12 @@ public final class SoloRankMatchResultFormatter {
 					.append(tracked.kills()).append("/")
 					.append(tracked.deaths()).append("/")
 					.append(tracked.assists());
+		}
+		// 경기 길이는 푸시 배너에도 붙여야 한다. 배너는 이 문구를 그대로 쓰고, 앱 알림함은
+		// data payload 로 다시 조립하므로, 여기 빠뜨리면 리스트에만 시간이 뜬다(실측).
+		// 1분 미만은 생략한다 — "0분" 은 정보가 아니라 오해를 만든다.
+		if (gameDurationSeconds != null && gameDurationSeconds >= 60) {
+			line.append(" · ").append(gameDurationSeconds / 60).append("분");
 		}
 		return line.toString();
 	}
