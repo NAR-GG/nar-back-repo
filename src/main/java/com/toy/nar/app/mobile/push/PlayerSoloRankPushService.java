@@ -62,7 +62,9 @@ public class PlayerSoloRankPushService {
 	 * 경기 종료 알림(전이 감지 + 스트리머 모드 계정용 match-v5 폴백). 문구만 다르고 발송
 	 * 파이프라인·중복 방지는 시작 알림과 동일하다.
 	 *
-	 * <p>{@code win}·{@code kda} 는 앱이 문구를 직접 조립할 수 있도록 data 에 따로 싣는다.
+	 * <p>{@code win}·{@code kda}·{@code gameDurationSeconds} 는 앱이 문구를 직접 조립할 수
+	 * 있도록 data 에 따로 싣는다. 초 단위로 넣는 건 앱이 "28분"으로 줄일지 "28:14"로 쓸지를
+	 * 나중에 고를 수 있게 하려는 것이다 — 문구를 바꾸려고 서버를 배포하지 않아도 된다.
 	 * 앱은 솔랭 카드만 서버 title/body 를 쓰지 않고 로케일에 맞춰 재조립하는데, data 에
 	 * 시작/종료 구분이 없어 종료 알림이 시작 문구로 그려지고 있었다.</p>
 	 */
@@ -74,6 +76,7 @@ public class PlayerSoloRankPushService {
 			String resultLine,
 			Boolean win,
 			String kda,
+			Integer gameDurationSeconds,
 			String opggUrl) {
 		if (player == null || player.getId() == null || gameId == null || !pushGateway.isAvailable()) {
 			return;
@@ -85,6 +88,9 @@ public class PlayerSoloRankPushService {
 		}
 		if (kda != null && !kda.isBlank()) {
 			endData.put("kda", kda);
+		}
+		if (gameDurationSeconds != null && gameDurationSeconds > 0) {
+			endData.put("gameDurationSeconds", String.valueOf(gameDurationSeconds));
 		}
 		MobilePushMessage message = buildMessage(
 				player, gameId, championName, championImageUrl, "솔로 랭크", opggUrl,

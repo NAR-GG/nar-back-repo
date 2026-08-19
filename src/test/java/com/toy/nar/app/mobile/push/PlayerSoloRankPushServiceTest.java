@@ -116,7 +116,7 @@ class PlayerSoloRankPushServiceTest {
 						new MobilePushResult(1, 0, List.of(), List.of("token-1")), List.of()));
 
 		service.notifySubscribersPostGame(
-				player, "game-1", "아리", "ahri.png", "아리로 승리 · 18/1/11", true, "18/1/11",
+				player, "game-1", "아리", "ahri.png", "아리로 승리 · 18/1/11", true, "18/1/11", 1694,
 				"https://www.op.gg/summoners/kr/Faker-KR1");
 
 		ArgumentCaptor<MobilePushMessage> captor = ArgumentCaptor.forClass(MobilePushMessage.class);
@@ -130,13 +130,15 @@ class PlayerSoloRankPushServiceTest {
 				.containsEntry("eventType", "END")
 				.containsEntry("win", "true")
 				.containsEntry("kda", "18/1/11")
+				// 초 단위로 싣는다 — "28분"으로 줄일지 "28:14"로 쓸지는 앱이 고른다.
+				.containsEntry("gameDurationSeconds", "1694")
 				.containsEntry("playerName", "Faker")
 				.containsEntry("championName", "아리")
 				.containsEntry("gameId", "game-1");
 	}
 
 	@Test
-	void 결과를_모르면_승패_KDA_키를_빼고_보낸다() {
+	void 결과를_모르면_승패_KDA_경기시간_키를_빼고_보낸다() {
 		Player player = player(10L, "Faker");
 		MemberDevice device = device(1L, member(7L), "token-1");
 
@@ -147,14 +149,14 @@ class PlayerSoloRankPushServiceTest {
 						new MobilePushResult(1, 0, List.of(), List.of("token-1")), List.of()));
 
 		service.notifySubscribersPostGame(
-				player, "game-1", "아리", "ahri.png", "아리 경기 종료", null, null,
+				player, "game-1", "아리", "ahri.png", "아리 경기 종료", null, null, null,
 				"https://www.op.gg/summoners/kr/Faker-KR1");
 
 		ArgumentCaptor<MobilePushMessage> captor = ArgumentCaptor.forClass(MobilePushMessage.class);
 		verify(quietAwarePushSender).send(any(), captor.capture());
 		assertThat(captor.getValue().data())
 				.containsEntry("eventType", "END")
-				.doesNotContainKeys("win", "kda");
+				.doesNotContainKeys("win", "kda", "gameDurationSeconds");
 	}
 
 	@Test
