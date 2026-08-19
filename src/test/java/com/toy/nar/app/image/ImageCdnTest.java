@@ -50,6 +50,24 @@ class ImageCdnTest {
 	}
 
 	@Test
+	@DisplayName("http 원본은 https 로 맞춰 감싼다 — lolesports 가 같은 자산을 http 로도 준다(선수 71건)")
+	void normalizesHttpOriginToHttps() {
+		String httpOrigin = "http://static.lolesports.com/players/1778842617008_LCK_BFX_Taeyoon_F.PNG";
+
+		assertThat(cdn().player(httpOrigin))
+				.endsWith("/https://static.lolesports.com/players/1778842617008_LCK_BFX_Taeyoon_F.PNG")
+				.doesNotContain("/http://");
+	}
+
+	@Test
+	@DisplayName("스킴만 다른 같은 자산은 같은 값으로 감싸진다 — 저장값·캐시 키가 갈리지 않게")
+	void httpAndHttpsOriginsCollapseToOneValue() {
+		String path = "static.lolesports.com/players/x.png";
+
+		assertThat(cdn().player("http://" + path)).isEqualTo(cdn().player("https://" + path));
+	}
+
+	@Test
 	@DisplayName("두 번 감싸도 결과가 같다 — 동기화 dirty 검사가 원본/래핑을 섞어 봐도 안전하게")
 	void isIdempotent() {
 		String once = cdn().team(TEAM_ORIGIN);
