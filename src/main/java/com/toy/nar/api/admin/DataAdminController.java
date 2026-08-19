@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.toy.nar.app.data.maintenance.GameStatusAnalyzer;
-import com.toy.nar.app.data.maintenance.PlayerImageMigrationService;
 import com.toy.nar.app.data.maintenance.dto.CleanupResult;
 import com.toy.nar.app.data.source.DriveTestService;
 import com.toy.nar.app.data.source.NotificationService;
@@ -48,7 +47,6 @@ public class DataAdminController {
 	private final GameCleanupService gameCleanupService;
 	private final DataReconciliationService reconciliationService;
 	private final DataVerificationService verificationService;
-	private final PlayerImageMigrationService playerImageMigrationService;
 
 	// Google Drive 서비스
 	private final DriveTestService driveTestService;
@@ -397,13 +395,6 @@ public class DataAdminController {
 						.processingTimeMs(100)
 						.build());
 		return ResponseEntity.ok("Slack 알림 완료");
-	}
-
-	@PostMapping("/sync/player-images")
-	public ResponseEntity<Map<String, Object>> syncPlayerImages() {
-		log.info("Starting player image migration...");
-		Map<String, Object> result = playerImageMigrationService.migratePlayerImages();
-		return ResponseEntity.ok(result);
 	}
 
 	private List<String> parseLeagues(String leagues) {
