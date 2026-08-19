@@ -21,6 +21,12 @@
 --   (red_team_image_url, teams.team_image_url, players.image_url,
 --    champions.image_url, champions.loading_image_url 도 같은 모양)
 
+-- 컬럼은 DB 기본 콜레이션(운영은 utf8mb4_unicode_ci)인데 JDBC 커넥션 기본은 utf8mb4_0900_ai_ci 다.
+-- 사용자 변수는 컬럼과 같은 coercibility 라 둘을 LIKE·CONCAT 하면 1267(Illegal mix of collations)로 죽는다
+-- — 문자열 리터럴이었다면 컬럼 쪽으로 자동 해소되지만 변수는 그렇지 않다.
+-- 커넥션 콜레이션을 DB 기본에 맞춰, 어떤 환경이든 컬럼과 같은 콜레이션이 되게 한다.
+SET @@session.collation_connection = @@collation_database;
+
 SET @cloud = COALESCE(
 	(SELECT SUBSTRING_INDEX(SUBSTRING_INDEX(profile_image_url, 'res.cloudinary.com/', -1), '/', 1)
 	 FROM member WHERE profile_image_url LIKE 'https://res.cloudinary.com/%' LIMIT 1),
