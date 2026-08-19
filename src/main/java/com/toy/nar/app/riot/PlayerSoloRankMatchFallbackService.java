@@ -92,7 +92,7 @@ public class PlayerSoloRankMatchFallbackService {
 					newGameCount++;
 
 					if (isFresh(match.info().gameEndTimestamp())) {
-						sendAlerts(account, gameId, champion, tracked);
+						sendAlerts(account, gameId, champion, tracked, match.info().durationSeconds());
 						alertsSentCount++;
 					}
 				}
@@ -122,7 +122,8 @@ public class PlayerSoloRankMatchFallbackService {
 			PlayerRiotAccount account,
 			String gameId,
 			Champion champion,
-			RiotMatchResponse.Participant tracked) {
+			RiotMatchResponse.Participant tracked,
+			Integer gameDurationSeconds) {
 		String championName = champion == null ? null : champion.getChampionNameKr();
 		String championIconUrl = champion == null ? null : champion.getImageUrl();
 		String resultLine = SoloRankMatchResultFormatter.resultLine(championName, tracked);
@@ -144,6 +145,7 @@ public class PlayerSoloRankMatchFallbackService {
 				resultLine,
 				tracked == null ? null : tracked.win(),
 				SoloRankMatchResultFormatter.kda(tracked),
+				gameDurationSeconds,
 				RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 	}
 
