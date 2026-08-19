@@ -53,13 +53,18 @@ public class PlayerSoloRankPushService {
 				player, gameId, championName, championImageUrl, queueDisplayName, opggUrl,
 				player.getName() + " 선수가 솔랭을 시작했어요",
 				normalizedChampion + KoreanParticle.ro(normalizedChampion) + " "
-						+ normalizeQueue(queueDisplayName) + " 플레이 중");
+						+ normalizeQueue(queueDisplayName) + " 플레이 중",
+				Map.of("eventType", EVENT_START));
 		dispatch(player, gameId, EVENT_START, message);
 	}
 
 	/**
-	 * 경기 종료 후 폴백 알림(match-v5 감지). 스트리머 모드 계정은 라이브 감지가 불가능해
-	 * 사후에라도 발송한다. 문구만 다르고 발송 파이프라인·중복 방지는 라이브 알림과 동일.
+	 * 경기 종료 알림(전이 감지 + 스트리머 모드 계정용 match-v5 폴백). 문구만 다르고 발송
+	 * 파이프라인·중복 방지는 시작 알림과 동일하다.
+	 *
+	 * <p>{@code win}·{@code kda} 는 앱이 문구를 직접 조립할 수 있도록 data 에 따로 싣는다.
+	 * 앱은 솔랭 카드만 서버 title/body 를 쓰지 않고 로케일에 맞춰 재조립하는데, data 에
+	 * 시작/종료 구분이 없어 종료 알림이 시작 문구로 그려지고 있었다.</p>
 	 */
 	public void notifySubscribersPostGame(
 			Player player,
@@ -67,14 +72,25 @@ public class PlayerSoloRankPushService {
 			String championName,
 			String championImageUrl,
 			String resultLine,
+			Boolean win,
+			String kda,
 			String opggUrl) {
 		if (player == null || player.getId() == null || gameId == null || !pushGateway.isAvailable()) {
 			return;
 		}
+		Map<String, String> endData = new LinkedHashMap<>();
+		endData.put("eventType", EVENT_END);
+		if (win != null) {
+			endData.put("win", String.valueOf(win));
+		}
+		if (kda != null && !kda.isBlank()) {
+			endData.put("kda", kda);
+		}
 		MobilePushMessage message = buildMessage(
 				player, gameId, championName, championImageUrl, "솔로 랭크", opggUrl,
 				player.getName() + " 선수가 솔랭 한 판을 마쳤어요",
-				resultLine);
+				resultLine,
+				endData);
 		dispatch(player, gameId, EVENT_END, message);
 	}
 
@@ -287,9 +303,13 @@ public class PlayerSoloRankPushService {
 			String queueDisplayName,
 			String opggUrl,
 			String title,
-			String body) {
+			String body,
+			Map<String, String> extra) {
 		Map<String, String> data = new LinkedHashMap<>();
 		data.put("type", PUSH_TYPE);
+		// data.type 은 앱의 딥링크 라우팅 키라 시작/종료가 같은 값을 써야 한다.
+		// 시작/종료 구분은 eventType 으로 따로 싣는다.
+		data.putAll(extra);
 		data.put("playerId", String.valueOf(player.getId()));
 		data.put("playerName", player.getName());
 		data.put("gameId", gameId);

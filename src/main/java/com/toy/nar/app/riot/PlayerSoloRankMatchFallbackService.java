@@ -142,6 +142,8 @@ public class PlayerSoloRankMatchFallbackService {
 				championName,
 				championIconUrl,
 				resultLine,
+				tracked == null ? null : tracked.win(),
+				SoloRankMatchResultFormatter.kda(tracked),
 				RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 	}
 

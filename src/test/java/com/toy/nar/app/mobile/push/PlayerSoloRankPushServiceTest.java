@@ -10,6 +10,7 @@ import com.toy.nar.domain.participant.entity.Player;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -17,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -91,6 +93,7 @@ class PlayerSoloRankPushServiceTest {
 						"아리로 솔로 랭크 플레이 중",
 						Map.of(
 								"type", "PLAYER_SOLO_RANK_STARTED",
+								"eventType", "START",
 								"playerId", "10",
 								"playerName", "Faker",
 								"gameId", "game-1",
@@ -99,6 +102,59 @@ class PlayerSoloRankPushServiceTest {
 								"deepLink", "nar://players/10",
 								"championImageUrl", "ahri.png",
 								"opggUrl", "https://www.op.gg/summoners/kr/Faker-KR1")));
+	}
+
+	@Test
+	void 종료_알림은_data_에_eventType_승패_KDA_를_싣는다() {
+		Player player = player(10L, "Faker");
+		MemberDevice device = device(1L, member(7L), "token-1");
+
+		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L, "END")).thenReturn(List.of(device));
+		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"), eq("END"))).thenReturn(List.of(7L));
+		when(quietAwarePushSender.send(any(), any()))
+				.thenReturn(new QuietAwarePushSender.Outcome(
+						new MobilePushResult(1, 0, List.of(), List.of("token-1")), List.of()));
+
+		service.notifySubscribersPostGame(
+				player, "game-1", "아리", "ahri.png", "아리로 승리 · 18/1/11", true, "18/1/11",
+				"https://www.op.gg/summoners/kr/Faker-KR1");
+
+		ArgumentCaptor<MobilePushMessage> captor = ArgumentCaptor.forClass(MobilePushMessage.class);
+		verify(quietAwarePushSender).send(eq(Map.of(7L, List.of("token-1"))), captor.capture());
+		MobilePushMessage sent = captor.getValue();
+		assertThat(sent.title()).isEqualTo("Faker 선수가 솔랭 한 판을 마쳤어요");
+		assertThat(sent.body()).isEqualTo("아리로 승리 · 18/1/11");
+		assertThat(sent.data())
+				// data.type 은 딥링크 라우팅 키라 시작 알림과 같은 값을 유지한다.
+				.containsEntry("type", "PLAYER_SOLO_RANK_STARTED")
+				.containsEntry("eventType", "END")
+				.containsEntry("win", "true")
+				.containsEntry("kda", "18/1/11")
+				.containsEntry("playerName", "Faker")
+				.containsEntry("championName", "아리")
+				.containsEntry("gameId", "game-1");
+	}
+
+	@Test
+	void 결과를_모르면_승패_KDA_키를_빼고_보낸다() {
+		Player player = player(10L, "Faker");
+		MemberDevice device = device(1L, member(7L), "token-1");
+
+		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L, "END")).thenReturn(List.of(device));
+		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"), eq("END"))).thenReturn(List.of(7L));
+		when(quietAwarePushSender.send(any(), any()))
+				.thenReturn(new QuietAwarePushSender.Outcome(
+						new MobilePushResult(1, 0, List.of(), List.of("token-1")), List.of()));
+
+		service.notifySubscribersPostGame(
+				player, "game-1", "아리", "ahri.png", "아리 경기 종료", null, null,
+				"https://www.op.gg/summoners/kr/Faker-KR1");
+
+		ArgumentCaptor<MobilePushMessage> captor = ArgumentCaptor.forClass(MobilePushMessage.class);
+		verify(quietAwarePushSender).send(any(), captor.capture());
+		assertThat(captor.getValue().data())
+				.containsEntry("eventType", "END")
+				.doesNotContainKeys("win", "kda");
 	}
 
 	@Test

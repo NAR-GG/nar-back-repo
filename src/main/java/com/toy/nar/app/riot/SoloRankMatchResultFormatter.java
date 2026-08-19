@@ -32,6 +32,20 @@ public final class SoloRankMatchResultFormatter {
 		return line.toString();
 	}
 
+	/**
+	 * 예: "18/1/11". 셋 중 하나라도 없으면 null 이다.
+	 *
+	 * <p>{@link #resultLine} 이 만든 한국어 문구를 앱이 그대로 쓰면 영어 로케일에서도 한국어가
+	 * 나온다. 앱이 자기 문구를 조립할 수 있도록 승패·KDA 를 푸시 data 에 따로 실어준다.</p>
+	 */
+	public static String kda(RiotMatchResponse.Participant tracked) {
+		if (tracked == null
+				|| tracked.kills() == null || tracked.deaths() == null || tracked.assists() == null) {
+			return null;
+		}
+		return tracked.kills() + "/" + tracked.deaths() + "/" + tracked.assists();
+	}
+
 	public static RiotMatchResponse.Participant findParticipant(RiotMatchResponse match, String puuid) {
 		if (match == null || match.info() == null || match.info().participants() == null) {
 			return null;
