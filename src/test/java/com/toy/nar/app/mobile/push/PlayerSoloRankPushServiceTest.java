@@ -122,7 +122,7 @@ class PlayerSoloRankPushServiceTest {
 		ArgumentCaptor<MobilePushMessage> captor = ArgumentCaptor.forClass(MobilePushMessage.class);
 		verify(quietAwarePushSender).send(eq(Map.of(7L, List.of("token-1"))), captor.capture());
 		MobilePushMessage sent = captor.getValue();
-		assertThat(sent.title()).isEqualTo("Faker 선수가 솔랭 한 판을 마쳤어요");
+		assertThat(sent.title()).isEqualTo("Faker 선수가 솔랭을 끝냈어요");
 		assertThat(sent.body()).isEqualTo("아리로 승리 · 18/1/11");
 		assertThat(sent.data())
 				// data.type 은 딥링크 라우팅 키라 시작 알림과 같은 값을 유지한다.

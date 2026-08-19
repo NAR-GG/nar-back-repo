@@ -94,7 +94,7 @@ public class PlayerSoloRankPushService {
 		}
 		MobilePushMessage message = buildMessage(
 				player, gameId, championName, championImageUrl, "솔로 랭크", opggUrl,
-				player.getName() + " 선수가 솔랭 한 판을 마쳤어요",
+				player.getName() + " 선수가 솔랭을 끝냈어요",
 				resultLine,
 				endData);
 		dispatch(player, gameId, EVENT_END, message);
