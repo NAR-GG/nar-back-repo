@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -139,6 +140,38 @@ class LiveActivityPushServiceRecreateTest {
 	private LiveActivityPushService.MatchCardAttributes attributes() {
 		return new LiveActivityPushService.MatchCardAttributes(
 				"match-1", "T1", "T1", "Hanwha Life Esports", "HLE", "LCK");
+	}
+
+	@Test
+	@DisplayName("토큰이 여러 개인 회원에게는 기기마다 보낸다 — 회원 단위로 잡으면 한 대만 받는다")
+	void sendsToEveryTokenOfSameMember() {
+		// 실측 2026-08-20 member 621: 활성 토큰 19개가 쌓였는데 발송은 늘 1건이었다.
+		// 대상 조회에 정렬이 없어 임의의 옛 유령 토큰이 뽑혔고, 8/13 부터 카드가 한 번도 안 떴다.
+		// 유령에게 보내지 않으니 410 도 못 받아 자동 정리(deactivateByPushTokenIn)까지 멈춰 있었다.
+		when(startTokenRepository.findStartTargets("match-1", 10L, 20L))
+				.thenReturn(List.of(
+						startTarget("ghost-tok", 7L, "HLE"),
+						startTarget("live-tok", 7L, "HLE")));
+
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		verify(apnsClient).sendStartAsync(eq("ghost-tok"), anyString(), any(), any(),
+				anyString(), anyString());
+		verify(apnsClient).sendStartAsync(eq("live-tok"), anyString(), any(), any(),
+				anyString(), anyString());
+	}
+
+	@Test
+	@DisplayName("같은 토큰의 중복 발송은 여전히 막는다 — 30초 창")
+	void stillBlocksDuplicateSendToSameToken() {
+		when(startTokenRepository.findStartTargets("match-1", 10L, 20L))
+				.thenReturn(List.of(startTarget("live-tok", 7L, "HLE")));
+
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
+
+		verify(apnsClient, times(1)).sendStartAsync(eq("live-tok"), anyString(), any(), any(),
+				anyString(), anyString());
 	}
 
 	private LiveActivityStartTokenRepository.StartTargetRow startTarget(

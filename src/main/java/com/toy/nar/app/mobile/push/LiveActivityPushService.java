@@ -47,7 +47,7 @@ public class LiveActivityPushService {
 	private static final String ATTRIBUTES_TYPE = "MatchLiveAttributes";
 
 	/**
-	 * 같은 회원·같은 경기에 카드를 다시 만들어 주지 않는 시간.
+	 * 같은 기기·같은 경기에 카드를 다시 만들어 주지 않는 시간.
 	 *
 	 * <p>기존 중복 방지는 {@code NOT EXISTS(active LiveActivityToken)} 하나뿐인데, 그 토큰은
 	 * 카드가 뜬 뒤 <b>앱이</b> 올려 준다. 실측 2026-08-16 매치 115548147900619033 에서
@@ -72,7 +72,20 @@ public class LiveActivityPushService {
 	private boolean pushToStartEnabled;
 
 	/**
-	 * 방금 카드를 보낸 (매치, 회원). 서버가 자기 발송을 기억하는 유일한 즉시 신호다.
+	 * 방금 카드를 보낸 (매치, 회원, 토큰). 서버가 자기 발송을 기억하는 유일한 즉시 신호다.
+	 *
+	 * <p>키에 토큰이 들어가는 이유 — 회원 단위로 잡으면 <b>토큰이 여러 개인 회원에게 한 대에만</b>
+	 * 보내게 된다. 대상 조회에 정렬이 없어 그 "한 대"는 임의로 정해지고, 오래된 유령 토큰이
+	 * 뽑히면 그 회원은 카드를 영영 못 받는다. 게다가 유령에게 보내지 않으니 410 도 못 받아
+	 * {@link LiveActivityStartTokenRepository#deactivateByPushTokenIn 자동 정리}가 돌지 않는다 —
+	 * 유령이 계속 쌓이고 당첨 확률은 더 나빠지는 악순환이다.
+	 * 실측 2026-08-20 member 621: 활성 토큰 19개가 쌓여 8/13 부터 카드가 한 번도 안 떴다.
+	 * 손으로 최신 1개만 남기자 즉시 정상화됐다.</p>
+	 *
+	 * <p>토큰 단위로 바꾸면 기기마다 한 장씩 뜬다(아이폰+아이패드가 원래 그래야 하는 동작이고,
+	 * 지금까지는 한 대만 받았다). 토큰이 막 회전한 직후처럼 옛 토큰이 아직 살아 있는 짧은 구간에는
+	 * 한 기기에 카드가 두 장 뜰 수 있는데, 아무것도 못 받는 것보다 낫다고 보고 감수한다.
+	 * 그 옛 토큰은 다음 발송에서 410 을 받고 정리된다.</p>
 	 *
 	 * <p>ponytail: 인메모리라 재기동하면 비고, 앱 인스턴스가 늘면 인스턴스별로 따로 센다.
 	 * 둘 다 최악이 "카드 한 장 더" 인 현재 동작으로 돌아가는 것뿐이라 테이블을 만들지 않았다.
@@ -240,11 +253,12 @@ public class LiveActivityPushService {
 	 * {@link #RECENT_START_WINDOW} 안에 이미 보냈으면 false — 두 경로(세트 시작 일괄 발송,
 	 * 구독 직후 따라잡기)가 같은 창을 공유해야 서로 겹쳐도 두 장이 되지 않는다.
 	 */
-	private boolean claimStart(String matchId, Long memberId) {
+	private boolean claimStart(String matchId, Long memberId, String pushToken) {
 		if (memberId == null) {
 			return true;
 		}
-		return recentStarts.asMap().putIfAbsent(matchId + "#" + memberId, Boolean.TRUE) == null;
+		return recentStarts.asMap()
+				.putIfAbsent(matchId + "#" + memberId + "#" + pushToken, Boolean.TRUE) == null;
 	}
 
 	/** 대상 산정만 다르고 발송·죽은 토큰 정리는 같다. */
@@ -258,7 +272,9 @@ public class LiveActivityPushService {
 		if (targets.isEmpty()) {
 			return;
 		}
-		targets = targets.stream().filter(target -> claimStart(matchId, target.getMemberId())).toList();
+		targets = targets.stream()
+				.filter(target -> claimStart(matchId, target.getMemberId(), target.getPushToken()))
+				.toList();
 		if (targets.isEmpty()) {
 			return;
 		}
