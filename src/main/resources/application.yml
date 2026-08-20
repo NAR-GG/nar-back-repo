@@ -152,6 +152,9 @@ cloudinary:
   # Riot 계열 원본(static.lolesports/ddragon/communitydragon)을 Cloudinary fetch 로 감싼다.
   # Cloudinary 콘솔의 Allowed fetch domains 에 같은 3개가 등록돼 있어야 동작한다.
   cdn-enabled: ${CLOUDINARY_CDN_ENABLED:true}
+  # 무료 티어 25 credits 소진 감시. 집계가 1~2일 늦어 임계를 낮게 잡는다.
+  quota-alert-percent: ${CLOUDINARY_QUOTA_ALERT_PERCENT:60}
+  quota-check-cron: ${CLOUDINARY_QUOTA_CHECK_CRON:0 0 10 * * *}
 
 # 모바일 소셜 로그인 설정.
 oauth:
