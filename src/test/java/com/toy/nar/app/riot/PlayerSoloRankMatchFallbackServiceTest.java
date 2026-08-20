@@ -179,4 +179,19 @@ class PlayerSoloRankMatchFallbackServiceTest {
 				new RiotMatchResponse.Info(
 						queueId, gameEndTimestamp - 1_500_000L, gameEndTimestamp, List.of(participant)));
 	}
+
+	@org.junit.jupiter.api.Test
+	@org.junit.jupiter.api.DisplayName("폴링 메서드에 @Transactional 이 다시 붙지 않았다")
+	void 폴링_메서드는_선언적_트랜잭션을_쓰지_않는다() throws NoSuchMethodException {
+		// readOnly = true 였을 때 알림 예약 INSERT 가
+		// "Connection is read-only. Queries leading to data modification are not allowed" 로 거절됐다.
+		// 경기 이력 적재는 REQUIRES_NEW 라 살아남아, 이력은 쌓이는데 알림만 안 나가는 모습이 된다
+		// (실측 2026-08-21 PerfecT 6경기 적재 / 발송 0건).
+		// readOnly 를 떼는 것만으로도 부족하다 — Riot 호출·웹훅·FCM 이 한 트랜잭션에 묶이면
+		// 커넥션과 행 락을 사이클 내내 붙잡는다(라이브 모니터가 같은 이유로 이미 걷어냈다).
+		assertThat(PlayerSoloRankMatchFallbackService.class.getMethod("pollTrackedAccounts")
+				.getAnnotation(org.springframework.transaction.annotation.Transactional.class))
+				.as("@Transactional 이면 알림 예약 INSERT 가 다시 막히거나 락을 오래 잡는다")
+				.isNull();
+	}
 }

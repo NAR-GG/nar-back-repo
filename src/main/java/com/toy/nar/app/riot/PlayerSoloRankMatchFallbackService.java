@@ -13,7 +13,6 @@ import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -49,7 +48,20 @@ public class PlayerSoloRankMatchFallbackService {
 	private final SoloRankGameHistoryRecorder soloRankGameHistoryRecorder;
 	private final SchedulerAlertService schedulerAlertService;
 
-	@Transactional(readOnly = true)
+	/**
+	 * 트랜잭션으로 감싸지 않는다.
+	 *
+	 * <p>{@code @Transactional(readOnly = true)} 였을 때 발송이 통째로 실패했다. 알림 예약이
+	 * {@code INSERT INTO player_solo_rank_push_delivery} 인데 읽기 전용 커넥션에 합류해
+	 * {@code Connection is read-only. Queries leading to data modification are not allowed} 로
+	 * 거절된다. 경기 이력 적재는 REQUIRES_NEW 라 살아남아서, <b>이력은 쌓이는데 알림만 안 나가는</b>
+	 * 모습이 된다 — 실측 2026-08-21 PerfecT 6경기 적재 / 발송 0건.
+	 *
+	 * <p>readOnly 만 떼는 것으로는 부족하다. 계정 수만큼의 Riot API 호출·디스코드 웹훅·FCM 발송이
+	 * 한 트랜잭션에 묶이면 커넥션과 행 락을 사이클 내내 붙잡는다. 라이브 모니터가 같은 이유로
+	 * 이미 트랜잭션을 걷어냈다(2026-07-29 락 대기 50초 타임아웃 80건).
+	 * 쓰기는 각자의 짧은 트랜잭션에서 한다.
+	 */
 	public PlayerSoloRankMatchFallbackResult pollTrackedAccounts() {
 		long startedAt = System.currentTimeMillis();
 		riotApiClient.assertConfigured();
