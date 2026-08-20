@@ -76,6 +76,20 @@ spec:
             - name: SOLO_RANK_END_NOTIFICATION_ENABLED
               value: "true"
 
+            # 스트리머 모드 계정용 match-v5 폴백. 이 계정들은 Spectator API 가 막혀
+            # 라이브 감지가 원천 불가라, 켜기 전까지는 시작도 종료도 알림이 하나도 안 나갔다
+            # (예: PerfecT#132 / player 133 — 구독해도 아무것도 못 받는 상태였다).
+            # 켜면 종료 후 match-v5 로 뒤늦게 잡아 "한 판을 마쳤어요" 를 보낸다.
+            #
+            # prod 에서 한 번도 안 돌아본 경로라 그동안 닫아 뒀다. 부하와 안전장치는 실측했다:
+            #   - 추적 계정 101개 × 5분 주기 = 사이클당 매치목록 조회 101회
+            #   - 개별 매치 조회는 라이브 모니터와 같은 기록 테이블로 중복 방지되어(exists)
+            #     이미 10,552건이 쌓인 지금은 대부분 스킵된다
+            #   - 첫 실행에 새로 적재되는 옛 경기는 alert-freshness-minutes(60) 게이트에
+            #     걸려 알림이 안 나간다 — 과거 경기 스팸이 나지 않는 이유다
+            - name: RIOT_MATCH_FALLBACK_ENABLED
+              value: "true"
+
           resources:
             requests:
               # 실측 RSS 1318Mi (힙 미포화). 스케줄링 기준이므로 평상시 값으로 잡는다.
