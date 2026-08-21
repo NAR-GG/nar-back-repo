@@ -50,7 +50,9 @@ master_alive() { ssh -O check -o ControlPath="$CP" dummy >/dev/null 2>&1; }
 # (ControlMaster=auto 라 붙는 순간 생긴다). VM 을 건드리지 않는다.
 ensure_master() {
 	master_alive && return 0
-	log "ControlMaster 없음 — 재생성 시도"
+	# fd 한도를 같이 남긴다. 새 master 는 이 쉘의 한도를 물려받으므로, 256 이 찍히면
+	# 위의 ulimit 이 먹지 않은 것이고 같은 장애가 재발할 수 있다는 뜻이다.
+	log "ControlMaster 없음 — 재생성 시도 (물려줄 fd 한도 $(ulimit -n))"
 	"$COLIMA" ssh -- true >/dev/null 2>&1
 	master_alive
 }
