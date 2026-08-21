@@ -46,7 +46,7 @@ Prometheus 타깃 변경이 끝나면 nginx 는 은퇴한다.
 | `scripts/nar-db-backup.sh` | `~/nar/nar-db-backup.sh` |
 | `scripts/nar-forward-guard.sh` | `~/nar/nar-forward-guard.sh` |
 | `scripts/cutover-reverse-repl.sh` | 노트북에서 실행 (양쪽 SSH 필요) |
-| `scripts/nar-watchdog.sh` | **춘천 `instance-elasticsearch`** 의 `/usr/local/bin/` |
+| `scripts/nar-watchdog.sh` | **춘천 박스**(`ssh nargg`, Ubuntu 20.04) 의 `/usr/local/bin/` + `crontab -l` 매분 |
 
 ## 여기 없는 것 — 비밀값
 
@@ -63,6 +63,32 @@ Prometheus 타깃 변경이 끝나면 nginx 는 은퇴한다.
 ~/nar/.cf-team-domain       nar-gg.cloudflareaccess.com
 ~/nar/.cf-access-app-id     ArgoCD Access 앱 ID
 ```
+
+춘천 박스에도 하나 있다. 맥미니의 `.discord-webhook` 과 같은 값이다.
+
+```
+~/.nar-webhook              nar-watchdog.sh 의 알림 채널 (chmod 600)
+```
+
+## 감시 두 겹
+
+한 겹으로는 못 덮는다. 고칠 수 있는 고장과 사람을 불러야 하는 고장이 다르다.
+
+| | `nar-forward-guard.sh` (맥미니) | `nar-watchdog.sh` (춘천) |
+|---|---|---|
+| 보는 것 | 호스트 리스너 6개 | `api.nar.kr` 응답 |
+| 주기 | 30초 (launchd) | 1분 (cron) |
+| 하는 일 | 직접 복구 | 디스코드 알림 |
+| 잡는 고장 | ssh mux master 사망 | 정전·회선 단절·colima 사망·DB 다운·앱 크래시 |
+
+포워딩 끊김은 guard 가 30초에 되살리니 watchdog 의 3분 임계에 닿지 않는다. 즉
+**watchdog 이 울리면 guard 가 손댈 수 없는 고장**이라는 뜻이고, 사람이 붙어야 한다.
+
+감시자를 집 밖에 두는 이유는 Prometheus·Loki·Grafana 가 전부 맥미니에 있어서다.
+정전이 나면 감시자도 같이 죽는다. 춘천 박스는 Oracle 클라우드라 집과 운명을 공유하지 않는다.
+
+`api/worlds/recent` 를 찌르는 이유는 DB 까지 타는 가장 가벼운 공개 경로라서다.
+`/v3/api-docs`(401)·`/actuator/health`(403) 는 Traefik 미들웨어가 막으므로 헬스 판정에 쓸 수 없다.
 
 ## ArgoCD 를 공개한 방식 — Access 가 전부다
 
