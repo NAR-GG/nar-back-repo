@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  30초마다 호스트↔VM 포워딩 확인. 끊겨 있으면 다시 건다.
+
+  주기 근거: 2026-08-21 장애는 감지까지 사람이 걸려서 28분이었다. 30초면 사용자가
+  체감하기 전에 끝난다. 정상일 때는 nc 여섯 번이라 부하가 없고 로그도 안 남는다.
+
+  cron 이 아닌 이유는 다른 nar 잡과 같다 — 이 기계에서 crontab 항목이 발화하지 않는다
+  (2026-08-17 확인).
+
+  KeepAlive 를 쓰지 않는다. 이 스크립트는 한 번 돌고 끝나는 것이고, 실패 시 다시
+  띄워봐야 같은 결과다. 30초 뒤 다음 주기가 알아서 재시도한다.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nar.forwardguard</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/changha/nar/nar-forward-guard.sh</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>30</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/changha/nar/forward-guard.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/changha/nar/forward-guard.log</string>
+</dict>
+</plist>

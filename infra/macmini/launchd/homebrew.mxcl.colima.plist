@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  brew 가 만든 colima 서비스 plist 에 SoftResourceLimits 한 항목을 더한 것이다.
+  원본은 `brew services` 가 생성하고, colima 를 업그레이드하거나 서비스를 다시 만들면
+  **이 수정이 덮어써진다**. 그때 여기서 다시 복사한다.
+
+  왜 필요한가: colima 가 띄우는 limactl hostagent 가 ssh mux master 를 만들고, 그 프로세스
+  하나가 호스트↔VM 포워딩 전부를 나른다. 커넥션 하나가 그 프로세스의 fd 하나다.
+  launchd 기본 soft limit 이 256 이라, 2026-08-21 20:25 T1 vs KT 1세트 시작 직후
+  앱 트래픽이 15배(5 → 76 req/s)로 뛰면서 천장을 넘었고 master 가 죽었다.
+  포워딩이 통째로 사라져 api.nar.kr 이 28분 동안 502 였다.
+
+  16384 는 kern.maxfilesperproc(61440) 안쪽으로 넉넉히 잡은 값이다.
+
+  이 값은 새로 뜨는 프로세스에만 적용된다. 이미 돌고 있는 master 는 그대로다
+  — 다음 colima 재시작 때 효과가 나타난다. 그 사이의 방어는
+  nar-forward-guard.sh 가 맡는다(스크립트에도 ulimit -n 16384 이 있어서,
+  guard 가 master 를 다시 만들면 높은 한도로 태어난다).
+-->
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<true/>
+	</dict>
+	<key>Label</key>
+	<string>homebrew.mxcl.colima</string>
+	<key>LimitLoadToSessionType</key>
+	<array>
+		<string>Aqua</string>
+		<string>Background</string>
+		<string>LoginWindow</string>
+		<string>StandardIO</string>
+		<string>System</string>
+	</array>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/opt/colima/bin/colima</string>
+		<string>start</string>
+		<string>-f</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>SoftResourceLimits</key>
+	<dict>
+		<key>NumberOfFiles</key>
+		<integer>16384</integer>
+	</dict>
+	<key>StandardErrorPath</key>
+	<string>/opt/homebrew/var/log/colima.log</string>
+	<key>StandardOutPath</key>
+	<string>/opt/homebrew/var/log/colima.log</string>
+	<key>WorkingDirectory</key>
+	<string>/Users/changha</string>
+</dict>
+</plist>

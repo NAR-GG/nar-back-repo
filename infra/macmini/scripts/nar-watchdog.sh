@@ -6,12 +6,19 @@
 # api.nar.kr 을 바깥에서 찔러본다. 감시자는 감시 대상과 같은 곳에 있으면 안 된다.
 set -u
 
-# /v3/api-docs 는 공개 도메인에서 nginx Basic Auth 로 막혀 있다(배포 헬스체크는 컨테이너에
-# 직접 붙어서 통과한다). 밖에서 쓸 수 있으면서 DB 까지 타는 가벼운 엔드포인트를 쓴다.
+# /v3/api-docs 와 /actuator/health 는 공개 도메인에서 막혀 있다 — 지금은 Traefik 미들웨어가
+# 각각 Basic Auth·403 을 건다(옛 nginx 시절과 이유는 같다). 밖에서 쓸 수 있으면서 DB 까지
+# 타는 가벼운 엔드포인트를 쓴다.
 URL="${NAR_WATCHDOG_URL:-https://api.nar.kr/api/worlds/recent}"
-WEBHOOK="${NAR_WATCHDOG_WEBHOOK:-}"
-STATE=/var/tmp/nar-watchdog.state   # 연속 실패 횟수를 들고 있는다
+# 웹훅은 저장소에 두지 않는다. 맥미니의 ~/nar/.discord-webhook 과 같은 규칙이다.
+WEBHOOK_FILE="${NAR_WATCHDOG_WEBHOOK_FILE:-$HOME/.nar-webhook}"
+WEBHOOK="${NAR_WATCHDOG_WEBHOOK:-$( [ -r "$WEBHOOK_FILE" ] && cat "$WEBHOOK_FILE" )}"
+STATE="${NAR_WATCHDOG_STATE:-/var/tmp/nar-watchdog.state}"   # 연속 실패 횟수를 들고 있는다
 THRESHOLD=3                          # 3분 연속 실패해야 알린다 — 순간 오류로 깨우지 않는다
+
+# 포워딩 끊김(2026-08-21 장애)은 여기까지 오지 않는다 — nar-forward-guard.sh 가 맥미니에서
+# 30초 안에 되살린다. 이 감시자가 잡는 것은 guard 가 손댈 수 없는 것들이다:
+# 정전, 회선 단절, colima 자체 사망, DB 다운, 앱 크래시.
 
 notify() {
   [ -n "$WEBHOOK" ] || return 0
