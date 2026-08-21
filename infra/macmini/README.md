@@ -41,7 +41,10 @@ Prometheus 타깃 변경이 끝나면 nginx 는 은퇴한다.
 | `cloudflared/config.yml` | `/opt/homebrew/etc/cloudflared/config.yml` |
 | `launchd/com.nar.cloudflared.plist` | `~/Library/LaunchAgents/` |
 | `launchd/com.nar.dbbackup.plist` | `~/Library/LaunchAgents/` |
+| `launchd/com.nar.forwardguard.plist` | `~/Library/LaunchAgents/` |
+| `launchd/homebrew.mxcl.colima.plist` | `~/Library/LaunchAgents/` — **brew 가 덮어쓴다**, colima 업그레이드 후 다시 복사 |
 | `scripts/nar-db-backup.sh` | `~/nar/nar-db-backup.sh` |
+| `scripts/nar-forward-guard.sh` | `~/nar/nar-forward-guard.sh` |
 | `scripts/cutover-reverse-repl.sh` | 노트북에서 실행 (양쪽 SSH 필요) |
 | `scripts/nar-watchdog.sh` | **춘천 `instance-elasticsearch`** 의 `/usr/local/bin/` |
 
@@ -114,6 +117,47 @@ https://macmini.tail97b60c.ts.net     tailscale serve → 127.0.0.1:30443
 | 8080 / 8083 | 앱 컨테이너 블루-그린 |
 | 8090 | brew nginx 기본 서버 (기본값 8080 이 앱과 겹쳐 옮겼다) |
 | 3306 | MySQL — `127.0.0.1` + Tailscale 만. LAN 에는 안 연다 |
+
+## 단일 실패점 — 호스트↔VM 포워딩
+
+앱이 k3s(Colima VM) 로 들어간 뒤 실트래픽 경로가 VM 경계를 넘는다.
+
+```
+Cloudflare → cloudflared → 호스트 127.0.0.1:30082 → [VM 경계] → Traefik → 파드
+                                    ↑ ssh 프로세스 하나가 이 구간 전부를 나른다
+```
+
+`30082`·`30443`·`6443`·`3000`·`9090`·`3100` 은 lima 가 만든 **하나의 ssh mux master**
+프로세스가 전부 들고 있다. 커넥션 하나가 그 프로세스의 fd 하나다. 이 구조에 함정이 세 개다.
+
+**1. launchd 기본 fd soft limit 이 256 이다.** 커넥션이 그만큼 몰리면 master 가 죽는다.
+`launchd/homebrew.mxcl.colima.plist` 의 `SoftResourceLimits` 로 16384 로 올려 뒀다
+(`kern.maxfilesperproc` = 61440). **brew 가 이 파일을 덮어쓰므로 colima 업그레이드 후 다시 넣어야 한다.**
+
+**2. lima 는 자기 포워딩을 감시하지 않는다.** 게스트 포트가 열리고 닫히는 이벤트에만
+반응한다. master 가 죽어도 게스트 포트는 그대로니 lima 는 아무 일도 하지 않는다.
+`limactl hostagent` 프로세스도 멀쩡히 살아 있다 — **프로세스 감시로는 안 잡히는 고장이다.**
+`nar-forward-guard.sh` 가 30초마다 리스너를 직접 확인하고 없으면 다시 건다.
+
+**3. 앱이 살아 있어도 서비스는 죽는다.** 파드·k3s·Traefik·MySQL 이 전부 정상인데 502 가 난다.
+`kubectl get pods` 로는 아무 문제가 안 보인다. 502 를 보면 파드보다 **호스트 리스너를 먼저** 봐야 한다.
+
+```bash
+lsof -nP -iTCP -sTCP:LISTEN | grep '^ssh '      # 포워딩 생존 확인
+~/nar/nar-forward-guard.sh                       # 수동 복구 (무중단, 즉시)
+tail ~/nar/forward-guard.log                     # 복구 이력. 정상일 때는 아무것도 안 쓴다
+```
+
+### 실사고 — 2026-08-21 20:25, 28분
+
+T1 vs KT 1세트 시작(`20:25:05`) 직후 앱 트래픽이 5 → 76 req/s 로 뛰었고 `20:25:31` 에
+master 가 죽었다. `api.nar.kr` 이 `20:53` 까지 502 였다(실패 요청 52,974건).
+lima 로그에는 그 28분 동안 `Time sync` 만 찍혀 있다. 발견은 사용자 신고였다.
+
+당시 근거를 잘못 짚기 쉬운 지점이 하나 있다. nginx `error.log` 에 08-19 부터 502 가
+쌓여 있는데 **그건 이 장애와 무관하다.** nginx 는 실트래픽 경로에 없고(cloudflared 가
+30082 로 직결), 자기 upstream 8080(도커 시절 잔재)이 비어서 찍는 것이다. 장애 창은
+`nar-cloudflared.log` 의 `dial tcp 127.0.0.1:30082: connect: connection refused` 로 재야 한다.
 
 ## 배포 함정
 
