@@ -205,7 +205,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(hikaricp_connections_pending)"
+          "expr": "max(hikaricp_connections_pending)"
         }
       ],
       "fieldConfig": {
@@ -523,13 +523,13 @@
       "targets": [
         {
           "refId": "A",
-          "legendFormat": "사용",
-          "expr": "sum(jvm_memory_used_bytes{area=\"heap\"})"
+          "legendFormat": "{{instance}} 사용",
+          "expr": "sum by (instance) (jvm_memory_used_bytes{area=\"heap\"})"
         },
         {
           "refId": "B",
-          "legendFormat": "최대",
-          "expr": "sum(jvm_memory_max_bytes{area=\"heap\"})"
+          "legendFormat": "{{instance}} 최대",
+          "expr": "sum by (instance) (jvm_memory_max_bytes{area=\"heap\"})"
         }
       ],
       "fieldConfig": {
@@ -572,23 +572,23 @@
       "targets": [
         {
           "refId": "A",
-          "legendFormat": "active",
-          "expr": "sum(hikaricp_connections_active)"
+          "legendFormat": "{{instance}} active",
+          "expr": "sum by (instance) (hikaricp_connections_active)"
         },
         {
           "refId": "B",
-          "legendFormat": "idle",
-          "expr": "sum(hikaricp_connections_idle)"
+          "legendFormat": "{{instance}} idle",
+          "expr": "sum by (instance) (hikaricp_connections_idle)"
         },
         {
           "refId": "C",
-          "legendFormat": "pending",
-          "expr": "sum(hikaricp_connections_pending)"
+          "legendFormat": "{{instance}} pending",
+          "expr": "sum by (instance) (hikaricp_connections_pending)"
         },
         {
           "refId": "D",
-          "legendFormat": "max",
-          "expr": "sum(hikaricp_connections_max)"
+          "legendFormat": "{{instance}} max",
+          "expr": "sum by (instance) (hikaricp_connections_max)"
         }
       ],
       "fieldConfig": {
