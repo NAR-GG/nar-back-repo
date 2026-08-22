@@ -47,11 +47,18 @@ spec:
             - name: DB_URL
               value: "jdbc:mysql://192.168.5.2:3306/nardb?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
 
-            # 스케줄러·푸시·Flyway·Sentry 는 시크릿(nar-env)의 원래 값을 그대로 쓴다 —
-            # 전부 true 다. 그림자 시절엔 docker 와의 이중 발송을 막으려고 여기서
-            # false 로 덮었는데, 스케줄러 이관(2026-08-19)과 함께 오버라이드를 걷었다.
-            # ⚠️ 이 매니페스트가 적용되기 전에 docker 컨테이너가 꺼져 있어야 한다.
-            #    둘 다 켜지면 라이브 폴링·푸시가 이중으로 나간다.
+            # 스케줄러는 이제 이 파드에서 돌지 않는다. nar-scheduler.yaml 이 전담한다.
+            #
+            # 나눈 이유는 두 가지다. 웹을 늘리고 싶어도 못 늘렸다 — 복제본을 2로 올리면
+            # 라이브 폴링과 푸시가 두 벌 돌아 사용자에게 알림이 두 번 간다(중복 실행 가드가 없다).
+            # 그리고 웹을 배포할 때마다 스케줄러가 같이 재시작해 라이브 폴링에 구멍이 났다.
+            #
+            # ⚠️ 스케줄러가 도는 파드는 언제나 정확히 하나여야 한다. 이 값을 true 로 되돌리면
+            #    nar-scheduler 와 겹쳐 이중 발송이 된다.
+            - name: APP_SCHEDULING_ENABLED
+              value: "false"
+
+            # 푸시·Flyway·Sentry 는 시크릿(nar-env)의 원래 값을 그대로 쓴다.
 
             # JAVA_TOOL_OPTIONS 는 시크릿 값을 쓰면 안 된다. 시크릿에는 docker 시절
             # 값(-Dwhatap.oname=nar-gg-green 등)이 박혀 있어 여기서 덮는다.

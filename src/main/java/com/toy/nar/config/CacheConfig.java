@@ -29,13 +29,26 @@ public class CacheConfig {
 	@Bean
 	public CacheManager cacheManager() {
 		List<CaffeineCache> caches = List.of(
-			// 변할 가능성이 있는 데이터 → TTL 유지
-			createCacheWithTTL("todaySchedules", 1, TimeUnit.HOURS, TODAY_SCHEDULE_MAX_SIZE),
-			createCacheWithTTL("todayMatchDetails", 1, TimeUnit.HOURS, TODAY_MATCH_DETAIL_MAX_SIZE),
+			// ── 아래 넷은 CacheEvictionService 가 지우던 캐시다 ──
+			//
+			// 스케줄러를 별도 파드로 떼면서 TTL 을 짧게 잡았다. Caffeine 은 JVM 안에 있어서,
+			// 파드가 둘이 되면 캐시도 두 벌이 된다. 스케줄러가 동기화 후 evict 를 불러도
+			// 그건 스케줄러 JVM 의 캐시일 뿐이라 웹 파드는 낡은 값을 계속 준다.
+			// 특히 아래 둘은 만료가 없어서 파드를 재시작할 때까지 영원히 낡았다.
+			//
+			// 크로스 JVM 무효화(웹에 evict 엔드포인트를 열고 스케줄러가 호출)도 되지만,
+			// 실측해 보니 그럴 필요가 없었다. 라이브 경로(/api/mobile/live/games/*)는
+			// 애초에 캐시를 타지 않아 실시간 점수는 이 캐시들과 무관하고, 키 수가 적어
+			// TTL 을 줄여도 쿼리가 거의 안 는다(todaySchedules 는 키가 날짜 하나다).
+			createCacheWithTTL("todaySchedules", 60, TimeUnit.SECONDS, TODAY_SCHEDULE_MAX_SIZE),
+			createCacheWithTTL("todayMatchDetails", 60, TimeUnit.SECONDS, TODAY_MATCH_DETAIL_MAX_SIZE),
 
-			// 불변 데이터 → TTL 제거, size limit만 적용 (LRU 정책)
-			createCacheNoTTL("dailySchedules", SCHEDULE_MAX_SIZE),
-			createCacheNoTTL("matchDetails", MATCH_DETAIL_MAX_SIZE),
+			// 과거 데이터. 경기가 끝나면 값이 굳지만 CSV 인제스트가 나중에 기록을 채우므로
+			// 완전한 불변은 아니다(그래서 evict 대상이었다). 급할 것 없어 10분으로 둔다.
+			createCacheWithTTL("dailySchedules", 10, TimeUnit.MINUTES, SCHEDULE_MAX_SIZE),
+			createCacheWithTTL("matchDetails", 10, TimeUnit.MINUTES, MATCH_DETAIL_MAX_SIZE),
+
+			// evict 대상이 아니다. 경기 기록은 한 번 적재되면 바뀌지 않는다.
 			createCacheNoTTL("gameRecords", GAME_RECORD_MAX_SIZE),
 
 			// 백오피스 대시보드 집계. 알림 시계열이 35만 행 스캔이라 매 로드마다 초 단위로 걸린다.

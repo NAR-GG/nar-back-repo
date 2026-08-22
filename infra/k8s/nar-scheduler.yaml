@@ -1,0 +1,117 @@
+# 스케줄러 파드. 웹과 같은 이미지를 쓰고 APP_SCHEDULING_ENABLED 로만 역할이 갈린다.
+# 코드를 나누지 않은 이유는 스위치가 이미 있기 때문이다 — SchedulerConfig 가
+# app.scheduling.enabled 로 모든 @Scheduled 등록을 좌우한다.
+#
+# ⚠️ 이 파드는 언제나 정확히 하나다. ShedLock 같은 중복 실행 가드가 없어서
+#    두 벌이 돌면 라이브 폴링·푸시가 이중으로 나간다. replicas 와 strategy 를
+#    같이 봐야 한다 — 아래 Recreate 주석 참고.
+#
+# 트래픽은 안 받는다. Service(nar-web)의 셀렉터가 app: nar-web 이라 이 라벨은 안 걸린다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nar-scheduler
+  namespace: nar
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+
+  # RollingUpdate 면 안 된다. replicas 1 에 maxSurge 는 올림이라 1 이 되고,
+  # 새 파드가 Ready 될 때까지 옛 파드가 남아 40~60초 동안 스케줄러가 두 벌 돈다.
+  # Recreate 는 옛 파드를 먼저 죽인다 — 그 사이 폴링에 구멍이 나지만,
+  # 구멍은 다음 주기가 메우고 이중 발송은 되돌릴 수 없다.
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: nar-scheduler
+  template:
+    metadata:
+      labels:
+        app: nar-scheduler
+    spec:
+      # nar-web 과 같은 이유다. /run/secrets 를 읽기 전용으로 마운트하는데
+      # 토큰 마운트가 그 아래에 디렉토리를 만들려다 실패해 파드가 안 뜬다.
+      automountServiceAccountToken: false
+
+      containers:
+        - name: app
+          image: menten4859/nar-gg:59870c1d502c04169f39926b4561e32c3a5ef771
+          ports:
+            - containerPort: 8080
+
+          envFrom:
+            - secretRef:
+                name: nar-env
+
+          env:
+            # 시크릿의 DB_URL 은 docker 시절 host.docker.internal 이라 파드에서 안 풀린다.
+            - name: DB_URL
+              value: "jdbc:mysql://192.168.5.2:3306/nardb?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+
+            - name: APP_SCHEDULING_ENABLED
+              value: "true"
+
+            # WhaTap 을 안 붙인다. 이번 달 해지 예정이라 새 파드에 새 oname 을 등록할
+            # 이유가 없고, 에이전트 하나만큼 메모리를 아낀다. 웹 파드에는 아직 남아 있다.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xmx1200m --add-opens=java.base/java.lang=ALL-UNNAMED"
+
+            - name: SERVER_SHUTDOWN
+              value: "graceful"
+
+            # 웹과 같은 값. 둘 중 하나라도 빠지면 해당 알림 경로가 조용히 죽는다.
+            - name: SOLO_RANK_END_NOTIFICATION_ENABLED
+              value: "true"
+            - name: RIOT_MATCH_FALLBACK_ENABLED
+              value: "true"
+
+          resources:
+            requests:
+              memory: "1300Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              # 웹과 달리 CPU 한도를 둔다. CSV 인제스트가 JDBC 4 스레드로 도는데,
+              # 같은 VM 의 웹 파드를 굶기면 안 된다. 스케줄 잡은 몇 초 늦어도 되고
+              # 사용자 요청은 안 된다.
+              cpu: "2500m"
+
+          # 트래픽을 안 받으니 readiness 는 배포 진행 판정용이다. Recreate 는 새 파드가
+          # Ready 가 될 때까지 배포를 완료로 보지 않는다.
+          #
+          # 경로가 웹(/api/worlds/recent)과 다른 이유: liveness 가 DB 를 타면 안 된다.
+          # DB 가 죽었을 때 파드를 재시작해도 DB 는 안 살아나고, 재기동한 파드가 또
+          # 같은 이유로 죽어 무한 재시작이 된다. 앱은 멀쩡한데 겉보기가 앱 크래시라
+          # 진짜 원인을 가린다. liveness 는 재시작으로 고쳐지는 것만 봐야 한다.
+          # 스프링의 liveness/readiness 그룹은 DB 헬스를 포함하지 않는다.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+
+          # 푸시·구글 드라이브 자격증명. 스케줄러가 실제로 발송하는 쪽이라
+          # 이게 없으면 FirebaseApp 빈이 파일을 못 찾아 기동에서 실패한다.
+          volumeMounts:
+            - name: files
+              mountPath: /run/secrets
+              readOnly: true
+
+      volumes:
+        - name: files
+          secret:
+            secretName: nar-files
+            defaultMode: 0400

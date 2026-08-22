@@ -75,12 +75,28 @@ common/       Error handling, filters, utilities
 - Complex queries use `*RepositoryCustom` + `*RepositoryImpl` pattern
 
 ### Caching (Caffeine)
-Two tiers defined in `CacheConfig.java`:
-- **TTL 1 hour**: `todaySchedules`, `todayMatchDetails` (volatile)
-- **LRU, no expiry**: `dailySchedules`, `matchDetails`, `gameRecords` (immutable once recorded)
+`CacheConfig.java`에 정의. **웹과 스케줄러가 별도 파드라 캐시도 두 벌이다.**
+Caffeine은 JVM 안에 있어서 `CacheEvictionService`의 evict는 자기 JVM만 지운다.
+그래서 **evict 대상 캐시(`todaySchedules`, `todayMatchDetails`, `dailySchedules`, `matchDetails`)는
+반드시 TTL이 있어야 한다** — 없으면 웹 파드가 재시작할 때까지 낡은 값을 준다.
+`CacheConfigTest`가 이 불변조건을 잠근다.
+
+- **TTL 60초**: `todaySchedules`, `todayMatchDetails` (진행 중 경기 스코어가 실린다)
+- **TTL 10분**: `dailySchedules`, `matchDetails` (과거 데이터. CSV 인제스트가 나중에 채운다)
+- **TTL 30초~1시간**: `mobileScheduleCalendar`, `mobileScheduleFilters`, `adminStats*`
+- **만료 없음(LRU)**: `gameRecords` (적재되면 안 바뀐다. evict 대상도 아니다)
+
+라이브 경로(`/api/mobile/live/games/*`)는 캐시를 타지 않는다. 실시간 스코어는 캐시와 무관하다.
 
 ### Scheduling
-5-thread pool (`SchedulerConfig.java`). Key tasks:
+**스케줄러는 웹과 다른 파드에서 돈다** (`infra/k8s/nar-scheduler.yaml`, 같은 이미지 + `APP_SCHEDULING_ENABLED=true`).
+`nar-web`은 `false`다. ShedLock 같은 중복 실행 가드가 없어서 **스케줄러 파드는 언제나 정확히 하나**여야 한다
+(그래서 `strategy: Recreate`, `replicas: 1`). 두 벌 돌면 라이브 폴링·푸시가 이중으로 나간다.
+
+가상 스레드 기반, 동시 실행 5개 제한(`SchedulerConfig.java`). 잡이 늘어 밀리면 파드를 늘리는 게 아니라
+이 한도를 올리거나 도메인별로 Deployment를 쪼갠다(각각 `replicas: 1`).
+
+Key tasks:
 - LoL Esports sync: every 30 mins
 - Team metadata sync: daily 4:15 AM
 - Discord daily summary: daily 9 AM
