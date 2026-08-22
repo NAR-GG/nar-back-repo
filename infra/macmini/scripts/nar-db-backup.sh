@@ -11,6 +11,22 @@
 # 컷오버 전에는 복제본을 뜬다. 복제본은 원본과 동일하므로 백업으로서 유효하고,
 # --single-transaction 이라 복제를 멈추지 않는다.
 set -euo pipefail
+PUSHGW=http://127.0.0.1:9091; CRON_JOB=db-backup; CRON_INSTANCE=macmini
+
+# ── 크론 감시 지표 (Pushgateway → Prometheus → Grafana "크론잡" 대시보드) ──
+# 실패해도 잡은 계속 돈다(|| true). 진짜 신호는 "마지막 성공이 오래됐다"라서
+# 이 push 자체가 죽으면 대시보드 신선도가 알아서 붉어진다.
+_CRON_T0=$(date +%s)
+push_metric() { # $1: exit code (0/1)
+	local now dur; now=$(date +%s); dur=$((now - _CRON_T0))
+	{ printf 'nar_cron_last_run_timestamp_seconds %s\n' "$now"
+	  [ "$1" = 0 ] && printf 'nar_cron_last_success_timestamp_seconds %s\n' "$now"
+	  printf 'nar_cron_duration_seconds %s\n' "$dur"
+	  printf 'nar_cron_exit_code %s\n' "$1"
+	} | curl -fsS -m 5 --data-binary @- \
+		"${PUSHGW}/metrics/job/${CRON_JOB}/instance/${CRON_INSTANCE}" >/dev/null 2>&1 || true
+}
+
 
 MYSQLDUMP=/opt/homebrew/opt/mysql@8.4/bin/mysqldump
 DB_NAME=nardb
@@ -30,6 +46,7 @@ fail() {
 			-d "{\"content\":\"🔴 DB 백업 실패 (맥미니): $1\"}" \
 			"$(cat "$WEBHOOK_FILE")" >/dev/null 2>&1 || true
 	fi
+	push_metric 1
 	exit 1
 }
 
@@ -70,3 +87,4 @@ fi
 # 로컬은 7일치. 오프사이트 보관은 버킷 라이프사이클(30일)이 담당한다.
 find "$DEST" -name 'nar-macmini-*.sql.gz' -mtime +"$KEEP_DAYS" -delete
 log "종료 (로컬 보관 $(ls -1 "$DEST"/nar-macmini-*.sql.gz 2>/dev/null | wc -l | tr -d ' ')개)"
+push_metric 0

@@ -5,6 +5,22 @@
 # 정전이나 회선 단절이 나면 감시자도 같이 죽는다. 그래서 집 밖에 있는 이 박스가
 # api.nar.kr 을 바깥에서 찔러본다. 감시자는 감시 대상과 같은 곳에 있으면 안 된다.
 set -u
+PUSHGW=http://100.111.167.92:9091; CRON_JOB=watchdog; CRON_INSTANCE=nargg
+
+# ── 크론 감시 지표 (Pushgateway → Prometheus → Grafana "크론잡" 대시보드) ──
+# 실패해도 잡은 계속 돈다(|| true). 진짜 신호는 "마지막 성공이 오래됐다"라서
+# 이 push 자체가 죽으면 대시보드 신선도가 알아서 붉어진다.
+_CRON_T0=$(date +%s)
+push_metric() { # $1: exit code (0/1)
+	local now dur; now=$(date +%s); dur=$((now - _CRON_T0))
+	{ printf 'nar_cron_last_run_timestamp_seconds %s\n' "$now"
+	  [ "$1" = 0 ] && printf 'nar_cron_last_success_timestamp_seconds %s\n' "$now"
+	  printf 'nar_cron_duration_seconds %s\n' "$dur"
+	  printf 'nar_cron_exit_code %s\n' "$1"
+	} | curl -fsS -m 5 --data-binary @- \
+		"${PUSHGW}/metrics/job/${CRON_JOB}/instance/${CRON_INSTANCE}" >/dev/null 2>&1 || true
+}
+
 
 # /v3/api-docs 와 /actuator/health 는 공개 도메인에서 막혀 있다 — 지금은 Traefik 미들웨어가
 # 각각 Basic Auth·403 을 건다(옛 nginx 시절과 이유는 같다). 밖에서 쓸 수 있으면서 DB 까지
@@ -46,3 +62,9 @@ fi
 
 # ponytail: 상태 파일 하나로 끝낸다. 감시 대상이 여러 개가 되거나 에스컬레이션이
 # 필요해지면 그때 blackbox_exporter + Alertmanager 로 올린다.
+
+# 잡 생존 신호 + api 연속 실패 수. exit_code 는 항상 0 — api 상태는 위 알림과
+# nar_watchdog_consecutive_fails 게이지가 말한다.
+push_metric 0
+printf 'nar_watchdog_consecutive_fails %s\n' "$fails" | curl -fsS -m 5 --data-binary @- \
+	"${PUSHGW}/metrics/job/${CRON_JOB}/instance/${CRON_INSTANCE}" >/dev/null 2>&1 || true

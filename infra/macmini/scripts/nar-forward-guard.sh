@@ -13,6 +13,22 @@
 # 그래서 밖에서 리스너 자체를 확인한다. 없으면 lima 가 쓰는 것과 같은 방법으로
 # 다시 건다(살아 있는 ControlMaster 에 -O forward). VM 재시작이 아니라 무중단이다.
 set -u
+PUSHGW=http://127.0.0.1:9091; CRON_JOB=forward-guard; CRON_INSTANCE=macmini
+
+# ── 크론 감시 지표 (Pushgateway → Prometheus → Grafana "크론잡" 대시보드) ──
+# 실패해도 잡은 계속 돈다(|| true). 진짜 신호는 "마지막 성공이 오래됐다"라서
+# 이 push 자체가 죽으면 대시보드 신선도가 알아서 붉어진다.
+_CRON_T0=$(date +%s)
+push_metric() { # $1: exit code (0/1)
+	local now dur; now=$(date +%s); dur=$((now - _CRON_T0))
+	{ printf 'nar_cron_last_run_timestamp_seconds %s\n' "$now"
+	  [ "$1" = 0 ] && printf 'nar_cron_last_success_timestamp_seconds %s\n' "$now"
+	  printf 'nar_cron_duration_seconds %s\n' "$dur"
+	  printf 'nar_cron_exit_code %s\n' "$1"
+	} | curl -fsS -m 5 --data-binary @- \
+		"${PUSHGW}/metrics/job/${CRON_JOB}/instance/${CRON_INSTANCE}" >/dev/null 2>&1 || true
+}
+
 
 CP="$HOME/.colima/_lima/colima/ssh.sock"
 COLIMA=/opt/homebrew/bin/colima
@@ -22,6 +38,8 @@ WEBHOOK_FILE="$HOME/nar/.discord-webhook"
 #   127.0.0.1 — 소비자가 이 기계 안에만 있는 것. cloudflared 도 127.0.0.1 로 붙으므로
 #               실트래픽 포트를 LAN 에 열 이유가 없다(lima 는 0.0.0.0 에 걸었다).
 #   0.0.0.0   — 노트북에서 Tailscale 로 보는 대시보드. 좁히면 안 보인다.
+#               9091(pushgateway)은 춘천 박스들이 Tailscale 로 push 하므로 0.0.0.0 필수.
+#               이게 죽으면 크론 지표 전체가 침묵해 대시보드가 오탐으로 붉어진다.
 FORWARDS="
 127.0.0.1:30082
 127.0.0.1:30443
@@ -29,6 +47,8 @@ FORWARDS="
 0.0.0.0:3000
 0.0.0.0:9090
 0.0.0.0:3100
+0.0.0.0:9091
+0.0.0.0:12345
 "
 
 # 여기서 만드는 ssh mux master 가 이 한도를 물려받는다. launchd 기본값 256 이
@@ -68,6 +88,7 @@ for f in $FORWARDS; do
 	if ! ensure_master; then
 		log "포워딩 $f 복구 실패 — ControlMaster 를 만들 수 없다. colima 자체를 봐야 한다"
 		notify "🔴 맥미니 포워딩 복구 실패 — colima ControlMaster 없음 (수동 확인 필요)"
+		push_metric 1
 		exit 1
 	fi
 
@@ -84,4 +105,5 @@ done
 # ponytail: docker.sock(유닉스 소켓)은 목록에서 뺐다. 서비스 경로가 아니고
 # `colima ssh -- docker` 로 대체된다. 필요해지면 같은 루프에
 # -L "$HOME/.colima/default/docker.sock:/var/run/docker.sock" 로 넣으면 된다.
+push_metric 0
 exit 0

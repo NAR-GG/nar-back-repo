@@ -14,6 +14,22 @@
 # 성공(🟢): 주 1회 결과 요약 — 침묵이 아니라 성공도 알린다. 크론이 죽은 것과
 #           구분이 안 되기 때문이다.
 set -u
+PUSHGW=http://100.111.167.92:9091; CRON_JOB=restore-verify; CRON_INSTANCE=es-vnic
+
+# ── 크론 감시 지표 (Pushgateway → Prometheus → Grafana "크론잡" 대시보드) ──
+# 실패해도 잡은 계속 돈다(|| true). 진짜 신호는 "마지막 성공이 오래됐다"라서
+# 이 push 자체가 죽으면 대시보드 신선도가 알아서 붉어진다.
+_CRON_T0=$(date +%s)
+push_metric() { # $1: exit code (0/1)
+	local now dur; now=$(date +%s); dur=$((now - _CRON_T0))
+	{ printf 'nar_cron_last_run_timestamp_seconds %s\n' "$now"
+	  [ "$1" = 0 ] && printf 'nar_cron_last_success_timestamp_seconds %s\n' "$now"
+	  printf 'nar_cron_duration_seconds %s\n' "$dur"
+	  printf 'nar_cron_exit_code %s\n' "$1"
+	} | curl -fsS -m 5 --data-binary @- \
+		"${PUSHGW}/metrics/job/${CRON_JOB}/instance/${CRON_INSTANCE}" >/dev/null 2>&1 || true
+}
+
 
 MAC="changha@100.111.167.92"
 WORK=/home/ubuntu/restore-verify
@@ -26,7 +42,7 @@ notify() {
     -d "$(python3 -c 'import json,sys; print(json.dumps({"content": sys.argv[1]}))' "$1")" \
     "$(cat $WEBHOOK_FILE)" >/dev/null 2>&1 || true
 }
-fail() { log "FAIL: $1"; notify "🔴 백업 복원 검증 실패: $1"; exit 1; }
+fail() { log "FAIL: $1"; notify "🔴 백업 복원 검증 실패: $1"; push_metric 1; exit 1; }
 
 mkdir -p "$WORK"
 log "=== 시작 ==="
@@ -69,3 +85,4 @@ rm -f "$WORK"/nar-macmini-*.sql.gz
 log "OK: $NAME tables=$RESTORED_TABLES members=$MEMBERS ${ELAPSED}s"
 notify "🟢 백업 복원 검증 통과: \`$NAME\` ($(( SIZE / 1024 / 1024 ))MB)
 복원 ${ELAPSED}초 · 테이블 ${RESTORED_TABLES}개(소스 일치) · 회원 ${MEMBERS} · 알림 ${ROWS_NOTI}행 · 최신 데이터 ${AGE_H}시간 전"
+push_metric 0
