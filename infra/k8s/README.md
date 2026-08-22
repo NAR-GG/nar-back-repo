@@ -3,16 +3,18 @@
 맥미니에서 도는 k3s 클러스터의 선언이다. `infra/macmini`(설정 원본 보관소)와 달리
 **여기는 실제로 적용되는 소스**다 — ArgoCD 가 이 디렉토리를 보고 클러스터를 맞춘다.
 
-## 지금 상태 (2026-08-18)
+## 지금 상태 (2026-08-22)
 
-**프로덕션은 아직 docker 다.** k3s 에 올라간 앱은 트래픽을 안 받는다.
+**프로덕션 전부가 여기다.** docker 판은 은퇴했다.
 
 ```
-사용자 ──> Cloudflare ──> cloudflared ──> nginx :8081 ──> docker 컨테이너 :8083   ← 실서비스
-                                                          맥미니 MySQL :3306
-                                                              ↑
-                                          k3s 파드 nar-web ────┘                  ← 트래픽 없음
+사용자 ──> Cloudflare ──> cloudflared(파드) ──> Traefik ──> nar-web 파드 ─┐
+                                                                          │
+                          nar-scheduler 파드 ────────────> 맥미니 MySQL :3306
 ```
+
+터널까지 클러스터 안이라 **요청 경로가 호스트↔VM 경계를 안 건넌다**
+(`cloudflared.yaml` 주석에 이유가 있다). 남은 경계 통과는 DB 접속과 kubectl 뿐이다.
 
 k3s 는 Colima VM **안에** 직접 설치했다(`colima --kubernetes` 아님).
 `~/.colima/default/colima.yaml` 의 `kubernetes.enabled: false` 를 유지해야 Colima 가
@@ -24,7 +26,14 @@ k3s 는 Colima VM **안에** 직접 설치했다(`colima --kubernetes` 아님).
 |---|---|
 | `namespace.yaml` | 네임스페이스 `nar` |
 | `nar-env-sealed.yaml` | 앱 환경변수 50개. **봉인돼 있어 저장소에 있어도 안전하다** |
+| `nar-files-sealed.yaml` | FCM·APNs·구글 드라이브 자격증명 파일 |
+| `docs-auth-sealed.yaml` | api-docs Basic Auth htpasswd |
 | `nar-web.yaml` | 웹 Deployment |
+| `nar-web-service.yaml` | 웹 Service (NodePort 30081 — Prometheus 가 여기를 긁는다) |
+| `nar-scheduler.yaml` | 스케줄러 Deployment. **언제나 정확히 하나** |
+| `traefik-routes.yaml` | 라우팅·인증·차단 (옛 nginx `nar.conf` 이식본) |
+| `cloudflared.yaml` | Cloudflare 터널. ingress 규칙이 ConfigMap 에 있다 |
+| `cloudflared-sealed.yaml` | 터널 자격증명 |
 
 ## 시크릿 — sealed-secrets
 
