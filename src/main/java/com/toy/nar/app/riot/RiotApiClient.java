@@ -160,16 +160,24 @@ public class RiotApiClient {
 									.map(Optional::<T>of);
 						}
 						if (statusCode.value() == 404) {
-							// 스트리머 모드 계정은 spectator-v5 가 404 "filtered" 를 준다(Riot 2025-10
-							// 익명성 정책). "지금 게임 중이 아님" 404 와 코드가 같아 지금은 구분이 안 되고,
-							// 그래서 라이브 감지가 영영 안 되는 계정이 몇 개인지도 모른다. 본문을 남겨
-							// 명단을 확보한다 — 폴백을 켤지 판단하는 근거다. 반환값은 그대로 empty 라
-							// 동작은 바뀌지 않는다.
+							// spectator-v5 의 404 는 "지금 게임 중이 아님"이라 폴링에서는 정상이다.
+							//
+							// 이 로그는 원래 스트리머 모드 계정 명단을 뽑으려던 것이었다. Riot 2025-10
+							// 익명성 정책으로 그런 계정에 404 "filtered" 가 오는데, 본문을 남겨두면
+							// 누가 영영 감지 안 되는 계정인지 알 수 있으리라 봤다.
+							//
+							// 실측해 보니 그 전제가 틀렸다(2026-08-22, 30분 표본).
+							//   404 filtered 2,123건 / 서로 다른 puuid 101개 = 추적 계정 전원
+							// Riot 은 평범한 "게임 중 아님" 404 에도 filtered 를 붙인다. 명단이 곧
+							// 전체 명단이라 정보가 없다. 하루 10만 줄로 진짜 신호를 가리기만 해서
+							// 기본 출력에서 뺀다. 다시 봐야 하면 이 클래스 로그 레벨만 DEBUG 로 올린다.
+							//
+							// 반환값은 그대로 empty 라 동작은 바뀌지 않는다.
 							return clientResponse.bodyToMono(String.class)
 									.defaultIfEmpty("")
 									.map(body -> {
 										if (body.contains("filtered")) {
-											log.info("[riot-404-filtered] {} body={}", uri, body);
+											log.debug("[riot-404-filtered] {} body={}", uri, body);
 										}
 										return Optional.<T>empty();
 									});
