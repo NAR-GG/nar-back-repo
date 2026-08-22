@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
  * Elasticsearch 검색 문서
  * Team, Player 등의 검색을 위한 인덱스 문서
  */
-@Document(indexName = "search")
+@Document(indexName = "search", createIndex = false)
 @Setting(settingPath = "elasticsearch/settings.json")
 @Getter
 @Builder
