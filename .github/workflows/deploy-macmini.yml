@@ -107,7 +107,6 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}"
-          MANIFEST=infra/k8s/nar-web.yaml
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -115,13 +114,20 @@ jobs:
           git fetch origin main --depth=1
           git checkout -B deploy FETCH_HEAD
 
-          # 태그만 갈아끼운다. 매니페스트의 나머지는 main 그대로다.
-          sed -i "s|^\( *image: \).*/nar-gg:.*|\1${IMAGE}|" "${MANIFEST}"
+          # 같은 이미지를 쓰는 매니페스트를 전부 갱신한다. 하나만 갈아끼우면 나머지는
+          # 옛 태그에 묶인 채 조용히 돌아간다 — 웹은 새 코드, 스케줄러는 옛 코드가 된다.
+          # nar-gg 이미지를 쓰는 매니페스트를 새로 추가하면 여기에도 넣어야 한다.
+          MANIFESTS=(infra/k8s/nar-web.yaml infra/k8s/nar-scheduler.yaml)
 
-          # sed 가 아무것도 못 바꿨는데 조용히 넘어가면, deploy 브랜치가 낡은 태그를
-          # 가리킨 채로 자동 동기화가 돈다. 이미지 줄 형식이 바뀌면 여기서 멈춘다.
-          grep -q "image: ${IMAGE}$" "${MANIFEST}" \
-            || { echo "이미지 줄을 못 바꿨다. ${MANIFEST} 의 형식을 확인하라."; exit 1; }
+          for MANIFEST in "${MANIFESTS[@]}"; do
+            # 태그만 갈아끼운다. 매니페스트의 나머지는 main 그대로다.
+            sed -i "s|^\( *image: \).*/nar-gg:.*|\1${IMAGE}|" "${MANIFEST}"
+
+            # sed 가 아무것도 못 바꿨는데 조용히 넘어가면, deploy 브랜치가 낡은 태그를
+            # 가리킨 채로 자동 동기화가 돈다. 이미지 줄 형식이 바뀌면 여기서 멈춘다.
+            grep -q "image: ${IMAGE}$" "${MANIFEST}" \
+              || { echo "이미지 줄을 못 바꿨다. ${MANIFEST} 의 형식을 확인하라."; exit 1; }
+          done
 
           git commit -am "chore: 배포 이미지 ${GITHUB_SHA::7}"
           git push -f origin deploy
