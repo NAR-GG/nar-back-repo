@@ -48,7 +48,8 @@ EC2 비용을 없애려고 앱을 집 맥미니(M1 16GB)로 옮겼고, **2026-08
 | `scripts/nar-db-backup.sh` | `~/nar/nar-db-backup.sh` |
 | `scripts/nar-forward-guard.sh` | `~/nar/nar-forward-guard.sh` |
 | `scripts/cutover-reverse-repl.sh` | 노트북에서 실행 (양쪽 SSH 필요) |
-| `scripts/nar-watchdog.sh` | **춘천 박스**(`ssh nargg`, Ubuntu 20.04) 의 `/usr/local/bin/` + `crontab -l` 매분 |
+| `scripts/nar-watchdog.sh` | **춘천 nargg-vnic**(`ssh nargg`, Ubuntu 20.04) 의 `/usr/local/bin/` + `crontab -l` 매분 |
+| `scripts/nar-restore-verify.sh` | **춘천 es-vnic**(`ubuntu@100.71.240.23`) 의 `/usr/local/bin/` + crontab 일요일 06:00 KST |
 
 ## 여기 없는 것 — 비밀값
 
@@ -88,6 +89,29 @@ EC2 비용을 없애려고 앱을 집 맥미니(M1 16GB)로 옮겼고, **2026-08
 
 감시자를 집 밖에 두는 이유는 Prometheus·Loki·Grafana 가 전부 맥미니에 있어서다.
 정전이 나면 감시자도 같이 죽는다. 춘천 박스는 Oracle 클라우드라 집과 운명을 공유하지 않는다.
+
+## 춘천 박스 두 대
+
+OCI Always Free E2.1.Micro(1GB/2vCPU) 2대. 같은 VCN, 둘 다 Tailscale.
+
+| | `nargg-vnic` (`ssh nargg`) | `es-vnic` (`ubuntu@100.71.240.23`) |
+|---|---|---|
+| 역할 | MySQL 8.0 **역방향 복제본** + watchdog | **Uptime Kuma** + 주간 **백업 복원 검증** |
+| 원래 | 컷오버 전 프로덕션 DB | Elasticsearch — **2026-08-22 은퇴** (색인 0건 유령, 앱 부팅 의존은 #449 로 제거) |
+
+es-vnic 상세:
+- **Uptime Kuma** `http://100.71.240.23:3001` — docker, Tailscale IP 바인딩이라 tailnet 전용.
+  api.nar.kr·argocd·MySQL 포트들을 밖에서 감시. watchdog 셸과 이중화 (서로 다른 박스).
+- **복원 검증기** — 매일 백업의 "덤프가 잘렸나" 검사는 반쪽이다. 이 크론이 나머지 반쪽:
+  맥미니 최신 덤프를 실제 MySQL 8.0 에 복원하고 테이블 수를 소스와 대조, 신선도(36h)를
+  확인해 디스코드로 보고한다. **성공도 알린다** — 침묵은 크론 사망과 구분이 안 된다.
+- 스왑 2G(`/swapfile`) — 1GB 에 mysql+kuma 공존용.
+- ⚠️ 이 박스 `ubuntu` 는 **uid 1001** 이다 (보통 1000 아님). authorized_keys 를 1000 으로
+  chown 하면 sshd 가 파일을 통째로 무시해 모든 키가 거부된다 — 실제로 당했다.
+- ⚠️ E2.1.Micro 는 OCI Run Command 플러그인 **미지원**, `user_data`·`ssh_authorized_keys`
+  메타데이터는 생성 후 수정 불가. 키를 잃으면 부트볼륨을 떼어 옆 박스에 물려 심는 것이
+  유일한 길이다 (2026-08-22 실행. 정지 → detach → nargg 에 데이터볼륨 attach → 마운트
+  후 키 추가 → 복귀).
 
 `api/worlds/recent` 를 찌르는 이유는 DB 까지 타는 가장 가벼운 공개 경로라서다.
 `/v3/api-docs`(401)·`/actuator/health`(403) 는 Traefik 미들웨어가 막으므로 헬스 판정에 쓸 수 없다.
