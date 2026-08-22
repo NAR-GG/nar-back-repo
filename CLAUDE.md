@@ -17,6 +17,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **메인 레포 디렉토리(`/Users/changha/Documents/25-3-quarter/nar`)는 직접 수정하지 않는다.** 작업은 워크트리에서 진행한다.
 - Claude가 작업할 때는 항상 워크트리를 사용하고, 완료 후 `main`으로 PR을 올린다.
 
+## 서비스 가용성 수칙 — 경기 시간 보호 (필수)
+
+**인프라·배포 작업 전에 반드시 오늘 경기 일정부터 확인한다:**
+
+```bash
+curl -s "https://api.nar.kr/api/schedule?date=$(date +%F)" | python3 -c "
+import sys,json
+for m in json.load(sys.stdin)['matches']:
+    print(m['scheduledTime'], m['leagueInfo'], m['matchTitle'], m['matchStatus'])"
+```
+
+- **경기 창(시작 1시간 전 ~ 마지막 세트 종료)과 겹치는 인프라 작업 금지.** `inProgress`가 하나라도 있으면 즉시 중단.
+- 여기서 인프라 작업이란: **스케줄러·웹 파드 재시작/배포, main 머지(자동 배포 트리거), DB·시크릿 변경, 서버(맥미니·춘천 박스) 재부팅, 의존 인프라(MySQL·Tailscale·cloudflared) 조작** 전부.
+- 이유: 라이브폴링의 세트 시작 감지(edge)가 **인메모리**(`LivePollingScheduler.startNotifiedGameIds`)라 재시작하면 유실된다. 재기동한 파드는 진행 중 세트를 "이미 시작됨"으로 보고 넘어가므로 **그 세트의 라이브위젯(push-to-start)·시작 알림이 통째로 누락**되고 복구 방법이 없다. 실사고: 2026-08-22 DK vs GEN — ES 박스 재부팅 → 파드 CrashLoop 44분 → 1세트 위젯 미발송.
+- **실서비스 기능에 영향을 줄 수 있는 작업은 사용자 승인을 먼저 받는다.** 자율 진행 금지. 진행 중에는 단계마다 그때그때 브리핑한다 (무엇을 건드리는지, 서비스에 어떤 영향인지, 언제 끝나는지).
+- 경기 중 작업이 불가피하면: 사용자 승인 + 세트 사이 휴식 창을 노리고, 재시작 후 라이브폴링 재개 로그(`[live-discovery]`)까지 확인하고 끝낸다.
+
 ## Project Overview
 
 **NAR.GG** — A League of Legends esports analytics service (Spring Boot 3.5.3, Java 17, MySQL, Elasticsearch). Tracks champion combinations, matchup stats, match schedules, and team performance metrics.
