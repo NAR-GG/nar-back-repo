@@ -5,29 +5,31 @@ EC2 비용을 없애려고 앱을 집 맥미니(M1 16GB)로 옮겼고, **2026-08
 설정 **원본 보관소**다. `infra/monitoring` 과 같은 규칙 — **자동 배포가 아니다.**
 서버 설정을 바꿨으면 여기에도 반영하고, 기계를 새로 세울 때는 여기서 복사한다.
 
-## 지금 상태 (2026-08-18)
+## 지금 상태 (2026-08-22)
 
 컷오버 완료. **실서비스가 맥미니에서 돈다.** DB 도 맥미니가 원본이다.
 
 ```
-사용자 ──> Cloudflare ──> cloudflared(터널) ─┬─> nginx :8081 ──> 앱 컨테이너(docker)
-                                             │                        │
-                                             │      맥미니 MySQL 8.4 (원본) <┘
-                                             │
-                                             └─> :30443 ──> ArgoCD (k3s)
-                                                  ↑ Cloudflare Access 가 앞에서 막는다
+사용자 ──> Cloudflare ──> [ Colima VM ─ k3s ]
+                            cloudflared(파드) ─┬─> Traefik ──> nar-web 파드
+                                               │                    │
+                                               └─> argocd-server    │
+                                                    ↑ Cloudflare Access 가 앞에서 막는다
+                          맥미니 MySQL 8.4 (원본, 호스트 네이티브) <┘
 ```
 
 | 호스트 | 가는 곳 |
 |---|---|
-| `api.nar.kr` | Traefik :30082 → k3s 파드. 실트래픽 (2026-08-19 전환) |
-| `argocd.nar.kr` | k3s NodePort :30443 → ArgoCD. **Cloudflare Access 필수** |
+| `api.nar.kr` | `traefik.traefik.svc` → k3s 파드. 실트래픽 (2026-08-19 전환) |
+| `argocd.nar.kr` | `argocd-server.argocd.svc` → ArgoCD. **Cloudflare Access 필수** |
 | `home.nar.kr` | `api.nar.kr` 과 동일 |
 
-**웹 트래픽은 파드가, 스케줄러는 아직 docker 컨테이너가 돈다.** 스케줄러 이관 전까지
-docker 를 끄면 안 된다 — 라이브 폴링·푸시·동기화가 전부 멈춘다.
-nginx(8081)에 남은 역할은 Prometheus 메트릭 프록시(9105)뿐이다. 스케줄러 이관과
-Prometheus 타깃 변경이 끝나면 nginx 는 은퇴한다.
+**cloudflared 는 2026-08-22 부터 클러스터 안에서 돈다**(`infra/k8s/cloudflared.yaml`).
+호스트 launchd 판은 롤백 수단으로만 남아 있다 — 두 판을 같이 띄우면 커넥터가 두 벌
+등록돼 Cloudflare 가 아무 쪽에나 보낸다. 되돌릴 때는 파드를 먼저 0 으로 줄인다.
+
+웹·스케줄러 모두 파드다. nginx(8081)에 남은 역할은 Prometheus 메트릭 프록시(9105)뿐이고,
+그 타깃을 옮기면 은퇴한다.
 
 춘천 MySQL 은 역방향 복제로 따라오는 롤백 안전망이다(`scripts/cutover-reverse-repl.sh`).
 
@@ -38,8 +40,8 @@ Prometheus 타깃 변경이 끝나면 nginx 는 은퇴한다.
 | `nginx/nar.conf` | `/opt/homebrew/etc/nginx/servers/nar.conf` |
 | `nginx/nar-upstream.conf` | `/opt/homebrew/etc/nginx/servers/nar-upstream.conf` — **배포 스크립트가 덮어쓴다** |
 | `mysql/my.cnf` | `/opt/homebrew/etc/my.cnf` |
-| `cloudflared/config.yml` | `/opt/homebrew/etc/cloudflared/config.yml` |
-| `launchd/com.nar.cloudflared.plist` | `~/Library/LaunchAgents/` |
+| `cloudflared/config.yml` | `/opt/homebrew/etc/cloudflared/config.yml` — **롤백용.** 실운영은 `infra/k8s/cloudflared.yaml` |
+| `launchd/com.nar.cloudflared.plist` | `~/Library/LaunchAgents/` — **unload 된 상태.** 지우지 말 것, 롤백이 `load` 한 줄이다 |
 | `launchd/com.nar.dbbackup.plist` | `~/Library/LaunchAgents/` |
 | `launchd/com.nar.forwardguard.plist` | `~/Library/LaunchAgents/` |
 | `launchd/homebrew.mxcl.colima.plist` | `~/Library/LaunchAgents/` — **brew 가 덮어쓴다**, colima 업그레이드 후 다시 복사 |

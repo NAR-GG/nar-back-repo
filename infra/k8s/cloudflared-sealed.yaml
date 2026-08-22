@@ -1,0 +1,17 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  annotations:
+    sealedsecrets.bitnami.com/namespace-wide: "true"
+  name: cloudflared-credentials
+  namespace: nar
+spec:
+  encryptedData:
+    credentials.json: AgAWl5kjVHgmshwPO9Q/Baz51YQozJ1zetSYvH3bM4DQDInfmHNBNTySDumRYK5W51aMYGoLaL30E2lpXyXZBAwqYZwJhjjcbj3coM1M1qHFVK9rzuOc6ZU5fO0KKMFVe5QXHFYpgJJ/kdUqz6XkY9vTPA5rH2mnUtC4yfqHf4JBhlgC6kIaZFbz20EJgLZkaHYPAAjCKnqimwbm1uBY6ghLWfcTYjvV/dGLwGPL73YXUZw4IFqJepJFnd2fi7wQNvUmDFVrebqdN29ucI8dY5q3Pp/ycLWeYw9oxAsACpYYyo83mVsKHNbyB1P3hFB+d/QhpGGMsfH1rNmeEDj0x6PtmVcvfIHnbqPDxv07W9d/uWwRhfSixTOMeq1KGlhlj9zE+6xlIJrcLGOpbc7IsTRRv7itCk43K6rIldpIqixLpeNHuAQZOkilwiFYYq829jPhKTysNCzLUKqKGql0LrP+OKON1OxOzsxiFc5k7G/NgOaCDKVxf2uWyPFEZnl+vWKGmpC88vAwqgneZe2x4Pjx9gniWEa4eUfYRz5VvanEu9IM1gq4ojzr8J80ht6qcdgtVbDt1+2WwK2eZ3uHTPI1POVeg6P3MDhHbCCmVLErNyXVYWxReYnXaDJZJPMvXhMntoFOyGyvXtaHIckSFx10yo5GwNmovCm53YpvE6o9V7xDNrYURAoYDCLe+idXe3J9QKPLDcAlvnYziQD32sfGQpDCtTwsxAt4JPlxd8d6q693IoAoZm38kcJBfGlvxgjv7cOzho4fT6vU6VqKgeDFmxLeM/tMJcFW24zOd4TS7GO5S8UkWYYPJbcpANc3+J0w8MYwsufICMjcK6+WWHvaWV5p7nMjWhKrIGsDTsis8zqXoGbivnO4soSPkH//ixCgo5hieiKBbCFbAOs540t6LIugHdzjc96u2uP7kcJh
+  template:
+    metadata:
+      annotations:
+        sealedsecrets.bitnami.com/namespace-wide: "true"
+      name: cloudflared-credentials
+      namespace: nar
