@@ -19,6 +19,336 @@
   },
   "panels": [
     {
+      "type": "stat",
+      "title": "TPS (현재)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{instance=\"nar-macmini\"}[1m]))",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 25
+              },
+              {
+                "color": "red",
+                "value": 40
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "금일 요청 수",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(http_server_requests_seconds_count{instance=\"nar-macmini\"}[24h]))",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "금일 최대 TPS",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max_over_time(sum(rate(http_server_requests_seconds_count{instance=\"nar-macmini\"}[1m]))[24h:1m])",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 25
+              },
+              {
+                "color": "red",
+                "value": 40
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "TPS 추이 (1분 이동)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{instance=\"nar-macmini\"}[1m]))",
+          "legendFormat": "TPS"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 25,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "동시접속 사용자",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(nar_active_users{instance=\"nar-macmini\"})",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "미수집",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "금일 사용자",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(nar_daily_users{instance=\"nar-macmini\"})",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "미수집",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "TPS — 오늘 vs 전체 추이",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{instance=\"nar-macmini\"}[1m]))",
+          "legendFormat": "TPS (1분)"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(http_server_requests_seconds_count{instance=\"nar-macmini\"}[30m]))",
+          "legendFormat": "TPS (30분 평활)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
       "id": 1,
       "type": "stat",
       "title": "Warding 앱 요청/s",
@@ -30,7 +360,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 0
+        "y": 9
       },
       "targets": [
         {
@@ -72,7 +402,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 0
+        "y": 9
       },
       "targets": [
         {
@@ -127,7 +457,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 0
+        "y": 9
       },
       "targets": [
         {
@@ -200,7 +530,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 0
+        "y": 9
       },
       "targets": [
         {
@@ -265,7 +595,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 4
+        "y": 13
       },
       "targets": [
         {
@@ -341,7 +671,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 4
+        "y": 13
       },
       "targets": [
         {
@@ -406,7 +736,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 12
+        "y": 21
       },
       "targets": [
         {
@@ -471,7 +801,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 12
+        "y": 21
       },
       "targets": [
         {
@@ -518,7 +848,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 20
+        "y": 29
       },
       "targets": [
         {
@@ -567,7 +897,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 20
+        "y": 29
       },
       "targets": [
         {
@@ -626,7 +956,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 20
+        "y": 29
       },
       "targets": [
         {
@@ -687,7 +1017,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 36
       },
       "targets": [
         {
@@ -700,6 +1030,50 @@
         "wrapLogMessage": true,
         "sortOrder": "Descending",
         "enableLogDetails": true
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "접속 사용자 추이",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(nar_active_users{instance=\"nar-macmini\"})",
+          "legendFormat": "동시접속(5분)"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(nar_daily_users{instance=\"nar-macmini\"})",
+          "legendFormat": "금일 누적"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       }
     }
   ],
