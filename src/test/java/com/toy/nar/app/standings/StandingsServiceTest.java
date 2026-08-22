@@ -8,6 +8,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -145,7 +147,8 @@ class StandingsServiceTest {
 		StandingsResponse res = service.getStandings("LCK");
 
 		assertThat(res.regularFinished()).isTrue();
-		assertThat(res.dataThrough()).isEqualTo(LocalDateTime.parse("2026-08-19T08:00"));
+		assertThat(res.dataThrough())
+				.isEqualTo(LocalDateTime.parse("2026-08-19T08:00").atOffset(ZoneOffset.UTC));
 	}
 
 	@DisplayName("남은 경기가 있으면 정규 진행 중이다")
@@ -175,6 +178,22 @@ class StandingsServiceTest {
 		assertThat(gen.setWins()).isNull();
 		assertThat(gen.streak()).isNull();
 		assertThat(res.inSync()).isTrue(); // 비교할 대상이 없으면 불일치로 보지 않는다
+	}
+
+	@DisplayName("dataThrough 는 UTC 오프셋을 달고 나간다 — match_date 가 오프셋 없는 UTC 라서")
+	@Test
+	void dataThroughCarriesUtcOffset() {
+		when(naver.fetchRanking("lck_2026")).thenReturn(List.of(
+				rank(1, "GEN", null, 1, 0, 1),
+				rank(2, "KT", null, 0, 1, -1)));
+		// 17:15Z = 다음 날 02:15 KST. 오프셋을 안 붙이면 앱이 하루 앞 날짜로 읽는다(LEC 가 이 시간대다).
+		givenMatches(List.of(match("2026-08-21T17:15", "GEN", 2, 1, "KT", "completed")));
+
+		OffsetDateTime through = service.getStandings("LCK").dataThrough();
+
+		assertThat(through.getOffset()).isEqualTo(ZoneOffset.UTC);
+		assertThat(through.toInstant())
+				.isEqualTo(LocalDateTime.parse("2026-08-21T17:15").toInstant(ZoneOffset.UTC));
 	}
 
 	private static StandingsResponse.Row res(StandingsResponse response, String teamCode) {
