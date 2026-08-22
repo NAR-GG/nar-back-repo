@@ -309,4 +309,15 @@ public interface LeagueMatchRepository extends JpaRepository<LeagueMatch, String
 			@Param("start") LocalDateTime start,
 			@Param("end") LocalDateTime end,
 			Pageable pageable);
+
+	/** 순위 집계용 — 리그의 특정 시즌·스플릿 경기 전체(완료·미완료 모두). */
+	@Query("SELECT m FROM LeagueMatch m "
+			+ "WHERE m.leagueName = :leagueName AND m.seasonYear = :seasonYear "
+			+ "AND m.seasonSplit IN :splits ORDER BY m.matchDate")
+	List<LeagueMatch> findForStandings(@Param("leagueName") String leagueName,
+			@Param("seasonYear") Integer seasonYear,
+			@Param("splits") java.util.Collection<String> splits);
+
+	/** 리그의 최신 경기 한 건. 현재 시즌(연도)을 알아내는 데 쓴다. */
+	LeagueMatch findTopByLeagueNameOrderByMatchDateDesc(String leagueName);
 }
