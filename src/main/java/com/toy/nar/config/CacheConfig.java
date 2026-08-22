@@ -26,6 +26,8 @@ public class CacheConfig {
 	// 이 값은 악의적/비정상 조합이 힙을 먹지 않게 막는 상한이다.
 	private static final long MOBILE_SCHEDULE_CALENDAR_MAX_SIZE = 256;
 
+	private static final long STANDINGS_MAX_SIZE = 16;     // 리그 수만큼
+
 	@Bean
 	public CacheManager cacheManager() {
 		List<CaffeineCache> caches = List.of(
@@ -49,6 +51,11 @@ public class CacheConfig {
 			createCacheWithTTL("matchDetails", 10, TimeUnit.MINUTES, MATCH_DETAIL_MAX_SIZE),
 
 			// evict 대상이 아니다. 경기 기록은 한 번 적재되면 바뀌지 않는다.
+			// 리그 순위표. 네이버 API + 우리 DB 집계를 합친 결과다.
+			// 이벤트 무효화를 넣지 않았다 — 경기가 끝나도 네이버가 먼저 갱신돼야 하는데,
+			// 우리가 완료를 먼저 감지해 evict 하면 아직 안 바뀐 값을 다시 캐시해 더 오래 낡는다.
+			createCacheWithTTL("leagueStandings", 5, TimeUnit.MINUTES, STANDINGS_MAX_SIZE),
+
 			createCacheNoTTL("gameRecords", GAME_RECORD_MAX_SIZE),
 
 			// 백오피스 대시보드 집계. 알림 시계열이 35만 행 스캔이라 매 로드마다 초 단위로 걸린다.
