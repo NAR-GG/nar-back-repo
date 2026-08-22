@@ -162,11 +162,25 @@ public class PlayerSoloRankMonitorService {
 			} catch (RiotApiException e) {
 				failedCount++;
 				if (e.isRateLimited()) {
-					// 429(server rate limit)는 Riot 공유·확률적 한도(Retry-After 20초 관측)라 낮은 rate에도 간헐 발생.
-					// 해당 계정만 스킵 → 다음 60초 주기에 재시도(솔랭 게임 20~35분이라 감지엔 무해).
-					// 개별 429는 알림하지 않고 로그만 — 예상된 일시 현상. 사이클 종합이 systemic일 때만 경고(아래).
+					// 429 는 리전 한도다. 우리 호출량 문제가 아니다 — 2026-08-22 24시간 실측:
+					//
+					//   kr    94계정   429  0건
+					//   euw1   4계정   429  각 ~200건 (폴링 시도의 14%)
+					//   na1    3계정   429  각 ~103건 (7%)
+					//
+					// 비-KR 계정 7개가 429 맞는 7명과 정확히 일치한다. EUW 로는 분당 4콜밖에
+					// 안 보내는데 429 가 나고, 분당 94콜을 보내는 KR 은 0건이다. 그러니 페이싱
+					// (max-requests-per-second)을 낮춰도 안 고쳐진다. Riot 쪽 리전 공유 한도다.
+					//
+					// 해당 계정만 스킵 → 약 72초 뒤 주기에 재시도. 감지엔 무해하다:
+					//   최장 연속 스킵 3사이클 = 2.4분, 솔랭 게임은 20~35분
+					//   게임 하나당 폴링 기회가 17~30번이라 전부 놓칠 확률은 사실상 0
+					//   shouldSendAlertFor 에 시간 게이트가 없어 늦게 감지해도 알림은 나간다
+					//
+					// 그래서 INFO 다. 하루 1,100줄이 WARN 이면 WARN 을 보는 의미가 없어진다.
+					// systemic 케이스는 아래 임계(10건/사이클)가 잡는다 — 관측 최대는 5건이다.
 					rateLimitedCount++;
-					log.warn("Riot live poll rate limited (429) for player={}, skipping this cycle",
+					log.info("Riot live poll rate limited (429) for player={}, skipping this cycle",
 							account.getPlayer().getName());
 				} else {
 					log.warn("Riot live poll failed for player={}", account.getPlayer().getName(), e);
