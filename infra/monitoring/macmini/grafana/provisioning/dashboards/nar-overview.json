@@ -726,15 +726,15 @@
         "hide": false,
         "iconColor": "orange",
         "name": "배포",
-        "expr": "{container=~\"nar-gg-.*\"} |= \"Started NarApplication\"",
+        "expr": "{namespace=\"nar\", pod=~\"nar-(web|scheduler).*\"} |= \"Started NarApplication\"",
         "queryType": "range",
         "instant": false,
         "maxLines": 50,
         "titleFormat": "배포",
-        "textFormat": "{{container}}",
+        "textFormat": "{{pod}}",
         "target": {
           "refId": "Anno",
-          "expr": "{container=~\"nar-gg-.*\"} |= \"Started NarApplication\"",
+          "expr": "{namespace=\"nar\", pod=~\"nar-(web|scheduler).*\"} |= \"Started NarApplication\"",
           "queryType": "range"
         }
       }
