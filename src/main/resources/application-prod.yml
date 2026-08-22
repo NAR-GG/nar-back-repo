@@ -34,8 +34,6 @@ spring:
     baseline-on-migrate: true
     baseline-version: 30
 
-  elasticsearch:
-    uris: ${ELASTICSEARCH_URI}
 
   security:
     oauth2:

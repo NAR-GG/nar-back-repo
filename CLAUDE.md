@@ -36,7 +36,7 @@ for m in json.load(sys.stdin)['matches']:
 
 ## Project Overview
 
-**NAR.GG** — A League of Legends esports analytics service (Spring Boot 3.5.3, Java 17, MySQL, Elasticsearch). Tracks champion combinations, matchup stats, match schedules, and team performance metrics.
+**NAR.GG** — A League of Legends esports analytics service (Spring Boot 3.5.3, Java 17, MySQL). Tracks champion combinations, matchup stats, match schedules, and team performance metrics.
 
 ## Common Commands
 
@@ -80,7 +80,7 @@ common/       Error handling, filters, utilities
 | `analysis/` | Team/player analytics queries |
 | `monitor/` | Real-time live game monitoring via Riot API polling |
 | `schedule/` | Match schedule management and notifications |
-| `search/` | Elasticsearch indexing and fulltext search |
+| `search/` | 자동완성 검색 (MySQL 코드·이름 매칭) |
 | `youtube/` | YouTube broadcast discovery and metadata sync |
 | `riot/` | Riot API integration (player ranks, accounts) |
 | `participant/` | Player, team, champion management |
@@ -88,7 +88,6 @@ common/       Error handling, filters, utilities
 ### Data Persistence
 - **JPA + Hibernate** with MySQL8Dialect; `open-in-view: false` (explicit fetch required)
 - **Flyway** migrations in `src/main/resources/db/migration/` (V1–V31+, baseline at V30)
-- **Elasticsearch** via separate repository config for search documents
 - Complex queries use `*RepositoryCustom` + `*RepositoryImpl` pattern
 
 ### Caching (Caffeine)
@@ -143,7 +142,6 @@ LoL Esports API, Riot API, YouTube Data API, Google Drive (CSV import), Discord 
 
 ```
 DB_URL, DB_USERNAME, DB_PASSWORD
-ELASTICSEARCH_URI
 YOUTUBE_API_KEY
 LOL_ESPORTS_KEY
 RIOT_API_KEY
