@@ -1,6 +1,8 @@
 package com.toy.nar.app.standings;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,7 +75,7 @@ public class StandingsService {
 	}
 
 	/** 우리 DB 로 계산하는 부분. 조회 실패·시즌 미상이면 비어 있는 채로 넘어간다(순위는 그대로 나간다). */
-	private record Derived(Map<String, TeamMetrics> metrics, LocalDateTime dataThrough) {
+	private record Derived(Map<String, TeamMetrics> metrics, OffsetDateTime dataThrough) {
 
 		static Derived empty() {
 			return new Derived(Map.of(), null);
@@ -94,11 +96,14 @@ public class StandingsService {
 		if (scoped.isEmpty()) {
 			return Derived.empty();
 		}
-		LocalDateTime through = scoped.stream()
+		// match_date 는 오프셋 없는 UTC 벽시계다. 여기서 오프셋을 붙여 내보내야
+		// 앱이 로컬 시각으로 오해하지 않는다.
+		OffsetDateTime through = scoped.stream()
 				.filter(m -> "completed".equalsIgnoreCase(m.getState()))
 				.map(LeagueMatch::getMatchDate)
 				.filter(Objects::nonNull)
 				.max(LocalDateTime::compareTo)
+				.map(d -> d.atOffset(ZoneOffset.UTC))
 				.orElse(null);
 		return new Derived(StandingsCalculator.compute(scoped), through);
 	}

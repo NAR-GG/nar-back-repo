@@ -1,6 +1,6 @@
 package com.toy.nar.app.standings.dto;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import lombok.Builder;
@@ -30,8 +30,13 @@ public record StandingsResponse(
 		/**
 		 * 어느 경기까지 반영됐는지. "언제 조회했나"가 아니라 "데이터가 어디까지 찼나"다.
 		 * 리그 휴식기에는 며칠 전 값이 정상이므로 경과 시간으로 환산해 보여주면 안 된다.
+		 *
+		 * <p>오프셋을 붙여 UTC 로 내보낸다. 원본 {@code league_match.match_date} 는 오프셋 없는
+		 * UTC 벽시계다 — 동기화가 {@code LocalDateTime.parse("2026-08-21T10:00:00Z")} 로 파싱하면서
+		 * Z 를 버리기 때문이다. 그대로 내보내면 앱이 로컬 시각으로 읽어 9시간 밀리고,
+		 * 자정 근처 경기(LEC 는 03:15 KST 에 끝난다)는 날짜가 하루 어긋난다.
 		 */
-		LocalDateTime dataThrough,
+		OffsetDateTime dataThrough,
 
 		/**
 		 * 네이버 집계와 우리 DB 집계의 경기 수가 맞는지.
