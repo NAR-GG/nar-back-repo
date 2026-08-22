@@ -172,7 +172,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({namespace=\"nar\", pod=~\"nar-scheduler.*\"} |= \"[live-activity]\" |~ \"실패\" [24h]))",
+          "expr": "sum(count_over_time({namespace=\"nar\", pod=~\"nar-scheduler.*\"} |= \"[live-activity]\" |~ \"(set-start 실패|set-end 실패|생성 실패|복구 실패|조회 실패|해석 실패|일시 실패 [1-9])\" [24h]))",
           "instant": true
         }
       ],
@@ -425,7 +425,7 @@
         },
         {
           "refId": "C",
-          "expr": "sum(count_over_time({namespace=\"nar\", pod=~\"nar-scheduler.*\"} |= \"[live-activity]\" |~ \"실패\" [5m]))",
+          "expr": "sum(count_over_time({namespace=\"nar\", pod=~\"nar-scheduler.*\"} |= \"[live-activity]\" |~ \"(set-start 실패|set-end 실패|생성 실패|복구 실패|조회 실패|해석 실패|일시 실패 [1-9])\" [5m]))",
           "legendFormat": "실패"
         }
       ],
