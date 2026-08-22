@@ -13,6 +13,7 @@ import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.participant.repository.TeamRepository;
 import com.toy.nar.domain.search.document.SearchDocument;
 import com.toy.nar.domain.search.repository.SearchDocumentRepository;
+import org.springframework.beans.factory.ObjectProvider;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,12 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class SearchIndexService {
 
-    private final SearchDocumentRepository searchDocumentRepository;
+    /** 색인은 관리자 수동 트리거다. ES 가 없으면 여기서 그대로 실패하는 게 맞다. */
+    private final ObjectProvider<SearchDocumentRepository> searchDocumentRepositoryProvider;
+
+    private SearchDocumentRepository searchDocumentRepository() {
+        return searchDocumentRepositoryProvider.getObject();
+    }
     private final TeamRepository teamRepository;
     private final PlayerRepository playerRepository;
 
@@ -51,7 +57,7 @@ public class SearchIndexService {
         if (keyword == null || keyword.isBlank()) {
             return List.of();
         }
-        return searchDocumentRepository.searchByKeyword(keyword.trim().toLowerCase());
+        return searchDocumentRepository().searchByKeyword(keyword.trim().toLowerCase());
     }
 
     /**
@@ -61,7 +67,7 @@ public class SearchIndexService {
         if (keyword == null || keyword.isBlank()) {
             return List.of();
         }
-        return searchDocumentRepository.searchByTypeAndKeyword("TEAM", keyword.trim().toLowerCase());
+        return searchDocumentRepository().searchByTypeAndKeyword("TEAM", keyword.trim().toLowerCase());
     }
 
     /**
@@ -71,7 +77,7 @@ public class SearchIndexService {
         if (keyword == null || keyword.isBlank()) {
             return List.of();
         }
-        return searchDocumentRepository.searchByTypeAndKeyword("PLAYER", keyword.trim().toLowerCase());
+        return searchDocumentRepository().searchByTypeAndKeyword("PLAYER", keyword.trim().toLowerCase());
     }
 
     /**
@@ -79,7 +85,7 @@ public class SearchIndexService {
      */
     public int syncAllTeams() {
         // 기존 TEAM 인덱스 전체 삭제 후 재생성 (team_code 없는 팀 제거)
-        searchDocumentRepository.deleteByEntityType("TEAM");
+        searchDocumentRepository().deleteByEntityType("TEAM");
         log.info("### [SearchIndex] 기존 TEAM 인덱스 삭제 완료 ###");
 
         List<Team> teams = teamRepository.findAll();
@@ -117,7 +123,7 @@ public class SearchIndexService {
                     .teamImageUrl(team.getImageUrl())
                     .build();
 
-            searchDocumentRepository.save(doc);
+            searchDocumentRepository().save(doc);
             count++;
         }
 
@@ -137,7 +143,7 @@ public class SearchIndexService {
             SearchDocument doc = SearchDocument.ofPlayer(
                     player.getId(),
                     player.getName());
-            searchDocumentRepository.save(doc);
+            searchDocumentRepository().save(doc);
             count++;
         }
 
@@ -185,7 +191,7 @@ public class SearchIndexService {
                 .teamImageUrl(team.getImageUrl())
                 .build();
 
-        searchDocumentRepository.save(doc);
+        searchDocumentRepository().save(doc);
     }
 
     /**
@@ -193,7 +199,7 @@ public class SearchIndexService {
      */
     public void indexPlayer(Player player) {
         SearchDocument doc = SearchDocument.ofPlayer(player.getId(), player.getName());
-        searchDocumentRepository.save(doc);
+        searchDocumentRepository().save(doc);
     }
 
     /**
@@ -201,7 +207,7 @@ public class SearchIndexService {
      */
     public void deleteIndex(String entityType, Long entityId) {
         String id = entityType + "_" + entityId;
-        searchDocumentRepository.deleteById(id);
+        searchDocumentRepository().deleteById(id);
     }
 
     private String buildAutocomplete(String name, String nameKorean, String chosung, String teamCode, String aliases) {

@@ -21,6 +21,7 @@ import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.TeamRepository;
 import com.toy.nar.domain.search.document.SearchDocument;
 import com.toy.nar.domain.search.repository.SearchDocumentRepository;
+import org.springframework.beans.factory.ObjectProvider;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,7 +35,12 @@ public class SearchService {
     private final TeamRepository teamRepository;
     private final GameRepository gameRepository;
     private final GameParticipantRepository gameParticipantRepository;
-    private final SearchDocumentRepository searchDocumentRepository;
+    /**
+     * ES 리포지토리. 검색이 꺼져 있거나(search.elasticsearch.enabled=false) ES 가 죽어 있으면
+     * 빈이 없거나 생성에 실패한다. ObjectProvider 라 주입 시점에는 아무것도 건드리지 않고,
+     * 실제 검색 때만 꺼내 쓴다 — 실패하면 아래 MySQL 폴백으로 넘어간다.
+     */
+    private final ObjectProvider<SearchDocumentRepository> searchDocumentRepository;
 
     /**
      * 팀 vs 팀 경기 자동완성 검색
@@ -126,7 +132,7 @@ public class SearchService {
         log.info("[DEBUG] findTeamsByKeyword called with keyword: '{}'", keyword);
         try {
             // ES에서 검색
-            List<SearchDocument> docs = searchDocumentRepository.searchByTypeAndKeyword("TEAM", keyword);
+            List<SearchDocument> docs = searchDocumentRepository.getObject().searchByTypeAndKeyword("TEAM", keyword);
 
             if (!docs.isEmpty()) {
                 // 정확도를 위해 가장 점수가 높은 상위 1개 팀만 사용

@@ -48,6 +48,23 @@ management:
         http.server.requests: 10s
 
 spring:
+  # Elasticsearch 리포지토리 스위치.
+  #
+  # SimpleElasticsearchRepository 생성자가 인덱스 정보를 받으려고 컨텍스트 로딩 중에 ES 에
+  # 접속한다. ES 가 죽어 있으면 검색만 죽는 게 아니라 애플리케이션이 아예 안 뜬다.
+  #
+  # 2026-08-17 맥미니 컷오버가 앱과 DB 만 옮기고 ES 는 구 인프라(tailnet nar-es)에 두고 갔다.
+  # 그 머신을 내리면 프로덕션이 부팅 불가가 되므로, 코드 배포 없이 끌 수 있는 손잡이를 둔다.
+  #
+  # 끄면 검색은 MySQL 폴백으로 동작한다(SearchService.findTeamsByKeyword). 관리자 색인 API 는
+  # 실패하는데, 색인할 대상이 없으니 맞는 동작이다.
+  #
+  # 로컬에서 ES 없이 앱을 띄우려면 ES_REPOSITORIES_ENABLED=false 로 실행한다.
+  data:
+    elasticsearch:
+      repositories:
+        enabled: ${ES_REPOSITORIES_ENABLED:true}
+
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
 
