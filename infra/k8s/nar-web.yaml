@@ -5,6 +5,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nar-web
+  annotations:
+    # 웹을 먼저 올린다(wave 0). 스케줄러는 wave 1 이라 이쪽이 Healthy 가 된 뒤에 시작한다 —
+    # 두 Deployment 가 동시에 surge 하면 파드가 순간 4개가 되고, VM(9.9GiB)에서 파드 하나는
+    # 실측 1.0~1.2GiB 다. 순차로 돌리면 피크가 3개로 고정된다. 대가는 배포 시간 2배뿐이다.
+    argocd.argoproj.io/sync-wave: "0"
   namespace: nar
 spec:
   replicas: 1

@@ -15,6 +15,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nar-scheduler
+  annotations:
+    # 웹(wave 0)이 Healthy 가 된 뒤에 교체한다. 동시 surge 를 막아 롤아웃 피크를 파드 3개로
+    # 묶는다 — 이 값을 지우면 웹과 같이 교체돼 4개가 된다.
+    argocd.argoproj.io/sync-wave: "1"
   namespace: nar
 spec:
   replicas: 1

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 5분마다 Colima VM 여유 메모리 확인. cron 은 이 기계에서 발화하지 않아 launchd 를 쓴다.
+     간격을 복제 감시와 같게 둔다 — 메모리는 배포·롤아웃 순간에 움직이므로 그보다 촘촘할 필요가 없다. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.nar.vmmemory</string>
+    <key>ProgramArguments</key>
+    <array><string>/Users/changha/nar/nar-vm-memory-guard.sh</string></array>
+    <key>StartInterval</key><integer>300</integer>
+    <key>RunAtLoad</key><true/>
+    <key>StandardOutPath</key><string>/Users/changha/nar/vmmemory.log</string>
+    <key>StandardErrorPath</key><string>/Users/changha/nar/vmmemory.log</string>
+</dict>
+</plist>

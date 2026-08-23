@@ -44,9 +44,11 @@ EC2 비용을 없애려고 앱을 집 맥미니(M1 16GB)로 옮겼고, **2026-08
 | `launchd/com.nar.cloudflared.plist` | `~/Library/LaunchAgents/` — **unload 된 상태.** 지우지 말 것, 롤백이 `load` 한 줄이다 |
 | `launchd/com.nar.dbbackup.plist` | `~/Library/LaunchAgents/` |
 | `launchd/com.nar.forwardguard.plist` | `~/Library/LaunchAgents/` |
+| `launchd/com.nar.vmmemory.plist` | `~/Library/LaunchAgents/` — Colima VM 여유 메모리 감시, 5분 |
 | `launchd/homebrew.mxcl.colima.plist` | `~/Library/LaunchAgents/` — **brew 가 덮어쓴다**, colima 업그레이드 후 다시 복사 |
 | `scripts/nar-db-backup.sh` | `~/nar/nar-db-backup.sh` |
 | `scripts/nar-forward-guard.sh` | `~/nar/nar-forward-guard.sh` |
+| `scripts/nar-vm-memory-guard.sh` | `~/nar/nar-vm-memory-guard.sh` |
 | `scripts/cutover-reverse-repl.sh` | 노트북에서 실행 (양쪽 SSH 필요) |
 | `scripts/nar-watchdog.sh` | **춘천 nargg-vnic**(`ssh nargg`, Ubuntu 20.04) 의 `/usr/local/bin/` + `crontab -l` 매분 |
 | `scripts/nar-restore-verify.sh` | **춘천 es-vnic**(`ubuntu@100.71.240.23`) 의 `/usr/local/bin/` + crontab 일요일 06:00 KST |
