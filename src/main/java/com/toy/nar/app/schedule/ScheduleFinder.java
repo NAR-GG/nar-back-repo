@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -29,6 +30,11 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ScheduleFinder {
 	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
+
+	/** 서비스 기준 시간대. 일정의 "하루"는 항상 이 기준으로 자른다. */
+	static final ZoneId KST = ZoneId.of("Asia/Seoul");
+	/** league_match.match_date 의 저장 시간대. */
+	static final ZoneId MATCH_DATE_ZONE = ZoneId.of("UTC");
 
 	private final GameRepository gameRepository;
 	private final com.toy.nar.app.lolesports.repository.LeagueMatchRepository leagueMatchRepository;
@@ -47,20 +53,36 @@ public class ScheduleFinder {
 	private record ParticipantInfo(String teamName, boolean isWin) {
 	}
 
+	/** KST 벽시계 시각을 match_date 와 같은 저장 시간대(UTC)의 값으로 옮긴다. */
+	static LocalDateTime toUtc(ZonedDateTime kst) {
+		return kst.withZoneSameInstant(MATCH_DATE_ZONE).toLocalDateTime();
+	}
+
 	public ScheduleResponseDto createScheduleResponseDto(LocalDate date) {
 		// Use only LeagueMatch data (Lolesports) for the schedule list
 		LocalDateTime startOfDayKst = date.atStartOfDay();
 		LocalDateTime endOfDayKst = date.atTime(23, 59, 59);
 
 		// 1. Fetch all LeagueMatch data
+		//
+		// league_match.match_date 는 UTC 로 저장된다(아래 시각 렌더도 UTC→KST 로 바꾼다).
+		// 그래서 "KST 하루"의 경계를 UTC 로 옮겨서 조회해야 한다. 예전에는 KST 날짜를 그대로
+		// 넣어서, 실제로 담기는 구간이 KST 09:00 ~ 다음날 08:59 였다 — LCK(17·19시)는 우연히
+		// 맞아떨어져 안 드러났고, KST 00:00~08:59 에 열리는 LEC·LCS 경기만 하루 앞 페이지에
+		// 붙어서 "어제 끝난 경기가 오늘 unstarted 로 보인다"로 나타났다.
+		LocalDateTime startOfDayUtc = toUtc(date.atStartOfDay(KST));
+		LocalDateTime endOfDayUtc = toUtc(date.plusDays(1).atStartOfDay(KST)).minusSeconds(1);
 		List<com.toy.nar.app.lolesports.repository.LeagueMatch> leagueMatches = leagueMatchRepository
-				.findByDateRange(startOfDayKst, endOfDayKst).stream()
+				.findByDateRange(startOfDayUtc, endOfDayUtc).stream()
 				.filter(match -> LeagueConstants.ALLOWED_LEAGUES.contains(match.getLeagueName().toUpperCase()))
 				.toList();
 
 		// 2. Fetch all Game data for the same day (plus/minus buffer for timezone diffs
 		// if needed) to check sync status efficiently
 		// We use a slightly wider range to ensure we catch everything
+		//
+		// game.actual_game_start_time 은 match_date 와 저장 규약이 달라 위 UTC 경계를 그대로
+		// 쓰지 않는다. ±12시간 버퍼가 어긋남을 흡수하므로 기존 기준(KST 날짜)을 유지한다.
 		LocalDateTime searchStart = startOfDayKst.minusHours(12);
 		LocalDateTime searchEnd = endOfDayKst.plusHours(12);
 		List<com.toy.nar.domain.game.entity.Game> dailyGames = gameRepository
@@ -86,8 +108,8 @@ public class ScheduleFinder {
 				.normalizeTeamName(leagueMatch.getRedTeamName());
 
 		String scheduledTime = leagueMatch.getMatchDate() != null
-				? leagueMatch.getMatchDate().atZone(ZoneId.of("UTC"))
-						.withZoneSameInstant(ZoneId.of("Asia/Seoul"))
+				? leagueMatch.getMatchDate().atZone(MATCH_DATE_ZONE)
+						.withZoneSameInstant(KST)
 						.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
 				: "";
 
