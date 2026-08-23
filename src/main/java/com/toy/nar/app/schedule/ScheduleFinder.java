@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toy.nar.app.lolesports.LeagueConstants;
+import com.toy.nar.app.lolesports.MatchDateWindow;
 import com.toy.nar.app.lolesports.MatchResultDto;
 import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.schedule.dto.ScheduleItemDto;
@@ -18,8 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -31,10 +30,6 @@ import java.util.stream.Collectors;
 public class ScheduleFinder {
 	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
 
-	/** 서비스 기준 시간대. 일정의 "하루"는 항상 이 기준으로 자른다. */
-	static final ZoneId KST = ZoneId.of("Asia/Seoul");
-	/** league_match.match_date 의 저장 시간대. */
-	static final ZoneId MATCH_DATE_ZONE = ZoneId.of("UTC");
 
 	private final GameRepository gameRepository;
 	private final com.toy.nar.app.lolesports.repository.LeagueMatchRepository leagueMatchRepository;
@@ -53,11 +48,6 @@ public class ScheduleFinder {
 	private record ParticipantInfo(String teamName, boolean isWin) {
 	}
 
-	/** KST 벽시계 시각을 match_date 와 같은 저장 시간대(UTC)의 값으로 옮긴다. */
-	static LocalDateTime toUtc(ZonedDateTime kst) {
-		return kst.withZoneSameInstant(MATCH_DATE_ZONE).toLocalDateTime();
-	}
-
 	public ScheduleResponseDto createScheduleResponseDto(LocalDate date) {
 		// Use only LeagueMatch data (Lolesports) for the schedule list
 		LocalDateTime startOfDayKst = date.atStartOfDay();
@@ -70,8 +60,8 @@ public class ScheduleFinder {
 		// 넣어서, 실제로 담기는 구간이 KST 09:00 ~ 다음날 08:59 였다 — LCK(17·19시)는 우연히
 		// 맞아떨어져 안 드러났고, KST 00:00~08:59 에 열리는 LEC·LCS 경기만 하루 앞 페이지에
 		// 붙어서 "어제 끝난 경기가 오늘 unstarted 로 보인다"로 나타났다.
-		LocalDateTime startOfDayUtc = toUtc(date.atStartOfDay(KST));
-		LocalDateTime endOfDayUtc = toUtc(date.plusDays(1).atStartOfDay(KST)).minusSeconds(1);
+		LocalDateTime startOfDayUtc = MatchDateWindow.startOfDay(date);
+		LocalDateTime endOfDayUtc = MatchDateWindow.endOfDay(date);
 		List<com.toy.nar.app.lolesports.repository.LeagueMatch> leagueMatches = leagueMatchRepository
 				.findByDateRange(startOfDayUtc, endOfDayUtc).stream()
 				.filter(match -> LeagueConstants.ALLOWED_LEAGUES.contains(match.getLeagueName().toUpperCase()))
@@ -108,8 +98,8 @@ public class ScheduleFinder {
 				.normalizeTeamName(leagueMatch.getRedTeamName());
 
 		String scheduledTime = leagueMatch.getMatchDate() != null
-				? leagueMatch.getMatchDate().atZone(MATCH_DATE_ZONE)
-						.withZoneSameInstant(KST)
+				? leagueMatch.getMatchDate().atZone(MatchDateWindow.MATCH_DATE_ZONE)
+						.withZoneSameInstant(MatchDateWindow.KST)
 						.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
 				: "";
 
