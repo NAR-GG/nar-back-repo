@@ -31,7 +31,14 @@ import java.util.Set;
 public class LivePollingScheduler {
 
 	private static final DateTimeFormatter START_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
-	private static final long INITIAL_LOOKBACK_SECONDS = 90L;
+	/**
+	 * 이 게임을 한 번도 관측하지 않았을 때 거슬러 볼 구간.
+	 *
+	 * <p>{@link #MAX_LAG_SECONDS} 보다 크면 의미가 없다 — 아래 엣지 클램프가 즉시 잘라낸다.
+	 * 실제로 90초로 두고 있었는데 50초 클램프에 항상 걸려 죽은 상수였다. 두 값을 같게 둬서
+	 * "처음 보는 게임은 엣지에서 시작한다"가 코드에 드러나게 한다.</p>
+	 */
+	private static final long INITIAL_LOOKBACK_SECONDS = 50L;
 	/** 라이브 엣지 추적: 이보다 더 뒤처지면 엣지 근처로 점프해 catch-up 지연(분 단위)을 막는다. */
 	private static final long MAX_LAG_SECONDS = 50L;
 	/** 피드는 window end-time이 20초보다 최신이면 거부하므로, 이보다 최신은 요청하지 않는다. */
@@ -41,6 +48,8 @@ public class LivePollingScheduler {
 	private final LiveStatsClient liveStatsClient;
 	private final LiveObjectEventRecorder liveObjectEventRecorder;
 	private final LiveStateStore liveStateStore;
+	/** 재기동 직후 "어디까지 봤는지" 를 이어받는 유일한 경로. 인메모리가 비었을 때만 쓴다. */
+	private final com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository minuteSnapshotRepository;
 	private final LiveFrameProcessor liveFrameProcessor;
 	private final LiveGameMetadataService liveGameMetadataService;
 	private final LeagueMatchService leagueMatchService;
@@ -808,15 +817,40 @@ public class LivePollingScheduler {
 		}
 	}
 
+	/**
+	 * 다음 window 요청의 시작 시각. "어디까지 봤는지" 를 인메모리 → DB 순으로 찾는다.
+	 *
+	 * <p>인메모리만 보면 <b>재기동한 파드는 자기가 어디까지 봤는지 모른다.</b> 그러면 엣지에서
+	 * 다시 시작하므로 재기동 공백의 프레임을 건너뛰고, {@code LiveObjectEventRecorder} 는
+	 * {@code previous == null} 이라 첫 프레임을 조용히 시드만 한다 — 그 구간 킬·오브젝트가
+	 * 로그도 없이 유실된다.</p>
+	 *
+	 * <p>실측 재기동 공백은 38~48초였고 엣지 클램프가 50초라 <b>우연히</b> 덮였다(여유 2~12초).
+	 * DB 를 보면 그 밴드(35~50초)에서는 끊긴 지점에서 정확히 이어받는다.</p>
+	 *
+	 * <p><b>긴 공백은 이걸로도 복구되지 않는다.</b> 아래 엣지 클램프가 후보를 잘라내기 때문이고,
+	 * 그건 의도다 — 분 단위 catch-up 을 하는 동안 라이브 엣지가 달아나 실시간성이 무너진다
+	 * (2026-07-29 락 대기 50초 뒤 19분 점프 실사고). DB 를 읽는 진짜 값어치는 <b>얼마나 건너뛰는지
+	 * 알 수 있다는 것</b>이다 — 그래야 침묵하지 않고 로그로 남길 수 있다. 그 구간을 실제로
+	 * 되찾아야 하면 {@code LiveBackfillService}(백오피스 백필 API)를 쓴다.</p>
+	 */
 	private String computeStartingTime(String gameId) {
 		Instant now = Instant.now();
-		Instant candidate = liveStateStore.getLatestState(gameId)
-				.map(state -> nextWindowStart(state.frameTimestampUtc().toInstant(ZoneOffset.UTC)))
+		Instant candidate = lastObservedFrame(gameId)
+				.map(this::nextWindowStart)
 				.orElseGet(() -> now.minusSeconds(INITIAL_LOOKBACK_SECONDS));
 
 		// 뒤처졌으면 라이브 엣지로 점프 (분 단위 catch-up 지연 방지)
 		Instant liveEdgeFloor = now.minusSeconds(MAX_LAG_SECONDS);
 		if (candidate.isBefore(liveEdgeFloor)) {
+			// 건너뛰는 구간을 남긴다. 이 점프가 곧 "그 구간 이벤트를 영구히 못 본다" 는 뜻인데
+			// 지금까지 침묵했다 — 재기동·락 대기 뒤 알림이 빈 이유를 사후에 찾을 수 없었다.
+			long skipped = liveEdgeFloor.getEpochSecond() - candidate.getEpochSecond();
+			// 처음 보는 게임(룩백 = 엣지)은 건너뛴 게 아니다. 실제로 뒤처진 경우만 남긴다.
+			if (skipped > 0) {
+				log.warn("[live-discovery] 라이브 엣지로 점프 — 이 구간 프레임은 보지 않는다 "
+								+ "gameId={} 건너뜀={}초 (되찾으려면 백필 API)", gameId, skipped);
+			}
 			candidate = liveEdgeFloor;
 		}
 		// 피드 20초 룰: 너무 최신 window는 거부되므로 상한을 둔다
@@ -837,5 +871,27 @@ public class LivePollingScheduler {
 	private Instant nextWindowStart(Instant latestFrameTimestamp) {
 		long nextWindowSecond = ((latestFrameTimestamp.getEpochSecond() / 10) + 1) * 10;
 		return Instant.ofEpochSecond(nextWindowSecond);
+	}
+
+	/**
+	 * 이 게임에서 마지막으로 본 프레임 시각. 인메모리가 우선, 없으면 DB 스냅샷.
+	 *
+	 * <p>인메모리가 먼저인 이유 — 폴링 중에는 그게 항상 더 신선하다(DB 는 분 버킷이라 최대
+	 * 1분 뒤처진다). DB 는 재기동 직후처럼 인메모리가 빈 순간에만 쓴다.</p>
+	 */
+	private java.util.Optional<Instant> lastObservedFrame(String gameId) {
+		java.util.Optional<Instant> inMemory = liveStateStore.getLatestState(gameId)
+				.map(state -> state.frameTimestampUtc().toInstant(ZoneOffset.UTC));
+		if (inMemory.isPresent()) {
+			return inMemory;
+		}
+		try {
+			return minuteSnapshotRepository.findTopByGameIdOrderByFrameTimestampUtcDesc(gameId)
+					.map(snapshot -> snapshot.getFrameTimestampUtc().toInstant(ZoneOffset.UTC));
+		} catch (Exception e) {
+			// 조회 실패로 폴링을 멈추지 않는다. 엣지에서 시작하면 그 구간을 잃지만 폴링 자체는 돈다.
+			log.warn("[live-discovery] 마지막 프레임 조회 실패 gameId={}: {}", gameId, e.getMessage());
+			return java.util.Optional.empty();
+		}
 	}
 }
