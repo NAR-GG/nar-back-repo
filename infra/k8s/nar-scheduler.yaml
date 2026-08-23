@@ -69,10 +69,9 @@ spec:
 
             - name: APP_SCHEDULING_ENABLED
               value: "true"
-            # 리더 리스(scheduler_lease 테이블). Recreate 아래에서는 파드가 하나라 항상 즉시
-            # 리더가 되므로 켜도 동작이 안 바뀐다 — 획득·갱신·반납 로그를 검증하는 단계다.
-            # 이 로그가 깨끗하면 strategy 를 RollingUpdate 로 바꾼다(무중단 교체, 별도 PR).
-            # 문제가 생기면 이 env 만 지우면 오늘까지의 동작으로 돌아간다.
+            # 리더 리스(scheduler_lease 테이블). 위 strategy(RollingUpdate)의 전제다 —
+            # 이걸 끄려면 strategy 도 Recreate 로 같이 되돌려야 한다(파일 상단 주석 참고).
+            # 첫 핸드오버 실측 2026-08-23: 리더 공백 4초, 폴링 공백 ~6-15초, 이중 실행 0.
             - name: APP_SCHEDULING_LEASE_ENABLED
               value: "true"
 

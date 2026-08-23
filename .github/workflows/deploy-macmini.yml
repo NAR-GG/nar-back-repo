@@ -99,67 +99,14 @@ jobs:
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:latest
             ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}
 
-      # 스케줄러를 지금 교체해도 되는지 판정한다.
-      #
-      # 스케줄러 재기동은 replicas 1 + Recreate 라 원리적으로 무중단이 불가능하다
-      # (실측 공백 38~48초, 부팅만 17초). 그 공백에 세트 첫 프레임이 떨어지면 그 세트의
-      # 시작 알림·라이브위젯이 통째로 누락되고 복구 방법이 없다. 웹은 RollingUpdate 라
-      # 공백이 0이므로 경기 중에도 안전하다.
-      #
-      # 그래서 경기가 진행 중이면 스케줄러 태그만 보류한다. 보류분은
-      # scheduler-catchup.yml 이 조용한 시간에 따라붙인다.
-      - name: 경기 진행 여부로 스케줄러 배포 게이트
-        id: gate
-        run: python3 .github/scripts/match_window.py
-
-      # 스키마를 되돌릴 수 없게 바꾸는 마이그레이션이면 태그를 갈라 둘 수 없다.
-      #
-      # Flyway 는 앱 기동 시 돈다. 웹이 먼저 뜨면서 마이그레이션을 적용하고 스케줄러가 옛
-      # 코드로 남으면 **옛 코드가 새 스키마를 만난다.** 추가만 하는 변경(CREATE TABLE, 컬럼
-      # 추가)은 옛 코드가 그냥 모르고 지나가므로 안전하지만, DROP·RENAME·MODIFY 는 옛 코드가
-      # 참조하던 것을 없애거나 바꾼다.
-      #
-      # 그래서 파괴적 마이그레이션이 섞였으면 게이트를 무시하고 둘 다 배포한다 —
-      # 40초 공백보다 스키마 불일치가 나쁘다.
-      #
-      # ponytail: 키워드 grep 이다. CREATE TABLE 안의 NOT NULL 같은 정상 케이스를 오탐하지
-      #   않게 DROP/RENAME/MODIFY/CHANGE 만 본다. 놓치는 표현이 있으면 그때 추가한다.
-      - name: 파괴적 마이그레이션이면 게이트를 무시한다
-        id: migration
-        run: |
-          set -uo pipefail
-          git fetch origin deploy --depth=1 2>/dev/null || true
-          if ! git rev-parse --verify -q origin/deploy >/dev/null; then
-            echo "deploy 브랜치가 아직 없다 → 첫 배포로 보고 게이트를 적용하지 않는다"
-            echo "destructive=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # deploy 브랜치는 main 트리 + 이미지 줄만 다르다. 그래서 이 diff 는
-          # "마지막 배포 이후 추가된 마이그레이션" 과 정확히 같다.
-          # github.event.before 를 쓰지 않는 이유 — checkout 이 얕아서 그 커밋이 로컬에 없다.
-          CHANGED=$(git diff --name-only origin/deploy HEAD -- \
-            'src/main/resources/db/migration/' 2>/dev/null || true)
-          if [ -z "$CHANGED" ]; then
-            echo "마이그레이션 변경 없음"
-            echo "destructive=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "마지막 배포 이후 추가/변경된 마이그레이션:"; echo "$CHANGED"
-          if echo "$CHANGED" | tr '\n' '\0' | xargs -0 grep -liE '(^|[^_[:alnum:]])(drop|rename|modify|change)([^_[:alnum:]]|$)' 2>/dev/null | grep -q .; then
-            echo "파괴적 구문 감지 → 스케줄러도 함께 배포한다"
-            echo "destructive=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "추가만 하는 마이그레이션 → 태그를 갈라도 안전하다"
-            echo "destructive=false" >> "$GITHUB_OUTPUT"
-          fi
-
       # 맥미니는 Tailscale 안에서만 닿는다. 러너를 tag:ci 짜리 임시 노드로 조인시킨다.
       # ACL 에서 tag:ci 는 맥미니 22 번 포트만 허용된다(DB VM·EC2 에는 못 닿는다).
       # 잡이 끝나면 ephemeral 노드라 자동으로 사라진다.
+      #
+      # 웹과 스케줄러를 같은 태그로 함께 올린다. 경기 창을 피해 스케줄러 태그를 보류하던
+      # 게이트(#470)는 리더 리스 + RollingUpdate(#473, #475)로 걷어냈다 — 스케줄러 교체가
+      # 실측 리더 공백 4초·폴링 공백 ~6-15초로 줄어 경기 중에도 무해하다.
       - name: deploy 브랜치에 이미지 태그 기록
-        env:
-          WINDOW_CLEAR: ${{ steps.gate.outputs.clear }}
-          DESTRUCTIVE_MIGRATION: ${{ steps.migration.outputs.destructive }}
         run: |
           set -euo pipefail
           IMAGE="${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:${{ github.sha }}"
@@ -167,40 +114,24 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin main deploy --depth=1 2>/dev/null || git fetch origin main --depth=1
-
-          # 보류할 때 되돌아갈 곳은 "직전 deploy 브랜치의 태그" 다. main 에 박힌 이미지 줄은
-          # 손으로 고정한 옛 SHA(수동 롤백용)라, 스케줄러를 건드리지 않고 넘기면 그 옛 태그로
-          # 되돌아간다 — checkout -B deploy FETCH_HEAD 가 트리를 main 으로 리셋하기 때문이다.
-          # 실측 확인: main 은 59870c1d, deploy 는 d38d3877 이었다. 이 줄이 없으면 롤백 사고다.
-          PREV_SCHEDULER_IMAGE=""
-          if git rev-parse --verify -q origin/deploy >/dev/null; then
-            PREV_SCHEDULER_IMAGE=$(git show origin/deploy:infra/k8s/nar-scheduler.yaml \
-              | grep -m1 -oE '[^[:space:]]+/nar-gg:[A-Za-z0-9._-]+' || true)
-          fi
-
+          git fetch origin main --depth=1
           git checkout -B deploy FETCH_HEAD
 
-          # 웹은 항상 새 이미지로 갱신한다 — RollingUpdate 라 공백이 없다.
-          sed -i "s|^\( *image: \).*/nar-gg:.*|\1${IMAGE}|" infra/k8s/nar-web.yaml
-          grep -q "image: ${IMAGE}$" infra/k8s/nar-web.yaml \
-            || { echo "nar-web 이미지 줄을 못 바꿨다. 형식을 확인하라."; exit 1; }
+          # 같은 이미지를 쓰는 매니페스트를 전부 갱신한다. 하나만 갈아끼우면 나머지는
+          # 옛 태그에 묶인 채 조용히 돌아간다 — 웹은 새 코드, 스케줄러는 옛 코드가 된다.
+          # nar-gg 이미지를 쓰는 매니페스트를 새로 추가하면 여기에도 넣어야 한다.
+          MANIFESTS=(infra/k8s/nar-web.yaml infra/k8s/nar-scheduler.yaml)
 
-          # 스케줄러는 경기 중이면 직전 태그를 그대로 유지한다(scheduler-catchup.yml 이 따라붙인다).
-          # 단 파괴적 마이그레이션이 섞였으면 옛 코드가 새 스키마를 만나므로 보류하지 않는다.
-          SCHEDULER_IMAGE="${IMAGE}"
-          if [ "${WINDOW_CLEAR}" != "true" ] && [ "${DESTRUCTIVE_MIGRATION}" != "true" ]; then
-            if [ -n "${PREV_SCHEDULER_IMAGE}" ]; then
-              SCHEDULER_IMAGE="${PREV_SCHEDULER_IMAGE}"
-              echo "::notice::경기 진행 중 — nar-scheduler 는 ${PREV_SCHEDULER_IMAGE} 유지 (catchup 이 반영)"
-            else
-              echo "::warning::직전 스케줄러 태그를 못 읽어 보류를 포기한다 — 함께 배포한다"
-            fi
-          fi
-          sed -i "s|^\( *image: \).*/nar-gg:.*|\1${SCHEDULER_IMAGE}|" infra/k8s/nar-scheduler.yaml
-          grep -q "image: ${SCHEDULER_IMAGE}$" infra/k8s/nar-scheduler.yaml \
-            || { echo "nar-scheduler 이미지 줄을 못 바꿨다. 형식을 확인하라."; exit 1; }
+          for MANIFEST in "${MANIFESTS[@]}"; do
+            # 태그만 갈아끼운다. 매니페스트의 나머지는 main 그대로다.
+            sed -i "s|^\( *image: \).*/nar-gg:.*|\1${IMAGE}|" "${MANIFEST}"
+
+            # sed 가 아무것도 못 바꿨는데 조용히 넘어가면, deploy 브랜치가 낡은 태그를
+            # 가리킨 채로 자동 동기화가 돈다. 이미지 줄 형식이 바뀌면 여기서 멈춘다.
+            grep -q "image: ${IMAGE}$" "${MANIFEST}" \
+              || { echo "이미지 줄을 못 바꿨다. ${MANIFEST} 의 형식을 확인하라."; exit 1; }
+          done
 
           git commit -am "chore: 배포 이미지 ${GITHUB_SHA::7}"
           git push -f origin deploy
-          echo "deploy 브랜치 갱신 → web=${IMAGE} scheduler=${SCHEDULER_IMAGE}"
+          echo "deploy 브랜치 갱신 → ${IMAGE}"
