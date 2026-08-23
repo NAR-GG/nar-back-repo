@@ -74,13 +74,40 @@ kubectl -n nar get secret nar-env -o jsonpath='{.metadata.ownerReferences[0].kin
 # SealedSecret 이 나와야 정상. 비어 있으면 컨트롤러가 관리하지 않는 것이다.
 ```
 
+## 파드가 둘이면 인메모리 상태도 둘이다
+
+`#442` 로 스케줄러를 뗀 뒤로 **`@Scheduled` 는 `nar-scheduler` 에서만 돈다**
+(`SchedulerConfig` 가 `app.scheduling.enabled` 로 등록을 좌우하고, `nar-web` 은 `false`).
+그래서 폴링이 채우는 인메모리 상태는 **스케줄러 파드에만 있다.**
+
+| 상태 | 사는 곳 | 웹에서는 |
+|---|---|---|
+| Caffeine 캐시 | 두 파드 각각 | evict 를 부르는 쪽이 전부 스케줄러라 웹 캐시는 아무도 안 지운다 → **TTL 로 해결됨** (`CacheConfigTest` 가 잠근다) |
+| `LiveStateStore` (`activeGames`·`latestStates`·`finishedGameIds`) | 스케줄러만 | **영구히 빈 상태.** 사용자 트래픽은 전부 웹으로 오는데(`traefik-routes.yaml`) 웹의 store 는 채워지지 않는다 |
+| `LivePollingScheduler.startNotifiedGameIds` | 스케줄러만 | 웹에는 의미 없음 |
+
+`LiveStateStore` 를 읽는 코드가 웹 요청 경로에 있으면 **DB 폴백이 있는지 확인해야 한다.**
+`LiveStateQueryService` 는 폴백이 있어 동작하고, `LiveActivityCatchUpService` 는 없어서
+#442 이후 무동작이다. 자세한 내용과 실측은 [ADR 0002](../../docs/adr/0002-scheduler-pod-split.md).
+
+**파드를 또 쪼갤 때는 인메모리 상태를 먼저 센다.** 필드가 `ConcurrentHashMap`·`newKeySet`
+인 스프링 빈을 찾고, 그 빈을 읽는 코드가 웹 요청 경로에 있는지 본다.
+
 ## 리소스 값의 근거
 
-- `-Xmx2g` — docker 판과 같게 맞췄다. 1g 로 낮추면 응답이 느려진다.
-- `limits.memory: 3Gi` — 힙 2g 위에 메타스페이스·스레드 스택·다이렉트 버퍼가 얹힌다.
-  **2Gi 로 잡으면 힙이 차는 순간 OOMKill 이다.** 실측 RSS 는 1318Mi(힙 미포화).
-- CPU 한도 없음 — 한도는 스로틀링이라 여유가 있어도 GC 와 기동이 느려진다.
+`2026-08-23` 롤아웃에서 OOMKilled 2건이 나 실측 기준으로 다시 잡았다(#461).
+그 전 값(`-Xmx2g`, `limits 3Gi`)은 docker 판을 그대로 베낀 근거 없는 숫자였다.
+
+- `-Xmx1024m` — Prometheus 7일 실측: 풀GC 후 생존 힙 **453 MiB**, 힙 커밋 최대 1424 MiB
+  (2g 라 G1 이 GC 대신 힙을 늘렸다). 1024m 은 생존의 2.3배다.
+  **1.5g·1.7g 로 낮추는 건 무의미하다** — 관측 최대 커밋 1424 MiB 가 그 아래라 캡이 안 걸린다.
+- `limits.memory: 2Gi` — RSS 구성식(실측 검산 1583Mi = 힙커밋 1041 + 논힙 339 + 기타 203),
+  worst-case 1566Mi 에 모델 오차분을 얹었다. 옛 3Gi 대비 천장이 1/3 낮아져 서지(2파드) 피크가 줄었다.
+- OOM 은 cgroup 한도 초과가 아니라 **VM 전역 고갈**이었다(`dmesg: constraint=CONSTRAINT_NONE`).
+  그래서 한도를 만지는 게 아니라 실사용량 자체를 줄이는 게 고침이었다.
+- 웹은 **CPU 한도 없음** — 한도는 스로틀링이라 여유가 있어도 GC 와 기동이 느려진다.
   요청값을 200m 에서 2 로 올려도 응답시간 차이가 없어서(47ms → 45ms) 500m 로 뒀다.
+  스케줄러는 반대로 한도를 둔다 — CSV 인제스트가 웹 파드를 굶기면 안 된다.
 
 ## 파드가 docker 보다 6ms 느린 이유
 

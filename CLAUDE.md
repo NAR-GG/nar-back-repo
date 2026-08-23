@@ -172,7 +172,13 @@ API 쿼터를 태우거나 prod 채널·실유저에게 알림을 보낼 수 있
 
 ## CI/CD
 
-GitHub Actions (`.github/workflows/deploy.yml`): Gradle build → Docker image → push to Docker Hub → SSH deploy to EC2 → health check against `/v3/api-docs`. Production logs viewable via Dozzle at `https://api.nar.kr/dozzle`.
+GitOps. GitHub Actions(`.github/workflows/deploy-macmini.yml`) 가 하는 일은 셋이다 — Gradle 빌드, Docker Hub 로 이미지 push,
+`deploy` 브랜치에 이미지 태그 기록. **반영은 ArgoCD 가 `deploy` 브랜치를 보고 한다**
+(#422 에서 SSH·블루-그린을 걷었다). 배포 대상은 맥미니 k3s 다. EC2 는 2026-08-19 종료.
+
+- 인프라 전체 지도와 이력: `infra/README.md`
+- 롤백은 Git 을 거친다: `infra/argocd/README.md`
+- 로그: Grafana(`grafana.nar.kr`) 의 Loki. `kubectl -n nar logs` 도 된다
 
 ## Agent skills
 

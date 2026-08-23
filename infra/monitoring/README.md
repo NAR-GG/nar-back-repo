@@ -1,6 +1,6 @@
 # 관측 스택 (Prometheus · Loki · Grafana)
 
-맥미니 홈서버를 관측 허브로 두고 프로덕션 앱(EC2)과 DB(Oracle VM)의 메트릭·로그를 한 곳에서 본다.
+맥미니 홈서버가 관측 허브이면서 관측 대상이다. 앱 파드·DB·춘천 박스의 메트릭·로그를 한 곳에서 본다.
 
 이 디렉토리는 **원본 보관용이다. 자동 배포가 아니다.** 서버 설정을 바꿨으면 여기에도 반영하고,
 기기를 새로 세울 때는 여기서 복사한다.
@@ -8,24 +8,27 @@
 ## 토폴로지
 
 ```
-EC2 nar-app (100.88.94.95)
-  ├ nginx :9105        ──pull──>  Prometheus ─┐
-  └ Grafana Alloy      ──push──>  Loki ───────┼─> Grafana :3000
-                                              │
-Oracle VM nargg-vnic (100.101.232.109)        │
-  └ mysqld_exporter :9104  ──pull─────────────┘
+맥미니 (100.111.167.92)
+  ├ nar-web 파드      NodePort 30081 ──pull──>  Prometheus ─┐
+  ├ nar-scheduler 파드 NodePort 30084 ──pull──>             ├─> Grafana :3000
+  ├ mysqld_exporter :9104          ──pull──>                │   (grafana.nar.kr)
+  └ Grafana Alloy                  ──push──>  Loki ─────────┘
 
-                          맥미니 (100.111.167.92)
+춘천 es-vnic (100.71.240.23)
+  └ Uptime Kuma :3001  (kuma.nar.kr) — 맥미니를 밖에서 찌른다
 ```
 
-**방향이 서로 반대다.** Prometheus는 맥미니가 긁어가고(pull), Loki는 EC2가 밀어넣는다(push).
+**방향이 서로 반대다.** Prometheus 는 긁어가고(pull), Loki 는 Alloy 가 밀어넣는다(push).
 
-전 구간이 Tailscale 위다. 공인 IP도 포트 개방도 없다. 그래서 **EC2 보안그룹에 9105를 열면 안 된다** —
-Tailscale 트래픽은 이미 성립된 아웃바운드 WireGuard 세션에 실려 오므로 보안그룹을 거치지 않는다.
-열면 인터넷에도 노출된다.
+스케줄러 파드가 별도 NodePort(30084)를 갖는 이유는 `nar-scheduler-service.yaml` 주석에 있다 —
+#442 로 파드가 갈린 날 `nar_scheduler_*` 지표 36개가 파드를 따라 이사했는데 Prometheus 는
+30081 만 긁고 있어서 오버뷰의 잡 패널이 No data 였다.
+
+전 구간이 Tailscale 위다. 공인 IP 도 포트 개방도 없다. Grafana·Kuma 만 Cloudflare Tunnel 로
+나가 있고 그 앞은 Cloudflare Access 가 막는다.
 
 Colima VM 안 컨테이너에서 `100.x` 대역은 도달하지만 **MagicDNS 이름은 해석하지 못한다.**
-그래서 스크랩 타깃과 push URL은 이름이 아니라 IP로 적는다.
+그래서 스크랩 타깃과 push URL 은 이름이 아니라 IP 로 적는다.
 
 ## 접속
 
@@ -41,19 +44,20 @@ Prometheus·Loki 는 Tailscale 안에서만 닿는다. Grafana·Kuma 는 Cloudfl
 막는 전제로 열었다** — Access 앱을 지우면 관리 UI 가 공개 인터넷에 그대로 남으므로,
 정책을 풀 때는 ingress 규칙도 같이 지운다.
 
-## 앱 메트릭이 9105를 거치는 이유
+## 앱 메트릭 접근 제어 — 9105 는 없어졌다
 
-앱 컨테이너는 `127.0.0.1:8080|8083`에만 바인딩되고(블루-그린), `SecurityConfig`는
-`/actuator/**`를 `permitAll`로 둔다. 즉 앱 자체에는 인증이 없다. 접근 제어를 전부 nginx가 한다.
+`SecurityConfig` 는 `/actuator/**` 를 `permitAll` 로 둔다. **앱 자체에는 인증이 없다.**
+접근 제어는 전부 앞단이 한다. docker 시절엔 nginx 9105 프록시가 그 역할이었는데,
+블루-그린 포트 전환(8080↔8083)을 따라가기 위한 장치였고 블루-그린이 사라지면서 같이 걷혔다(#422).
 
-- `sites-enabled/api.nar.kr` 443 블록에 `location /actuator/ { return 404; }` — 공개 도메인 차단
-- `conf.d/nar-metrics.conf`(이 디렉토리의 `ec2/nginx-nar-metrics.conf`) — 9105 포트를
-  Tailscale 대역(`100.64.0.0/10`)에만 열어 스크랩을 받는다
+지금은 두 겹이다.
 
-`upstream nar_backend`를 참조하므로 블루-그린 포트 전환(8080↔8083)을 자동으로 따라간다.
-배포 스크립트가 재작성하는 파일은 `conf.d/nar-upstream.conf` 뿐이라 이 설정은 배포에 덮이지 않는다.
+- **공개 도메인**: `traefik-routes.yaml` 의 `actuator-deny` 미들웨어가 `/actuator` 를 403 으로 막는다
+  (`ipAllowList: 255.255.255.255/32` — 어떤 IP 도 매치되지 않는 대역)
+- **스크랩**: Prometheus 가 NodePort 를 직접 긁는다. `nar-web` 30081, `nar-scheduler` 30084.
+  NodePort 는 VM 안 + 호스트 루프백에서만 닿는다
 
-**앞단 nginx가 없는 환경으로 앱을 옮기면 이 전제가 깨진다.** 그때는 접근 제어를 앱으로 가져와야 한다.
+**앞단이 없는 환경으로 앱을 옮기면 이 전제가 깨진다.** 그때는 접근 제어를 앱으로 가져와야 한다.
 
 ## 대시보드
 
@@ -117,22 +121,6 @@ cd ~/monitoring && docker compose up -d
 그대로 들어가지만, **14057(MySQL)은 `__inputs`가 비어 있고 `id`가 박혀 있어 import API가 거부한다.**
 `id`를 `null`로 바꿔 `/api/dashboards/db`에 POST해야 들어간다.
 
-### EC2
-
-```bash
-sudo mkdir -p /etc/apt/keyrings/
-wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
-echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
-sudo apt-get update && sudo apt-get install -y alloy
-
-sudo cp alloy-config.alloy /etc/alloy/config.alloy
-sudo usermod -aG docker alloy          # 도커 소켓을 읽어야 한다
-sudo systemctl restart alloy
-
-sudo cp nginx-nar-metrics.conf /etc/nginx/conf.d/
-sudo nginx -t && sudo nginx -s reload
-```
-
 ### Oracle VM
 
 ```bash
@@ -166,7 +154,7 @@ RSA 키 교환을 요구하는데, 소켓은 그 과정을 건너뛴다.
 이 디렉토리에는 시크릿이 없다.
 
 - Grafana 관리자 비밀번호 — 맥미니 `grafana-data` 볼륨 안
-- mysqld_exporter 비밀번호 — EC2가 아닌 Oracle VM의 `/etc/mysqld_exporter/.my.cnf` (0600)
+- mysqld_exporter 비밀번호 — Oracle VM 의 `/etc/mysqld_exporter/.my.cnf` (0600)
 
 Tailscale IP가 들어가지만 사설망 주소라 공개돼도 접근되지 않는다.
 
