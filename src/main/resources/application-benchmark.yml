@@ -25,8 +25,6 @@ spring:
     enabled: true
     baseline-on-migrate: false
 
-  elasticsearch:
-    uris: ${ELASTICSEARCH_URI:http://127.0.0.1:9200}
 
   security:
     oauth2:

@@ -19,9 +19,6 @@ import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import com.toy.nar.domain.game.repository.GameRepository;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.TeamRepository;
-import com.toy.nar.domain.search.document.SearchDocument;
-import com.toy.nar.domain.search.repository.SearchDocumentRepository;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -34,11 +31,10 @@ public class SearchService {
     private final TeamRepository teamRepository;
     private final GameRepository gameRepository;
     private final GameParticipantRepository gameParticipantRepository;
-    private final SearchDocumentRepository searchDocumentRepository;
 
     /**
      * 팀 vs 팀 경기 자동완성 검색
-     * 초성 검색, 한글 검색, 영문 검색 모두 지원 (Elasticsearch + Nori)
+     * 팀 코드 정확 매칭 + 이름 부분 매칭 (MySQL)
      * 
      * @param query 검색어 (예: "T1vsGeng", "ㅈㅈ", "젠지")
      * @param limit 최대 결과 수
@@ -55,7 +51,7 @@ public class SearchService {
             return SearchAutocompleteResponse.empty();
         }
 
-        // 2. 각 키워드별로 Elasticsearch에서 팀 검색 (초성/한글/영문 지원)
+        // 2. 각 키워드별로 팀 검색
         List<List<Team>> teamsByKeyword = new ArrayList<>();
         for (String keyword : teamKeywords) {
             List<Team> teams = findTeamsByKeyword(keyword);
@@ -119,41 +115,20 @@ public class SearchService {
     }
 
     /**
-     * Elasticsearch를 활용한 팀 검색 (초성/한글/영문 지원)
-     * ES에 데이터가 없으면 MySQL로 폴백 (team_code가 있는 팀만)
+     * 팀 검색 (team_code가 있는 주요 리그 팀만).
+     *
+     * 원래 Elasticsearch(초성·Nori) 경로가 앞에 있었지만 색인이 늘 0건이라
+     * 실제로는 처음부터 이 MySQL 경로만 동작했다. 2026-08-22 ES 은퇴와 함께
+     * 사실을 코드에 맞췄다 — 잃은 기능 없음.
      */
     private List<Team> findTeamsByKeyword(String keyword) {
-        log.info("[DEBUG] findTeamsByKeyword called with keyword: '{}'", keyword);
-        try {
-            // ES에서 검색
-            List<SearchDocument> docs = searchDocumentRepository.searchByTypeAndKeyword("TEAM", keyword);
-
-            if (!docs.isEmpty()) {
-                // 정확도를 위해 가장 점수가 높은 상위 1개 팀만 사용
-                // (edge_ngram으로 인해 유사도가 낮은 팀들도 검색될 수 있음)
-                Long bestMatchTeamId = docs.get(0).getEntityId();
-                log.info("[DEBUG] ES found team: entityId={}, name={}", bestMatchTeamId, docs.get(0).getName());
-                return teamRepository.findAllById(List.of(bestMatchTeamId));
-            }
-            log.info("[DEBUG] ES returned empty results for keyword: '{}'", keyword);
-        } catch (Exception e) {
-            // ES 연결 실패 시 로그만 남기고 폴백
-            log.warn("Elasticsearch 검색 실패, MySQL로 폴백: {}", e.getMessage());
-        }
-
-        // 폴백: MySQL에서 검색 (team_code가 있는 주요 리그 팀만)
         // 1. teamCode 정확 매칭 시도
         List<Team> codeMatch = teamRepository.findByCodeIgnoreCase(keyword);
-        log.info("[DEBUG] MySQL codeMatch for '{}': {} results -> {}", keyword, codeMatch.size(),
-                codeMatch.stream().map(t -> t.getName() + "(" + t.getCode() + ")").toList());
         if (!codeMatch.isEmpty()) {
             return codeMatch;
         }
         // 2. 이름 포함 검색 (team_code 있는 팀만)
-        List<Team> nameMatch = teamRepository.findByNameContainingIgnoreCaseAndCodeIsNotNull(keyword);
-        log.info("[DEBUG] MySQL nameMatch for '{}': {} results -> {}", keyword, nameMatch.size(),
-                nameMatch.stream().map(t -> t.getName() + "(" + t.getCode() + ")").toList());
-        return nameMatch;
+        return teamRepository.findByNameContainingIgnoreCaseAndCodeIsNotNull(keyword);
     }
 
     /**

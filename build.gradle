@@ -75,9 +75,6 @@ dependencies {
 	implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml'
 	implementation 'org.jsoup:jsoup:1.16.1'
 
-	// Elasticsearch
-	implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
-
 	// Security & OAuth2
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
