@@ -9,7 +9,7 @@
   "timezone": "browser",
   "editable": true,
   "schemaVersion": 39,
-  "refresh": "30s",
+  "refresh": "5s",
   "time": {
     "from": "now-6h",
     "to": "now"
@@ -214,8 +214,8 @@
       "type": "stat",
       "title": "동시접속 사용자",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "loki",
+        "uid": "loki"
       },
       "gridPos": {
         "h": 4,
@@ -226,13 +226,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(nar_active_users{instance=\"nar-macmini\"})",
-          "instant": true
+          "expr": "count(sum by (uid) (count_over_time({namespace=\"nar\", pod=~\"nar-web.*\"} |= \"user_activity\" | regexp `uid=(?P<uid>\\S+)` [5m])))",
+          "queryType": "instant"
         }
       ],
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -255,14 +255,15 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "최근 5분 안에 요청을 보낸 고유 사용자 수. 식별자는 로그인 회원이면 m:{memberId}, 아니면 i:{CF-Connecting-IP} 다. 요청 기반이라 화면만 켜두고 API 를 안 부르면 창에서 빠진다. 집계는 앱이 아니라 Loki 가 쿼리 시점에 한다 — 파드가 죽어도 리셋되지 않고 웹을 여러 대로 늘려도 중복으로 세지 않는다."
     },
     {
       "type": "stat",
       "title": "금일 사용자",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "loki",
+        "uid": "loki"
       },
       "gridPos": {
         "h": 4,
@@ -273,8 +274,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(nar_daily_users{instance=\"nar-macmini\"})",
-          "instant": true
+          "expr": "count(sum by (uid) (count_over_time({namespace=\"nar\", pod=~\"nar-web.*\"} |= \"user_activity\" | regexp `uid=(?P<uid>\\S+)` [$__range])))",
+          "queryType": "instant"
         }
       ],
       "options": {
@@ -302,7 +303,9 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "오늘(자정 이후) 한 번이라도 요청한 고유 사용자 수. 패널 시간범위가 곧 정의라 앱에 자정 리셋 코드가 없다. 식별자는 로그인 회원이면 m:{memberId}, 아니면 i:{CF-Connecting-IP} 다. 요청 기반이라 화면만 켜두고 API 를 안 부르면 창에서 빠진다. 집계는 앱이 아니라 Loki 가 쿼리 시점에 한다 — 파드가 죽어도 리셋되지 않고 웹을 여러 대로 늘려도 중복으로 세지 않는다.",
+      "timeFrom": "now/d"
     },
     {
       "type": "timeseries",
@@ -360,7 +363,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 9
+        "y": 15
       },
       "targets": [
         {
@@ -402,7 +405,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 9
+        "y": 15
       },
       "targets": [
         {
@@ -457,7 +460,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 9
+        "y": 15
       },
       "targets": [
         {
@@ -530,7 +533,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 9
+        "y": 15
       },
       "targets": [
         {
@@ -595,7 +598,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 19
       },
       "targets": [
         {
@@ -671,7 +674,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 19
       },
       "targets": [
         {
@@ -736,7 +739,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 21
+        "y": 27
       },
       "targets": [
         {
@@ -801,7 +804,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 21
+        "y": 27
       },
       "targets": [
         {
@@ -848,7 +851,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 29
+        "y": 35
       },
       "targets": [
         {
@@ -897,7 +900,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 29
+        "y": 35
       },
       "targets": [
         {
@@ -956,7 +959,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 29
+        "y": 35
       },
       "targets": [
         {
@@ -1017,7 +1020,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 42
       },
       "targets": [
         {
@@ -1034,10 +1037,10 @@
     },
     {
       "type": "timeseries",
-      "title": "접속 사용자 추이",
+      "title": "동시접속 사용자 (실시간)",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "loki",
+        "uid": "loki"
       },
       "gridPos": {
         "h": 5,
@@ -1048,13 +1051,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(nar_active_users{instance=\"nar-macmini\"})",
-          "legendFormat": "동시접속(5분)"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(nar_daily_users{instance=\"nar-macmini\"})",
-          "legendFormat": "금일 누적"
+          "expr": "count(sum by (uid) (count_over_time({namespace=\"nar\", pod=~\"nar-web.*\"} |= \"user_activity\" | regexp `uid=(?P<uid>\\S+)` [5m])))",
+          "legendFormat": "동시접속"
         }
       ],
       "fieldConfig": {
@@ -1062,12 +1060,89 @@
           "unit": "none",
           "custom": {
             "drawStyle": "line",
-            "fillOpacity": 15,
-            "lineWidth": 1,
-            "showPoints": "never"
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "lineInterpolation": "smooth"
           }
         },
         "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "5분 롤링 창을 5초 간격으로 찍는다. 각 점은 \"그 시점 직전 5분의 고유 사용자\". 창이 미끄러지므로 선이 매끄럽다. 식별자는 로그인 회원이면 m:{memberId}, 아니면 i:{CF-Connecting-IP} 다. 요청 기반이라 화면만 켜두고 API 를 안 부르면 창에서 빠진다. 집계는 앱이 아니라 Loki 가 쿼리 시점에 한다 — 파드가 죽어도 리셋되지 않고 웹을 여러 대로 늘려도 중복으로 세지 않는다.",
+      "timeFrom": "15m",
+      "interval": "5s"
+    },
+    {
+      "type": "timeseries",
+      "title": "금일 사용자 추이 (1일 전 비교)",
+      "description": "5분 구간별 고유 사용자를 자정부터 지금까지 그린다. 회색은 정확히 24시간 전 같은 시각(LogQL offset 24h) — 오늘이 평소보다 높은지 낮은지 보는 용도다. 하루치 스캔이라 다른 패널보다 무겁다(실측 약 37만 줄·89MB·0.27초). 로그가 불어나 느려지면 Loki ruler 로 1분마다 굳혀 Prometheus 에서 읽는다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "timeFrom": "now/d",
+      "interval": "5m",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(sum by (uid) (count_over_time({namespace=\"nar\", pod=~\"nar-web.*\"} |= \"user_activity\" | regexp `uid=(?P<uid>\\S+)` [5m])))",
+          "legendFormat": "오늘"
+        },
+        {
+          "refId": "B",
+          "expr": "count(sum by (uid) (count_over_time({namespace=\"nar\", pod=~\"nar-web.*\"} |= \"user_activity\" | regexp `uid=(?P<uid>\\S+)` [5m] offset 24h)))",
+          "legendFormat": "1일 전"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "1일 전"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8e8e8e"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 25
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -1112,6 +1187,17 @@
           "queryType": "range"
         }
       }
+    ]
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "1h"
     ]
   }
 }

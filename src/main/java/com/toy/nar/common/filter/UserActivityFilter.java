@@ -2,24 +2,29 @@ package com.toy.nar.common.filter;
 
 import java.io.IOException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.toy.nar.app.monitor.UserActivityService;
-
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 
 /**
- * 접속 사용자 집계용 필터. Grafana 의 "동시접속 사용자"·"금일 사용자"가 이 값을 본다.
+ * 접속 사용자 계측. Grafana 의 "동시접속 사용자"·"금일 사용자"가 이 로그를 센다.
  *
- * 식별 기준은 로그인 회원 우선, 없으면 클라이언트 IP 다. 모바일 앱은 대부분 로그인
+ * <p>집계를 앱에 두지 않는다. 요청마다 식별자 한 줄만 뱉고 고유 수는 Loki 가 쿼리
+ * 시점에 계산한다. 파드가 죽어도 값이 리셋되지 않고, 웹을 여러 대로 늘려도 같은
+ * 사용자가 중복으로 세지지 않는다 — 인메모리 Set 으로는 둘 다 불가능했다.
+ * (고유 사용자 수는 집합 카디널리티라 파드별 값을 더할 수 없다. Counter 와 달리
+ * Prometheus 가 보정해줄 수 없는 이유다.)
+ *
+ * <p>식별 기준은 로그인 회원 우선, 없으면 클라이언트 IP 다. 모바일 앱은 대부분 로그인
  * 상태라 회원으로 잡히고, 웹·비로그인 조회는 IP 로 잡힌다.
  *
  * <p>순서가 중요하다. JwtAuthenticationFilter 뒤에 서야 SecurityContext 에 memberId 가
@@ -27,16 +32,25 @@ import lombok.RequiredArgsConstructor;
  */
 @Order(Integer.MAX_VALUE)
 @Component
-@RequiredArgsConstructor
 public class UserActivityFilter extends OncePerRequestFilter {
 
-	private final UserActivityService userActivityService;
+	/**
+	 * 대시보드가 이 문자열로 로그를 고른다(LogQL {@code |= "user_activity"}).
+	 * {@code uid=} 뒤 토큰도 정규식으로 뽑아 쓰므로 형식을 바꾸면 패널이 빈다.
+	 */
+	private static final String ACTIVITY_FORMAT = "user_activity uid={}";
+
+	/**
+	 * 전용 로거. 요청 1건당 1줄이라 볼륨이 크다. 로그가 부담되면 재배포 없이
+	 * {@code logging.level.user-activity=OFF} 로 끈다 — 대신 지표도 같이 멈춘다.
+	 */
+	private static final Logger ACTIVITY_LOG = LoggerFactory.getLogger("user-activity");
 
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
 		throws ServletException, IOException {
 
-		userActivityService.recordUserActivity(identify(request));
+		ACTIVITY_LOG.info(ACTIVITY_FORMAT, identify(request));
 		filterChain.doFilter(request, response);
 	}
 
@@ -47,7 +61,7 @@ public class UserActivityFilter extends OncePerRequestFilter {
 		return uri.startsWith("/actuator");
 	}
 
-	private String identify(HttpServletRequest request) {
+	String identify(HttpServletRequest request) {
 		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 		if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof Long memberId) {
 			return "m:" + memberId;
