@@ -75,4 +75,4 @@ cloudflared 파드 ──> Traefik ──> nar-web 파드          ┐
 |---|---|
 | WhaTap 에이전트 | `#459` 로 지표는 대체했지만 `nar-web.yaml` 에 javaagent·hostPath 볼륨이 아직 붙어 있다. 계약 해지 후 걷는다 |
 | 스케줄러 파드 분리 부작용 | `LiveActivityCatchUpService` 가 `#442` 이후 동작하지 않는다. 경기 상세의 세트 LIVE 판정도 같은 원인일 가능성. [ADR 0002](../docs/adr/0002-scheduler-pod-split.md) 참고 |
-| 로컬 벤치마크 대시보드 | 루트 `monitoring/` 을 걷었다(포트폴리오용 산출물, 참조 0건). `application-benchmark.yml` 프로파일은 남아 있다. 다시 필요하면 추적됐던 4개 파일(대시보드 JSON·프로비저닝·prometheus.yml)은 git 히스토리에서 꺼낼 수 있지만, **`docker-compose.yml` 은 `.gitignore` 대상이라 히스토리에 없다** — 새로 쓰거나 `infra/monitoring/macmini/docker-compose.yml` 을 줄여서 쓴다 |
+| 로컬 벤치마크 관측 | 루트 `monitoring/` 이었다. `infra/monitoring/` 과 이름이 겹쳐 구분이 안 됐으므로 [`benchmark-observability/`](../benchmark-observability/README.md) 로 옮겼다. **여기(`infra/`)는 프로덕션 원본만 둔다** — 로컬 도구는 섞지 않는다 |
