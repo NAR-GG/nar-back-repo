@@ -41,6 +41,8 @@ public class LivePollingScheduler {
 	private static final long INITIAL_LOOKBACK_SECONDS = 50L;
 	/** 라이브 엣지 추적: 이보다 더 뒤처지면 엣지 근처로 점프해 catch-up 지연(분 단위)을 막는다. */
 	private static final long MAX_LAG_SECONDS = 50L;
+	/** 엣지 점프를 WARN 으로 남길 최소 크기. 지연 큰 피드(LPL ~70초)의 정상 churn 은 거른다. */
+	private static final long EDGE_JUMP_LOG_THRESHOLD_SECONDS = 45L;
 	/** 피드는 window end-time이 20초보다 최신이면 거부하므로, 이보다 최신은 요청하지 않는다. */
 	private static final long MIN_FEED_AGE_SECONDS = 35L;
 
@@ -846,8 +848,11 @@ public class LivePollingScheduler {
 			// 건너뛰는 구간을 남긴다. 이 점프가 곧 "그 구간 이벤트를 영구히 못 본다" 는 뜻인데
 			// 지금까지 침묵했다 — 재기동·락 대기 뒤 알림이 빈 이유를 사후에 찾을 수 없었다.
 			long skipped = liveEdgeFloor.getEpochSecond() - candidate.getEpochSecond();
-			// 처음 보는 게임(룩백 = 엣지)은 건너뛴 게 아니다. 실제로 뒤처진 경우만 남긴다.
-			if (skipped > 0) {
+			// 임계값이 있는 이유 — 지연이 큰 피드는 정상 상태에서도 매 틱 걸린다. 실측 2026-08-23
+			// LPL AL vs BLG: 프레임 타임스탬프가 벽시계보다 65~75초 뒤라 12~30초 점프가 6초마다
+			// 찍혔고, 데이터는 멀쩡히 흘렀다(서버가 가용한 최신 window 를 주므로 유실이 아니다).
+			// 사고는 이보다 크다: 재기동 56초, 락 대기 19분. 45초가 둘을 가른다.
+			if (skipped > EDGE_JUMP_LOG_THRESHOLD_SECONDS) {
 				log.warn("[live-discovery] 라이브 엣지로 점프 — 이 구간 프레임은 보지 않는다 "
 								+ "gameId={} 건너뜀={}초 (되찾으려면 백필 API)", gameId, skipped);
 			}
