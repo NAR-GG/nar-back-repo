@@ -1,6 +1,7 @@
 package com.toy.nar.app.mobile.push;
 
 import com.toy.nar.domain.member.repository.LiveActivityCardDispatchRepository;
+import com.toy.nar.domain.member.repository.LiveActivityMatchProgressRepository;
 import com.toy.nar.domain.member.repository.LiveActivityStartTokenRepository;
 import com.toy.nar.domain.member.repository.LiveActivityTokenRepository;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +65,8 @@ public class LiveActivityPushService {
 	private final LiveActivityTokenRepository tokenRepository;
 	private final LiveActivityStartTokenRepository startTokenRepository;
 	private final LiveActivityCardDispatchRepository cardDispatchRepository;
+	/** 워터마크·종료 발송 여부의 지속성. 원자성은 아래 인메모리 필드가 담당한다. */
+	private final LiveActivityMatchProgressRepository matchProgressRepository;
 	private final ApnsLiveActivityClient apnsClient;
 
 	/**
@@ -101,14 +104,44 @@ public class LiveActivityPushService {
 		return apnsClient.isAvailable();
 	}
 
-	/** 이 매치의 종료 카드가 이미 나갔는지. 늦은 setEnded 를 쏘기 전에 확인한다. */
+	/**
+	 * 이 매치의 종료 카드가 이미 나갔는지. 늦은 setEnded 를 쏘기 전에 확인한다.
+	 *
+	 * <p>인메모리를 먼저 보고, 없으면 DB 를 본다. 재기동한 파드가 이걸 모르면 이미 닫은 카드에
+	 * 늦은 세트 종료를 다시 쏘게 된다.</p>
+	 */
 	public boolean matchEndPushed(String matchId) {
-		return matchEndPushedMatchIds.contains(matchId);
+		if (matchEndPushedMatchIds.contains(matchId)) {
+			return true;
+		}
+		try {
+			if (matchProgressRepository.isMatchEndPushed(matchId)) {
+				matchEndPushedMatchIds.add(matchId);
+				return true;
+			}
+		} catch (Exception e) {
+			log.warn("[live-activity] 종료 발송 여부 조회 실패 matchId={}: {}", matchId, e.getMessage());
+		}
+		return false;
 	}
 
-	/** 종료 발송 선점. 처음 선점했으면 true — 동시 진입하는 발송 경로의 dedup 에 쓴다. */
+	/**
+	 * 종료 발송 선점. 처음 선점했으면 true — 동시 진입하는 발송 경로의 dedup 에 쓴다.
+	 *
+	 * <p>인메모리와 DB 를 모두 선점해야 true 다. DB 쪽은 {@code match_end_pushed_at IS NULL}
+	 * 조건부 UPDATE 라, 재기동 전에 이미 나간 종료를 두 번 쏘지 않는다.</p>
+	 */
 	public boolean claimMatchEndPush(String matchId) {
-		return matchEndPushedMatchIds.add(matchId);
+		if (!matchEndPushedMatchIds.add(matchId)) {
+			return false;
+		}
+		try {
+			return matchProgressRepository.claimMatchEndPush(matchId);
+		} catch (Exception e) {
+			// 저장 실패 시 이 프로세스 안에서는 이미 선점했으므로 중복은 없다. 재기동하면 보호를 잃는다.
+			log.warn("[live-activity] 종료 발송 선점 저장 실패 matchId={}: {}", matchId, e.getMessage());
+			return true;
+		}
 	}
 
 	/** 세트 시작 — 카드를 진행 중으로 바꾼다. */
@@ -421,10 +454,15 @@ public class LiveActivityPushService {
 		}
 		long key = progressKey(setNumber, phase);
 		// compute 로 검사와 갱신을 한 번에 한다 — 매치가 같은 이벤트가 동시에 들어올 수 있다.
+		//
+		// 맵에 없으면 DB 에서 한 번 읽어 온다. 재기동한 파드는 자기가 어디까지 카드를 올렸는지
+		// 모르는데, 그 상태로 낡은 이벤트를 받으면 진행 중인 경기 카드를 전 세트로 되돌린다.
+		// 매치당 프로세스당 한 번만 읽으므로 이후 호출은 인메모리와 같은 비용이다.
 		boolean[] accepted = { false };
 		lastProgressByMatch.compute(matchId, (id, previous) -> {
-			if (previous != null && key < previous) {
-				return previous;
+			Long known = previous != null ? previous : loadProgressKey(matchId);
+			if (known != null && key < known) {
+				return known;
 			}
 			accepted[0] = true;
 			return key;
@@ -432,8 +470,28 @@ public class LiveActivityPushService {
 		if (!accepted[0]) {
 			log.info("[live-activity] 뒤처진 이벤트 무시 matchId={} set={} phase={} (마지막={})",
 					matchId, setNumber, phase, lastProgressByMatch.get(matchId));
+			return false;
 		}
-		return accepted[0];
+		// 쓰기는 compute 밖에서 한다 — 맵의 bin 을 들고 DB I/O 를 기다리지 않는다.
+		// 순서가 뒤집혀도 리포지토리가 GREATEST 로 최댓값을 지킨다.
+		try {
+			matchProgressRepository.raiseProgressKey(matchId, key);
+		} catch (Exception e) {
+			// 저장 실패는 이번 발송을 막지 않는다. 인메모리 워터마크는 이미 올라가 있어
+			// 이 프로세스가 사는 동안은 정상이고, 재기동하면 그만큼 보호를 잃을 뿐이다.
+			log.warn("[live-activity] 진행도 저장 실패 matchId={} key={}: {}", matchId, key, e.getMessage());
+		}
+		return true;
+	}
+
+	/** DB 에 남은 워터마크. 조회 실패는 "모른다"로 접는다 — 발송을 막지는 않는다. */
+	private Long loadProgressKey(String matchId) {
+		try {
+			return matchProgressRepository.findProgressKey(matchId).orElse(null);
+		} catch (Exception e) {
+			log.warn("[live-activity] 진행도 조회 실패 matchId={}: {}", matchId, e.getMessage());
+			return null;
+		}
 	}
 
 	/** 세트 번호가 먼저, 같은 세트면 playing < setEnded < matchEnded 순. */
