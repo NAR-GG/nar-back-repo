@@ -44,6 +44,7 @@ class LivePollingSchedulerTest {
 				liveStatsClient,
 				objectEventRecorder,
 				liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				liveFrameProcessor,
 				liveGameMetadataService,
 				leagueMatchService,
@@ -90,6 +91,7 @@ class LivePollingSchedulerTest {
 				liveStatsClient,
 				objectEventRecorder,
 				liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				liveFrameProcessor,
 				liveGameMetadataService,
 				leagueMatchService,
@@ -376,6 +378,7 @@ class LivePollingSchedulerTest {
 				.thenReturn(List.of("EWC"));
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
@@ -415,6 +418,7 @@ class LivePollingSchedulerTest {
 				.thenReturn(List.of("EWC"));
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
@@ -455,6 +459,7 @@ class LivePollingSchedulerTest {
 				.thenReturn(List.of("EWC"));
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
@@ -496,6 +501,7 @@ class LivePollingSchedulerTest {
 				.thenReturn(List.of("EWC"));
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
@@ -539,6 +545,7 @@ class LivePollingSchedulerTest {
 				.thenReturn(List.of("EWC"));
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService, mock(LiveStatsClient.class), mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
@@ -581,6 +588,7 @@ class LivePollingSchedulerTest {
 				.thenReturn(java.util.Set.of(), java.util.Set.of("kespa-match-1"));
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), new LiveStateStore(),
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
@@ -625,6 +633,7 @@ class LivePollingSchedulerTest {
 				org.mockito.ArgumentMatchers.any(), anyString())).thenReturn(false);
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService, liveStatsClient, mock(LiveObjectEventRecorder.class), new LiveStateStore(),
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, cacheEvictionService, mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
@@ -663,6 +672,7 @@ class LivePollingSchedulerTest {
 				.thenReturn(List.of("EWC"));
 		LivePollingScheduler scheduler = new LivePollingScheduler(
 				worldsService, mock(LiveStatsClient.class), mock(LiveObjectEventRecorder.class), liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class), liveGameMetadataServiceMock(), leagueMatchService,
 				leagueConfigService, mock(CacheEvictionService.class), mock(NotificationService.class),
 				mock(TeamLiveEventPushService.class),
@@ -989,6 +999,7 @@ class LivePollingSchedulerTest {
 				mock(LiveStatsClient.class),
 				mock(LiveObjectEventRecorder.class),
 				liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class),
 				liveGameMetadataServiceMock(),
 				mock(LeagueMatchService.class),
@@ -1019,6 +1030,7 @@ class LivePollingSchedulerTest {
 				mock(LiveStatsClient.class),
 				mock(LiveObjectEventRecorder.class),
 				liveStateStore,
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class),
 				liveGameMetadataServiceMock(),
 				leagueMatchService,
@@ -1047,6 +1059,7 @@ class LivePollingSchedulerTest {
 				mock(LiveStatsClient.class),
 				mock(LiveObjectEventRecorder.class),
 				new LiveStateStore(),
+				mock(com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository.class),
 				mock(LiveFrameProcessor.class),
 				mock(LiveGameMetadataService.class),
 				mock(LeagueMatchService.class),

@@ -82,6 +82,20 @@ public class LiveObjectEventRecorder {
 		}
 
 		ObservedObjectState previous = lastObservedByGame.get(activeGame.gameId());
+		if (previous == null) {
+			// 기준선이 없으면 첫 스냅샷은 시드만 하고 이벤트를 내보내지 않는다(아래 previous != null
+			// 가드). 정책은 관측 공백과 같다 — 유도하면 전부 이 프레임에서 발생한 것으로 뭉친다.
+			//
+			// 그런데 그 경로는 WARN 을 남기고 여기는 침묵했다. 재기동 뒤 킬·오브젝트 알림이 한
+            // 구간 비어도 사후에 찾을 방법이 없었다. 이미 킬이 있는 상태에서 기준선이 없다는 건
+			// "재기동했고 그 사이 진행이 있었다" 는 뜻이라, 그때만 남긴다.
+			int killsAtSeed = snapshots.get(0).blue().kills() + snapshots.get(0).red().kills();
+			if (killsAtSeed > 0) {
+				log.warn("[live-notify] 이벤트 기준선 없음 — 첫 프레임을 시드만 한다(그 이전 구간 미복구) "
+								+ "gameId={} frame={} 누적킬={}",
+						activeGame.gameId(), snapshots.get(0).frameTimestampUtc(), killsAtSeed);
+			}
+		}
 		for (FrameSnapshot snapshot : snapshots) {
 			if (previous != null && !snapshot.frameTimestampUtc().isAfter(previous.frameTimestampUtc())) {
 				continue;
