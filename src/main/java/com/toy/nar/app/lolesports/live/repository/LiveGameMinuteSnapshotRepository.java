@@ -56,4 +56,25 @@ public interface LiveGameMinuteSnapshotRepository extends JpaRepository<LiveGame
 			HAVING MAX(s.frameTimestampUtc) > :since
 			""")
 	List<String> findFreshGameIdsByMatchId(String matchId, LocalDateTime since);
+
+	/**
+	 * {@code since} 이후로 프레임이 들어온 매치 ID들 = 지금 세트가 돌고 있는 매치.
+	 *
+	 * <p>{@link #findFreshGameIdsByMatchId} 의 매치 미지정 버전이다. 대상 매치를 모르는 채로
+	 * "지금 라이브인 매치"를 찾아야 하는 호출부(팀 구독 직후 따라잡기)가 쓴다.</p>
+	 *
+	 * <p>게임이 아니라 매치로 묶으므로 종료 확정 여부는 여기서 못 걸러낸다. 후보를 좁히는
+	 * 용도로만 쓰고, 실제 판정은 매치별로 {@link #findFreshGameIdsByMatchId} 를 다시 물어
+	 * {@code isFinished} 까지 확인해야 한다.</p>
+	 *
+	 * <p>{@code frameTimestampUtc} 는 UTC 다. 호출부도 UTC 로 넘겨야 한다.</p>
+	 */
+	@Query("""
+			SELECT s.matchId
+			FROM LiveGameMinuteSnapshot s
+			WHERE s.matchId IS NOT NULL
+			GROUP BY s.matchId
+			HAVING MAX(s.frameTimestampUtc) > :since
+			""")
+	List<String> findFreshMatchIds(LocalDateTime since);
 }
