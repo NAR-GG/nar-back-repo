@@ -53,6 +53,11 @@ public class MobileScheduleService {
 			"DNS", "BFX", "NS", "BRO", "KRX"
 	);
 	private static final String LOLESPORTS_SOURCE = "LOLESPORTS";
+	/**
+	 * 세트를 LIVE 로 볼 최신 프레임 신선도. 폴링이 5초 주기이므로 3분은 넉넉하다.
+	 * {@code LiveStateStore} 의 stale 제거(3분)와 같은 값으로 둬서 두 경로가 같은 리듬으로 움직인다.
+	 */
+	private static final java.time.Duration LIVE_FRAME_FRESHNESS = java.time.Duration.ofMinutes(3);
 	/** 세트 상태 — 종료(라이브 데이터 보유). 승리 팀은 이 상태에서만 노출한다. */
 	private static final String STATUS_ENDED = "ENDED";
 	private static final String CURSOR_DELIMITER = "|";
@@ -395,6 +400,26 @@ public class MobileScheduleService {
 				.filter(gameId -> gameId != null && !gameId.isBlank())
 				.filter(gameId -> !liveStateStore.isFinished(gameId))
 				.collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+		// 인메모리 store 는 폴링이 도는 파드에만 채워진다. #442 로 스케줄러를 뗀 뒤 이 코드가
+		// 도는 웹 파드의 store 는 영구히 비어서, 위 집합만 보면 진행 중인 세트가 recordedSet 에
+		// 걸려 ENDED 로 내려간다. 실측 2026-08-23 16:14 TT vs LGD — 같은 순간 같은 엔드포인트에
+		// 스케줄러 파드는 프레임 보유, 웹 파드는 []. 앱에는 진행 중 세트가 ENDED 로 나갔다.
+		// DB 는 두 파드가 공유하니 최신 프레임 신선도로 보강한다.
+		//
+		// isFinished 필터를 여기도 거는 이유: 스케줄러 파드에서는 종료 확정된 세트가 stale 제거
+		// 전까지 신선한 프레임을 갖고 있어서, 안 걸면 종료된 세트가 LIVE 로 부활한다.
+		//
+		// ponytail: 신선도 창(3분)만큼은 세트가 끝난 뒤에도 LIVE 로 남는다 — 마지막 프레임이
+		// 그동안 창 안이라서다. 영구히 ENDED 인 지금보다는 낫다. 더 정확히 하려면 프레임의
+		// gameState=finished 를 스냅샷에 저장해서 여기서 같이 봐야 한다.
+		minuteSnapshotRepository
+				.findFreshGameIdsByMatchId(
+						match.getId(),
+						LocalDateTime.now(java.time.ZoneOffset.UTC).minus(LIVE_FRAME_FRESHNESS))
+				.stream()
+				.filter(gameId -> gameId != null && !gameId.isBlank())
+				.filter(gameId -> !liveStateStore.isFinished(gameId))
+				.forEach(liveGameIds::add);
 		List<String> recordedGameIds = minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart(match.getId());
 		java.util.Set<String> recordedSet = new java.util.LinkedHashSet<>(recordedGameIds);
 

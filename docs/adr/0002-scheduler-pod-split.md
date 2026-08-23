@@ -27,7 +27,7 @@ TTL 로 처리했다. **처리하지 않은 것은 라이브 상태다.**
 |---|---|---|
 | `LiveStateQueryService.getLatestState()` | 인메모리 → 없으면 `live_game_minute_snapshot` | **동작한다.** 분 버킷 행이 폴마다(5초) UPSERT 되므로 지연은 5~10초 |
 | `LiveActivityCatchUpService.liveGameOf()` | 없음 | **정지했다.** 아래 실측 참고 |
-| `MobileScheduleService` 의 세트 LIVE 판정 | 없음 (`recordedGameIds` 가 일부만 보완) | 진행 중 세트가 `ENDED` 로 내려갈 것으로 보인다. **미검증** |
+| `MobileScheduleService` 의 세트 LIVE 판정 | **없었다 → DB 신선도로 보강함** | 진행 중 세트가 `ENDED` 로 내려갔다. **실측 확정 후 수정** (아래) |
 | `LiveController` `GET /api/live/games` | 없음 | 항상 빈 배열. 운영·진단용이라 사용자 영향 없음 |
 
 ### 실측 (Loki, 2026-08-23)
@@ -47,6 +47,28 @@ TTL 로 처리했다. **처리하지 않은 것은 라이브 상태다.**
 `POST /api/mobile/me/live-activities` 로 올린다. 서버 push-to-start 는 앱이 실행 중이
 아닐 때의 경로다. 그래서 이 정지는 "앱이 카드를 못 만드는 상황에서 구독이 일어날 때"만
 드러난다.
+
+### 세트 LIVE 판정 — 확정하고 고쳤다
+
+2026-08-23 16:14, LPL TT vs LGD 1세트가 진행 중일 때 같은 엔드포인트를 두 파드에 직접 물었다.
+
+```
+kubectl -n nar exec deploy/nar-scheduler -- curl -s localhost:8080/api/live/games
+  [{"gameId":"116566854547835297", ..., "frameTimestampUtc":"2026-08-23T07:14:50.401"}]
+kubectl -n nar exec deploy/nar-web -- curl -s localhost:8080/api/live/games
+  []
+GET /api/mobile/matches/116566854547835296/games   (사용자 경로, 웹이 응답)
+  {"gameOrder":1, "status":"ENDED", "winnerTeamCode":null}    ← 진행 중인데 ENDED
+```
+
+`gameStatus()` 가 `liveGameIds`(웹에선 빈 집합) miss → `recordedGameIds`(프레임이 쌓였으니 hit)
+→ `ENDED` 였다. 앱 영향은 진행 중 세트의 **라이브 라벨 누락**(`isCurrentSetLive`)과
+**평점 탭 조기 개방**(`ensureRatingsLoaded` 가 `== ENDED` 를 조건으로 쓴다). 일정 목록의
+LIVE 배지는 `matchStatus`(DB) 기반이라 무관했다 — 그래서 눈에 잘 안 띄었다.
+
+고침: `findFreshGameIdsByMatchId(matchId, since)` 로 **최신 프레임이 3분 안에 들어온 게임**을
+`liveGameIds` 에 합집합으로 더한다. DB 는 두 파드가 공유하므로 웹에서도 보인다.
+`isFinished` 필터를 DB 경로에도 걸어야 스케줄러 파드에서 종료된 세트가 부활하지 않는다.
 
 ## 그래서 무엇을 하지 않았나
 

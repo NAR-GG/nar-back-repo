@@ -28,6 +28,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -580,6 +582,72 @@ class MobileScheduleServiceTest {
 		assertThat(response.games()).singleElement()
 				.extracting(MobileScheduleListResponse.MobileGameSummary::status)
 				.isEqualTo("LIVE");
+	}
+
+	@Test
+	void getMatchGamesMarksSetLiveFromFreshSnapshotsWhenStoreIsEmpty() {
+		// 웹 파드 상황. #442 로 폴링이 스케줄러 파드로 가서 여기 store 는 영구히 비어 있다.
+		// 인메모리만 보면 진행 중인 세트가 recordedSet 에 걸려 ENDED 로 내려간다 —
+		// 실측 2026-08-23 16:14 TT vs LGD 에서 앱에 그렇게 나갔다. DB 신선도로 LIVE 를 살린다.
+		when(leagueMatchRepository.findById("match-1"))
+				.thenReturn(Optional.of(match("match-1", "LPL", LocalDateTime.of(2026, 8, 23, 16, 0), "TT", "LGD", "inProgress")));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", null, null, null)));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>());
+		when(liveStateStore.isFinished("game-1")).thenReturn(false);
+		// 프레임이 쌓여 있으니 recordedSet 에는 들어간다 — 보강이 없으면 이것 때문에 ENDED 다.
+		when(minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart("match-1"))
+				.thenReturn(List.of("game-1"));
+		when(minuteSnapshotRepository.findFreshGameIdsByMatchId(eq("match-1"), any()))
+				.thenReturn(List.of("game-1"));
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games()).singleElement()
+				.extracting(MobileScheduleListResponse.MobileGameSummary::status)
+				.isEqualTo("LIVE");
+	}
+
+	@Test
+	void getMatchGamesDoesNotResurrectFinishedSetFromFreshSnapshots() {
+		// 스케줄러 파드 상황. 종료 확정된 세트는 stale 제거 전까지 신선한 프레임을 갖고 있다.
+		// DB 보강에도 isFinished 필터를 걸어야 종료된 세트가 LIVE 로 부활하지 않는다.
+		when(leagueMatchRepository.findById("match-1"))
+				.thenReturn(Optional.of(match("match-1", "LPL", LocalDateTime.of(2026, 8, 23, 16, 0), "TT", "LGD", "inProgress")));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", null, null, null)));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>());
+		when(liveStateStore.isFinished("game-1")).thenReturn(true);
+		when(minuteSnapshotRepository.findGameIdsByMatchIdOrderByStart("match-1"))
+				.thenReturn(List.of("game-1"));
+		when(minuteSnapshotRepository.findFreshGameIdsByMatchId(eq("match-1"), any()))
+				.thenReturn(List.of("game-1"));
+
+		MobileMatchGamesResponse response = service.getMatchGames("match-1");
+
+		assertThat(response.games()).singleElement()
+				.extracting(MobileScheduleListResponse.MobileGameSummary::status)
+				.isEqualTo("ENDED");
+	}
+
+	@Test
+	void getMatchGamesAsksSnapshotsForFreshnessInUtc() {
+		// frameTimestampUtc 는 UTC 다. 호출부가 시스템 존으로 물으면 KST(+9)에서는
+		// 9시간 미래 기준이 되어 신선한 세트가 하나도 안 잡힌다.
+		when(leagueMatchRepository.findById("match-1"))
+				.thenReturn(Optional.of(match("match-1", "LPL", LocalDateTime.of(2026, 8, 23, 16, 0), "TT", "LGD", "inProgress")));
+		when(leagueMatchGameRepository.findMappedGameWinnerRowsByMatchId("match-1", "LOLESPORTS"))
+				.thenReturn(List.of(new WinnerRow("match-1", 1, "game-1", null, null, null)));
+		when(liveStateStore.getActiveGames()).thenReturn(new java.util.HashMap<>());
+
+		service.getMatchGames("match-1");
+
+		ArgumentCaptor<LocalDateTime> since = ArgumentCaptor.forClass(LocalDateTime.class);
+		verify(minuteSnapshotRepository).findFreshGameIdsByMatchId(eq("match-1"), since.capture());
+		LocalDateTime nowUtc = LocalDateTime.now(java.time.ZoneOffset.UTC);
+		assertThat(since.getValue())
+				.isAfter(nowUtc.minusMinutes(4))
+				.isBefore(nowUtc.minusMinutes(2));
 	}
 
 	@Test
