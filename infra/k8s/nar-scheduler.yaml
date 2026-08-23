@@ -7,6 +7,10 @@
 #    같이 봐야 한다 — 아래 Recreate 주석 참고.
 #
 # 트래픽은 안 받는다. Service(nar-web)의 셀렉터가 app: nar-web 이라 이 라벨은 안 걸린다.
+#
+# ⚠️ 폴링이 채우는 인메모리 상태(LiveStateStore, startNotifiedGameIds)는 이 파드에만 있다.
+#    nar-web 은 같은 빈을 갖지만 영구히 빈 상태다 — 웹 요청 경로에서 그걸 읽는 코드는
+#    DB 폴백이 없으면 조용히 무동작이 된다. docs/adr/0002-scheduler-pod-split.md 참고.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

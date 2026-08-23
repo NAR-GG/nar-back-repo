@@ -21,9 +21,9 @@
 | 분야      | 기술 |
 |-----------|------|
 | Backend   | Java, Spring Framework |
-| Database  | MySQL (AWS RDS) |
-| Infra     | AWS EC2, Docker |
-| CI/CD     | GitHub Actions |
+| Database  | MySQL 8.4 (맥미니 호스트) |
+| Infra     | 맥미니 M1 홈서버 · k3s · ArgoCD · Cloudflare Tunnel ([`infra/`](infra/README.md)) |
+| CI/CD     | GitHub Actions → Docker Hub → ArgoCD (GitOps) |
 | Data      | 6시간 주기 데이터 자동 업데이트 |
 
 ## 핵심 기능
