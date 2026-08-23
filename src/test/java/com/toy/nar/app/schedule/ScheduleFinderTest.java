@@ -62,9 +62,10 @@ class ScheduleFinderTest {
 				.redScore(2)
 				.build();
 
+		// match_date 는 UTC 저장이라 KST 3/4 하루는 UTC 3/3 15:00 ~ 3/4 14:59:59 다
 		given(leagueMatchRepository.findByDateRange(
-				LocalDateTime.of(2026, 3, 4, 0, 0),
-				LocalDateTime.of(2026, 3, 4, 23, 59, 59)))
+				LocalDateTime.of(2026, 3, 3, 15, 0, 0),
+				LocalDateTime.of(2026, 3, 4, 14, 59, 59)))
 				.willReturn(List.of(match));
 		given(gameRepository.findAllByActualGameStartTimeBetween(
 				LocalDateTime.of(2026, 3, 3, 12, 0),
@@ -108,9 +109,10 @@ class ScheduleFinderTest {
 				"Cloud9",
 				"Team Liquid");
 
+		// match_date 는 UTC 저장이라 KST 3/4 하루는 UTC 3/3 15:00 ~ 3/4 14:59:59 다
 		given(leagueMatchRepository.findByDateRange(
-				LocalDateTime.of(2026, 3, 4, 0, 0),
-				LocalDateTime.of(2026, 3, 4, 23, 59, 59)))
+				LocalDateTime.of(2026, 3, 3, 15, 0, 0),
+				LocalDateTime.of(2026, 3, 4, 14, 59, 59)))
 				.willReturn(List.of(match));
 		given(gameRepository.findAllByActualGameStartTimeBetween(
 				LocalDateTime.of(2026, 3, 3, 12, 0),

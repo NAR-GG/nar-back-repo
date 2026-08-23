@@ -813,8 +813,9 @@ public class LeagueMatchService {
 
 	public GameExternalIdentityBackfillResult backfillGameExternalIdentities(List<String> leagues, int year) {
 		List<String> targetLeagues = (leagues == null || leagues.isEmpty()) ? LeagueConstants.TARGET_LEAGUES : leagues;
-		LocalDateTime start = java.time.LocalDate.of(year, 1, 1).atStartOfDay();
-		LocalDateTime end = java.time.LocalDate.of(year + 1, 1, 1).atStartOfDay().minusNanos(1);
+		// match_date 는 오프셋 없는 UTC 벽시계다(MatchDateWindow 참고). 연 경계도 KST 기준으로 자른다.
+		LocalDateTime start = MatchDateWindow.startOfDay(java.time.LocalDate.of(year, 1, 1));
+		LocalDateTime end = MatchDateWindow.endOfDay(java.time.LocalDate.of(year, 12, 31));
 		List<LeagueMatch> matches = leagueMatchRepository.findByDateRange(start, end).stream()
 				.filter(match -> match.getLeagueName() != null
 						&& targetLeagues.contains(match.getLeagueName().toUpperCase()))
@@ -1359,8 +1360,10 @@ public class LeagueMatchService {
 		}
 
 		boolean isAllLeagues = leagueSlug == null || leagueSlug.isEmpty() || "ALL".equalsIgnoreCase(leagueSlug);
-		LocalDateTime start = startDate.atStartOfDay();
-		LocalDateTime end = endDate.atTime(23, 59, 59);
+		// KST 날짜를 그대로 넣으면 담기는 구간이 KST 09:00~다음날 08:59 가 된다 —
+		// 새벽에 열리는 LEC·LCS 가 하루 앞 날짜에 붙는다(MatchDateWindow 참고).
+		LocalDateTime start = MatchDateWindow.startOfDay(startDate);
+		LocalDateTime end = MatchDateWindow.endOfDay(endDate);
 
 		log.info("Searching matches for league: {} between {} and {}", isAllLeagues ? "ALL" : leagueSlug, start, end);
 
@@ -1558,8 +1561,9 @@ public class LeagueMatchService {
 	}
 
 	public GameIdBackfillResult backfillGameIdsForYear(int year, int limit) {
-		LocalDateTime start = java.time.LocalDate.of(year, 1, 1).atStartOfDay();
-		LocalDateTime end = java.time.LocalDate.of(year + 1, 1, 1).atStartOfDay().minusNanos(1);
+		// match_date 는 오프셋 없는 UTC 벽시계다(MatchDateWindow 참고). 연 경계도 KST 기준으로 자른다.
+		LocalDateTime start = MatchDateWindow.startOfDay(java.time.LocalDate.of(year, 1, 1));
+		LocalDateTime end = MatchDateWindow.endOfDay(java.time.LocalDate.of(year, 12, 31));
 
 		List<LeagueMatch> candidates = leagueMatchRepository.findByDateRange(start, end);
 		if (limit > 0 && candidates.size() > limit) {

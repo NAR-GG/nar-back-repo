@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -24,6 +26,12 @@ public class WorldsService {
 
 	private static final int EVENT_DETAIL_CONCURRENCY_LIMIT = 5;
 
+	/**
+	 * games[] 의 inProgress 를 믿기 시작하는 시점 — 예정 시각 이 분 전부터.
+	 * LivePollingScheduler 의 피드 프로브 창과 같은 여유값이다.
+	 */
+	private static final int LIVE_PROMOTION_LEAD_MINUTES = 5;
+
 	private final WebClient webClient;
 	@Qualifier("applicationTaskExecutor")
 	private final Executor applicationTaskExecutor;
@@ -33,6 +41,31 @@ public class WorldsService {
 
 	@Value("${lolesports.riot-api.key}")
 	private String RIOT_API_KEY;
+
+	/**
+	 * 예정 시각이 아직 오지 않았는지({@link #LIVE_PROMOTION_LEAD_MINUTES} 분 여유).
+	 *
+	 * <p>업스트림 games[] 는 시작도 안 한 경기의 1세트를 inProgress 로 흘릴 때가 있다 —
+	 * 2026-08-22 LPL TT vs LGD: 예정 22시간 전에 game 1 만 inProgress 로 내려왔고
+	 * getSchedule 의 event.state 는 unstarted, livestats 피드는 204(미발행)였다.
+	 * 그 값을 그대로 매치 상태로 올려서 앱이 하루 가까이 "진행중"으로 보였고,
+	 * 라이브 추적에 걸려 네이버 스코어 조회를 10초마다 헛돌렸다.
+	 *
+	 * <p>판정 불가(값 없음·파싱 실패)는 <b>false</b> — 즉 승격을 막지 않는다. 오염을
+	 * 통과시키는 손해(오표시)보다 진행 중인 경기를 놓치는 손해(라이브위젯·시작 알림 누락)가
+	 * 크기 때문에, 확실히 미래라고 읽힐 때만 막는다.
+	 */
+	static boolean notYetStarted(String matchDate) {
+		if (matchDate == null || matchDate.isBlank()) {
+			return false;
+		}
+		try {
+			Instant start = Instant.parse(matchDate);
+			return Instant.now().isBefore(start.minus(Duration.ofMinutes(LIVE_PROMOTION_LEAD_MINUTES)));
+		} catch (Exception e) {
+			return false;
+		}
+	}
 
 	public MatchResponseWrapper getWorldsMatches(String pageToken, String leagueSlug) {
 		String normalizedLeague = normalizeLeagueSlug(leagueSlug);
@@ -186,7 +219,8 @@ public class WorldsService {
 					}
 				}
 			}
-			if (hasInProgressGame) {
+			// 예정 시각 전이면 games[] 의 inProgress 는 업스트림 오염으로 본다(notYetStarted 참고).
+			if (hasInProgressGame && !notYetStarted(matchDate)) {
 				finalState = "inProgress";
 			}
 
@@ -350,7 +384,8 @@ public class WorldsService {
 				}
 			}
 		}
-		if (hasInProgressGame) {
+		// 예정 시각 전이면 games[] 의 inProgress 는 업스트림 오염으로 본다(notYetStarted 참고).
+		if (hasInProgressGame && !notYetStarted(matchDate)) {
 			finalState = "inProgress";
 		}
 

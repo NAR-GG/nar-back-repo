@@ -1,5 +1,6 @@
 package com.toy.nar.app.schedule;
 
+import com.toy.nar.app.lolesports.MatchDateWindow;
 import com.toy.nar.app.lolesports.repository.LeagueMatchGame;
 import com.toy.nar.app.lolesports.repository.LeagueMatchGameRepository;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
@@ -72,11 +73,13 @@ public class ScheduleService {
 
 		String leagueFilter = normalizeLeagueFilter(league);
 		Team teamFilter = resolveTeamFilter(teamId);
-		LocalDateTime start = month.atDay(1).atStartOfDay();
-		LocalDateTime end = month.plusMonths(1).atDay(1).atStartOfDay();
+		// match_date 는 오프셋 없는 UTC 벽시계다(MatchDateWindow 참고). KST 한 달의 경계를
+		// 그 기준으로 옮겨야 월 첫날·마지막날 새벽 경기가 옆 달로 새지 않는다.
+		LocalDateTime start = MatchDateWindow.startOfDay(month.atDay(1));
+		LocalDateTime end = MatchDateWindow.endOfDay(month.atEndOfMonth());
 
 		List<com.toy.nar.app.lolesports.repository.LeagueMatch> matches = leagueMatchRepository
-				.findByDateRange(start, end.minusNanos(1)).stream()
+				.findByDateRange(start, end).stream()
 				.filter(match -> match.getLeagueName() != null)
 				.filter(match -> isAllowedLeague(match.getLeagueName()))
 				.filter(match -> leagueFilter == null || leagueFilter.equalsIgnoreCase(match.getLeagueName()))
@@ -90,7 +93,8 @@ public class ScheduleService {
 			if (match.getMatchDate() == null) {
 				continue;
 			}
-			String dateKey = match.getMatchDate().toLocalDate().toString();
+			// toLocalDate() 는 UTC 날짜다 — 그대로 쓰면 KST 새벽 경기가 하루 앞 칸에 찍힌다.
+			String dateKey = MatchDateWindow.toKstDate(match.getMatchDate()).toString();
 			ScheduleCalendarResponseDto.ScheduleDateSummaryDto existing = dateMap.get(dateKey);
 			if (existing == null) {
 				List<String> leagues = new ArrayList<>();
@@ -227,10 +231,8 @@ public class ScheduleService {
 		String normalizedRedTeamName = com.toy.nar.common.util.NameNormalizer
 				.normalizeTeamName(leagueMatch.getRedTeamName());
 
-		// Format scheduled time from matchDate (LocalDateTime), converting UTC to KST
 		String scheduledTime = leagueMatch.getMatchDate() != null
-				? leagueMatch.getMatchDate().atZone(java.time.ZoneId.of("UTC"))
-						.withZoneSameInstant(java.time.ZoneId.of("Asia/Seoul"))
+				? MatchDateWindow.toKst(leagueMatch.getMatchDate())
 						.toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
 				: "";
 
