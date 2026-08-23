@@ -17,6 +17,15 @@ scrape_configs:
         labels:
           instance: nar-macmini
 
+  # 스케줄러 파드. 잡 지표(nar_scheduler_*)가 여기 있다 — 파드 분리(#442) 때
+  # 웹에서 이사했는데 이 타깃이 없어서 잡 패널이 No data 였다.
+  - job_name: nar-scheduler
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['172.17.0.1:30084']
+        labels:
+          instance: nar-scheduler
+
   # 춘천 MySQL (원본). 컷오버 후에는 복제본이 된다.
   - job_name: mysql
     static_configs:
@@ -31,3 +40,10 @@ scrape_configs:
       - targets: ['mysqld-exporter:9104']
         labels:
           instance: macmini-db
+
+  # 크론잡 지표 (pushgateway). honor_labels 가 없으면 push 때 넣은 job/instance 라벨을
+  # Prometheus 가 자기 것(job=cron-jobs)으로 덮어써서 잡 구분이 사라진다.
+  - job_name: cron-jobs
+    honor_labels: true
+    static_configs:
+      - targets: ['pushgateway:9091']

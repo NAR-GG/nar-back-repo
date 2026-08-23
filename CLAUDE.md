@@ -173,3 +173,17 @@ API 쿼터를 태우거나 prod 채널·실유저에게 알림을 보낼 수 있
 ## CI/CD
 
 GitHub Actions (`.github/workflows/deploy.yml`): Gradle build → Docker image → push to Docker Hub → SSH deploy to EC2 → health check against `/v3/api-docs`. Production logs viewable via Dozzle at `https://api.nar.kr/dozzle`.
+
+## Agent skills
+
+### Issue tracker
+
+이슈는 GitHub Issues(`NAR-GG/nar-back-repo`)에 있고 `gh` CLI로 다룬다. `docs/agents/issue-tracker.md` 참고.
+
+### Triage labels
+
+기본 라벨 어휘 5종(`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`)을 그대로 쓴다. `docs/agents/triage-labels.md` 참고.
+
+### Domain docs
+
+single-context 레이아웃(루트 `CONTEXT.md` + `docs/adr/`). 아직 둘 다 없으며, 필요해질 때 `/domain-modeling`이 만든다. `docs/agents/domain.md` 참고.

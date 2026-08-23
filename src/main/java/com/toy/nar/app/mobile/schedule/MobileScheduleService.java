@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.schedule;
 
+import com.toy.nar.app.lolesports.MatchDateWindow;
 import com.toy.nar.app.lolesports.LeagueConstants;
 import com.toy.nar.app.lolesports.live.ActiveLiveGame;
 import com.toy.nar.app.lolesports.live.LiveStateStore;
@@ -26,7 +27,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -47,8 +47,6 @@ public class MobileScheduleService {
 	private static final String DEFAULT_LEAGUE = "LCK";
 	private static final String ALL_LEAGUES = "ALL";
 	private static final int DEFAULT_TEAM_YEAR = 2026;
-	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-	private static final ZoneId UTC = ZoneId.of("UTC");
 	private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 	private static final List<String> LCK_TEAM_CODES = List.of(
 			"T1", "HLE", "GEN", "DK", "KT",
@@ -107,13 +105,13 @@ public class MobileScheduleService {
 		}
 		List<String> normalizedLeagues = normalizeLeagues(league);
 		TeamFilters teamFilters = resolveTeamFilters(teamId);
-		LocalDateTime startUtc = toUtc(month.atDay(1).atStartOfDay());
-		LocalDateTime endUtc = toUtc(month.plusMonths(1).atDay(1).atStartOfDay());
+		LocalDateTime startUtc = MatchDateWindow.toUtc(month.atDay(1).atStartOfDay());
+		LocalDateTime endUtc = MatchDateWindow.toUtc(month.plusMonths(1).atDay(1).atStartOfDay());
 		List<LeagueMatch> matches = findMatches(normalizedLeagues, teamFilters, startUtc, endUtc);
 
 		Map<String, MobileScheduleCalendarResponse.DateSummary> summaries = new LinkedHashMap<>();
 		for (LeagueMatch match : matches) {
-			String date = toKstDate(match).toString();
+			String date = MatchDateWindow.toKstDate(match.getMatchDate()).toString();
 			MobileScheduleCalendarResponse.DateSummary existing = summaries.get(date);
 			if (existing == null) {
 				summaries.put(date, new MobileScheduleCalendarResponse.DateSummary(
@@ -143,8 +141,8 @@ public class MobileScheduleService {
 		}
 		List<String> normalizedLeagues = normalizeLeagues(league);
 		TeamFilters teamFilters = resolveTeamFilters(teamId);
-		LocalDateTime startUtc = toUtc(date.atStartOfDay());
-		LocalDateTime endUtc = toUtc(date.plusDays(1).atStartOfDay());
+		LocalDateTime startUtc = MatchDateWindow.toUtc(date.atStartOfDay());
+		LocalDateTime endUtc = MatchDateWindow.toUtc(date.plusDays(1).atStartOfDay());
 		List<LeagueMatch> found = findMatches(normalizedLeagues, teamFilters, startUtc, endUtc);
 		Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId = loadGames(found);
 		List<MobileScheduleListResponse.MobileMatchSummary> matches = found.stream()
@@ -236,7 +234,7 @@ public class MobileScheduleService {
 		LocalDateTime cursorDate = matchCursor != null ? matchCursor.matchDate() : null;
 		String cursorId = matchCursor != null ? matchCursor.matchId() : null;
 		// matchDate 는 UTC 저장이라 KST 기준 그날 00:00 을 UTC 로 옮겨 비교한다.
-		LocalDateTime fromUtc = from == null ? null : toUtc(from.atStartOfDay());
+		LocalDateTime fromUtc = from == null ? null : MatchDateWindow.toUtc(from.atStartOfDay());
 
 		List<LeagueMatch> fetched = fromUtc == null
 				? fetchDesc(leagueParam, teamFilter, seasonYear, normalizedSplit, cursorDate, cursorId, pageSize + 1)
@@ -268,7 +266,7 @@ public class MobileScheduleService {
 			String seasonSplit,
 			int pageSize,
 			LocalDate around) {
-		LocalDateTime anchorUtc = toUtc(around.atStartOfDay());
+		LocalDateTime anchorUtc = MatchDateWindow.toUtc(around.atStartOfDay());
 		int futureSize = pageSize / 2 + pageSize % 2;
 		int pastSize = pageSize - futureSize;
 
@@ -582,7 +580,7 @@ public class MobileScheduleService {
 			Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId) {
 		return new MobileScheduleListResponse.MobileMatchSummary(
 				match.getId(),
-				match.getMatchDate() != null ? toKstDate(match).toString() : null,
+				match.getMatchDate() != null ? MatchDateWindow.toKstDate(match.getMatchDate()).toString() : null,
 				toScheduledTime(match),
 				match.getState(),
 				match.getMatchTitle(),
@@ -762,24 +760,9 @@ public class MobileScheduleService {
 		if (match.getMatchDate() == null) {
 			return "";
 		}
-		return match.getMatchDate()
-				.atZone(UTC)
-				.withZoneSameInstant(KST)
+		return MatchDateWindow.toKst(match.getMatchDate())
 				.toLocalTime()
 				.format(TIME_FORMATTER);
-	}
-
-	private LocalDate toKstDate(LeagueMatch match) {
-		return match.getMatchDate()
-				.atZone(UTC)
-				.withZoneSameInstant(KST)
-				.toLocalDate();
-	}
-
-	private LocalDateTime toUtc(LocalDateTime kstDateTime) {
-		return kstDateTime.atZone(KST)
-				.withZoneSameInstant(UTC)
-				.toLocalDateTime();
 	}
 
 	private TeamFilter resolveTeamFilter(Long teamId) {

@@ -56,6 +56,25 @@ data:
       - hostname: home.nar.kr
         service: http://traefik.traefik.svc.cluster.local:80
 
+      # Grafana(관측 허브). argocd.nar.kr 과 같은 전제다 — **Cloudflare Access 가 앞에서
+      # 막아야 한다.** Grafana 자체 로그인이 있지만 그건 브루트포스에 노출된 로그인이다.
+      #
+      # 목적지가 클러스터 서비스가 아니다. Grafana 는 k3s 파드가 아니라 같은 Colima VM 의
+      # docker compose(`infra/monitoring/macmini/`)에서 돌고 0.0.0.0:3000 에 퍼블리시된다.
+      # 10.42.0.1 은 그 VM 의 cni0 주소 — 파드에서 노드를 가리키는 이름이다.
+      # eth0(192.168.5.1)도 되지만 그건 DHCP 라 리스가 바뀌면 깨진다. cni0 은 파드 CIDR
+      # (10.42.0.0/24, 단일 노드)에 묶여 있어 재부팅을 넘겨도 같다.
+      # 맥미니 호스트(host.docker.internal:3000)로 가면 Colima 포트 포워딩을 타는데,
+      # 그게 2026-08-21 장애의 원인이라 일부러 피한다.
+      - hostname: grafana.nar.kr
+        service: http://10.42.0.1:3000
+
+      # Uptime Kuma. 춘천 박스(es-vnic)에서 돌고 Tailscale IP 에만 바인딩돼 있다.
+      # 파드에서 100.x 대역은 도달한다(실측 302). MagicDNS 이름은 해석 못 하므로 IP 로 적는다.
+      # 이 호스트도 Access 뒤에 둔다 — Kuma 로그인 하나만 믿지 않는다.
+      - hostname: kuma.nar.kr
+        service: http://100.71.240.23:3001
+
       # 위 규칙에 안 걸리는 요청은 버린다. 터널이 열려 있다고 해서
       # 클러스터의 다른 서비스가 노출되면 안 된다.
       - service: http_status:404
@@ -94,7 +113,7 @@ spec:
         # ConfigMap 만 바꾸면 파드는 안 뜬다(마운트 파일은 갱신되지만 cloudflared 가
         # 다시 읽지 않는다). 체크섬을 넣어 ingress 규칙 변경이 롤링을 유발하게 한다.
         # 값은 config.yml 을 바꿀 때 같이 갱신한다 — `make` 류 자동화는 없다.
-        config-revision: "2026-08-22-1"
+        config-revision: "2026-08-23-1"
     spec:
       automountServiceAccountToken: false
 

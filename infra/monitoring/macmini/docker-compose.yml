@@ -33,6 +33,17 @@ services:
     ports:
       - "3000:3000"
 
+  # 크론잡 감시 지표 수신. 백업·복제감시·watchdog·복원검증 스크립트가 끝날 때
+  # "언제 돌았고 성공했나"를 여기로 push 하고 Prometheus 가 긁어간다.
+  # 크론은 pull 이 불가능하다 — 잡이 죽으면 긁을 대상 자체가 없다. 그래서 push 고,
+  # 진짜 신호는 "마지막 성공이 오래됐다"(침묵 감지)다.
+  pushgateway:
+    image: prom/pushgateway:latest
+    container_name: pushgateway
+    restart: unless-stopped
+    ports:
+      - "9091:9091"
+
   # 맥미니 MySQL 복제 지연 감시. 호스트 MySQL 에 host.docker.internal 로 붙는다.
   mysqld-exporter:
     image: prom/mysqld-exporter:latest
@@ -52,6 +63,8 @@ services:
       - run
       - --server.http.listen-addr=0.0.0.0:12345
       - /etc/alloy/config.alloy
+    ports:
+      - "12345:12345"
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock

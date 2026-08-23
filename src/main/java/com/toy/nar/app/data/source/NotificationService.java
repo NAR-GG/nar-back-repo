@@ -65,21 +65,6 @@ public class NotificationService {
 		sendNotification(title, message, "good");
 	}
 
-	public void sendUserCountNotification(long userCount) {
-		if (!notificationEnabled) return;
-
-		String title = "[트래픽 알림] 실시간 접속자";
-		String message = String.format("상태: 임계치 도달\n감지 시각: `%s`\n\n" +
-				"```text\n" +
-				"현재 접속자 : %d명\n" +
-				"```",
-			LocalDateTime.now().format(ALERT_TIME_FORMATTER),
-			userCount
-		);
-
-		sendNotification(title, message, "good");
-	}
-
 
 	/**
 	 * 실패 알림 전송

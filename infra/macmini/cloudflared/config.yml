@@ -45,6 +45,14 @@ ingress:
   - hostname: home.nar.kr
     service: http://127.0.0.1:30082
 
+  # 관측 UI 2개. 파드판과 목적지가 다르다 — 여기는 호스트라 Colima 포트 포워딩(3000)을
+  # 그대로 쓴다. 파드판은 VM 안에서 10.42.0.1:3000 으로 직접 간다.
+  # 둘 다 Cloudflare Access 뒤에 있어야 한다.
+  - hostname: grafana.nar.kr
+    service: http://127.0.0.1:3000
+  - hostname: kuma.nar.kr
+    service: http://100.71.240.23:3001
+
   # 위 규칙에 안 걸리는 요청은 버린다. 터널이 열려 있다고 해서
   # 맥미니의 다른 포트가 노출되면 안 된다.
   - service: http_status:404

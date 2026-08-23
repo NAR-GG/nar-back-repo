@@ -1,0 +1,22 @@
+# 스케줄러 파드 메트릭 노출 (Prometheus 전용).
+#
+# 스케줄러를 별도 파드로 뗀 날(#442) nar_scheduler_* 지표 36개가 파드를 따라
+# 이사했는데 Prometheus 는 nar-web(30081)만 긁고 있었다 — 오버뷰 대시보드의
+# 잡 패널 4개가 그날부터 No data 였다. 웹과 같은 패턴(NodePort 직접 스크랩)으로
+# 배선을 복구한다.
+#
+# 트래픽용이 아니다. cloudflared·Traefik 어디에도 이 포트로 가는 규칙이 없고,
+# NodePort 는 VM 안 + 호스트 루프백에서만 닿는다(30081 과 동일).
+apiVersion: v1
+kind: Service
+metadata:
+  name: nar-scheduler-metrics
+  namespace: nar
+spec:
+  type: NodePort
+  selector:
+    app: nar-scheduler
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30084

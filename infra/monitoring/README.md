@@ -31,11 +31,15 @@ Colima VM 안 컨테이너에서 `100.x` 대역은 도달하지만 **MagicDNS �
 
 | | 주소 |
 |---|---|
-| Grafana | `http://macmini:3000` |
+| Grafana | `https://grafana.nar.kr` (Cloudflare Access) 또는 `http://macmini:3000` |
+| Uptime Kuma | `https://kuma.nar.kr` (Cloudflare Access) 또는 `http://100.71.240.23:3001` |
 | Prometheus | `http://macmini:9090` |
 | Loki | `http://macmini:3100` (직접 볼 일은 없다) |
 
-Tailscale 안에서만 닿는다.
+Prometheus·Loki 는 Tailscale 안에서만 닿는다. Grafana·Kuma 는 Cloudflare Tunnel 로도
+나가 있다(`infra/k8s/cloudflared.yaml`). **그 두 호스트는 Cloudflare Access 가 앞에서
+막는 전제로 열었다** — Access 앱을 지우면 관리 UI 가 공개 인터넷에 그대로 남으므로,
+정책을 풀 때는 ingress 규칙도 같이 지운다.
 
 ## 앱 메트릭이 9105를 거치는 이유
 
