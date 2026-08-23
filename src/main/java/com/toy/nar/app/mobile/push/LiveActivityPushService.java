@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.push;
 
+import com.toy.nar.domain.member.repository.LiveActivityCardDispatchRepository;
 import com.toy.nar.domain.member.repository.LiveActivityStartTokenRepository;
 import com.toy.nar.domain.member.repository.LiveActivityTokenRepository;
 import lombok.RequiredArgsConstructor;
@@ -47,21 +48,22 @@ public class LiveActivityPushService {
 	private static final String ATTRIBUTES_TYPE = "MatchLiveAttributes";
 
 	/**
-	 * 같은 기기·같은 경기에 카드를 다시 만들어 주지 않는 시간.
+	 * 방금 발행한 카드를 "다시 발행해도 된다"고 보지 않는 시간.
 	 *
-	 * <p>기존 중복 방지는 {@code NOT EXISTS(active LiveActivityToken)} 하나뿐인데, 그 토큰은
-	 * 카드가 뜬 뒤 <b>앱이</b> 올려 준다. 실측 2026-08-16 매치 115548147900619033 에서
-	 * push-to-start 발송(19:45:11)과 토큰 등록(19:45:13~21) 사이가 2~10초였다. 그 창 안에
-	 * 두 번째 요청이 들어오면 가드가 통과해 카드가 두 장 뜬다 — 같은 매치에서 member 10 이
-	 * 17:07:37 / 17:07:39 두 번 catch-up 되고 "이전 카드 닫음" 로그 없이 2장이 됐다.
+	 * <p>따라잡기 경로는 발행 이력을 풀고 다시 발행한다(사용자가 카드를 지웠을 수 있으므로).
+	 * 그런데 갱신 토큰은 발행 뒤 2~10초 있어야 올라오므로 그 창 안에서는
+	 * {@link #closePreviousCard} 가 닫을 토큰을 못 찾아 앞 카드가 살아남는다 — 짧은 간격의 연속
+	 * 구독 액션이 카드를 두 장 만든다(실측 2026-08-16 member 10, 17:07:37 / 17:07:39).
+	 * 등록 지연 최대치의 3배로 잡는다.</p>
 	 *
-	 * <p>30초는 등록 지연 최대치의 3배다. 더 길게 잡으면 사용자가 카드를 지우고 다시 구독하는
-	 * 정상 경로(따라잡기)까지 막는다.
+	 * <p>예전에는 같은 목적의 창이 Caffeine 인메모리였는데, #442 로 파드가 둘이 된 뒤 세트 시작
+	 * (스케줄러)과 따라잡기(웹)가 서로 다른 JVM 이라 공유되지 않았다. DB 시계로 옮겨 고쳤다.</p>
 	 */
-	private static final Duration RECENT_START_WINDOW = Duration.ofSeconds(30);
+	private static final Duration RECENT_DISPATCH_WINDOW = Duration.ofSeconds(30);
 
 	private final LiveActivityTokenRepository tokenRepository;
 	private final LiveActivityStartTokenRepository startTokenRepository;
+	private final LiveActivityCardDispatchRepository cardDispatchRepository;
 	private final ApnsLiveActivityClient apnsClient;
 
 	/**
@@ -70,32 +72,6 @@ public class LiveActivityPushService {
 	 */
 	@Value("${apns.push-to-start.enabled:false}")
 	private boolean pushToStartEnabled;
-
-	/**
-	 * 방금 카드를 보낸 (매치, 회원, 토큰). 서버가 자기 발송을 기억하는 유일한 즉시 신호다.
-	 *
-	 * <p>키에 토큰이 들어가는 이유 — 회원 단위로 잡으면 <b>토큰이 여러 개인 회원에게 한 대에만</b>
-	 * 보내게 된다. 대상 조회에 정렬이 없어 그 "한 대"는 임의로 정해지고, 오래된 유령 토큰이
-	 * 뽑히면 그 회원은 카드를 영영 못 받는다. 게다가 유령에게 보내지 않으니 410 도 못 받아
-	 * {@link LiveActivityStartTokenRepository#deactivateByPushTokenIn 자동 정리}가 돌지 않는다 —
-	 * 유령이 계속 쌓이고 당첨 확률은 더 나빠지는 악순환이다.
-	 * 실측 2026-08-20 member 621: 활성 토큰 19개가 쌓여 8/13 부터 카드가 한 번도 안 떴다.
-	 * 손으로 최신 1개만 남기자 즉시 정상화됐다.</p>
-	 *
-	 * <p>토큰 단위로 바꾸면 기기마다 한 장씩 뜬다(아이폰+아이패드가 원래 그래야 하는 동작이고,
-	 * 지금까지는 한 대만 받았다). 토큰이 막 회전한 직후처럼 옛 토큰이 아직 살아 있는 짧은 구간에는
-	 * 한 기기에 카드가 두 장 뜰 수 있는데, 아무것도 못 받는 것보다 낫다고 보고 감수한다.
-	 * 그 옛 토큰은 다음 발송에서 410 을 받고 정리된다.</p>
-	 *
-	 * <p>ponytail: 인메모리라 재기동하면 비고, 앱 인스턴스가 늘면 인스턴스별로 따로 센다.
-	 * 둘 다 최악이 "카드 한 장 더" 인 현재 동작으로 돌아가는 것뿐이라 테이블을 만들지 않았다.
-	 * 다중 인스턴스로 가면 Redis 나 발송 이력 테이블로 옮긴다.</p>
-	 */
-	private final com.github.benmanes.caffeine.cache.Cache<String, Boolean> recentStarts =
-			com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
-					.expireAfterWrite(RECENT_START_WINDOW)
-					.maximumSize(10_000)
-					.build();
 
 	/**
 	 * 매치별로 마지막에 카드에 반영한 진행도. 뒤처진 이벤트를 걸러내는 워터마크다.
@@ -198,6 +174,7 @@ public class LiveActivityPushService {
 			return;
 		}
 		closePreviousCard(matchId, memberId, setNumber, blueScore, redScore);
+		releaseDispatch(matchId, memberId);
 		List<LiveActivityStartTokenRepository.StartTargetRow> targets;
 		try {
 			targets = startTokenRepository.findStartTargetsForMember(matchId, memberId);
@@ -249,16 +226,20 @@ public class LiveActivityPushService {
 	}
 
 	/**
-	 * 이 회원·이 경기에 지금 카드를 만들어도 되는지 표시하고 결과를 돌려준다.
-	 * {@link #RECENT_START_WINDOW} 안에 이미 보냈으면 false — 두 경로(세트 시작 일괄 발송,
-	 * 구독 직후 따라잡기)가 같은 창을 공유해야 서로 겹쳐도 두 장이 되지 않는다.
+	 * 이 회원의 이 매치 발행 이력을 지워 카드를 다시 만들 수 있게 한다.
+	 *
+	 * <p>발행 선점이 매치 단위라, 이걸 풀지 않으면 사용자가 카드를 지우고 재구독해도 선점에 걸려
+	 * 그 매치 내내 카드가 안 뜬다. 재발행 의사가 확실한 경로(구독 직후 따라잡기)에서만 부른다.</p>
+	 *
+	 * <p>{@link #closePreviousCard} 보다 <b>먼저</b> 부르지 않아도 된다. 순서 의존은 없다 —
+	 * 대상 조회 전에만 끝나면 된다.</p>
 	 */
-	private boolean claimStart(String matchId, Long memberId, String pushToken) {
-		if (memberId == null) {
-			return true;
+	private void releaseDispatch(String matchId, Long memberId) {
+		try {
+			cardDispatchRepository.release(memberId, matchId, RECENT_DISPATCH_WINDOW);
+		} catch (Exception e) {
+			log.warn("카드 발행 이력 해제 실패 matchId={} memberId={}: {}", matchId, memberId, e.getMessage());
 		}
-		return recentStarts.asMap()
-				.putIfAbsent(matchId + "#" + memberId + "#" + pushToken, Boolean.TRUE) == null;
 	}
 
 	/** 대상 산정만 다르고 발송·죽은 토큰 정리는 같다. */
@@ -272,9 +253,7 @@ public class LiveActivityPushService {
 		if (targets.isEmpty()) {
 			return;
 		}
-		targets = targets.stream()
-				.filter(target -> claimStart(matchId, target.getMemberId(), target.getPushToken()))
-				.toList();
+		targets = claimDispatch(matchId, setNumber, targets);
 		if (targets.isEmpty()) {
 			return;
 		}
@@ -332,6 +311,54 @@ public class LiveActivityPushService {
 				log.warn("push-to-start 토큰 비활성화 실패 matchId={}: {}", matchId, e.getMessage());
 			}
 		}
+	}
+
+	/**
+	 * 아직 이 매치에 카드를 발행하지 않은 회원만 남긴다.
+	 *
+	 * <p>선점 이력이 DB 라 <b>세트가 바뀌어도, 파드가 바뀌어도, 재기동해도</b> 유지된다. 그래서
+	 * 카드는 매치당 한 장이다 — 세트 전환은 갱신 토큰으로 반영하고 새로 만들지 않는다. 실측
+	 * 2026-08-23 T1 vs HLE 에서 세트1 3,120건 뒤 세트2 에 2,702건이 또 나가 약 2,700명이 카드
+	 * 두 장을 받았고, 갱신 토큰이 없는 옛 카드는 만들어진 시점 스코어(0:0)에 영구히 멈춰 있었다.</p>
+	 *
+	 * <p><b>선점은 회원 단위, 발송은 토큰 단위다.</b> 회원 단위로 선점하고 토큰 하나만 골라
+	 * 보내면 안 된다 — 대상 조회에 정렬이 없어 "한 대"가 임의로 정해지고, 오래된 유령 토큰이
+	 * 뽑히면 그 회원은 카드를 영영 못 받는다. 유령에게 보내지 않으니 410 도 못 받아
+	 * {@link LiveActivityStartTokenRepository#deactivateByPushTokenIn 자동 정리}조차 안 돈다
+	 * (실측 2026-08-20 member 621: 활성 토큰 19개가 쌓여 8/13 부터 카드가 한 번도 안 떴다).
+	 * 그래서 선점된 회원의 토큰은 전부 보낸다 — 기기마다 한 장이 원래 의도한 동작이다.</p>
+	 *
+	 * <p>조회가 실패하면 선점을 건너뛰고 전부 보낸다. 카드가 한 장 더 뜨는 것보다 아무것도 못
+	 * 받는 쪽이 나쁘다.</p>
+	 */
+	private List<LiveActivityStartTokenRepository.StartTargetRow> claimDispatch(
+			String matchId,
+			int setNumber,
+			List<LiveActivityStartTokenRepository.StartTargetRow> targets) {
+		List<Long> memberIds = targets.stream()
+				.map(LiveActivityStartTokenRepository.StartTargetRow::getMemberId)
+				.filter(java.util.Objects::nonNull)
+				.distinct()
+				.toList();
+		if (memberIds.isEmpty()) {
+			return targets;
+		}
+		java.util.Set<Long> claimed;
+		try {
+			claimed = new java.util.HashSet<>(
+					cardDispatchRepository.claimAll(memberIds, matchId, setNumber));
+		} catch (Exception e) {
+			log.warn("카드 발행 선점 실패 — 선점 없이 발송한다 matchId={}: {}", matchId, e.getMessage());
+			return targets;
+		}
+		int skipped = memberIds.size() - claimed.size();
+		if (skipped > 0) {
+			log.info("[live-activity] 이미 카드를 발행한 회원 제외 matchId={} set={} 제외 {}명",
+					matchId, setNumber, skipped);
+		}
+		return targets.stream()
+				.filter(target -> target.getMemberId() != null && claimed.contains(target.getMemberId()))
+				.toList();
 	}
 
 	/**
@@ -554,6 +581,16 @@ public class LiveActivityPushService {
 			}
 		} catch (Exception e) {
 			log.warn("Live Activity 토큰 비활성화 실패 matchId={}: {}", matchId, e.getMessage());
+		}
+
+		// 발행 이력도 매치가 끝나면 쓸모가 없다. 여기서 지우지 않으면 경기마다 구독자 수만큼
+		// (실측 3천 행) 쌓여 무한히 자란다 — 알림함이 172만 행이 된 것과 같은 모양이 된다.
+		if (end) {
+			try {
+				cardDispatchRepository.deleteAllByMatchId(matchId);
+			} catch (Exception e) {
+				log.warn("카드 발행 이력 정리 실패 matchId={}: {}", matchId, e.getMessage());
+			}
 		}
 	}
 }

@@ -23,6 +23,7 @@ class LiveActivityPushServiceTest {
 
 	private LiveActivityTokenRepository tokenRepository;
 	private LiveActivityStartTokenRepository startTokenRepository;
+	private FakeLiveActivityCardDispatchRepository cardDispatchRepository;
 	private ApnsLiveActivityClient apnsClient;
 	private LiveActivityPushService service;
 
@@ -30,8 +31,10 @@ class LiveActivityPushServiceTest {
 	void setUp() {
 		tokenRepository = mock(LiveActivityTokenRepository.class);
 		startTokenRepository = mock(LiveActivityStartTokenRepository.class);
+		cardDispatchRepository = new FakeLiveActivityCardDispatchRepository();
 		apnsClient = mock(ApnsLiveActivityClient.class);
-		service = new LiveActivityPushService(tokenRepository, startTokenRepository, apnsClient);
+		service = new LiveActivityPushService(
+				tokenRepository, startTokenRepository, cardDispatchRepository, apnsClient);
 		when(apnsClient.isAvailable()).thenReturn(true);
 		when(apnsClient.sendUpdateAsync(anyString(), any())).thenReturn(alive(true));
 		when(apnsClient.sendEndAsync(anyString(), any(), any())).thenReturn(alive(true));

@@ -39,6 +39,7 @@ class LiveActivityPushServiceRecreateTest {
 
 	private LiveActivityTokenRepository tokenRepository;
 	private LiveActivityStartTokenRepository startTokenRepository;
+	private FakeLiveActivityCardDispatchRepository cardDispatchRepository;
 	private ApnsLiveActivityClient apnsClient;
 	private LiveActivityPushService service;
 
@@ -46,8 +47,10 @@ class LiveActivityPushServiceRecreateTest {
 	void setUp() {
 		tokenRepository = mock(LiveActivityTokenRepository.class);
 		startTokenRepository = mock(LiveActivityStartTokenRepository.class);
+		cardDispatchRepository = new FakeLiveActivityCardDispatchRepository();
 		apnsClient = mock(ApnsLiveActivityClient.class);
-		service = new LiveActivityPushService(tokenRepository, startTokenRepository, apnsClient);
+		service = new LiveActivityPushService(
+				tokenRepository, startTokenRepository, cardDispatchRepository, apnsClient);
 		when(apnsClient.isAvailable()).thenReturn(true);
 		org.springframework.test.util.ReflectionTestUtils.setField(service, "pushToStartEnabled", true);
 		when(apnsClient.sendStartAsync(anyString(), anyString(), any(), any(), anyString(), anyString()))
@@ -162,11 +165,13 @@ class LiveActivityPushServiceRecreateTest {
 	}
 
 	@Test
-	@DisplayName("같은 토큰의 중복 발송은 여전히 막는다 — 30초 창")
+	@DisplayName("중복 발송은 발행 이력이 막는다 — 두 번째 호출은 선점에 걸려 안 나간다")
 	void stillBlocksDuplicateSendToSameToken() {
 		when(startTokenRepository.findStartTargets("match-1", 10L, 20L))
 				.thenReturn(List.of(startTarget("live-tok", 7L, "HLE")));
 
+		// 두 번째 호출을 막는 건 대역의 UNIQUE(member_id, match_id) 다 — 서비스가 선점을
+		// 실제로 존중하는지가 여기서 드러난다.
 		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
 		service.startCards("match-1", 1, 0, 0, 10L, 20L, attributes());
 
