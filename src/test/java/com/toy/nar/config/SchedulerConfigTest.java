@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import com.toy.nar.domain.sync.repository.SchedulerLeaseRepository;
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 
@@ -13,8 +15,11 @@ import org.springframework.scheduling.config.ScheduledTaskRegistrar;
  */
 class SchedulerConfigTest {
 
+	// SchedulerConfig 가 리더 리스 서비스를 물게 되면서(둘 다 같은 스위치 조건) 함께 올린다.
+	// 리포지토리는 DB 가 필요 없는 목으로 채운다 — 이 테스트의 관심사는 스위치뿐이다.
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-			.withUserConfiguration(SchedulerConfig.class);
+			.withBean(SchedulerLeaseRepository.class, () -> Mockito.mock(SchedulerLeaseRepository.class))
+			.withUserConfiguration(SchedulerConfig.class, SchedulerLeaseService.class);
 
 	@Test
 	@DisplayName("app.scheduling.enabled 미설정이면 스케줄러 설정이 로드되지 않는다")

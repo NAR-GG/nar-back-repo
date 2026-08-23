@@ -60,6 +60,12 @@ spec:
 
             - name: APP_SCHEDULING_ENABLED
               value: "true"
+            # 리더 리스(scheduler_lease 테이블). Recreate 아래에서는 파드가 하나라 항상 즉시
+            # 리더가 되므로 켜도 동작이 안 바뀐다 — 획득·갱신·반납 로그를 검증하는 단계다.
+            # 이 로그가 깨끗하면 strategy 를 RollingUpdate 로 바꾼다(무중단 교체, 별도 PR).
+            # 문제가 생기면 이 env 만 지우면 오늘까지의 동작으로 돌아간다.
+            - name: APP_SCHEDULING_LEASE_ENABLED
+              value: "true"
 
             # WhaTap 을 안 붙인다. 이번 달 해지 예정이라 새 파드에 새 oname 을 등록할
             # 이유가 없고, 에이전트 하나만큼 메모리를 아낀다. 웹 파드에는 아직 남아 있다.

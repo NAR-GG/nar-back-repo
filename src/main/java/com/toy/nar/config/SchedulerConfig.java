@@ -27,6 +27,12 @@ public class SchedulerConfig implements SchedulingConfigurer {
 
 	private static final int SCHEDULED_TASK_CONCURRENCY_LIMIT = 5;
 
+	private final SchedulerLeaseService leaseService;
+
+	public SchedulerConfig(SchedulerLeaseService leaseService) {
+		this.leaseService = leaseService;
+	}
+
 	@Bean
 	public TaskScheduler taskScheduler() {
 		SimpleAsyncTaskScheduler taskScheduler = new SimpleAsyncTaskScheduler();
@@ -38,6 +44,8 @@ public class SchedulerConfig implements SchedulingConfigurer {
 
 	@Override
 	public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
-		taskRegistrar.setTaskScheduler(taskScheduler());
+		// 모든 @Scheduled 가 이 스케줄러를 거친다. 리더 게이트를 여기 한 곳에 두면
+		// 잡을 새로 추가해도 게이트를 빠뜨릴 수 없다 (LeaderGatedTaskScheduler 참고).
+		taskRegistrar.setTaskScheduler(new LeaderGatedTaskScheduler(taskScheduler(), leaseService));
 	}
 }
