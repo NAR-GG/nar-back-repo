@@ -1,5 +1,6 @@
-# 웹 파드. 아직 트래픽을 안 받는다 — Service·Ingress 가 없고, nginx 는 여전히
-# docker 컨테이너(8083)를 가리킨다. 트래픽 전환은 별도 단계다.
+# 웹 파드. 실트래픽을 받는다 (헤더가 "아직 안 받는다" 라고 거짓말하고 있었다 — 전환은 끝났다).
+#   Cloudflare → 호스트 cloudflared → 127.0.0.1:30082 → Traefik(NodePort) → 이 파드
+# 라우팅은 traefik-routes.yaml, Service 는 nar-web-service.yaml.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -10,6 +11,18 @@ spec:
   # 롤백은 Git 으로 한다(옛 SHA 재배포). kubectl rollout undo 를 쓸 일이 없으므로
   # 옛 ReplicaSet 이력을 기본값 10개나 쌓아둘 이유가 없다 — ArgoCD 트리만 어지럽힌다.
   revisionHistoryLimit: 3
+
+  # 무중단 배포. 기본값 25%/25% 로도 replicas 1 에서는 올림·내림이 맞아떨어져
+  # 같은 결과가 나오지만, 무중단을 반올림 규칙에 맡기고 있었다.
+  # replicas 를 건드리는 순간 조용히 깨지는 종류의 의존이라 숫자로 못박는다.
+  #
+  # ⚠️ maxSurge 0 으로 바꾸면 유일한 파드가 먼저 죽어 다운타임이 생긴다.
+  #    스케줄러(nar-scheduler.yaml)와 달리 여기는 Recreate 를 쓰면 안 된다.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: nar-web
@@ -67,8 +80,19 @@ spec:
             # 월말 해지 때 이 값에서 -javaagent 와 -Dwhatap.oname 을 지우고,
             # 아래 whatap 볼륨(volumeMounts·volumes)도 함께 걷어낸다.
             # 에이전트 jar 는 hostPath(~/nar/whatap)에 있고 oname 만 파드용으로 바꿨다.
+            #
+            # ── Xmx 는 2g 였다 (2026-08-23 롤아웃 OOMKilled 2건) ──
+            # 근거 없는 숫자였다. Prometheus 7일 실측:
+            #   live data(풀GC 후 생존)  453 MiB
+            #   힙 커밋 최대            1424 MiB   ← 2g 라 G1 이 GC 대신 힙을 늘렸다
+            #   할당률 13.2 MiB/s, GC overhead 1.1%, 정지시간 0.027%
+            # 1024m 은 생존의 2.3배. eden 571 MiB 라 young GC 는 43초마다 = 1.4회/분으로
+            # 지금(2.57회/분)보다 오히려 덜 돈다 — 힙이 자주 430M 로 쪼그라들어 있어서다.
+            #
+            # ⚠️ 1.5g·1.7g 로 낮추는 건 무의미하다. 관측 최대 커밋 1424 MiB 가 그 아래라
+            #    캡이 안 걸린다. 죽던 순간 anon-rss 1777 MiB(=힙 커밋 약 1235)도 마찬가지다.
             - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx2g -javaagent:/whatap/whatap.agent-2.2.77.jar -Dwhatap.oname=nar-web --add-opens=java.base/java.lang=ALL-UNNAMED"
+              value: "-Xmx1024m -javaagent:/whatap/whatap.agent-2.2.77.jar -Dwhatap.oname=nar-web --add-opens=java.base/java.lang=ALL-UNNAMED"
 
             # 롤링 교체에서 옛 파드가 SIGTERM 을 받는 순간 Tomcat 이 처리 중이던
             # 커넥션을 끊어 502 가 난다(#422 검증 배포에서 실제로 관측).
@@ -98,14 +122,30 @@ spec:
               value: "true"
 
           resources:
+            # RSS 구성식 (실측 검산: 1583Mi = 힙커밋 1041 + 논힙 339 + 기타 203)
+            #   힙 커밋 상한          1024Mi   (-Xmx1024m)
+            #   논힙 커밋              339Mi   (메타스페이스 201 + 코드힙 119 + 클래스 24)
+            #   스레드(94개)·GC구조·malloc  203Mi
+            #   ────────────────────────────
+            #   worst-case             1566Mi
+            #
+            # 2026-08-23 OOM 은 cgroup 한도 초과가 아니라 VM 전역 고갈이었다
+            # (dmesg: `constraint=CONSTRAINT_NONE ... global_oom`). 그래서 한도를 만지는 게
+            # 아니라 **실사용량 자체**를 줄이는 게 고침이다 — 그건 위 Xmx 가 한다.
+            # 여기 숫자는 장부를 실측에 맞추는 일이다.
+            #
+            # Guaranteed QoS(oom_score_adj -997)로 만들 수도 있지만 그러려면 CPU 에도
+            # limits 를 걸어야 한다(메모리만 맞춰선 Burstable 그대로다). CPU 한도는
+            # 스로틀링이라 기동과 GC 를 느리게 만든다 — 새 위험을 사서 보험을 드는 꼴이라 안 한다.
             requests:
-              # 실측 RSS 1318Mi (힙 미포화). 스케줄링 기준이므로 평상시 값으로 잡는다.
-              memory: "1536Mi"
+              # 실측 정상 RSS(1583Mi) 근처. 스케줄링 기준이므로 평상시 값으로 잡는다.
+              memory: "1600Mi"
               cpu: "500m"
             limits:
-              # 힙 2g 위에 메타스페이스·스레드 스택·다이렉트 버퍼가 얹힌다.
-              # 2Gi 로 잡으면 힙이 차는 순간 OOMKill 이다.
-              memory: "3Gi"
+              # worst-case 1566Mi 에 모델 오차분을 얹었다. 1600Mi 로 바짝 조이면
+              # 추정이 조금만 빗나가도 cgroup OOMKill 이라 여유를 남긴다.
+              # 그래도 옛 3Gi 대비 천장이 1/3 낮아져 서지(2파드) 피크가 확 줄어든다.
+              memory: "2Gi"
               # CPU 한도는 두지 않는다. 한도는 스로틀링이라, 여유가 있어도 GC 와 기동이 느려진다.
 
           # docker 판에 없던 것. 프로세스는 살아 있는데 응답을 못 하는 상태를
