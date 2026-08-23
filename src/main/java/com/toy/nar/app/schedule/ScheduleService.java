@@ -231,10 +231,8 @@ public class ScheduleService {
 		String normalizedRedTeamName = com.toy.nar.common.util.NameNormalizer
 				.normalizeTeamName(leagueMatch.getRedTeamName());
 
-		// Format scheduled time from matchDate (LocalDateTime), converting UTC to KST
 		String scheduledTime = leagueMatch.getMatchDate() != null
-				? leagueMatch.getMatchDate().atZone(java.time.ZoneId.of("UTC"))
-						.withZoneSameInstant(java.time.ZoneId.of("Asia/Seoul"))
+				? MatchDateWindow.toKst(leagueMatch.getMatchDate())
 						.toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
 				: "";
 

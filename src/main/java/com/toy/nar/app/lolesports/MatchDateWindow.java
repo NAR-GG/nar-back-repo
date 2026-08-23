@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 
 /**
  * {@code league_match.match_date} 조회 구간을 KST 하루/기간 기준으로 만든다.
@@ -36,9 +37,19 @@ public final class MatchDateWindow {
 	private MatchDateWindow() {
 	}
 
+	/** KST 벽시계 시각을 match_date 와 같은 기준으로 옮긴다. 하루 경계가 아닌 임의 시각용. */
+	public static LocalDateTime toUtc(LocalDateTime kstWallClock) {
+		return kstWallClock.atZone(KST).withZoneSameInstant(MATCH_DATE_ZONE).toLocalDateTime();
+	}
+
+	/** match_date 를 KST 로 읽는다. 날짜만 필요하면 {@link #toKstDate}, 시각은 여기서 꺼낸다. */
+	public static ZonedDateTime toKst(LocalDateTime matchDate) {
+		return matchDate.atZone(MATCH_DATE_ZONE).withZoneSameInstant(KST);
+	}
+
 	/** KST 하루의 시작을 match_date 와 같은 기준으로 옮긴 값(포함). */
 	public static LocalDateTime startOfDay(LocalDate kstDay) {
-		return kstDay.atStartOfDay(KST).withZoneSameInstant(MATCH_DATE_ZONE).toLocalDateTime();
+		return toUtc(kstDay.atStartOfDay());
 	}
 
 	/** KST 하루의 끝을 match_date 와 같은 기준으로 옮긴 값(포함). 다음 날 시작 −1초다. */
@@ -51,6 +62,6 @@ public final class MatchDateWindow {
 	 * {@code matchDate.toLocalDate()} 는 UTC 날짜라 KST 새벽 경기가 하루 앞으로 묶인다.
 	 */
 	public static LocalDate toKstDate(LocalDateTime matchDate) {
-		return matchDate.atZone(MATCH_DATE_ZONE).withZoneSameInstant(KST).toLocalDate();
+		return toKst(matchDate).toLocalDate();
 	}
 }

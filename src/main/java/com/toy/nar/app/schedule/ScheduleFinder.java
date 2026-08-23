@@ -98,8 +98,7 @@ public class ScheduleFinder {
 				.normalizeTeamName(leagueMatch.getRedTeamName());
 
 		String scheduledTime = leagueMatch.getMatchDate() != null
-				? leagueMatch.getMatchDate().atZone(MatchDateWindow.MATCH_DATE_ZONE)
-						.withZoneSameInstant(MatchDateWindow.KST)
+				? MatchDateWindow.toKst(leagueMatch.getMatchDate())
 						.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
 				: "";
 
