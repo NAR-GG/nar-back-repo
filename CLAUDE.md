@@ -29,11 +29,13 @@ for m in json.load(sys.stdin)['matches']:
 ```
 
 - **경기 창(시작 1시간 전 ~ 마지막 세트 종료)과 겹치는 인프라 작업 금지.** `inProgress`가 하나라도 있으면 즉시 중단.
-- 여기서 인프라 작업이란: **스케줄러 파드 재시작/배포, DB·시크릿 변경, 서버(맥미니·춘천 박스) 재부팅, 의존 인프라(MySQL·Tailscale·cloudflared) 조작** 전부.
-- **main 머지는 이제 경기 중에도 안전하다** — 파이프라인이 경기 창을 감지해 스케줄러 태그를 보류하고 웹만 배포한다(위 CI/CD 절). 단 **파괴적 마이그레이션(`DROP`·`RENAME`·`MODIFY`)이 섞이면 보류가 해제**되어 스케줄러가 재기동되므로, 그런 머지는 여전히 경기 창 밖에서 한다.
-- 이유: 라이브폴링의 세트 시작 감지(edge)가 **인메모리**(`LivePollingScheduler.startNotifiedGameIds`)라 재시작하면 유실된다. 재기동한 파드는 진행 중 세트를 "이미 시작됨"으로 보고 넘어가므로 **그 세트의 라이브위젯(push-to-start)·시작 알림이 통째로 누락**되고 복구 방법이 없다. 실사고: 2026-08-22 DK vs GEN — ES 박스 재부팅 → 파드 CrashLoop 44분 → 1세트 위젯 미발송.
+- 여기서 인프라 작업이란: **DB·시크릿 변경, 서버(맥미니·춘천 박스) 재부팅, 의존 인프라(MySQL·Tailscale·cloudflared) 조작.**
+- **main 머지와 파드 배포(웹·스케줄러 모두)는 경기 중에도 안전하다** (2026-08-23 실측 검증, #467~#475).
+  - 웹: `RollingUpdate` 라 공백 0초.
+  - 스케줄러: 리더 리스(`scheduler_lease`) + `RollingUpdate` — 새 파드가 standby 로 대기하다 구 파드가 리스를 반납하면 이어받는다. 실측 리더 공백 4초, 폴링 공백 ~6-15초. 그 공백의 프레임은 재기동한 파드가 DB(`live_game_minute_snapshot`)에서 이어받아 유실이 없고, 재발화하는 발송은 전부 DB 멱등이다(FCM `member_team_event_push_delivery`, 카드 `live_activity_card_dispatch`, 워터마크 `live_activity_match_progress`).
+  - 남은 꼬리: 세트 시작 **디스코드 웹훅**만 중복 가능(가드 없음). 내부 채널이라 감수한다.
 - **실서비스 기능에 영향을 줄 수 있는 작업은 사용자 승인을 먼저 받는다.** 자율 진행 금지. 진행 중에는 단계마다 그때그때 브리핑한다 (무엇을 건드리는지, 서비스에 어떤 영향인지, 언제 끝나는지).
-- 경기 중 작업이 불가피하면: 사용자 승인 + 세트 사이 휴식 창을 노리고, 재시작 후 라이브폴링 재개 로그(`[live-discovery]`)까지 확인하고 끝낸다.
+- 경기 중 작업이 불가피하면(위 금지 목록의 것): 사용자 승인 + 세트 사이 휴식 창을 노리고, 작업 후 라이브폴링 재개 로그(`[live-discovery]`)까지 확인하고 끝낸다.
 
 ## Project Overview
 
@@ -107,8 +109,9 @@ Caffeine은 JVM 안에 있어서 `CacheEvictionService`의 evict는 자기 JVM�
 
 ### Scheduling
 **스케줄러는 웹과 다른 파드에서 돈다** (`infra/k8s/nar-scheduler.yaml`, 같은 이미지 + `APP_SCHEDULING_ENABLED=true`).
-`nar-web`은 `false`다. ShedLock 같은 중복 실행 가드가 없어서 **스케줄러 파드는 언제나 정확히 하나**여야 한다
-(그래서 `strategy: Recreate`, `replicas: 1`). 두 벌 돌면 라이브 폴링·푸시가 이중으로 나간다.
+`nar-web`은 `false`다. **잡을 돌리는 파드는 언제나 정확히 하나** — 리더 리스(`scheduler_lease`,
+`SchedulerLeaseService`)가 보장한다. 두 벌 돌면 라이브 폴링·푸시가 이중으로 나가는데, 롤아웃
+겹침에서도 리더만 잡 본문을 실행하므로 `RollingUpdate` 로 무중단 교체가 된다(위 CI/CD 절).
 
 가상 스레드 기반, 동시 실행 5개 제한(`SchedulerConfig.java`). 잡이 늘어 밀리면 파드를 늘리는 게 아니라
 이 한도를 올리거나 도메인별로 Deployment를 쪼갠다(각각 `replicas: 1`).
@@ -177,29 +180,29 @@ GitOps. GitHub Actions(`.github/workflows/deploy-macmini.yml`) 가 하는 일은
 `deploy` 브랜치에 이미지 태그 기록. **반영은 ArgoCD 가 `deploy` 브랜치를 보고 한다**
 (#422 에서 SSH·블루-그린을 걷었다). 배포 대상은 맥미니 k3s 다. EC2 는 2026-08-19 종료.
 
-### 웹과 스케줄러의 배포가 갈려 있다
+### 두 파드 모두 무중단으로, 같은 태그로 배포된다
 
-**웹은 경기 중에도 배포된다. 스케줄러는 경기 창을 피한다.**
+머지마다 웹·스케줄러가 같은 이미지 태그로 함께 올라간다. 순서는 sync-wave 가 잡는다
+(`nar-web` wave 0 → Healthy → `nar-scheduler` wave 1) — 동시 surge 를 막아 롤아웃 피크가
+파드 3개로 묶인다.
 
-| | 전략 | 재기동 공백 | 경기 중 배포 |
-|---|---|---|---|
-| `nar-web` | `RollingUpdate` (maxSurge 1) | 0초 | 한다 |
-| `nar-scheduler` | `Recreate` (replicas 1) | **38~48초** (실측) | **보류한다** |
+| | 전략 | 교체 공백 |
+|---|---|---|
+| `nar-web` | `RollingUpdate` (maxSurge 1) | 0초 |
+| `nar-scheduler` | `RollingUpdate` + **리더 리스** | 리더 4초 / 폴링 ~6-15초 (실측 2026-08-23) |
 
-스케줄러는 `replicas: 1` + `Recreate` 라 원리적으로 무중단이 불가능하고, 그 공백에 세트 첫
-프레임이 떨어지면 그 세트의 시작 알림·라이브위젯이 통째로 누락된다.
+스케줄러의 "정확히 하나" 보장은 물리(Recreate)가 아니라 **리더 리스**다 —
+`scheduler_lease` 단일 행을 5초마다 갱신(TTL 15초)하고, 리더인 파드만 `@Scheduled` 본문을
+실행한다(`SchedulerLeaseService` + `LeaderGatedTaskScheduler`). 롤아웃 겹침 동안 새 파드는
+standby 로 대기한다. **`APP_SCHEDULING_LEASE_ENABLED` 를 끄려면 strategy 도 `Recreate` 로
+같이 되돌려야 한다** — 리스 없는 RollingUpdate 는 겹침 동안 폴링·푸시가 두 벌 돈다.
 
-- 게이트 판정은 `.github/scripts/match_window.py` — 진행 중이거나 1시간 내 시작이면 `clear=false`.
-  일정 API 를 못 읽으면 보수적으로 `false` 다. 자체 검증은 `test_match_window.py`.
-- 보류된 스케줄러 태그는 `scheduler-catchup.yml`(30분 cron)이 조용한 시간에 웹 태그로 맞춘다.
-  **이미지를 새로 빌드하지 않는다** — 웹이 쓰는 태그를 가리키게만 바꾼다.
-- 롤아웃 피크는 sync-wave 로 파드 3개에 묶여 있다 (`nar-web` wave 0 → `nar-scheduler` wave 1).
+**마이그레이션은 후방호환을 기본으로 한다.** 롤아웃 동안(수 분) 옛 코드가 새 스키마를 만난다.
+`CREATE TABLE`·컬럼 추가는 안전하고, `DROP`·`RENAME`·`MODIFY` 는 앱 코드가 그 대상을 더 이상
+참조하지 않게 된 다음 배포에서 한다.
 
-**마이그레이션은 후방호환만 쓴다.** 태그가 갈리면 옛 코드(스케줄러)가 새 스키마를 만난다.
-`CREATE TABLE`·컬럼 추가는 옛 코드가 모르고 지나가므로 안전하지만 `DROP`·`RENAME`·`MODIFY` 는
-아니다. 파이프라인이 새 마이그레이션에서 그 키워드를 발견하면 **게이트를 무시하고 둘 다
-배포한다** — 40초 공백보다 스키마 불일치가 나쁘다. 즉 파괴적 마이그레이션을 경기 중에 머지하면
-스케줄러가 재기동된다.
+경기 창을 피해 스케줄러 태그를 보류하던 게이트와 `scheduler-catchup.yml` 은 #476 에서
+걷어냈다 — 교체가 무해해져 미룰 이유가 없다.
 
 - 인프라 전체 지도와 이력: `infra/README.md`
 - 롤백은 Git 을 거친다: `infra/argocd/README.md`
