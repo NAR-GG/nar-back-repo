@@ -11,6 +11,9 @@ kind: Application
 metadata:
   name: nar
   namespace: argocd
+  annotations:
+    # 배포 완료(싱크 성공 + Healthy) 시 디스코드 알림 (notifications-cm.yaml)
+    notifications.argoproj.io/subscribe.on-deployed.discord: ""
 spec:
   project: default
   source:
