@@ -33,7 +33,7 @@ data:
               "fields": [
                 {"name": "Sync", "value": "{{.app.status.sync.status}}", "inline": true},
                 {"name": "Health", "value": "{{.app.status.health.status}}", "inline": true},
-                {"name": "Revision", "value": "{{printf \"%.8s\" .app.status.operationState.syncResult.revision}}", "inline": true}
+                {"name": "Revision", "value": "{{printf "%.8s" .app.status.operationState.syncResult.revision}}", "inline": true}
               ]
             }]
           }
