@@ -21,6 +21,27 @@ data:
     - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
       oncePer: app.status.operationState.syncResult.revision
       send: [app-deployed]
+  # 싱크가 Error/Failed 로 끝나면 발송. 같은 리비전 재시도 실패로는 1회만.
+  trigger.on-sync-failed: |
+    - when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']
+      oncePer: app.status.operationState.syncResult.revision
+      send: [app-sync-failed]
+  template.app-sync-failed: |
+    webhook:
+      discord:
+        method: POST
+        body: |
+          {
+            "embeds": [{
+              "title": "❌ {{.app.metadata.name}} 싱크 실패",
+              "color": 15158332,
+              "fields": [
+                {"name": "Phase", "value": "{{.app.status.operationState.phase}}", "inline": true},
+                {"name": "Revision", "value": "{{printf "%.8s" .app.status.operationState.syncResult.revision}}", "inline": true},
+                {"name": "Message", "value": {{printf "%q" .app.status.operationState.message}}}
+              ]
+            }]
+          }
   template.app-deployed: |
     webhook:
       discord:
