@@ -89,15 +89,15 @@ main ──(CI: 이미지 태그 한 줄 수정)──> deploy ──> ArgoCD �
 embed 를 쏜다. 설정은 `notifications-cm.yaml`, 구독은 `nar-app.yaml` 의
 `notifications.argoproj.io/subscribe.on-deployed.discord` 어노테이션.
 
-웹훅 URL 시크릿은 봉인해 두지 않았다 — 클러스터 안의 `nar-env` 에서 복사해 만든다:
+웹훅 URL 시크릿은 봉인해 두지 않았다 — 받을 채널의 웹훅 URL 로 만든다
+(디스코드 채널 설정 → 연동 → 웹후크):
 
 ```bash
 kubectl -n argocd create secret generic argocd-notifications-secret \
-  --from-literal=discord-webhook-url="$(kubectl -n nar get secret nar-env \
-    -o jsonpath='{.data.DISCORD_WEBHOOK_URL}' | base64 -d)"
+  --from-literal=discord-webhook-url="<채널 웹훅 URL>"
 ```
 
-다른 채널로 보내려면 그 채널의 웹훅 URL 로 시크릿만 갈아끼우면 된다.
+다른 채널로 보내려면 이 시크릿만 갈아끼우면 된다.
 `oncePer: revision` 이라 selfHeal 재싱크로는 중복 발송되지 않는다.
 
 ## "Synced" 가 뜻하지 않는 것
