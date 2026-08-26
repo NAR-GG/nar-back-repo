@@ -54,6 +54,32 @@ public class CloudinarySignatureService {
 				uploadUrl);
 	}
 
+	/**
+	 * 커뮤니티 첨부 사진 업로드 서명. 프로필과 달리 이미지마다 새 public_id(UUID) —
+	 * 덮어쓰기가 없어야 글에 이미 붙은 사진이 나중 업로드로 바뀌지 않는다.
+	 */
+	public ProfileImageUploadSignatureResponse buildCommunityUpload(Long memberId, long timestamp) {
+		String publicId = "community/" + memberId + "/" + java.util.UUID.randomUUID();
+		Map<String, String> params = Map.of(
+				"public_id", publicId,
+				"timestamp", String.valueOf(timestamp));
+		String signature = sign(params);
+		String uploadUrl = "https://api.cloudinary.com/v1_1/" + properties.getCloudName() + "/image/upload";
+		return new ProfileImageUploadSignatureResponse(
+				properties.getCloudName(),
+				properties.getApiKey(),
+				timestamp,
+				publicId,
+				false,
+				signature,
+				uploadUrl);
+	}
+
+	/** 앱이 보낸 secure_url 이 우리 Cloudinary 것인지. 외부 URL 주입(핫링크·우회 첨부)을 막는다. */
+	public boolean isOurSecureUrl(String url) {
+		return url != null && url.startsWith("https://res.cloudinary.com/" + properties.getCloudName() + "/");
+	}
+
 	private static String sha1Hex(String value) {
 		try {
 			byte[] digest = MessageDigest.getInstance("SHA-1")

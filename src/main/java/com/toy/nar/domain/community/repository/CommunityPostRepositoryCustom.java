@@ -29,4 +29,13 @@ public interface CommunityPostRepositoryCustom {
 	int applyLikeDelta(long postId, int delta);
 
 	void applyCommentDelta(long postId, int delta);
+
+	/** 첨부 사진 전체 교체(삭제 후 재삽입). 작성 시에는 그냥 삽입이 된다. */
+	void replaceImages(long postId, List<String> imageUrls);
+
+	/** 상세용 — VISIBLE 사진만 sort_order 순. id 는 IMAGE 신고 target 으로 쓰인다. */
+	List<CommunityPostImageRow> findVisibleImages(long postId);
+
+	/** 목록용 — 각 글의 VISIBLE 사진 전부(post_id, sort_order 순). 썸네일·개수는 호출부가 접는다. */
+	List<CommunityPostImageRow> findVisibleImagesByPostIds(List<Long> postIds);
 }

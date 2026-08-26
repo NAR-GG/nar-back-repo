@@ -16,10 +16,12 @@ public final class CommunityDtos {
 
 	/* ---------- 요청 ---------- */
 
-	public record PostCreateRequest(Long boardTeamId, String title, String body) {
+	/** imageUrls: 서명 업로드 후 받은 secure_url 목록(≤5). 우리 Cloudinary URL 만 통과한다. */
+	public record PostCreateRequest(Long boardTeamId, String title, String body, List<String> imageUrls) {
 	}
 
-	public record PostUpdateRequest(String title, String body) {
+	/** imageUrls 는 전체 교체다 — null 은 변경 없음, 빈 배열은 전부 제거. */
+	public record PostUpdateRequest(String title, String body, List<String> imageUrls) {
 	}
 
 	/** replyToCommentId 만 받는다 — parent 올려붙이기·멘션 대상은 서버가 유도한다(위조 방지). */
@@ -41,7 +43,11 @@ public final class CommunityDtos {
 
 	public record PostSummaryResponse(Long id, Long boardTeamId, String title, String bodyPreview,
 			AuthorResponse author, int viewCount, int likeCount, int commentCount,
-			boolean edited, LocalDateTime createdAt) {
+			boolean edited, LocalDateTime createdAt, String thumbnailUrl, int imageCount) {
+	}
+
+	/** id 는 IMAGE 신고의 targetId 로 쓴다. */
+	public record PostImageResponse(Long id, String url) {
 	}
 
 	public record PostListResponse(List<PostSummaryResponse> posts, Long nextCursor) {
@@ -53,7 +59,8 @@ public final class CommunityDtos {
 
 	public record PostDetailResponse(Long id, Long boardTeamId, String title, String body,
 			AuthorResponse author, int viewCount, int likeCount, int commentCount,
-			boolean edited, LocalDateTime createdAt, PostViewerResponse viewer) {
+			boolean edited, LocalDateTime createdAt, PostViewerResponse viewer,
+			List<PostImageResponse> images) {
 	}
 
 	/** status: VISIBLE / DELETED / HIDDEN / BLOCKED. VISIBLE 이 아니면 body 는 null. */

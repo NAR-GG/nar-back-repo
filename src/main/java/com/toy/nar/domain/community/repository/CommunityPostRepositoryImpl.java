@@ -136,6 +136,52 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 				delta, postId);
 	}
 
+	@Override
+	public void replaceImages(long postId, List<String> imageUrls) {
+		jdbcTemplate.update("DELETE FROM community_post_image WHERE post_id = ?", postId);
+		if (imageUrls == null || imageUrls.isEmpty()) {
+			return;
+		}
+		jdbcTemplate.batchUpdate(
+				"INSERT INTO community_post_image (post_id, image_url, sort_order) VALUES (?, ?, ?)",
+				new org.springframework.jdbc.core.BatchPreparedStatementSetter() {
+					@Override
+					public void setValues(java.sql.PreparedStatement ps, int i) throws java.sql.SQLException {
+						ps.setLong(1, postId);
+						ps.setString(2, imageUrls.get(i));
+						ps.setInt(3, i);
+					}
+
+					@Override
+					public int getBatchSize() {
+						return imageUrls.size();
+					}
+				});
+	}
+
+	@Override
+	public List<CommunityPostImageRow> findVisibleImages(long postId) {
+		return jdbcTemplate.query(
+				"SELECT id, post_id, image_url FROM community_post_image"
+						+ " WHERE post_id = ? AND status = 'VISIBLE' ORDER BY sort_order",
+				(rs, i) -> new CommunityPostImageRow(rs.getLong(1), rs.getLong(2), rs.getString(3)),
+				postId);
+	}
+
+	@Override
+	public List<CommunityPostImageRow> findVisibleImagesByPostIds(List<Long> postIds) {
+		if (postIds == null || postIds.isEmpty()) {
+			return List.of();
+		}
+		String placeholders = String.join(", ", java.util.Collections.nCopies(postIds.size(), "?"));
+		return jdbcTemplate.query(
+				"SELECT id, post_id, image_url FROM community_post_image"
+						+ " WHERE post_id IN (" + placeholders + ") AND status = 'VISIBLE'"
+						+ " ORDER BY post_id, sort_order",
+				(rs, i) -> new CommunityPostImageRow(rs.getLong(1), rs.getLong(2), rs.getString(3)),
+				postIds.toArray());
+	}
+
 	static void appendExcludedAuthors(StringBuilder sql, List<Object> params, List<Long> excludedMemberIds) {
 		if (excludedMemberIds == null || excludedMemberIds.isEmpty()) {
 			return;
