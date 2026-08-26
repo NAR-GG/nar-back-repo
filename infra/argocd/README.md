@@ -13,8 +13,10 @@ kubectl apply -f <sealed-secrets controller.yaml>
 kubectl create namespace argocd
 kubectl apply -n argocd --server-side --force-conflicts -f <argo-cd install.yaml>
 
-# 3. 저장소 자격증명 + Application
+# 3. 저장소 자격증명 + Application + 알림 설정
 kubectl apply -f infra/argocd/
+
+# 4. 디스코드 배포 알림용 시크릿 (아래 "디스코드 배포 알림" 절)
 ```
 
 `--server-side` 가 필요하다. 그냥 `apply` 하면 ApplicationSet CRD 가
@@ -80,6 +82,23 @@ main ──(CI: 이미지 태그 한 줄 수정)──> deploy ──> ArgoCD �
 
 배포 워크플로의 `paths-ignore` 에 `infra/**` 가 있다. 매니페스트만 바뀐 커밋은
 배포를 다시 트리거하지 않는다.
+
+## 디스코드 배포 알림
+
+새 리비전이 싱크 성공 + Healthy 가 되면 notifications-controller 가 디스코드로
+embed 를 쏜다. 설정은 `notifications-cm.yaml`, 구독은 `nar-app.yaml` 의
+`notifications.argoproj.io/subscribe.on-deployed.discord` 어노테이션.
+
+웹훅 URL 시크릿은 봉인해 두지 않았다 — 받을 채널의 웹훅 URL 로 만든다
+(디스코드 채널 설정 → 연동 → 웹후크):
+
+```bash
+kubectl -n argocd create secret generic argocd-notifications-secret \
+  --from-literal=discord-webhook-url="<채널 웹훅 URL>"
+```
+
+다른 채널로 보내려면 이 시크릿만 갈아끼우면 된다.
+`oncePer: revision` 이라 selfHeal 재싱크로는 중복 발송되지 않는다.
 
 ## "Synced" 가 뜻하지 않는 것
 

@@ -1,0 +1,60 @@
+# ArgoCD 배포 알림 → 디스코드.
+#
+# 새 리비전이 싱크 성공 + Healthy 가 되면 디스코드 웹훅으로 embed 를 쏜다.
+# argocd 네임스페이스는 GitOps 대상이 아니므로 이 파일은 수동 apply 한다 (README 참고).
+# 웹훅 URL 은 argocd-notifications-secret 의 discord-webhook-url 키에서 읽는다 —
+# 시크릿 생성도 README 의 부트스트랩 절차에 있다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  # 디스코드는 ArgoCD 에 네이티브 서비스가 없어서 webhook 서비스로 embeds JSON 을 직접 POST 한다.
+  service.webhook.discord: |
+    url: $discord-webhook-url
+    headers:
+    - name: Content-Type
+      value: application/json
+  # 같은 리비전으로는 1회만 발송 (oncePer). selfHeal 재싱크가 중복 알림을 만들지 않는다.
+  trigger.on-deployed: |
+    - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+      oncePer: app.status.operationState.syncResult.revision
+      send: [app-deployed]
+  # 싱크가 Error/Failed 로 끝나면 발송. 같은 리비전 재시도 실패로는 1회만.
+  trigger.on-sync-failed: |
+    - when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']
+      oncePer: app.status.operationState.syncResult.revision
+      send: [app-sync-failed]
+  template.app-sync-failed: |
+    webhook:
+      discord:
+        method: POST
+        body: |
+          {
+            "embeds": [{
+              "title": "❌ {{.app.metadata.name}} 싱크 실패",
+              "color": 15158332,
+              "fields": [
+                {"name": "Phase", "value": "{{.app.status.operationState.phase}}", "inline": true},
+                {"name": "Revision", "value": "{{printf "%.8s" .app.status.operationState.syncResult.revision}}", "inline": true},
+                {"name": "Message", "value": {{printf "%q" .app.status.operationState.message}}}
+              ]
+            }]
+          }
+  template.app-deployed: |
+    webhook:
+      discord:
+        method: POST
+        body: |
+          {
+            "embeds": [{
+              "title": "✅ {{.app.metadata.name}} 새 버전 배포 완료",
+              "color": 3066993,
+              "fields": [
+                {"name": "Sync", "value": "{{.app.status.sync.status}}", "inline": true},
+                {"name": "Health", "value": "{{.app.status.health.status}}", "inline": true},
+                {"name": "Revision", "value": "{{printf "%.8s" .app.status.operationState.syncResult.revision}}", "inline": true}
+              ]
+            }]
+          }
