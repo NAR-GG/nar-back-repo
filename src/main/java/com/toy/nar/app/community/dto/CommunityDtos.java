@@ -26,6 +26,13 @@ public final class CommunityDtos {
 	public record CommentCreateRequest(String body, Long replyToCommentId) {
 	}
 
+	/** targetType: POST/COMMENT/IMAGE, reason: ABUSE/OBSCENE/AD/FRAUD/SPAM/ETC (ETC 는 detail 필수). */
+	public record ReportCreateRequest(String targetType, Long targetId, String reason, String detail) {
+	}
+
+	public record BlockCreateRequest(Long memberId) {
+	}
+
 	/* ---------- 응답 ---------- */
 
 	public record AuthorResponse(Long memberId, String nickname, String profileImageUrl,
