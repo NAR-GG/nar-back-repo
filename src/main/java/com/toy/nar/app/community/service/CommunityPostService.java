@@ -120,9 +120,10 @@ public class CommunityPostService {
 	}
 
 	/**
-	 * 조회수 +1. 트랜잭션 없이 원자 UPDATE 한 방 — 조회는 쓰기보다 수십 배 잦아 여기에
-	 * 락 경합을 만들 이유가 없고, 틀려도 되는 숫자라 실패는 삼킨다(설계 문서 2장).
+	 * 조회수 +1. UPDATE 한 문장짜리 최소 트랜잭션 — 클래스 기본이 readOnly 라 여기만 쓰기로
+	 * 연다. 다른 쓰기와 묶지 않으니 락은 찰나고, 틀려도 되는 숫자라 실패는 삼킨다(설계 문서 2장).
 	 */
+	@Transactional
 	public void increaseViewCount(long postId) {
 		try {
 			postRepository.increaseViewCount(postId);
