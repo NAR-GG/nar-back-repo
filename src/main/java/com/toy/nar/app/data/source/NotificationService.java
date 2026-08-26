@@ -34,6 +34,9 @@ public class NotificationService {
 	@Value("${notification.discord.roster-webhook-url:}")
 	private String rosterDiscordWebhookUrl;
 
+	@Value("${notification.discord.community-webhook-url:}")
+	private String communityDiscordWebhookUrl;
+
 	@Value("${notification.enabled:false}")
 	private boolean notificationEnabled;
 
@@ -292,6 +295,41 @@ public class NotificationService {
 				? discordWebhookUrl
 				: rosterDiscordWebhookUrl;
 		sendNotification(webhookUrl, "[LCK 로스터 변동 감지]", message, "warning");
+	}
+
+	/**
+	 * 커뮤니티 신고 임계 도달 알림. 전용 채널이 없으면 기본 웹훅으로 폴백(로스터와 같은 패턴).
+	 * mention 이면 @here 를 실어 다른 알림 틈에 묻히지 않게 한다 — 이미지 신고(1건 즉시)용.
+	 */
+	public void sendCommunityReportNotification(String title, String message, boolean mention) {
+		if (!notificationEnabled) return;
+
+		String webhookUrl = (communityDiscordWebhookUrl == null || communityDiscordWebhookUrl.isEmpty())
+				? discordWebhookUrl
+				: communityDiscordWebhookUrl;
+		if (webhookUrl == null || webhookUrl.isEmpty()) return;
+
+		try {
+			HttpHeaders headers = new HttpHeaders();
+			headers.setContentType(MediaType.APPLICATION_JSON);
+
+			Map<String, Object> embed = new java.util.LinkedHashMap<>();
+			embed.put("title", title);
+			embed.put("description", message);
+			embed.put("color", mapDiscordColor("danger"));
+
+			Map<String, Object> payload = new java.util.LinkedHashMap<>();
+			payload.put("username", "NAR 운영 알림");
+			if (mention) {
+				// embed 본문은 핑이 안 울린다 — content 만 멘션을 발화시킨다.
+				payload.put("content", "@here 이미지 신고");
+			}
+			payload.put("embeds", new Object[] { embed });
+
+			restTemplate.postForEntity(webhookUrl, new HttpEntity<>(payload, headers), String.class);
+		} catch (Exception e) {
+			log.error("커뮤니티 신고 알림 발송 실패", e);
+		}
 	}
 
 	private String teamDisplay(String teamSide, String teamName) {

@@ -13,8 +13,10 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.toy.nar.domain.community.entity.CommunityReport.TargetType;
 import com.toy.nar.domain.community.repository.CommunityInteractionRepository;
 import com.toy.nar.domain.community.repository.CommunityInteractionRepository.ToggleResult;
+import com.toy.nar.domain.community.repository.CommunityModerationRepository;
 import com.toy.nar.domain.community.repository.CommunityPostRepositoryImpl;
 import com.toy.nar.domain.community.repository.CommunityPostRow;
 
@@ -103,6 +105,21 @@ class CommunityRepositoryMySqlIntegrationTest {
 
 		// 0 밑으로 안 내려간다 (GREATEST 가드)
 		assertThat(postRepository.applyLikeDelta(1L, -1)).isEqualTo(0);
+	}
+
+	@Test
+	void 차단은_멱등이고_신고대상_검증은_VISIBLE만_통과한다() {
+		CommunityModerationRepository moderation = new CommunityModerationRepository(jdbc);
+
+		assertThat(moderation.insertBlock(1L, 2L)).isTrue();
+		assertThat(moderation.insertBlock(1L, 2L)).isFalse(); // 중복 차단 멱등
+		assertThat(moderation.deleteBlock(1L, 2L)).isTrue();
+		assertThat(moderation.deleteBlock(1L, 2L)).isFalse(); // 중복 해제 멱등
+
+		assertThat(moderation.findVisibleTargetPreview(TargetType.POST, 1L)).isPresent();
+		assertThat(moderation.findVisibleTargetPreview(TargetType.POST, 5L)).isEmpty();   // DELETED
+		assertThat(moderation.findVisibleTargetPreview(TargetType.POST, 999L)).isEmpty(); // 실존 안 함
+		assertThat(moderation.findVisibleTargetPreview(TargetType.COMMENT, 1L)).isEmpty();
 	}
 
 	@Test
