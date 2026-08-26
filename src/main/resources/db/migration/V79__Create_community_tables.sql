@@ -17,6 +17,14 @@
 --   3) 목록에 항상 보이는 숫자(view/like/comment/vote count)는 역정규화 컬럼.
 --      집계 테이블 COUNT 로 목록을 그리면 페이지당 20번 집계라 바로 무너진다.
 
+-- 이름 충돌 정리 — prod 에는 community_post 가 이미 있었다. 외부 커뮤니티(인벤/네이버/OPGG)
+-- 크롤링 게시글 테이블로, 자체 커뮤니티와는 무관한 기능이다(app/community/, v3 홈 Top5 위젯).
+-- 앞으로의 "진짜" 커뮤니티가 community_* 이름을 갖도록 크롤러 쪽을 개명한다(데이터 보존).
+-- RENAME 은 원래 후방호환 위반이지만 여기서만 감수한다 — 롤아웃 겹침 몇 분간 구 파드의
+-- 크롤러 insert 와 홈 위젯 조회가 에러날 뿐이고(크롤러는 어차피 7/31 이후 파싱 실패로
+-- 3주째 빈손), 새 community_post 와 스키마가 달라 잘못 꽂힐 수도 없다.
+RENAME TABLE community_post TO crawled_community_post;
+
 -- 게시글. board_team_id NULL = 전체 게시판(가짜 팀 행을 만들면 온보딩·구독 조인에 새어 나간다).
 -- author_team_id 는 작성 시점 응원팀을 굳혀 저장 — favorite_team_id 조인으로 그리면
 -- 팀을 옮기는 순간 과거 글 로고가 전부 뒤집힌다.

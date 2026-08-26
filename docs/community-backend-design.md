@@ -715,6 +715,17 @@ CREATE TABLE community_banned_word (
 - 상수는 `application.yml` 프로퍼티 — 도배범 등장 시 숫자만 조인다
 - 일일 상한은 안 넣는다. 간격 제한을 뚫는 도배범이 나타나면 같은 인덱스로 한 줄 추가
 
+### 이름 충돌 — 레거시 `community_post` (배포에서 발견)
+
+prod 에 `community_post` 가 이미 있었다 — 외부 커뮤니티(인벤/네이버/OPGG) **크롤링**
+게시글 테이블(`app/community/`, v3 홈 Top5 위젯). 첫 배포가 이 충돌로 CrashLoop 났다
+(RollingUpdate 라 서비스 무중단, V79 는 한 문장도 적용 전에 실패해 스키마 오염 없음).
+
+**레거시를 `crawled_community_post` 로 개명하고(데이터 보존) 새 커뮤니티가 이름을
+갖는다.** 앞으로의 진짜 커뮤니티가 제 이름을 쓰는 게 맞다. 덤으로 발견: 이 크롤러는
+10분마다 돌지만 2026-07-31 이후 데이터가 없다 — 파서가 조용히 깨진 좀비. 정리(수리 or
+기능 제거)는 별도 이슈로.
+
 ### 스키마 — 초안에서 바뀐 것 (V79 기준)
 
 - **`community_post.edited_at` 추가** — "수정됨" 판정 전용. `updated_at` 은

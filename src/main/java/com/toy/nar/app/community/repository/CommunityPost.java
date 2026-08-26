@@ -6,7 +6,9 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "community_post", indexes = {
+// 외부 커뮤니티(인벤/네이버/OPGG) 크롤링 게시글. 원래 community_post 였는데 자체 커뮤니티
+// 기능이 그 이름을 가져가면서 V79 에서 crawled_community_post 로 RENAME 됐다.
+@Table(name = "crawled_community_post", indexes = {
 	@Index(name = "idx_community_type_date", columnList = "communityType, createdAt DESC"),
 	@Index(name = "idx_post_url", columnList = "postUrl", unique = true)
 })
