@@ -67,3 +67,21 @@ CREATE TABLE video (
     video_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     published_at DATETIME
 );
+
+-- 외부 커뮤니티 크롤링 게시글. pre-V31 시절 ddl-auto 로 생긴 테이블이라 마이그레이션엔 없는데,
+-- V79 가 이 테이블을 crawled_community_post 로 RENAME 하므로 baseline 에 있어야 한다.
+CREATE TABLE community_post (
+    comment_count INT NOT NULL,
+    view_count INT NOT NULL,
+    vote_count INT NOT NULL,
+    created_at DATETIME(6) DEFAULT NULL,
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    last_updated DATETIME(6) DEFAULT NULL,
+    author VARCHAR(255) NOT NULL,
+    post_url VARCHAR(255) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    community_type ENUM('INVEN','NAVER','OPGG') NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_post_url (post_url),
+    KEY idx_community_type_date (community_type, created_at DESC)
+);
