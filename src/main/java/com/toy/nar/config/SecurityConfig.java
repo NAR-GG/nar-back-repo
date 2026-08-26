@@ -66,6 +66,13 @@ public class SecurityConfig {
                                 "/api/mobile/me/live-activities/**",
                                 "/api/mobile/me/quiet-hours"
                         ).authenticated()
+                        // 커뮤니티 — 읽기는 비회원 허용(아래 /api/** permitAll), 쓰기만 막는다.
+                        // 조회수 +1 은 쓰기(POST)지만 비회원 포함이라 먼저 열어 둔다.
+                        .requestMatchers(HttpMethod.POST, "/api/mobile/community/posts/*/view").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/mobile/community/**").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/mobile/community/**").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/mobile/community/**").authenticated()
+                        .requestMatchers("/api/mobile/me/community/**").authenticated()
                         .requestMatchers(
                                 "/api/auth/me", "/api/auth/logout", "/api/auth/onboarding"
                         ).authenticated()

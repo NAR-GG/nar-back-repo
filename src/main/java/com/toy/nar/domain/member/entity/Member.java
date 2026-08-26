@@ -61,6 +61,11 @@ public class Member {
     @Column(name = "quiet_hours_enabled", nullable = false)
     private boolean quietHoursEnabled;
 
+    // 응원팀을 "바꾼" 시각. 최초 선택은 변경이 아니라 안 찍는다(NULL = 쿨다운 없음).
+    // 팀 게시판 쓰기 30일 쿨다운(D-1) 판정에만 쓴다.
+    @Column(name = "favorite_team_changed_at")
+    private LocalDateTime favoriteTeamChangedAt;
+
     @Column(name = "quiet_start_time", nullable = false)
     private LocalTime quietStartTime = LocalTime.of(1, 0);
 
@@ -82,9 +87,19 @@ public class Member {
 
     public void completeOnboarding(String favoriteLeagueName, Team favoriteTeam, Collection<Player> favoritePlayers) {
         this.favoriteLeagueName = favoriteLeagueName;
+        stampFavoriteTeamChange(favoriteTeam);
         this.favoriteTeam = favoriteTeam;
         replaceFavoritePlayers(favoritePlayers);
         this.onboardedAt = LocalDateTime.now();
+    }
+
+    /** 응원팀이 실제로 바뀔 때만 변경 시각을 찍는다. 최초 선택·같은 팀 재선택은 변경이 아니다. */
+    private void stampFavoriteTeamChange(Team newTeam) {
+        Long currentId = this.favoriteTeam == null ? null : this.favoriteTeam.getId();
+        Long newId = newTeam == null ? null : newTeam.getId();
+        if (currentId != null && !currentId.equals(newId)) {
+            this.favoriteTeamChangedAt = LocalDateTime.now();
+        }
     }
 
     /**
@@ -119,6 +134,7 @@ public class Member {
     public void updateProfile(String name, String tag, Team favoriteTeam, String profileImageUrl) {
         this.name = name;
         this.tag = tag;
+        stampFavoriteTeamChange(favoriteTeam);
         this.favoriteTeam = favoriteTeam;
         this.profileImageUrl = profileImageUrl;
     }
