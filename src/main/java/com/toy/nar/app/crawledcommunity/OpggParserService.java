@@ -1,8 +1,8 @@
-package com.toy.nar.app.community;
+package com.toy.nar.app.crawledcommunity;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.toy.nar.app.community.dto.OpggPostDto;
+import com.toy.nar.app.crawledcommunity.dto.OpggPostDto;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;

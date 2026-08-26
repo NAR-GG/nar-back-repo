@@ -1,6 +1,6 @@
-package com.toy.nar.app.community;
+package com.toy.nar.app.crawledcommunity;
 
-import com.toy.nar.app.community.dto.InvenPostDto;
+import com.toy.nar.app.crawledcommunity.dto.InvenPostDto;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;

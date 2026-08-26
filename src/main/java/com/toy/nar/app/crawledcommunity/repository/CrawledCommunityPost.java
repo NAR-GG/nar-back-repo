@@ -1,4 +1,4 @@
-package com.toy.nar.app.community.repository;
+package com.toy.nar.app.crawledcommunity.repository;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
-public class CommunityPost {
+public class CrawledCommunityPost {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -1,4 +1,4 @@
-package com.toy.nar.app.community;
+package com.toy.nar.app.crawledcommunity;
 
 import com.toy.nar.app.monitor.SchedulerAlertService;
 import lombok.RequiredArgsConstructor;
@@ -9,9 +9,9 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class CommunityScheduler {
+public class CrawledCommunityScheduler {
 
-	private final CommunityService communityService;
+	private final CrawledCommunityService communityService;
 	private final SchedulerAlertService schedulerAlertService;
 
 	// 1. 데이터 동기화: 10분마다 실행 (최신글 & 인기글)

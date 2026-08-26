@@ -5,16 +5,16 @@ import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.toy.nar.app.community.InvenParserService;
-import com.toy.nar.app.community.OpggParserService;
-import com.toy.nar.app.community.dto.InvenPostDto;
-import com.toy.nar.app.community.dto.OpggPostDto;
+import com.toy.nar.app.crawledcommunity.InvenParserService;
+import com.toy.nar.app.crawledcommunity.OpggParserService;
+import com.toy.nar.app.crawledcommunity.dto.InvenPostDto;
+import com.toy.nar.app.crawledcommunity.dto.OpggPostDto;
 
-import com.toy.nar.app.community.repository.CommunityPost;
-import com.toy.nar.app.community.repository.NewsPost;
-import com.toy.nar.app.community.CommunityService;
-import com.toy.nar.app.community.NaverParserService;
-import com.toy.nar.app.community.dto.NaverPostDto;
+import com.toy.nar.app.crawledcommunity.repository.CrawledCommunityPost;
+import com.toy.nar.app.crawledcommunity.repository.NewsPost;
+import com.toy.nar.app.crawledcommunity.CrawledCommunityService;
+import com.toy.nar.app.crawledcommunity.NaverParserService;
+import com.toy.nar.app.crawledcommunity.dto.NaverPostDto;
 
 import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +28,7 @@ public class PostController {
 	private final OpggParserService opggParserService;
 	private final InvenParserService invenParserService;
 	private final NaverParserService naverParserService;
-	private final CommunityService communityService;
+	private final CrawledCommunityService communityService;
 
 	@PostMapping("/api/community/sync")
 	public String syncCommunities(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "latest") String sort) {
@@ -37,7 +37,7 @@ public class PostController {
 	}
 
 	@GetMapping("/api/community/top5")
-	public List<CommunityPost> getTop5Posts(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "latest") String sort) {
+	public List<CrawledCommunityPost> getTop5Posts(@org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "latest") String sort) {
 		return communityService.getTop5Posts(sort);
 	}
 

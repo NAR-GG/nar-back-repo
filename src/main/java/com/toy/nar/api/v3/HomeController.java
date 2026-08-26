@@ -5,9 +5,9 @@ import com.toy.nar.app.analysis.dto.ChampionStatsDto;
 import com.toy.nar.app.analysis.dto.PlayerAnalysisResponse;
 import com.toy.nar.app.analysis.service.ChampionAnalysisService;
 import com.toy.nar.app.analysis.service.PlayerAnalysisService;
-import com.toy.nar.app.community.CommunityService;
-import com.toy.nar.app.community.repository.CommunityPost;
-import com.toy.nar.app.community.repository.NewsPost;
+import com.toy.nar.app.crawledcommunity.CrawledCommunityService;
+import com.toy.nar.app.crawledcommunity.repository.CrawledCommunityPost;
+import com.toy.nar.app.crawledcommunity.repository.NewsPost;
 import com.toy.nar.app.lolesports.LeagueMatchService;
 import com.toy.nar.app.lolesports.MatchResultDto;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,7 +28,7 @@ import java.util.List;
 public class HomeController {
 
 	private final LeagueMatchService leagueMatchService;
-	private final CommunityService communityService;
+	private final CrawledCommunityService communityService;
 	private final ChampionAnalysisService championAnalysisService;
 	private final PlayerAnalysisService playerAnalysisService;
 
@@ -45,7 +45,7 @@ public class HomeController {
 
 	@Operation(summary = "커뮤니티 TOP 5 조회", description = "통합 커뮤니티(OP.GG, Inven, Naver)의 상위 5개 게시글을 조회합니다.")
 	@GetMapping("/community")
-	public List<CommunityPost> getTop5CommunityPosts(
+	public List<CrawledCommunityPost> getTop5CrawledCommunityPosts(
 		@Parameter(description = "정렬 기준 (latest: 최신순, popular: 인기순)", example = "latest") 
 		@RequestParam(required = false, defaultValue = "latest") String sort) {
 		return communityService.getTop5Posts(sort);

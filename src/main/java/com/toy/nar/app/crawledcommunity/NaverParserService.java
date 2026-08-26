@@ -1,8 +1,8 @@
-package com.toy.nar.app.community;
+package com.toy.nar.app.crawledcommunity;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.toy.nar.app.community.dto.NaverPostDto;
+import com.toy.nar.app.crawledcommunity.dto.NaverPostDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;

@@ -1,4 +1,4 @@
-package com.toy.nar.app.community.repository;
+package com.toy.nar.app.crawledcommunity.repository;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
