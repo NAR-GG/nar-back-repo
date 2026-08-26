@@ -450,6 +450,22 @@ public class AuthController {
         return ResponseEntity.ok(cloudinarySignatureService.buildProfileUpload(memberId, timestamp));
     }
 
+    @Operation(
+            summary = "커뮤니티 첨부 사진 업로드 서명 발급",
+            description = "게시글 첨부 사진용. 이미지마다 새 public_id 가 발급되므로 사진 수만큼 호출한다. "
+                    + "앱은 업로드 후 받은 secure_url 목록을 게시글 작성/수정의 imageUrls 로 보낸다."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/me/community-image/signature")
+    public ResponseEntity<ProfileImageUploadSignatureResponse> communityImageUploadSignature(
+            @AuthenticationPrincipal Long memberId) {
+        if (memberId == null) {
+            throw new ResponseStatusException(UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        long timestamp = Instant.now().getEpochSecond();
+        return ResponseEntity.ok(cloudinarySignatureService.buildCommunityUpload(memberId, timestamp));
+    }
+
     private List<Team> findSelectableTeams(int year) {
         Map<String, Team> teamsByCode = teamRepository.findAllByCodeIn(LckTeamCatalog.TEAM_CODES).stream()
                 .filter(team -> team.getCode() != null)

@@ -123,6 +123,27 @@ class CommunityRepositoryMySqlIntegrationTest {
 	}
 
 	@Test
+	void 첨부사진은_전체교체되고_VISIBLE만_내려간다() {
+		postRepository.replaceImages(2L, List.of("https://res.cloudinary.com/x/a.jpg",
+				"https://res.cloudinary.com/x/b.jpg"));
+		assertThat(postRepository.findVisibleImages(2L)).hasSize(2);
+		assertThat(postRepository.findVisibleImages(2L).get(0).imageUrl()).endsWith("a.jpg"); // sort_order 유지
+
+		// 신고로 한 장만 블라인드 → 상세·목록에서 그 장만 빠진다
+		jdbc.update("UPDATE community_post_image SET status = 'HIDDEN' WHERE post_id = 2 AND sort_order = 0");
+		assertThat(postRepository.findVisibleImages(2L)).hasSize(1);
+		assertThat(postRepository.findVisibleImagesByPostIds(List.of(2L, 3L))).hasSize(1);
+
+		// 전체 교체 — 이전 행(HIDDEN 포함) 삭제 후 재삽입
+		postRepository.replaceImages(2L, List.of("https://res.cloudinary.com/x/c.jpg"));
+		assertThat(postRepository.findVisibleImages(2L)).hasSize(1);
+		assertThat(postRepository.findVisibleImages(2L).get(0).imageUrl()).endsWith("c.jpg");
+
+		postRepository.replaceImages(2L, List.of()); // 빈 배열 = 전부 제거
+		assertThat(postRepository.findVisibleImages(2L)).isEmpty();
+	}
+
+	@Test
 	void 작성간격_검사용_마지막작성시각은_삭제글도_본다() {
 		// member 1 의 마지막 글은 삭제된 5번 — status 무관하게 잡혀야 우회가 막힌다
 		assertThat(postRepository.findLastCreatedAt(1L)).isPresent();

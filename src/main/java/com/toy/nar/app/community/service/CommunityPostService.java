@@ -39,11 +39,14 @@ public class CommunityPostService {
 	private static final int PREVIEW_LENGTH = 150;
 	private static final int MAX_TITLE_LENGTH = 100;
 	private static final int MAX_BODY_LENGTH = 10_000;
+	private static final int MAX_IMAGES = 5;
+	private static final int MAX_IMAGE_URL_LENGTH = 500; // 컬럼 상한
 
 	private final CommunityPostRepository postRepository;
 	private final CommunityInteractionRepository interactionRepository;
 	private final MemberRepository memberRepository;
 	private final CommunityWriteGuard writeGuard;
+	private final com.toy.nar.app.auth.profile.CloudinarySignatureService cloudinarySignatureService;
 
 	public PostListResponse getPosts(Long boardTeamId, Long cursor, Integer size, Long viewerId) {
 		int pageSize = clampSize(size);
@@ -51,7 +54,10 @@ public class CommunityPostService {
 				? List.of()
 				: interactionRepository.findBlockedMemberIds(viewerId);
 		List<CommunityPostRow> rows = postRepository.findPage(boardTeamId, cursor, blocked, pageSize);
-		List<PostSummaryResponse> posts = rows.stream().map(CommunityPostService::toSummary).toList();
+		var imagesByPost = imagesByPost(rows);
+		List<PostSummaryResponse> posts = rows.stream()
+				.map(row -> toSummary(row, imagesByPost.getOrDefault(row.id(), List.of())))
+				.toList();
 		return new PostListResponse(posts, nextCursor(rows, pageSize));
 	}
 
@@ -73,11 +79,17 @@ public class CommunityPostService {
 					&& interactionRepository.findBlockedMemberIds(viewerId).contains(row.authorMemberId());
 		}
 		PostViewerResponse viewer = new PostViewerResponse(liked, scrapped, mine, blockedAuthor);
+		List<com.toy.nar.app.community.dto.CommunityDtos.PostImageResponse> images = blockedAuthor
+				? List.of()
+				: postRepository.findVisibleImages(postId).stream()
+						.map(img -> new com.toy.nar.app.community.dto.CommunityDtos.PostImageResponse(
+								img.id(), img.imageUrl()))
+						.toList();
 		return new PostDetailResponse(row.id(), row.boardTeamId(),
 				blockedAuthor ? null : row.title(),
 				blockedAuthor ? null : row.body(),
 				toAuthor(row), row.viewCount(), row.likeCount(), row.commentCount(),
-				row.editedAt() != null, row.createdAt(), viewer);
+				row.editedAt() != null, row.createdAt(), viewer, images);
 	}
 
 	@Transactional
@@ -88,6 +100,8 @@ public class CommunityPostService {
 		writeGuard.checkBoardWritable(member, request.boardTeamId());
 		writeGuard.checkPostInterval(memberId);
 
+		List<String> imageUrls = validateImageUrls(request.imageUrls());
+
 		Long authorTeamId = member.getFavoriteTeam() == null ? null : member.getFavoriteTeam().getId();
 		CommunityPost post = CommunityPost.builder()
 				.boardTeamId(request.boardTeamId())
@@ -96,7 +110,11 @@ public class CommunityPostService {
 				.title(title)
 				.body(body)
 				.build();
-		return postRepository.save(post).getId();
+		long postId = postRepository.save(post).getId();
+		if (!imageUrls.isEmpty()) {
+			postRepository.replaceImages(postId, imageUrls);
+		}
+		return postId;
 	}
 
 	@Transactional
@@ -107,6 +125,10 @@ public class CommunityPostService {
 			throw new CustomException(ErrorCode.COMMUNITY_NOT_AUTHOR);
 		}
 		post.edit(requireLength(request.title(), MAX_TITLE_LENGTH), requireLength(request.body(), MAX_BODY_LENGTH));
+		// null = 이미지 변경 없음, 빈 배열 = 전부 제거 (DTO 계약)
+		if (request.imageUrls() != null) {
+			postRepository.replaceImages(postId, validateImageUrls(request.imageUrls()));
+		}
 	}
 
 	@Transactional
@@ -157,8 +179,10 @@ public class CommunityPostService {
 		requireLogin(memberId);
 		int pageSize = clampSize(size);
 		List<CommunityPostRow> rows = postRepository.findScrapPage(memberId, cursor, pageSize);
+		var imagesByPost = imagesByPost(rows);
 		List<ScrapItemResponse> items = rows.stream()
-				.map(row -> new ScrapItemResponse(row.scrapId(), toSummary(row)))
+				.map(row -> new ScrapItemResponse(row.scrapId(),
+						toSummary(row, imagesByPost.getOrDefault(row.id(), List.of()))))
 				.toList();
 		Long nextCursor = rows.size() < pageSize ? null : rows.get(rows.size() - 1).scrapId();
 		return new ScrapListResponse(items, nextCursor);
@@ -166,13 +190,43 @@ public class CommunityPostService {
 
 	/* ---------- 내부 ---------- */
 
-	static PostSummaryResponse toSummary(CommunityPostRow row) {
+	static PostSummaryResponse toSummary(CommunityPostRow row,
+			List<com.toy.nar.domain.community.repository.CommunityPostImageRow> images) {
 		String preview = row.body().length() <= PREVIEW_LENGTH
 				? row.body()
 				: row.body().substring(0, PREVIEW_LENGTH);
+		String thumbnailUrl = images.isEmpty() ? null : images.get(0).imageUrl();
 		return new PostSummaryResponse(row.id(), row.boardTeamId(), row.title(), preview,
 				toAuthor(row), row.viewCount(), row.likeCount(), row.commentCount(),
-				row.editedAt() != null, row.createdAt());
+				row.editedAt() != null, row.createdAt(), thumbnailUrl, images.size());
+	}
+
+	/** 페이지의 글 id 들로 VISIBLE 사진을 한 방에 긁어 post_id 로 접는다(썸네일·개수용). */
+	private java.util.Map<Long, List<com.toy.nar.domain.community.repository.CommunityPostImageRow>> imagesByPost(
+			List<CommunityPostRow> rows) {
+		if (rows.isEmpty()) {
+			return java.util.Map.of();
+		}
+		return postRepository.findVisibleImagesByPostIds(rows.stream().map(CommunityPostRow::id).toList())
+				.stream()
+				.collect(java.util.stream.Collectors.groupingBy(
+						com.toy.nar.domain.community.repository.CommunityPostImageRow::postId));
+	}
+
+	private List<String> validateImageUrls(List<String> imageUrls) {
+		if (imageUrls == null || imageUrls.isEmpty()) {
+			return List.of();
+		}
+		if (imageUrls.size() > MAX_IMAGES) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+		for (String url : imageUrls) {
+			// 서명 업로드를 거친 우리 Cloudinary URL 만 — 외부 URL 주입(핫링크·우회 첨부)을 막는다
+			if (!cloudinarySignatureService.isOurSecureUrl(url) || url.length() > MAX_IMAGE_URL_LENGTH) {
+				throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+			}
+		}
+		return imageUrls;
 	}
 
 	static com.toy.nar.app.community.dto.CommunityDtos.AuthorResponse toAuthor(CommunityPostRow row) {
