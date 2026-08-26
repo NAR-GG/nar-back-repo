@@ -1,4 +1,4 @@
-package com.toy.nar.app.community.dto;
+package com.toy.nar.app.crawledcommunity.dto;
 
 import lombok.Builder;
 import lombok.Data;

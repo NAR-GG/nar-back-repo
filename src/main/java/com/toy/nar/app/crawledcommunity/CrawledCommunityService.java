@@ -1,9 +1,9 @@
-package com.toy.nar.app.community;
+package com.toy.nar.app.crawledcommunity;
 
-import com.toy.nar.app.community.dto.InvenPostDto;
-import com.toy.nar.app.community.dto.NaverPostDto;
-import com.toy.nar.app.community.dto.OpggPostDto;
-import com.toy.nar.app.community.repository.*;
+import com.toy.nar.app.crawledcommunity.dto.InvenPostDto;
+import com.toy.nar.app.crawledcommunity.dto.NaverPostDto;
+import com.toy.nar.app.crawledcommunity.dto.OpggPostDto;
+import com.toy.nar.app.crawledcommunity.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,13 +18,13 @@ import java.util.Optional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class CommunityService {
+public class CrawledCommunityService {
 
 	private final OpggParserService opggParserService;
 	private final InvenParserService invenParserService;
 	private final NaverParserService naverParserService;
 	private final NaverNewsService naverNewsService;
-	private final CommunityPostRepository communityPostRepository;
+	private final CrawledCommunityPostRepository communityPostRepository;
 	private final NewsPostRepository newsPostRepository;
 	private final TransactionTemplate transactionTemplate;
 
@@ -113,12 +113,12 @@ public class CommunityService {
 		try {
 			LocalDateTime createdAt = parseDateTime(createdAtStr);
 			
-			Optional<CommunityPost> existingPost = communityPostRepository.findByPostUrl(url);
+			Optional<CrawledCommunityPost> existingPost = communityPostRepository.findByPostUrl(url);
 
 			if (existingPost.isPresent()) {
 				existingPost.get().updateStatistics(viewCount, voteCount, commentCount);
 			} else {
-				CommunityPost newPost = CommunityPost.builder()
+				CrawledCommunityPost newPost = CrawledCommunityPost.builder()
 					.communityType(type)
 					.title(title)
 					.author(author)
@@ -151,7 +151,7 @@ public class CommunityService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<CommunityPost> getTop5Posts(String sortType) {
+	public List<CrawledCommunityPost> getTop5Posts(String sortType) {
 		org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 5);
 		
 		if ("popular".equalsIgnoreCase(sortType)) {

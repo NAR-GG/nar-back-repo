@@ -1,4 +1,4 @@
-package com.toy.nar.app.community.repository;
+package com.toy.nar.app.crawledcommunity.repository;
 
 import jakarta.persistence.*;
 import lombok.*;

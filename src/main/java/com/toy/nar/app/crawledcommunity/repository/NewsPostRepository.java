@@ -1,4 +1,4 @@
-package com.toy.nar.app.community.repository;
+package com.toy.nar.app.crawledcommunity.repository;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

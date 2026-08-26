@@ -13,6 +13,14 @@ import com.toy.nar.common.error.ErrorResponse;
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
+	@ExceptionHandler(CommunityWriteBlockedException.class)
+	protected ResponseEntity<ErrorResponse> handleCommunityWriteBlocked(CommunityWriteBlockedException e) {
+		log.warn("handleCommunityWriteBlocked : {} retryAfter={}s", e.getErrorCode(), e.getRetryAfterSeconds());
+		return ResponseEntity.status(e.getErrorCode().getHttpStatus())
+				.header("Retry-After", String.valueOf(e.getRetryAfterSeconds()))
+				.body(ErrorResponse.toResponseEntity(e.getErrorCode()).getBody());
+	}
+
 	@ExceptionHandler(CustomException.class)
 	protected ResponseEntity<ErrorResponse> handleCustomException(CustomException e) {
 		// 4xx는 예상된 비즈니스 흐름이라 warn — ERROR 로그는 Sentry 이벤트로 수집되므로 5xx만 남긴다

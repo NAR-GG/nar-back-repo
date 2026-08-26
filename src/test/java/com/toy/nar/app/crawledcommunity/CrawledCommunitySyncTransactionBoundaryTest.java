@@ -1,7 +1,7 @@
-package com.toy.nar.app.community;
+package com.toy.nar.app.crawledcommunity;
 
-import com.toy.nar.app.community.repository.CommunityPostRepository;
-import com.toy.nar.app.community.repository.NewsPostRepository;
+import com.toy.nar.app.crawledcommunity.repository.CrawledCommunityPostRepository;
+import com.toy.nar.app.crawledcommunity.repository.NewsPostRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,11 +27,11 @@ class CommunitySyncTransactionBoundaryTest {
 	private final InvenParserService invenParser = mock(InvenParserService.class);
 	private final NaverParserService naverParser = mock(NaverParserService.class);
 	private final NaverNewsService naverNewsService = mock(NaverNewsService.class);
-	private final CommunityPostRepository postRepository = mock(CommunityPostRepository.class);
+	private final CrawledCommunityPostRepository postRepository = mock(CrawledCommunityPostRepository.class);
 	private final NewsPostRepository newsPostRepository = mock(NewsPostRepository.class);
 	private final TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
 
-	private final CommunityService service = new CommunityService(
+	private final CrawledCommunityService service = new CrawledCommunityService(
 			opggParser, invenParser, naverParser, naverNewsService,
 			postRepository, newsPostRepository, transactionTemplate);
 
@@ -54,9 +54,9 @@ class CommunitySyncTransactionBoundaryTest {
 	void 동기화_메서드는_선언적_트랜잭션을_쓰지_않는다() throws NoSuchMethodException {
 		for (String methodName : List.of(
 				"syncAll", "syncAllCommunities", "syncNaverNews", "syncOpgg", "syncInven", "syncNaver")) {
-			assertThat(CommunityService.class.getMethod(methodName, String.class)
+			assertThat(CrawledCommunityService.class.getMethod(methodName, String.class)
 					.getAnnotation(Transactional.class))
-					.as("CommunityService.%s 는 @Transactional 이면 크롤링이 트랜잭션에 갇힌다", methodName)
+					.as("CrawledCommunityService.%s 는 @Transactional 이면 크롤링이 트랜잭션에 갇힌다", methodName)
 					.isNull();
 		}
 

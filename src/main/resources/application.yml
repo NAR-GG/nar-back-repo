@@ -176,3 +176,9 @@ solo-rank:
     enabled: ${SOLO_RANK_END_NOTIFICATION_ENABLED:false}
     sweep-interval-ms: ${SOLO_RANK_END_SWEEP_INTERVAL_MS:30000}
     initial-delay-ms: ${SOLO_RANK_END_INITIAL_DELAY_MS:60000}
+
+# 커뮤니티 쓰기 제한. 도배범이 나타나면 값만 조인다(재배포 필요, 코드 수정 불필요).
+community:
+  post-interval-seconds: ${COMMUNITY_POST_INTERVAL_SECONDS:60}
+  comment-interval-seconds: ${COMMUNITY_COMMENT_INTERVAL_SECONDS:10}
+  team-change-cooldown-days: ${COMMUNITY_TEAM_CHANGE_COOLDOWN_DAYS:30}
