@@ -232,8 +232,13 @@ offset 없다. 전부 커서다.
      구현 최소지만 유저가 글을 다 쓰고 나서야 막힌 걸 안다
 2. **마이페이지에 "내가 쓴 글 / 내가 쓴 댓글" 추가 여부.**
    - 내가 쓴 글: 서버 인덱스(`member_id, id DESC`)는 이미 있다. API 만 붙이면 됨
-   - 내가 쓴 댓글: 댓글 테이블에 member 선행 인덱스가 없어 **인덱스 마이그레이션 +
-     API 둘 다 필요**. 넣기로 정해지면 백엔드에 알려줄 것
+   - 내가 쓴 댓글: **API 만 붙이면 된다.** V79 DDL 에 `INDEX` 로 안 적혀 있어
+     "인덱스가 없다"고 봤는데, FK(`fk_community_comment_member`)를 만들며 MySQL 이
+     `(member_id)` 인덱스를 자동 생성해 뒀다. InnoDB 의 secondary index 는 리프에
+     PK 를 담으므로 이건 실질적으로 `(member_id, id)` 다 — 커서 조건(`id < ?`)과
+     `ORDER BY id DESC`(backward index scan) 가 같은 인덱스 안에서 처리된다.
+     프로드 `EXPLAIN` 의 `possible_keys` 에도 잡힌다. **인덱스를 새로 추가하면
+     중복이라 댓글 쓰기마다 유지 비용만 늘어난다**
    - 스크랩(`GET /api/mobile/me/community/scraps`)은 이미 있으므로 마이페이지
      묶음이 스크랩·글·댓글 3종이 될지 화면 기획과 같이 결정
 

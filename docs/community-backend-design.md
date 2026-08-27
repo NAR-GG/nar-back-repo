@@ -102,6 +102,11 @@ CREATE TABLE community_comment (
         FOREIGN KEY (member_id) REFERENCES member(id) ON DELETE CASCADE,
     INDEX idx_community_comment_post (post_id, id),
     INDEX idx_community_comment_parent (parent_id, id)
+    -- "내가 쓴 댓글"(마이페이지) 용 member 인덱스는 여기 없다. 없어도 된다 —
+    -- FK 가 (member_id) 인덱스를 자동으로 만들고, InnoDB secondary index 는
+    -- 리프에 PK 를 담으므로 그게 실질적으로 (member_id, id) 다. 커서 조건과
+    -- ORDER BY id DESC(backward index scan) 가 그 안에서 처리된다.
+    -- 따로 추가하면 중복이라 댓글 쓰기마다 유지 비용만 는다.
 );
 ```
 
