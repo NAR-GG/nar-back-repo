@@ -387,6 +387,8 @@ LIMIT :size;
 - **차단당한 사람 기준 인덱스** — `member_block` 에 `blocked_member_id` 선행
 인덱스를 추가하고 싶어질 텐데, 조회 방향은 항상 "내가 차단한 사람"이라 필요
 없다. "나를 차단한 사람 목록"은 어떤 화면에도 안 쓴다(써서도 안 된다).
+(정정: 어차피 FK `fk_member_block_blocked` 가 `(blocked_member_id)` 인덱스를
+자동 생성한다 — "추가하지 말자"는 판단은 유효하지만 존재 자체는 FK 가 강제한다.)
 - **차단 캐시** — replicas 1 이라 파드 교체마다 날아가고, 원본 조회가 유니크
 인덱스 한 번이라 캐시할 가치가 없다.
 
@@ -740,6 +742,10 @@ prod 에 `community_post` 가 이미 있었다 — 외부 커뮤니티(인벤/�
   많아야 수십 행이라 status 잔여 필터는 공짜
 - **좋아요 테이블의 member 선행 인덱스 제거** — "이 20개 글 중 내가 누른 것"은
   uk 점조회 20번으로 끝나고, "내가 좋아요한 목록" 화면은 없다
+  (정정: uk 가 `(post_id, member_id)` 순서라 member FK 요건을 못 채워, MySQL 이
+  `fk_community_post_like_member (member_id)` 를 자동 생성한다. 명시 인덱스를 뺀
+  절약은 없었던 셈이다 — 나중에 "내가 좋아요한 목록"이 생기면 이 FK 인덱스가
+  실질 `(member_id, id)` 로 그대로 쓰인다. 댓글 좋아요도 동일)
 - **`community_scrap` 인덱스는 `(member_id, id DESC, post_id)` 커버링** —
   "내 스크랩" 페이지의 post_id 추출이 인덱스만으로 끝난다
 - **`community_poll_vote.poll_id` 에 FK 안 건다** — 삭제 연쇄는 option FK 로
