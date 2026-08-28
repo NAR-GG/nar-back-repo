@@ -66,6 +66,35 @@ public class CommunityCommentRepositoryImpl implements CommunityCommentRepositor
 	}
 
 	@Override
+	public List<CommunityMyCommentRow> findMyCommentPage(long memberId, Long cursorId, int size) {
+		StringBuilder sql = new StringBuilder("""
+				SELECT c.id, c.post_id, p.title AS post_title, c.body, c.like_count, c.created_at
+				FROM community_comment c
+				JOIN community_post p ON p.id = c.post_id
+				WHERE c.member_id = ?
+				  AND c.status = 'VISIBLE'
+				  AND p.status = 'VISIBLE'
+				""");
+		List<Object> params = new ArrayList<>();
+		params.add(memberId);
+		if (cursorId != null) {
+			sql.append("  AND c.id < ?\n");
+			params.add(cursorId);
+		}
+		sql.append("ORDER BY c.id DESC LIMIT ?");
+		params.add(size);
+		return jdbcTemplate.query(sql.toString(),
+				(rs, i) -> new CommunityMyCommentRow(
+						rs.getLong("id"),
+						rs.getLong("post_id"),
+						rs.getString("post_title"),
+						rs.getString("body"),
+						rs.getInt("like_count"),
+						rs.getTimestamp("created_at").toLocalDateTime()),
+				params.toArray());
+	}
+
+	@Override
 	public Optional<LocalDateTime> findLastCreatedAt(long memberId) {
 		List<LocalDateTime> result = jdbcTemplate.query(
 				"SELECT created_at FROM community_comment WHERE member_id = ? ORDER BY id DESC LIMIT 1",

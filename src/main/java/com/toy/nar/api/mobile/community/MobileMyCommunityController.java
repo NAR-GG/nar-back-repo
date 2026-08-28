@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 public class MobileMyCommunityController {
 
 	private final CommunityPostService postService;
+	private final com.toy.nar.app.community.service.CommunityCommentService commentService;
 
 	@GetMapping("/scraps")
 	public ResponseEntity<ScrapListResponse> getMyScraps(
@@ -25,5 +26,29 @@ public class MobileMyCommunityController {
 			@RequestParam(required = false) Integer size,
 			@AuthenticationPrincipal Long memberId) {
 		return ResponseEntity.ok(postService.getMyScraps(memberId, cursor, size));
+	}
+
+	@GetMapping("/posts")
+	public ResponseEntity<com.toy.nar.app.community.dto.CommunityDtos.PostListResponse> getMyPosts(
+			@RequestParam(required = false) Long cursor,
+			@RequestParam(required = false) Integer size,
+			@AuthenticationPrincipal Long memberId) {
+		return ResponseEntity.ok(postService.getMyPosts(memberId, cursor, size));
+	}
+
+	@GetMapping("/likes")
+	public ResponseEntity<com.toy.nar.app.community.dto.CommunityDtos.LikedPostListResponse> getMyLikedPosts(
+			@RequestParam(required = false) Long cursor,
+			@RequestParam(required = false) Integer size,
+			@AuthenticationPrincipal Long memberId) {
+		return ResponseEntity.ok(postService.getMyLikedPosts(memberId, cursor, size));
+	}
+
+	@GetMapping("/comments")
+	public ResponseEntity<com.toy.nar.app.community.dto.CommunityDtos.MyCommentListResponse> getMyComments(
+			@RequestParam(required = false) Long cursor,
+			@RequestParam(required = false) Integer size,
+			@AuthenticationPrincipal Long memberId) {
+		return ResponseEntity.ok(commentService.getMyComments(memberId, cursor, size));
 	}
 }

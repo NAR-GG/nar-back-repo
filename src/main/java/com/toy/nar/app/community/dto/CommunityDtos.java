@@ -83,4 +83,19 @@ public final class CommunityDtos {
 
 	public record ScrapListResponse(List<ScrapItemResponse> items, Long nextCursor) {
 	}
+
+	/** 내가 좋아요한 글. 커서는 likeId. */
+	public record LikedPostItemResponse(Long likeId, PostSummaryResponse post) {
+	}
+
+	public record LikedPostListResponse(List<LikedPostItemResponse> items, Long nextCursor) {
+	}
+
+	/** 내가 쓴 댓글. postTitle 로 원글 이동. 삭제·블라인드(댓글·원글 모두)는 목록에서 빠진다. */
+	public record MyCommentResponse(Long id, Long postId, String postTitle, String body,
+			int likeCount, LocalDateTime createdAt) {
+	}
+
+	public record MyCommentListResponse(List<MyCommentResponse> comments, Long nextCursor) {
+	}
 }

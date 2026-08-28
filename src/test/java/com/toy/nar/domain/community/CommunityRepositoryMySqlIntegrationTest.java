@@ -144,6 +144,36 @@ class CommunityRepositoryMySqlIntegrationTest {
 	}
 
 	@Test
+	void 내활동_목록은_삭제된_것을_숨긴다() {
+		// 내가 쓴 글: member 1 의 글 1,3(전체),6(팀) — 삭제된 5는 빠진다
+		assertThat(postRepository.findMyPostPage(1L, null, 10))
+				.extracting(CommunityPostRow::id).containsExactly(6L, 3L, 1L);
+
+		// 좋아요한 글: member 2 가 3(VISIBLE)과 5(DELETED)를 좋아요 → 3만 나온다
+		interactions.togglePostLike(3L, 2L);
+		interactions.togglePostLike(5L, 2L);
+		var liked = postRepository.findLikedPage(2L, null, 10);
+		assertThat(liked).extracting(CommunityPostRow::id).containsExactly(3L);
+		assertThat(liked.get(0).scrapId()).isNotNull(); // 커서 = like.id
+
+		// 내가 쓴 댓글: VISIBLE 댓글만, 그리고 원글이 삭제된 댓글도 빠진다.
+		// id 는 101+ — 차단 테스트가 "COMMENT 1 은 없다"를 가정하므로 낮은 id 를 쓰면
+		// 실행 순서에 따라 그 테스트를 깨뜨린다(CI 실측).
+		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body) VALUES (101, 3, 2, '보임')");
+		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body, status)"
+				+ " VALUES (102, 3, 2, '삭제됨', 'DELETED')");
+		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body) VALUES (103, 5, 2, '원글삭제')");
+		var comments = commentPage(2L);
+		assertThat(comments).hasSize(1);
+		assertThat(comments.get(0).postTitle()).isEqualTo("글3");
+	}
+
+	private static java.util.List<com.toy.nar.domain.community.repository.CommunityMyCommentRow> commentPage(long memberId) {
+		return new com.toy.nar.domain.community.repository.CommunityCommentRepositoryImpl(jdbc)
+				.findMyCommentPage(memberId, null, 10);
+	}
+
+	@Test
 	void 작성간격_검사용_마지막작성시각은_삭제글도_본다() {
 		// member 1 의 마지막 글은 삭제된 5번 — status 무관하게 잡혀야 우회가 막힌다
 		assertThat(postRepository.findLastCreatedAt(1L)).isPresent();

@@ -107,6 +107,43 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 	}
 
 	@Override
+	public List<CommunityPostRow> findMyPostPage(long memberId, Long cursorId, int size) {
+		// idx_community_post_member (member_id, id DESC) 가 필터·정렬·커서를 같이 처리한다.
+		StringBuilder sql = new StringBuilder(SELECT_COLUMNS.formatted("NULL"));
+		List<Object> params = new ArrayList<>();
+		sql.append("WHERE p.member_id = ?\n");
+		params.add(memberId);
+		sql.append("  AND p.status = 'VISIBLE'\n");
+		if (cursorId != null) {
+			sql.append("  AND p.id < ?\n");
+			params.add(cursorId);
+		}
+		sql.append("ORDER BY p.id DESC LIMIT ?");
+		params.add(size);
+		return jdbcTemplate.query(sql.toString(), ROW_MAPPER, params.toArray());
+	}
+
+	@Override
+	public List<CommunityPostRow> findLikedPage(long memberId, Long cursorId, int size) {
+		// fk_community_post_like_member (member_id) 자동 인덱스가 실질 (member_id, id) 로
+		// 필터·정렬·커서를 처리한다(#490). 커서는 like.id — scrap_id 슬롯에 실린다.
+		StringBuilder sql = new StringBuilder(SELECT_COLUMNS.formatted("l.id")
+				.replace("FROM community_post p",
+						"FROM community_post_like l JOIN community_post p ON p.id = l.post_id"));
+		List<Object> params = new ArrayList<>();
+		sql.append("WHERE l.member_id = ?\n");
+		params.add(memberId);
+		if (cursorId != null) {
+			sql.append("  AND l.id < ?\n");
+			params.add(cursorId);
+		}
+		sql.append("  AND p.status = 'VISIBLE'\n");
+		sql.append("ORDER BY l.id DESC LIMIT ?");
+		params.add(size);
+		return jdbcTemplate.query(sql.toString(), ROW_MAPPER, params.toArray());
+	}
+
+	@Override
 	public Optional<LocalDateTime> findLastCreatedAt(long memberId) {
 		// idx_community_post_member (member_id, id DESC) 최신 1행. status 무관.
 		List<LocalDateTime> result = jdbcTemplate.query(
