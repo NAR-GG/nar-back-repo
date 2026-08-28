@@ -175,8 +175,19 @@ class CommunityRepositoryMySqlIntegrationTest {
 
 	@Test
 	void 작성간격_검사용_마지막작성시각은_삭제글도_본다() {
-		// member 1 의 마지막 글은 삭제된 5번 — status 무관하게 잡혀야 우회가 막힌다
-		assertThat(postRepository.findLastCreatedAt(1L)).isPresent();
-		assertThat(postRepository.findLastCreatedAt(999L)).isEmpty();
+		// member 1 의 마지막 전체글은 삭제된 5번 — status 무관하게 잡혀야 우회가 막힌다
+		assertThat(postRepository.findLastCreatedAt(1L, null)).isPresent();
+		assertThat(postRepository.findLastCreatedAt(999L, null)).isEmpty();
+	}
+
+	@Test
+	void 작성간격은_게시판별로_따로_잡힌다() {
+		// member 1 은 전체(1,3,5)와 팀 1(6)에 썼고, member 2 는 전체(2,4)에만 썼다.
+		assertThat(postRepository.findLastCreatedAt(1L, null)).isPresent();
+		assertThat(postRepository.findLastCreatedAt(1L, 1L)).isPresent();
+		// 팀 게시판에 한 번도 안 쓴 회원은 전체에 썼어도 팀 쪽은 비어야 한다 —
+		// 안 그러면 전체에 쓴 직후 팀 게시판까지 같이 잠긴다.
+		assertThat(postRepository.findLastCreatedAt(2L, null)).isPresent();
+		assertThat(postRepository.findLastCreatedAt(2L, 1L)).isEmpty();
 	}
 }

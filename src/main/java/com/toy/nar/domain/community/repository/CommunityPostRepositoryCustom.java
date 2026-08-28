@@ -26,8 +26,11 @@ public interface CommunityPostRepositoryCustom {
 	/** 내가 좋아요한 글. 커서는 like.id (row 의 scrapId 슬롯에 실려 내려간다). */
 	List<CommunityPostRow> findLikedPage(long memberId, Long cursorId, int size);
 
-	/** 작성 간격 검사용 마지막 작성 시각. status 무관 — 지웠다 다시 올리는 우회도 잡는다. */
-	Optional<LocalDateTime> findLastCreatedAt(long memberId);
+	/**
+	 * 작성 간격 검사용 마지막 작성 시각. status 무관 — 지웠다 다시 올리는 우회도 잡는다.
+	 * [boardTeamId] 로 범위를 좁힌다(null 은 전체 게시판) — 간격은 게시판마다 따로 돈다.
+	 */
+	Optional<LocalDateTime> findLastCreatedAt(long memberId, Long boardTeamId);
 
 	void increaseViewCount(long postId);
 

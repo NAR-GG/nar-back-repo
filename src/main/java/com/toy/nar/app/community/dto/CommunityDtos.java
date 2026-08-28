@@ -52,10 +52,11 @@ public final class CommunityDtos {
 
 	/**
 	 * 게시판 쓰기 자격 판정 — 잠금 바용. 팀 게시판 + 로그인일 때만 내려간다(그 외 null).
-	 * reason: NOT_FAN(응원팀 아님) / COOLDOWN(팀 변경 30일) / null(canWrite=true).
-	 * COOLDOWN 이면 writableFrom 에 쓰기 가능 시각이 실린다.
+	 * reason: NOT_FAN(응원팀 아님) / null(쓰기 자격 있음).
+	 * nextWritableAt: 작성 간격(D-9)에 걸려 있으면 다음 작성 가능 시각, 아니면 null.
+	 * 자격(reason)과 간격(nextWritableAt)은 별개다 — 자격이 있어도 방금 썼으면 기다린다.
 	 */
-	public record BoardViewerResponse(boolean canWrite, String reason, LocalDateTime writableFrom) {
+	public record BoardViewerResponse(boolean canWrite, String reason, LocalDateTime nextWritableAt) {
 	}
 
 	public record PostListResponse(List<PostSummaryResponse> posts, Long nextCursor,

@@ -70,11 +70,33 @@ public class CommunityWriteGuard {
 		throw new CustomException(ErrorCode.COMMUNITY_BOARD_FORBIDDEN);
 	}
 
-	/** 글 작성 간격(D-9). status 무관 최신 1행 — 지웠다 다시 올리는 우회도 잡는다. */
-	public void checkPostInterval(long memberId) {
-		checkInterval(postRepository.findLastCreatedAt(memberId).orElse(null), postIntervalSeconds);
+	/**
+	 * 글 작성 간격(D-9). status 무관 최신 1행 — 지웠다 다시 올리는 우회도 잡는다.
+	 *
+	 * <p>간격은 <b>게시판마다 따로</b> 돈다. 전체 게시판에 쓴 직후에도 우리팀
+	 * 게시판에는 바로 쓸 수 있다 — 도배는 한 게시판을 도배하는 것이지, 성격이 다른
+	 * 두 곳에 하나씩 쓰는 것은 도배가 아니다.</p>
+	 */
+	public void checkPostInterval(long memberId, Long boardTeamId) {
+		checkInterval(postRepository.findLastCreatedAt(memberId, boardTeamId).orElse(null),
+				postIntervalSeconds);
 	}
 
+	/**
+	 * 이 게시판에 다음으로 글을 쓸 수 있는 시각. 지금 쓸 수 있으면 null.
+	 * 목록 응답(boardViewer)에 실어 앱이 글쓰기 버튼을 미리 잠그게 한다 —
+	 * 다 쓰고 등록에서 429 를 받는 것보다 낫다.
+	 */
+	public LocalDateTime nextPostWritableAt(long memberId, Long boardTeamId) {
+		LocalDateTime last = postRepository.findLastCreatedAt(memberId, boardTeamId).orElse(null);
+		if (last == null) {
+			return null;
+		}
+		LocalDateTime writableAt = last.plusSeconds(postIntervalSeconds);
+		return remainingSeconds(writableAt) > 0 ? writableAt : null;
+	}
+
+	/** 댓글 작성 간격. 댓글은 글과 달리 계정 기준 하나로 둔다(간격이 10초라 충분하다). */
 	public void checkCommentInterval(long memberId) {
 		checkInterval(commentRepository.findLastCreatedAt(memberId).orElse(null), commentIntervalSeconds);
 	}

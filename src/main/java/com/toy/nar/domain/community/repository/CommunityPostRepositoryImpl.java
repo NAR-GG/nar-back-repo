@@ -144,11 +144,16 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 	}
 
 	@Override
-	public Optional<LocalDateTime> findLastCreatedAt(long memberId) {
-		// idx_community_post_member (member_id, id DESC) 최신 1행. status 무관.
+	public Optional<LocalDateTime> findLastCreatedAt(long memberId, Long boardTeamId) {
+		// idx_community_post_member_board (member_id, board_team_id, id DESC) 최신 1행.
+		// status 무관 — 지웠다 다시 올리는 우회도 잡는다.
+		//
+		// 전체 게시판은 board_team_id 가 NULL 이라 `= ?` 로는 절대 안 맞는다.
+		// NULL-safe 비교(<=>)를 써야 한 문장으로 두 경우를 다 덮는다.
 		List<LocalDateTime> result = jdbcTemplate.query(
-				"SELECT created_at FROM community_post WHERE member_id = ? ORDER BY id DESC LIMIT 1",
-				(rs, i) -> rs.getTimestamp(1).toLocalDateTime(), memberId);
+				"SELECT created_at FROM community_post"
+						+ " WHERE member_id = ? AND board_team_id <=> ? ORDER BY id DESC LIMIT 1",
+				(rs, i) -> rs.getTimestamp(1).toLocalDateTime(), memberId, boardTeamId);
 		return result.stream().findFirst();
 	}
 
