@@ -5,6 +5,7 @@ import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.MemberFavoritePlayer;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Schema(description = "로그인 사용자 정보 응답")
@@ -28,9 +29,17 @@ public record MemberResponse(
 		@Schema(description = "프로필 이미지 URL", example = "https://storage.example.com/profiles/12.png", nullable = true)
 		String profileImageUrl,
 		@Schema(description = "온보딩 완료 여부", example = "false")
-		boolean isOnboarded) {
+		boolean isOnboarded,
+		@Schema(description = "응원팀을 다시 바꿀 수 있는 시각. null 이면 지금 바꿀 수 있다.",
+				example = "2026-09-28T01:00:00", nullable = true)
+		LocalDateTime favoriteTeamChangeAvailableFrom) {
 
+    /** 쿨다운을 모르는 자리(로그인 응답 등)에서 쓴다 — 팀 변경 화면은 아래 오버로드를 쓸 것. */
     public static MemberResponse from(Member member) {
+        return from(member, null);
+    }
+
+    public static MemberResponse from(Member member, LocalDateTime favoriteTeamChangeAvailableFrom) {
         return new MemberResponse(
                 member.getId(),
                 member.getNickname(),
@@ -44,7 +53,8 @@ public record MemberResponse(
                         .map(player -> player.getId())
                         .toList(),
                 CloudinaryUrls.with(member.getProfileImageUrl(), CloudinaryUrls.AVATAR),
-                member.isOnboarded()
+                member.isOnboarded(),
+                favoriteTeamChangeAvailableFrom
         );
     }
 }

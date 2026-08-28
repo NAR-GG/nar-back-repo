@@ -63,6 +63,7 @@ class AuthControllerOnboardingNotificationTest {
 				mobileDeviceService,
 				notificationService,
 				profileService,
+				new com.toy.nar.domain.member.service.FavoriteTeamChangePolicy(),
 				mock(CloudinarySignatureService.class),
 				immediateTransactionTemplate());
 		Member member = Member.builder().name("용맹한바론").tag("0000").email("test@example.com").build();
@@ -246,6 +247,7 @@ class AuthControllerOnboardingNotificationTest {
 				mobileDeviceService,
 				notificationService,
 				profileService,
+				new com.toy.nar.domain.member.service.FavoriteTeamChangePolicy(),
 				mock(CloudinarySignatureService.class),
 				immediateTransactionTemplate());
 		return new TestContext(

@@ -27,7 +27,7 @@ public enum ErrorCode {
 	COMMUNITY_COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."),
 	COMMUNITY_NOT_AUTHOR(HttpStatus.FORBIDDEN, "본인이 작성한 글만 수정·삭제할 수 있습니다."),
 	COMMUNITY_BOARD_FORBIDDEN(HttpStatus.FORBIDDEN, "응원팀 게시판에만 글을 쓸 수 있습니다."),
-	COMMUNITY_TEAM_COOLDOWN(HttpStatus.FORBIDDEN, "응원팀을 바꾼 지 얼마 되지 않았습니다."),
+	FAVORITE_TEAM_CHANGE_COOLDOWN(HttpStatus.FORBIDDEN, "응원팀은 30일에 한 번만 바꿀 수 있습니다."),
 	COMMUNITY_WRITE_INTERVAL(HttpStatus.TOO_MANY_REQUESTS, "잠시 후 다시 작성할 수 있습니다."),
 	COMMUNITY_REPORT_TARGET_NOT_FOUND(HttpStatus.NOT_FOUND, "신고 대상을 찾을 수 없습니다."),
 	COMMUNITY_ALREADY_REPORTED(HttpStatus.CONFLICT, "이미 신고한 대상입니다."),
