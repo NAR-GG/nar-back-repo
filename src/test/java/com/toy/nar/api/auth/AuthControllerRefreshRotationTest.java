@@ -8,6 +8,7 @@ import com.toy.nar.app.auth.NaverUserClient;
 import com.toy.nar.app.auth.SocialLoginService;
 import com.toy.nar.app.auth.profile.CloudinarySignatureService;
 import com.toy.nar.app.auth.profile.ProfileService;
+import com.toy.nar.domain.member.service.FavoriteTeamChangePolicy;
 import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
@@ -65,6 +66,7 @@ class AuthControllerRefreshRotationTest {
 			mock(MobileDeviceService.class),
 			mock(MobileTeamNotificationService.class),
 			mock(ProfileService.class),
+			mock(FavoriteTeamChangePolicy.class),
 			mock(CloudinarySignatureService.class),
 			null);
 

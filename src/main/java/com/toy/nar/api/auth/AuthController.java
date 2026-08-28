@@ -27,6 +27,7 @@ import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.RefreshToken;
 import com.toy.nar.domain.member.repository.MemberRepository;
+import com.toy.nar.domain.member.service.FavoriteTeamChangePolicy;
 import com.toy.nar.domain.member.repository.MemberSocialRepository;
 import com.toy.nar.domain.member.repository.RefreshTokenRepository;
 import com.toy.nar.domain.participant.LckTeamCatalog;
@@ -122,6 +123,7 @@ public class AuthController {
     private final MobileDeviceService mobileDeviceService;
     private final MobileTeamNotificationService mobileTeamNotificationService;
     private final ProfileService profileService;
+    private final FavoriteTeamChangePolicy favoriteTeamChangePolicy;
     private final CloudinarySignatureService cloudinarySignatureService;
     private final TransactionTemplate transactionTemplate;
 
@@ -371,9 +373,12 @@ public class AuthController {
                 request.favoritePlayerIds(),
                 team.getId());
 
+        // 온보딩을 다시 돌려 팀만 갈아타는 것도 변경이다. 프로필 수정과 같은 검사를 태운다.
+        favoriteTeamChangePolicy.checkChangeable(member, team);
+
         member.completeOnboarding(favoriteLeague, team, favoritePlayers);
         mobileTeamNotificationService.ensureDefaultSubscription(member, team);
-        return MemberResponse.from(member);
+        return MemberResponse.from(member, favoriteTeamChangePolicy.changeAvailableFrom(member));
     }
 
     @Operation(
@@ -390,7 +395,8 @@ public class AuthController {
     public ResponseEntity<MemberResponse> me(@AuthenticationPrincipal Long memberId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "회원을 찾을 수 없습니다"));
-        return ResponseEntity.ok(MemberResponse.from(member));
+        return ResponseEntity.ok(
+                MemberResponse.from(member, favoriteTeamChangePolicy.changeAvailableFrom(member)));
     }
 
     @Operation(

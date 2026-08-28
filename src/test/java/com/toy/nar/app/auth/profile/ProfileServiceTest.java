@@ -4,6 +4,7 @@ import com.toy.nar.api.auth.dto.MemberResponse;
 import com.toy.nar.app.auth.profile.dto.ProfileUpdateRequest;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
+import com.toy.nar.domain.member.service.FavoriteTeamChangePolicy;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.TeamRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +32,8 @@ class ProfileServiceTest {
 	void setUp() {
 		memberRepository = mock(MemberRepository.class);
 		teamRepository = mock(TeamRepository.class);
-		profileService = new ProfileService(memberRepository, teamRepository);
+		profileService = new ProfileService(memberRepository, teamRepository,
+				new FavoriteTeamChangePolicy());
 	}
 
 	private Member member(Long id, String name, String tag) {

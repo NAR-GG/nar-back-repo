@@ -35,10 +35,7 @@ public class CommunityWriteGuard {
 	@Value("${community.comment-interval-seconds:10}")
 	private long commentIntervalSeconds;
 
-	@Value("${community.team-change-cooldown-days:30}")
-	private long teamChangeCooldownDays;
-
-	/** 게시판 쓰기 자격 판정 결과. reason 은 NOT_FAN / COOLDOWN / null(쓰기 가능). */
+	/** 게시판 쓰기 자격 판정 결과. reason 은 NOT_FAN / null(쓰기 가능). */
 	public record BoardWritability(boolean canWrite, String reason, LocalDateTime writableFrom) {
 
 		static final BoardWritability WRITABLE = new BoardWritability(true, null, null);
@@ -46,8 +43,12 @@ public class CommunityWriteGuard {
 
 	/**
 	 * 게시판 쓰기 자격 판정. 전체 게시판(boardTeamId == null)은 항상 가능,
-	 * 팀 게시판은 응원팀 일치 + 팀 변경 30일 쿨다운(D-1)을 본다.
+	 * 팀 게시판은 응원팀이 일치하면 가능하다.
 	 * 쓰기 경로(예외)와 목록의 잠금 바(boardViewer)가 같은 판정을 쓴다.
+	 *
+	 * <p>팀 변경 30일 쿨다운(D-1)은 여기 없다. 게이트가 쓰기가 아니라 변경 시점으로
+	 * 옮겨갔다({@code FavoriteTeamChangePolicy}) — 바꾼 뒤에 "30일간 못 쓴다"고
+	 * 알려주면 되돌릴 방법이 없어서, 바꾸기 전에 막는 쪽으로 바꿨다.</p>
 	 */
 	public BoardWritability evaluateBoardWritability(Member member, Long boardTeamId) {
 		if (boardTeamId == null) {
@@ -57,13 +58,6 @@ public class CommunityWriteGuard {
 		if (!boardTeamId.equals(favoriteTeamId)) {
 			return new BoardWritability(false, "NOT_FAN", null);
 		}
-		LocalDateTime changedAt = member.getFavoriteTeamChangedAt();
-		if (changedAt != null) {
-			LocalDateTime writableFrom = changedAt.plusDays(teamChangeCooldownDays);
-			if (remainingSeconds(writableFrom) > 0) {
-				return new BoardWritability(false, "COOLDOWN", writableFrom);
-			}
-		}
 		return BoardWritability.WRITABLE;
 	}
 
@@ -72,10 +66,6 @@ public class CommunityWriteGuard {
 		BoardWritability result = evaluateBoardWritability(member, boardTeamId);
 		if (result.canWrite()) {
 			return;
-		}
-		if ("COOLDOWN".equals(result.reason())) {
-			throw new CommunityWriteBlockedException(ErrorCode.COMMUNITY_TEAM_COOLDOWN,
-					remainingSeconds(result.writableFrom()));
 		}
 		throw new CustomException(ErrorCode.COMMUNITY_BOARD_FORBIDDEN);
 	}
