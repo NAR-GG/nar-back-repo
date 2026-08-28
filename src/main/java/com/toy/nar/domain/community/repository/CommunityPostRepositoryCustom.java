@@ -20,6 +20,12 @@ public interface CommunityPostRepositoryCustom {
 	/** 내 스크랩 페이지. 커서는 scrap.id (row 의 scrapId 로 내려간다). */
 	List<CommunityPostRow> findScrapPage(long memberId, Long cursorId, int size);
 
+	/** 내가 쓴 글. 커서는 post.id. 삭제·블라인드는 숨긴다(내 활동 화면 정책). */
+	List<CommunityPostRow> findMyPostPage(long memberId, Long cursorId, int size);
+
+	/** 내가 좋아요한 글. 커서는 like.id (row 의 scrapId 슬롯에 실려 내려간다). */
+	List<CommunityPostRow> findLikedPage(long memberId, Long cursorId, int size);
+
 	/** 작성 간격 검사용 마지막 작성 시각. status 무관 — 지웠다 다시 올리는 우회도 잡는다. */
 	Optional<LocalDateTime> findLastCreatedAt(long memberId);
 

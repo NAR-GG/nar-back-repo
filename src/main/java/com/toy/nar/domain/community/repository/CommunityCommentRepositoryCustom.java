@@ -14,4 +14,11 @@ public interface CommunityCommentRepositoryCustom {
 
 	/** like_count 원자 증감 후 갱신된 값을 돌려준다. */
 	int applyLikeDelta(long commentId, int delta);
+
+	/**
+	 * 내가 쓴 댓글. 커서는 comment.id DESC. 삭제·블라인드 댓글과 원글이 내려간 댓글은
+	 * 숨긴다 — 원글 상세로 이동할 수 없는 행은 보여줘도 갈 곳이 없다.
+	 * member_id 는 FK 자동 인덱스(fk_community_comment_member)가 커버한다.
+	 */
+	List<CommunityMyCommentRow> findMyCommentPage(long memberId, Long cursorId, int size);
 }

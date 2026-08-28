@@ -175,6 +175,31 @@ public class CommunityPostService {
 		return new ScrapToggleResponse(result != ToggleResult.REMOVED);
 	}
 
+	public PostListResponse getMyPosts(Long memberId, Long cursor, Integer size) {
+		requireLogin(memberId);
+		int pageSize = clampSize(size);
+		List<CommunityPostRow> rows = postRepository.findMyPostPage(memberId, cursor, pageSize);
+		var imagesByPost = imagesByPost(rows);
+		List<PostSummaryResponse> posts = rows.stream()
+				.map(row -> toSummary(row, imagesByPost.getOrDefault(row.id(), List.of())))
+				.toList();
+		return new PostListResponse(posts, nextCursor(rows, pageSize));
+	}
+
+	public com.toy.nar.app.community.dto.CommunityDtos.LikedPostListResponse getMyLikedPosts(
+			Long memberId, Long cursor, Integer size) {
+		requireLogin(memberId);
+		int pageSize = clampSize(size);
+		List<CommunityPostRow> rows = postRepository.findLikedPage(memberId, cursor, pageSize);
+		var imagesByPost = imagesByPost(rows);
+		var items = rows.stream()
+				.map(row -> new com.toy.nar.app.community.dto.CommunityDtos.LikedPostItemResponse(
+						row.scrapId(), toSummary(row, imagesByPost.getOrDefault(row.id(), List.of()))))
+				.toList();
+		Long nextCursor = rows.size() < pageSize ? null : rows.get(rows.size() - 1).scrapId();
+		return new com.toy.nar.app.community.dto.CommunityDtos.LikedPostListResponse(items, nextCursor);
+	}
+
 	public ScrapListResponse getMyScraps(Long memberId, Long cursor, Integer size) {
 		requireLogin(memberId);
 		int pageSize = clampSize(size);

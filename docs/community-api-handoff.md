@@ -4,7 +4,7 @@
 `community_dummy.dart` 를 실제 API 로 교체할 수 있게 쓴다.
 설계 배경·결정 근거는 `docs/community-backend-design.md`.
 
-- **총 17개 엔드포인트** (게시글 8, 댓글 4, 신고·차단 3, 내 스크랩 1, 사진 서명 1)
+- **총 20개 엔드포인트** (게시글 8, 댓글 4, 신고·차단 3, 내 활동 4, 사진 서명 1)
 - 아직 없는 것: 투표, 규칙 전문 API(D-6), 제재 사유 응답, 금칙어 — 뒤 단계에서 온다
 - Swagger: `https://api.nar.kr/swagger-ui.html` (Basic Auth 는 기존과 동일)
 
@@ -180,15 +180,40 @@ offset 없다. 전부 커서다.
 
 ### `DELETE /api/mobile/community/blocks/{memberId}` — 차단 해제 (멱등)
 
-## 내 스크랩 (1)
+## 내 활동 (4) — 전부 인증 필수
 
-### `GET /api/mobile/me/community/scraps?cursor=&size=` (인증 필수)
+**공통 정책: 삭제·블라인드된 것은 목록에서 숨긴다** (내가 쓴 글·댓글 포함).
+
+### `GET /api/mobile/me/community/scraps?cursor=&size=`
 
 ```json
 { "items": [ { "scrapId": 12, "post": { ...PostSummary와 동일... } } ], "nextCursor": 12 }
 ```
 
-커서는 `scrapId` 기준. 삭제·블라인드된 글은 목록에서 빠진다.
+커서는 `scrapId` 기준.
+
+### `GET /api/mobile/me/community/posts?cursor=&size=` — 내가 쓴 글
+
+응답은 게시글 목록과 동일(`{ posts, nextCursor }`, 커서 = 글 id). 전체·팀 게시판 글이 섞여
+내려온다(`boardTeamId` 로 구분).
+
+### `GET /api/mobile/me/community/likes?cursor=&size=` — 좋아요한 글
+
+```json
+{ "items": [ { "likeId": 7, "post": { ...PostSummary... } } ], "nextCursor": 7 }
+```
+
+커서는 `likeId` 기준(스크랩과 같은 모양).
+
+### `GET /api/mobile/me/community/comments?cursor=&size=` — 내가 쓴 댓글
+
+```json
+{ "comments": [ { "id": 9, "postId": 3, "postTitle": "원글 제목", "body": "...",
+    "likeCount": 1, "createdAt": "..." } ], "nextCursor": 9 }
+```
+
+최신순(커서 = 댓글 id). `postId` 로 원글 상세 이동. **원글이 삭제된 댓글도 목록에서
+빠진다** — 눌러도 갈 곳이 없어서다.
 
 ## 사진 업로드 플로우 (1)
 
@@ -230,17 +255,9 @@ offset 없다. 전부 커서다.
      프로필의 "N일 후 작성 가능" 표시까지 처리
    - 안 넣으면: 쓰기 버튼은 열어 두고 403 + `Retry-After` 를 받았을 때 안내.
      구현 최소지만 유저가 글을 다 쓰고 나서야 막힌 걸 안다
-2. **마이페이지에 "내가 쓴 글 / 내가 쓴 댓글" 추가 여부.**
-   - 내가 쓴 글: 서버 인덱스(`member_id, id DESC`)는 이미 있다. API 만 붙이면 됨
-   - 내가 쓴 댓글: **API 만 붙이면 된다.** V79 DDL 에 `INDEX` 로 안 적혀 있어
-     "인덱스가 없다"고 봤는데, FK(`fk_community_comment_member`)를 만들며 MySQL 이
-     `(member_id)` 인덱스를 자동 생성해 뒀다. InnoDB 의 secondary index 는 리프에
-     PK 를 담으므로 이건 실질적으로 `(member_id, id)` 다 — 커서 조건(`id < ?`)과
-     `ORDER BY id DESC`(backward index scan) 가 같은 인덱스 안에서 처리된다.
-     프로드 `EXPLAIN` 의 `possible_keys` 에도 잡힌다. **인덱스를 새로 추가하면
-     중복이라 댓글 쓰기마다 유지 비용만 늘어난다**
-   - 스크랩(`GET /api/mobile/me/community/scraps`)은 이미 있으므로 마이페이지
-     묶음이 스크랩·글·댓글 3종이 될지 화면 기획과 같이 결정
+2. ~~마이페이지에 "내가 쓴 글 / 내가 쓴 댓글" 추가 여부~~ — **해소.** 내 활동 4종
+   (스크랩·내 글·좋아요한 글·내 댓글) API 가 전부 나갔다. 위 "내 활동" 절 참고.
+   인덱스 추가 없이 기존 인덱스(FK 자동 인덱스 포함)로 돌고, 삭제·블라인드는 숨긴다.
 
 ## 참고
 

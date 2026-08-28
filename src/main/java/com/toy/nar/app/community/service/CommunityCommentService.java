@@ -125,6 +125,19 @@ public class CommunityCommentService {
 		return new LikeToggleResponse(result != ToggleResult.REMOVED, likeCount);
 	}
 
+	public com.toy.nar.app.community.dto.CommunityDtos.MyCommentListResponse getMyComments(
+			Long memberId, Long cursor, Integer size) {
+		CommunityPostService.requireLogin(memberId);
+		int pageSize = size == null ? DEFAULT_PAGE_SIZE : Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+		var rows = commentRepository.findMyCommentPage(memberId, cursor, pageSize);
+		var comments = rows.stream()
+				.map(row -> new com.toy.nar.app.community.dto.CommunityDtos.MyCommentResponse(
+						row.id(), row.postId(), row.postTitle(), row.body(), row.likeCount(), row.createdAt()))
+				.toList();
+		Long nextCursor = rows.size() < pageSize ? null : rows.get(rows.size() - 1).id();
+		return new com.toy.nar.app.community.dto.CommunityDtos.MyCommentListResponse(comments, nextCursor);
+	}
+
 	/* ---------- 내부 ---------- */
 
 	private CommentResponse toResponse(CommunityCommentRow row, Long viewerId, Set<Long> blocked, Set<Long> liked) {
