@@ -156,11 +156,13 @@ class CommunityRepositoryMySqlIntegrationTest {
 		assertThat(liked).extracting(CommunityPostRow::id).containsExactly(3L);
 		assertThat(liked.get(0).scrapId()).isNotNull(); // 커서 = like.id
 
-		// 내가 쓴 댓글: VISIBLE 댓글만, 그리고 원글이 삭제된 댓글도 빠진다
-		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body) VALUES (1, 3, 2, '보임')");
+		// 내가 쓴 댓글: VISIBLE 댓글만, 그리고 원글이 삭제된 댓글도 빠진다.
+		// id 는 101+ — 차단 테스트가 "COMMENT 1 은 없다"를 가정하므로 낮은 id 를 쓰면
+		// 실행 순서에 따라 그 테스트를 깨뜨린다(CI 실측).
+		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body) VALUES (101, 3, 2, '보임')");
 		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body, status)"
-				+ " VALUES (2, 3, 2, '삭제됨', 'DELETED')");
-		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body) VALUES (3, 5, 2, '원글삭제')");
+				+ " VALUES (102, 3, 2, '삭제됨', 'DELETED')");
+		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body) VALUES (103, 5, 2, '원글삭제')");
 		var comments = commentPage(2L);
 		assertThat(comments).hasSize(1);
 		assertThat(comments.get(0).postTitle()).isEqualTo("글3");
