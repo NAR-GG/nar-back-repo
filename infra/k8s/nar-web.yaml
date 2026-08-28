@@ -126,6 +126,18 @@ spec:
             - name: RIOT_MATCH_FALLBACK_ENABLED
               value: "true"
 
+            # 응원팀 변경 쿨다운(일). 0 이면 제한이 통째로 꺼진다.
+            #
+            # 지금 0 인 이유: 스토어에 나가 있는 앱(1.0.18+40)에는 이 제한을 설명하는
+            # 화면이 없다. 서버만 켜면 프로필 수정에서 팀을 바꾼 사용자가 403 을 받고
+            # "저장에 실패했습니다" 만 보게 된다 — 왜 막혔는지 알 방법이 없다.
+            #
+            # 제한을 안내하는 앱 버전이 스토어에 나간 뒤 "30" 으로 바꾼다. 그 앱은
+            # /auth/me 의 favoriteTeamChangeAvailableFrom 으로 팀을 고르는 순간에
+            # 막고 날짜를 알려준다.
+            - name: COMMUNITY_TEAM_CHANGE_COOLDOWN_DAYS
+              value: "0"
+
           resources:
             # RSS 구성식 (실측 검산: 1583Mi = 힙커밋 1041 + 논힙 339 + 기타 203)
             #   힙 커밋 상한          1024Mi   (-Xmx1024m)

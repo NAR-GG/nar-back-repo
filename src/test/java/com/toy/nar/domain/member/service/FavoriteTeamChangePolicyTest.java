@@ -58,6 +58,21 @@ class FavoriteTeamChangePolicyTest {
 	}
 
 	@Test
+	void 쿨다운_0일이면_제한이_꺼진다() {
+		// prod 킬 스위치(COMMUNITY_TEAM_CHANGE_COOLDOWN_DAYS=0). 제한을 설명하는 앱이
+		// 스토어에 나가기 전까지는 이 값으로 꺼 둔다 — 켜면 구버전 앱 사용자가 이유
+		// 없는 "저장 실패" 만 보게 된다.
+		FavoriteTeamChangePolicy off = new FavoriteTeamChangePolicy();
+		ReflectionTestUtils.setField(off, "cooldownDays", 0L);
+
+		Member member = memberWithTeam(1L);
+		member.updateProfile("이름", "0001", team(2L), null); // 방금 바꿈
+
+		assertThat(off.changeAvailableFrom(member)).isNull();
+		assertThatCode(() -> off.checkChangeable(member, team(3L))).doesNotThrowAnyException();
+	}
+
+	@Test
 	void 서른날이_지나면_다시_바꿀_수_있다() {
 		Member member = memberWithTeam(1L);
 		member.updateProfile("이름", "0001", team(2L), null);
