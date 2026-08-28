@@ -58,7 +58,25 @@ public class CommunityPostService {
 		List<PostSummaryResponse> posts = rows.stream()
 				.map(row -> toSummary(row, imagesByPost.getOrDefault(row.id(), List.of())))
 				.toList();
-		return new PostListResponse(posts, nextCursor(rows, pageSize));
+		return new PostListResponse(posts, nextCursor(rows, pageSize), boardViewer(boardTeamId, viewerId));
+	}
+
+	/**
+	 * 잠금 바용 쓰기 자격 판정. 팀 게시판 + 로그인일 때만 계산한다 — 화면과 데이터가
+	 * 같이 오게 목록 응답에 실어, 앱이 쓰기 시도(403) 전에 잠금 바를 그린다.
+	 */
+	private com.toy.nar.app.community.dto.CommunityDtos.BoardViewerResponse boardViewer(
+			Long boardTeamId, Long viewerId) {
+		if (boardTeamId == null || viewerId == null) {
+			return null;
+		}
+		return memberRepository.findById(viewerId)
+				.map(member -> {
+					var result = writeGuard.evaluateBoardWritability(member, boardTeamId);
+					return new com.toy.nar.app.community.dto.CommunityDtos.BoardViewerResponse(
+							result.canWrite(), result.reason(), result.writableFrom());
+				})
+				.orElse(null);
 	}
 
 	public PostDetailResponse getPost(long postId, Long viewerId) {
@@ -183,7 +201,7 @@ public class CommunityPostService {
 		List<PostSummaryResponse> posts = rows.stream()
 				.map(row -> toSummary(row, imagesByPost.getOrDefault(row.id(), List.of())))
 				.toList();
-		return new PostListResponse(posts, nextCursor(rows, pageSize));
+		return new PostListResponse(posts, nextCursor(rows, pageSize), null);
 	}
 
 	public com.toy.nar.app.community.dto.CommunityDtos.LikedPostListResponse getMyLikedPosts(
