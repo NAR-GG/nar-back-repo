@@ -50,7 +50,16 @@ public final class CommunityDtos {
 	public record PostImageResponse(Long id, String url) {
 	}
 
-	public record PostListResponse(List<PostSummaryResponse> posts, Long nextCursor) {
+	/**
+	 * 게시판 쓰기 자격 판정 — 잠금 바용. 팀 게시판 + 로그인일 때만 내려간다(그 외 null).
+	 * reason: NOT_FAN(응원팀 아님) / COOLDOWN(팀 변경 30일) / null(canWrite=true).
+	 * COOLDOWN 이면 writableFrom 에 쓰기 가능 시각이 실린다.
+	 */
+	public record BoardViewerResponse(boolean canWrite, String reason, LocalDateTime writableFrom) {
+	}
+
+	public record PostListResponse(List<PostSummaryResponse> posts, Long nextCursor,
+			BoardViewerResponse boardViewer) {
 	}
 
 	/** blockedAuthor 면 title/body 는 null — 앱이 "차단한 사용자의 글" 자리를 그린다. */
