@@ -62,19 +62,23 @@ public class CommunityPostService {
 	}
 
 	/**
-	 * 잠금 바용 쓰기 자격 판정. 팀 게시판 + 로그인일 때만 계산한다 — 화면과 데이터가
-	 * 같이 오게 목록 응답에 실어, 앱이 쓰기 시도(403) 전에 잠금 바를 그린다.
+	 * 쓰기 자격 + 작성 간격 판정. 로그인 상태면 <b>전체 게시판에도</b> 실어 준다 —
+	 * 자격은 전체가 항상 통과지만 작성 간격은 전체에도 걸리기 때문이다.
+	 *
+	 * <p>화면과 데이터가 같이 오게 목록 응답에 실어, 앱이 쓰기 시도(403·429) 전에
+	 * 잠금 바를 그리고 글쓰기 버튼을 잠근다.</p>
 	 */
 	private com.toy.nar.app.community.dto.CommunityDtos.BoardViewerResponse boardViewer(
 			Long boardTeamId, Long viewerId) {
-		if (boardTeamId == null || viewerId == null) {
+		if (viewerId == null) {
 			return null;
 		}
 		return memberRepository.findById(viewerId)
 				.map(member -> {
 					var result = writeGuard.evaluateBoardWritability(member, boardTeamId);
 					return new com.toy.nar.app.community.dto.CommunityDtos.BoardViewerResponse(
-							result.canWrite(), result.reason(), result.writableFrom());
+							result.canWrite(), result.reason(),
+							writeGuard.nextPostWritableAt(viewerId, boardTeamId));
 				})
 				.orElse(null);
 	}
@@ -116,7 +120,7 @@ public class CommunityPostService {
 		String title = requireLength(request.title(), MAX_TITLE_LENGTH);
 		String body = requireLength(request.body(), MAX_BODY_LENGTH);
 		writeGuard.checkBoardWritable(member, request.boardTeamId());
-		writeGuard.checkPostInterval(memberId);
+		writeGuard.checkPostInterval(memberId, request.boardTeamId());
 
 		List<String> imageUrls = validateImageUrls(request.imageUrls());
 
