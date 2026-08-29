@@ -120,16 +120,17 @@ class CommunityRepositoryMySqlIntegrationTest {
 	@Test
 	void 내댓글은_원글의_게시판을_싣는다() {
 		CommunityCommentRepositoryImpl comments = new CommunityCommentRepositoryImpl(jdbc);
+		// 컨테이너와 DB 를 클래스 전체가 공유한다. id 는 다른 테스트(101~103)와 겹치면 안 된다.
 		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body)"
-				+ " VALUES (100, 6, 1, '팀글 댓글'), (101, 1, 1, '전체글 댓글')");
+				+ " VALUES (110, 6, 1, '팀글 댓글'), (111, 1, 1, '전체글 댓글')");
 
 		List<CommunityMyCommentRow> rows = comments.findMyCommentPage(1L, null, 10);
 
-		CommunityMyCommentRow onTeamBoard = rows.stream().filter(r -> r.id() == 100L).findFirst().orElseThrow();
+		CommunityMyCommentRow onTeamBoard = rows.stream().filter(r -> r.id() == 110L).findFirst().orElseThrow();
 		assertThat(onTeamBoard.boardTeamId()).isEqualTo(1L);
 		assertThat(onTeamBoard.boardTeamCode()).isEqualTo("T1");
 
-		CommunityMyCommentRow onAllBoard = rows.stream().filter(r -> r.id() == 101L).findFirst().orElseThrow();
+		CommunityMyCommentRow onAllBoard = rows.stream().filter(r -> r.id() == 111L).findFirst().orElseThrow();
 		assertThat(onAllBoard.boardTeamId()).isNull();
 		assertThat(onAllBoard.boardTeamCode()).isNull();
 	}
