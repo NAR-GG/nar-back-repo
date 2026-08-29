@@ -1102,4 +1102,28 @@ class LivePollingSchedulerTest {
 	void 스코어가_null_이면_0으로_보고_종료로_보지_않는다() {
 		assertThat(LivePollingScheduler.isMatchEnded(3, null, null)).isFalse();
 	}
+
+	/**
+	 * 2026-08-29 라이브 전면 중단의 회귀 테스트.
+	 *
+	 * <p>Riot 이 "window end-time 이 80초보다 최신이면 거부" 로 룰을 조였는데(그 전엔 20초)
+	 * 우리는 40~50초 전 window 를 요청하고 있었다. 진행 중이던 경기가 전부 매 틱 400 이었다.
+	 *
+	 * <p>window 는 {@code [start, start+10초]} 라 start 가 90초보다 오래돼야 end 가 80초를 넘는다.
+	 * 상수를 다시 낮추면 라이브가 통째로 죽으므로 여기서 잠근다.
+	 */
+	@Test
+	void 요청하는_window_는_피드의_80초_룰보다_오래된_구간이어야_한다() {
+		long minFeedAge = (long) ReflectionTestUtils.getField(
+				LivePollingScheduler.class, "MIN_FEED_AGE_SECONDS");
+		long maxLag = (long) ReflectionTestUtils.getField(
+				LivePollingScheduler.class, "MAX_LAG_SECONDS");
+
+		// start + 10초(window 길이) 가 80초보다 오래돼야 한다.
+		assertThat(minFeedAge).isGreaterThanOrEqualTo(90L);
+
+		// 클램프가 바닥(MAX_LAG) → 천장(MIN_FEED_AGE) 순서다. 바닥이 더 최신이면 천장이 도로
+		// 끌어내려 MAX_LAG 가 죽은 상수가 된다 — 실제로 그런 적이 있다.
+		assertThat(maxLag).isGreaterThan(minFeedAge);
+	}
 }
