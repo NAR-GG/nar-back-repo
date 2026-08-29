@@ -102,7 +102,9 @@ public class CommunityWriteGuard {
 	}
 
 	private void checkInterval(LocalDateTime lastCreatedAt, long intervalSeconds) {
-		if (lastCreatedAt == null) {
+		// 0 이하 = 제한 없음. 댓글은 기본 0 이다 — 티키타카를 막지 않는다.
+		// 도배가 생기면 env(COMMUNITY_COMMENT_INTERVAL_SECONDS)로만 다시 켠다.
+		if (intervalSeconds <= 0 || lastCreatedAt == null) {
 			return;
 		}
 		long remaining = remainingSeconds(lastCreatedAt.plusSeconds(intervalSeconds));
