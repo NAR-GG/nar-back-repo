@@ -39,6 +39,7 @@ public class CommunityCommentService {
 	private final CommunityInteractionRepository interactionRepository;
 	private final MemberRepository memberRepository;
 	private final CommunityWriteGuard writeGuard;
+	private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
 	public CommentListResponse getComments(long postId, Long cursor, Integer size, Long viewerId) {
 		requireVisiblePost(postId);
@@ -93,6 +94,11 @@ public class CommunityCommentService {
 		long id = commentRepository.save(comment).getId();
 		// 자식 insert → 부모 카운터 순서 고정(락 수칙). 같은 트랜잭션이라 정합.
 		postRepository.applyCommentDelta(postId, 1);
+		// 알림(원글 작성자·답글 대상)은 커밋 후 리스너가 보낸다 — FCM 을 트랜잭션 밖으로.
+		eventPublisher.publishEvent(new CommunityCommentCreatedEvent(
+				postId, id, memberId, member.getNickname(),
+				post.getMemberId(), mentionMemberId,
+				body.length() <= 80 ? body : body.substring(0, 80)));
 		return id;
 	}
 

@@ -42,6 +42,7 @@ public class MemberNotificationRetentionService {
 			@Value("${notification.retention.live-event-days:7}") int liveEventDays,
 			@Value("${notification.retention.solo-rank-days:7}") int soloRankDays,
 			@Value("${notification.retention.set-days:30}") int setDays,
+			@Value("${notification.retention.community-days:30}") int communityDays,
 			@Value("${notification.retention.chunk-size:5000}") int chunkSize,
 			@Value("${notification.retention.max-chunks-per-type:400}") int maxChunksPerType) {
 		this.notificationRepository = notificationRepository;
@@ -54,6 +55,12 @@ public class MemberNotificationRetentionService {
 		retentionDays.put(MemberNotificationType.PLAYER_SOLO_RANK_STARTED, soloRankDays);
 		retentionDays.put(MemberNotificationType.SET_START, setDays);
 		retentionDays.put(MemberNotificationType.SET_END, setDays);
+		// 커뮤니티 4종은 한 값으로 묶는다 — 생성량이 유형별로 갈릴 만큼 크지 않고,
+		// 댓글 알림은 열람 후에도 "어느 글이었지" 하고 되찾는 용도가 있어 SET 와 같은 30일.
+		retentionDays.put(MemberNotificationType.COMMUNITY_COMMENT, communityDays);
+		retentionDays.put(MemberNotificationType.COMMUNITY_REPLY, communityDays);
+		retentionDays.put(MemberNotificationType.COMMUNITY_REPORT_RESULT, communityDays);
+		retentionDays.put(MemberNotificationType.COMMUNITY_RESTRICTION, communityDays);
 	}
 
 	// 트래픽이 가장 적은 새벽에 돈다. DB 백업(04:10)과 겹치지 않게 04:40.
