@@ -153,6 +153,7 @@ DISCORD_WEBHOOK_URL, DISCORD_PLAYER_WEBHOOK_URL
 DISCORD_ROSTER_WEBHOOK_URL                # LCK 로스터 변동 알림. 비우면 DISCORD_WEBHOOK_URL로 폴백
 DISCORD_COMMUNITY_WEBHOOK_URL             # 커뮤니티 신고 임계 알림(텍스트 3건/이미지 1건). 비우면 DISCORD_WEBHOOK_URL로 폴백
 GOOGLE_DRIVE_CSV_ID
+GOOGLE_SERVICE_ACCOUNT_KEY                # 구글 드라이브 서비스 계정 키 JSON 원문. 없으면 클래스패스 service-account-key.json 폴백(로컬 전용)
 RIOT_MONITOR_ENABLED, RIOT_API_ENABLED   # feature flags for scheduling
 JWT_SECRET
 
