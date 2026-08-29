@@ -107,7 +107,7 @@ public class CommunityPostService {
 						.map(img -> new com.toy.nar.app.community.dto.CommunityDtos.PostImageResponse(
 								img.id(), img.imageUrl()))
 						.toList();
-		return new PostDetailResponse(row.id(), row.boardTeamId(),
+		return new PostDetailResponse(row.id(), row.boardTeamId(), row.boardTeamCode(),
 				blockedAuthor ? null : row.title(),
 				blockedAuthor ? null : row.body(),
 				toAuthor(row), row.viewCount(), row.likeCount(), row.commentCount(),
@@ -243,7 +243,7 @@ public class CommunityPostService {
 				? row.body()
 				: row.body().substring(0, PREVIEW_LENGTH);
 		String thumbnailUrl = images.isEmpty() ? null : images.get(0).imageUrl();
-		return new PostSummaryResponse(row.id(), row.boardTeamId(), row.title(), preview,
+		return new PostSummaryResponse(row.id(), row.boardTeamId(), row.boardTeamCode(), row.title(), preview,
 				toAuthor(row), row.viewCount(), row.likeCount(), row.commentCount(),
 				row.editedAt() != null, row.createdAt(), thumbnailUrl, images.size());
 	}

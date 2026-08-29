@@ -21,7 +21,8 @@ import lombok.RequiredArgsConstructor;
 public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCustom {
 
 	private static final String SELECT_COLUMNS = """
-			SELECT p.id, p.board_team_id, p.title, p.body, p.view_count, p.like_count,
+			SELECT p.id, p.board_team_id, bt.team_code AS board_team_code,
+			       p.title, p.body, p.view_count, p.like_count,
 			       p.comment_count, p.status, p.created_at, p.edited_at,
 			       p.member_id AS author_member_id, m.name AS author_name, m.tag AS author_tag,
 			       m.profile_image_url AS author_profile_image_url,
@@ -31,11 +32,13 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 			FROM community_post p
 			LEFT JOIN member m ON m.id = p.member_id
 			LEFT JOIN teams t ON t.team_id = p.author_team_id
+			LEFT JOIN teams bt ON bt.team_id = p.board_team_id
 			""";
 
 	private static final RowMapper<CommunityPostRow> ROW_MAPPER = (rs, i) -> new CommunityPostRow(
 			rs.getLong("id"),
 			rs.getObject("board_team_id", Long.class),
+			rs.getString("board_team_code"),
 			rs.getString("title"),
 			rs.getString("body"),
 			rs.getInt("view_count"),

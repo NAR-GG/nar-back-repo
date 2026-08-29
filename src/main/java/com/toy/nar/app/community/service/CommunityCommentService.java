@@ -132,7 +132,9 @@ public class CommunityCommentService {
 		var rows = commentRepository.findMyCommentPage(memberId, cursor, pageSize);
 		var comments = rows.stream()
 				.map(row -> new com.toy.nar.app.community.dto.CommunityDtos.MyCommentResponse(
-						row.id(), row.postId(), row.postTitle(), row.body(), row.likeCount(), row.createdAt()))
+						row.id(), row.postId(), row.postTitle(),
+						row.boardTeamId(), row.boardTeamCode(),
+						row.body(), row.likeCount(), row.createdAt()))
 				.toList();
 		Long nextCursor = rows.size() < pageSize ? null : rows.get(rows.size() - 1).id();
 		return new com.toy.nar.app.community.dto.CommunityDtos.MyCommentListResponse(comments, nextCursor);
