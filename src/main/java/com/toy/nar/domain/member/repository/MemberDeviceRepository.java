@@ -18,6 +18,9 @@ public interface MemberDeviceRepository extends JpaRepository<MemberDevice, Long
 
 	Optional<MemberDevice> findByIdAndMember_Id(Long id, Long memberId);
 
+	/** 한 회원의 활성 기기 전부 — 커뮤니티 댓글 알림처럼 수신자가 1명인 발송용. */
+	List<MemberDevice> findByMember_IdAndActiveTrue(Long memberId);
+
 	// 백오피스 회원 상세: 푸시 받을 수 있는 기기 수.
 	long countByMember_IdAndActiveTrue(Long memberId);
 

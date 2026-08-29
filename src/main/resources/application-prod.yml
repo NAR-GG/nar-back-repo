@@ -86,6 +86,7 @@ notification:
     live-event-days: ${NOTIFICATION_RETENTION_LIVE_EVENT_DAYS:7}
     solo-rank-days: ${NOTIFICATION_RETENTION_SOLO_RANK_DAYS:7}
     set-days: ${NOTIFICATION_RETENTION_SET_DAYS:30}
+    community-days: ${NOTIFICATION_RETENTION_COMMUNITY_DAYS:30}
     chunk-size: ${NOTIFICATION_RETENTION_CHUNK_SIZE:5000}
     max-chunks-per-type: ${NOTIFICATION_RETENTION_MAX_CHUNKS:400}
   scheduler:

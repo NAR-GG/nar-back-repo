@@ -22,10 +22,10 @@ class MemberNotificationRetentionServiceTest {
 	private final MemberNotificationRepository notificationRepository = mock(MemberNotificationRepository.class);
 	private final SchedulerAlertService schedulerAlertService = mock(SchedulerAlertService.class);
 
-	/** liveEvent 7일, soloRank 7일, set 30일, 청크 5000, 청크 상한 3. */
+	/** liveEvent 7일, soloRank 7일, set 30일, community 30일, 청크 5000, 청크 상한 3. */
 	private MemberNotificationRetentionService service() {
 		return new MemberNotificationRetentionService(
-				notificationRepository, schedulerAlertService, 7, 7, 30, 5000, 3);
+				notificationRepository, schedulerAlertService, 7, 7, 30, 30, 5000, 3);
 	}
 
 	@Test
