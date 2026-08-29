@@ -96,6 +96,20 @@ public class CommunityCommentService {
 		return id;
 	}
 
+	/** 본문 수정(작성자만). edited_at 스탬프 → 응답 edited 로 "(수정됨)" 표시. 간격 검사는 안 탄다 — 수정은 도배가 아니다. */
+	@Transactional
+	public void update(long commentId, Long memberId,
+			com.toy.nar.app.community.dto.CommunityDtos.CommentUpdateRequest request) {
+		CommunityPostService.requireLogin(memberId);
+		CommunityComment comment = commentRepository.findById(commentId)
+				.filter(CommunityComment::isVisible)
+				.orElseThrow(() -> new CustomException(ErrorCode.COMMUNITY_COMMENT_NOT_FOUND));
+		if (!comment.isAuthor(memberId)) {
+			throw new CustomException(ErrorCode.COMMUNITY_NOT_AUTHOR);
+		}
+		comment.edit(CommunityPostService.requireLength(request.body(), MAX_BODY_LENGTH));
+	}
+
 	@Transactional
 	public void delete(long commentId, Long memberId) {
 		CommunityPostService.requireLogin(memberId);
@@ -134,7 +148,7 @@ public class CommunityCommentService {
 				.map(row -> new com.toy.nar.app.community.dto.CommunityDtos.MyCommentResponse(
 						row.id(), row.postId(), row.postTitle(),
 						row.boardTeamId(), row.boardTeamCode(),
-						row.body(), row.likeCount(), row.createdAt()))
+						row.body(), row.likeCount(), row.editedAt() != null, row.createdAt()))
 				.toList();
 		Long nextCursor = rows.size() < pageSize ? null : rows.get(rows.size() - 1).id();
 		return new com.toy.nar.app.community.dto.CommunityDtos.MyCommentListResponse(comments, nextCursor);
@@ -163,7 +177,8 @@ public class CommunityCommentService {
 		}
 		return new CommentResponse(row.id(), row.parentId(),
 				visible ? row.body() : null, status, author, mentionNickname,
-				row.likeCount(), liked.contains(row.id()), mine, row.createdAt());
+				row.likeCount(), liked.contains(row.id()), mine,
+				row.editedAt() != null, row.createdAt());
 	}
 
 	private CommunityPost requireVisiblePost(long postId) {

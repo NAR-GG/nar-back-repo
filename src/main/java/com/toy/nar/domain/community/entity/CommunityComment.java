@@ -57,6 +57,10 @@ public class CommunityComment {
 	@Column(nullable = false, length = 20)
 	private CommunityContentStatus status = CommunityContentStatus.VISIBLE;
 
+	/** 본문 수정 시각 — "(수정됨)" 판정 전용. status 변경에는 안 찍는다(게시글과 같은 규칙). */
+	@Column(name = "edited_at")
+	private LocalDateTime editedAt;
+
 	// 앱 시각으로 직접 넣는다 — CommunityPost.createdAt 과 같은 이유.
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
@@ -71,6 +75,12 @@ public class CommunityComment {
 		this.mentionMemberId = mentionMemberId;
 		this.body = body;
 		this.createdAt = LocalDateTime.now();
+	}
+
+	/** 본문 수정. 멘션·parent 는 안 바뀐다 — 답글 관계를 수정으로 재배선할 이유가 없다. */
+	public void edit(String body) {
+		this.body = body;
+		this.editedAt = LocalDateTime.now();
 	}
 
 	public void softDelete() {

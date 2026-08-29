@@ -28,6 +28,10 @@ public final class CommunityDtos {
 	public record CommentCreateRequest(String body, Long replyToCommentId) {
 	}
 
+	/** 댓글 수정 — 본문만 바꾼다. 멘션·답글 관계는 수정으로 안 바뀐다. */
+	public record CommentUpdateRequest(String body) {
+	}
+
 	/** targetType: POST/COMMENT/IMAGE, reason: ABUSE/OBSCENE/AD/FRAUD/SPAM/ETC (ETC 는 detail 필수). */
 	public record ReportCreateRequest(String targetType, Long targetId, String reason, String detail) {
 	}
@@ -92,7 +96,7 @@ public final class CommunityDtos {
 	/** status: VISIBLE / DELETED / HIDDEN / BLOCKED. VISIBLE 이 아니면 body 는 null. */
 	public record CommentResponse(Long id, Long parentId, String body, String status,
 			AuthorResponse author, String mentionNickname, int likeCount,
-			boolean liked, boolean mine, LocalDateTime createdAt) {
+			boolean liked, boolean mine, boolean edited, LocalDateTime createdAt) {
 	}
 
 	public record CommentListResponse(List<CommentResponse> comments, Long nextCursor) {
@@ -125,7 +129,7 @@ public final class CommunityDtos {
 	 */
 	public record MyCommentResponse(Long id, Long postId, String postTitle,
 			Long boardTeamId, String boardTeamCode, String body,
-			int likeCount, LocalDateTime createdAt) {
+			int likeCount, boolean edited, LocalDateTime createdAt) {
 	}
 
 	public record MyCommentListResponse(List<MyCommentResponse> comments, Long nextCursor) {
