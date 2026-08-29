@@ -43,6 +43,25 @@ class LivePollingResumeTest {
 	private static final DateTimeFormatter START_TIME_FORMATTER =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
 
+	/**
+	 * 엣지 밴드는 {@code [now-MAX_LAG, now-MIN_FEED_AGE]} 다. 폴링이 요청하는 startingTime 은
+	 * 항상 이 안으로 클램프된다.
+	 *
+	 * <p>값을 하드코딩하지 않고 상수에서 읽는 이유 — 2026-08-29 Riot 이 피드의 "너무 최신"
+	 * 룰을 20초에서 80초로 조여 상수가 통째로 올라갔을 때, 여기 박아둔 -50/-35/-70 이 전부
+	 * 깨졌다. 밴드가 다시 움직여도 의도("밴드 안으로 클램프된다")는 그대로여야 한다.
+	 */
+	private static final long MAX_LAG = (long) ReflectionTestUtils.getField(
+			LivePollingScheduler.class, "MAX_LAG_SECONDS");
+	private static final long MIN_FEED_AGE = (long) ReflectionTestUtils.getField(
+			LivePollingScheduler.class, "MIN_FEED_AGE_SECONDS");
+
+	/** 요청한 window 가 엣지 밴드 안인가. 10초 내림과 테스트 실행 시간만큼 여유를 준다. */
+	private void assertWithinEdgeBand(Instant requested) {
+		assertThat(requested).isBeforeOrEqualTo(Instant.now().minusSeconds(MIN_FEED_AGE - 2));
+		assertThat(requested).isAfter(Instant.now().minusSeconds(MAX_LAG + 20));
+	}
+
 	private LiveStatsClient liveStatsClient;
 	private LiveStateStore liveStateStore;
 	private LiveGameMinuteSnapshotRepository snapshotRepository;
@@ -77,18 +96,18 @@ class LivePollingResumeTest {
 	@Test
 	@DisplayName("인메모리가 비어도 DB 의 마지막 프레임에서 이어받는다 — 엣지 밴드 안이면 그대로 쓴다")
 	void resumesFromDbWhenMemoryIsEmpty() {
-		// 45초 전 프레임. 다음 window 는 그 직후(약 -40초)라 엣지 바닥(-50)보다 최신이고
-		// 피드 20초 룰 상한(-35)보다는 과거다 → 클램프 없이 그대로 쓰인다.
-		Instant lastFrame = Instant.now().minusSeconds(45);
+		// 엣지 밴드 바로 바깥(조금 더 과거)의 프레임. 다음 window 는 그 직후라 밴드 안으로
+		// 들어오므로 클램프 없이 그대로 쓰인다 — "DB 에서 이어받았다" 가 관측되는 유일한 구간이다.
+		Instant lastFrame = Instant.now().minusSeconds(MAX_LAG + 5);
 		when(snapshotRepository.findTopByGameIdOrderByFrameTimestampUtcDesc(GAME_ID))
 				.thenReturn(Optional.of(snapshotAt(lastFrame)));
 
 		scheduler.pollActiveGames();
 
 		Instant requested = capturedStartingTime();
-		// 마지막 프레임보다 뒤이고, DB 를 안 봤을 때 쓰이는 엣지 바닥(-50)보다도 뒤여야 한다.
+		// 마지막 프레임보다 뒤 = 이어받았다는 뜻. 엣지로 점프했다면 이보다 더 뒤가 된다.
 		assertThat(requested).isAfter(lastFrame);
-		assertThat(requested).isAfter(Instant.now().minusSeconds(50));
+		assertWithinEdgeBand(requested);
 	}
 
 	@Test
@@ -99,9 +118,7 @@ class LivePollingResumeTest {
 
 		scheduler.pollActiveGames();
 
-		Instant requested = capturedStartingTime();
-		assertThat(requested).isBeforeOrEqualTo(Instant.now().minusSeconds(34));
-		assertThat(requested).isAfter(Instant.now().minusSeconds(70));
+		assertWithinEdgeBand(capturedStartingTime());
 	}
 
 	@Test
@@ -115,8 +132,7 @@ class LivePollingResumeTest {
 
 		scheduler.pollActiveGames();
 
-		Instant requested = capturedStartingTime();
-		assertThat(requested).isAfter(Instant.now().minusSeconds(70));
+		assertWithinEdgeBand(capturedStartingTime());
 	}
 
 	@Test
@@ -127,7 +143,7 @@ class LivePollingResumeTest {
 
 		scheduler.pollActiveGames();
 
-		assertThat(capturedStartingTime()).isAfter(Instant.now().minusSeconds(70));
+		assertWithinEdgeBand(capturedStartingTime());
 	}
 
 	@Test

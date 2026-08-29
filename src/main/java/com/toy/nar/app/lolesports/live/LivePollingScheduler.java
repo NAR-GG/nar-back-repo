@@ -35,16 +35,37 @@ public class LivePollingScheduler {
 	 * 이 게임을 한 번도 관측하지 않았을 때 거슬러 볼 구간.
 	 *
 	 * <p>{@link #MAX_LAG_SECONDS} 보다 크면 의미가 없다 — 아래 엣지 클램프가 즉시 잘라낸다.
-	 * 실제로 90초로 두고 있었는데 50초 클램프에 항상 걸려 죽은 상수였다. 두 값을 같게 둬서
-	 * "처음 보는 게임은 엣지에서 시작한다"가 코드에 드러나게 한다.</p>
+	 * 두 값을 같게 둬서 "처음 보는 게임은 엣지에서 시작한다"가 코드에 드러나게 한다.</p>
 	 */
-	private static final long INITIAL_LOOKBACK_SECONDS = 50L;
-	/** 라이브 엣지 추적: 이보다 더 뒤처지면 엣지 근처로 점프해 catch-up 지연(분 단위)을 막는다. */
-	private static final long MAX_LAG_SECONDS = 50L;
+	private static final long INITIAL_LOOKBACK_SECONDS = 110L;
+	/**
+	 * 라이브 엣지 추적: 이보다 더 뒤처지면 엣지 근처로 점프해 catch-up 지연(분 단위)을 막는다.
+	 *
+	 * <p><b>{@link #MIN_FEED_AGE_SECONDS} 보다 커야 한다.</b> 클램프가 바닥(이 값) → 천장
+	 * (MIN_FEED_AGE) 순서라, 바닥이 더 최신이면 천장이 도로 끌어내려 이 상수가 죽는다.</p>
+	 */
+	private static final long MAX_LAG_SECONDS = 110L;
 	/** 엣지 점프를 WARN 으로 남길 최소 크기. 지연 큰 피드(LPL ~70초)의 정상 churn 은 거른다. */
 	private static final long EDGE_JUMP_LOG_THRESHOLD_SECONDS = 45L;
-	/** 피드는 window end-time이 20초보다 최신이면 거부하므로, 이보다 최신은 요청하지 않는다. */
-	private static final long MIN_FEED_AGE_SECONDS = 35L;
+	/**
+	 * 피드가 거부하는 "너무 최신" 경계. 이보다 최신은 요청하지 않는다.
+	 *
+	 * <p>2026-08-29 Riot 이 이 룰을 <b>20초에서 80초로 조였다</b>. 그날 진행 중이던 경기가
+	 * 전부(LCK BFX-T1, LCP MVK-CFO) 매 틱 400 으로 떨어졌다:
+	 *
+	 * <pre>
+	 * BAD_QUERY_PARAMETER
+	 * "disallowed window with end time less than 80 sec old (was 50.74 sec old)"
+	 * </pre>
+	 *
+	 * <p>window 는 {@code [start, start+10초]} 라 end 가 80초보다 오래되려면
+	 * {@code start <= now-90초} 여야 한다. 실측 경계는 now-80 이 200, now-70 이 400이었다.
+	 * 시계 오차와 아래 10초 내림을 감안해 100초로 둔다.
+	 *
+	 * <p>대가는 지연이다 — 라이브 데이터가 이 값만큼 뒤처진다. Riot 이 그 앞을 안 주므로
+	 * 피할 방법이 없다. <b>이 값을 80 아래로 내리면 라이브가 통째로 죽는다.</b>
+	 */
+	private static final long MIN_FEED_AGE_SECONDS = 100L;
 
 	private final WorldsService worldsService;
 	private final LiveStatsClient liveStatsClient;
@@ -858,7 +879,7 @@ public class LivePollingScheduler {
 			}
 			candidate = liveEdgeFloor;
 		}
-		// 피드 20초 룰: 너무 최신 window는 거부되므로 상한을 둔다
+		// 피드 80초 룰: 너무 최신 window는 400 으로 거부되므로 상한을 둔다
 		Instant newestAllowed = now.minusSeconds(MIN_FEED_AGE_SECONDS);
 		if (candidate.isAfter(newestAllowed)) {
 			candidate = newestAllowed;
