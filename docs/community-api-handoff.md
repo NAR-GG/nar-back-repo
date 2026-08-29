@@ -145,7 +145,7 @@ offset 없다. 전부 커서다.
 { "comments": [ {
     "id": 9, "parentId": 5, "body": "...", "status": "VISIBLE",
     "author": { ... }, "mentionNickname": "이름#0002",
-    "likeCount": 1, "liked": false, "mine": false, "createdAt": "..."
+    "likeCount": 1, "liked": false, "mine": false, "edited": false, "createdAt": "..."
 } ], "nextCursor": 9 }
 ```
 
@@ -169,6 +169,12 @@ offset 없다. 전부 커서다.
   parent 올려붙이기(1단 고정)와 멘션 대상은 서버가 유도한다. 앱이 parentId 를
   직접 계산하지 말 것
 - 팀 게시판 글의 댓글도 응원팀·쿨다운 검사를 탄다(글과 같은 규칙)
+
+### `PUT /api/mobile/community/comments/{id}` — 수정 (작성자만)
+
+`{ "body": "≤1,000자" }` — 본문만 바뀐다(멘션·답글 관계 불변). 수정하면 `edited` 가
+true. **글·댓글 모두 `edited == true` 면 "(수정됨)" 라벨을 붙인다** — 에타는 표시
+안 하지만, 댓글 달린 뒤 본문 바꿔치기를 투명하게 만드는 장치라 우리는 표시한다.
 
 ### `DELETE /api/mobile/community/comments/{id}` — 삭제 (작성자만, 소프트)
 

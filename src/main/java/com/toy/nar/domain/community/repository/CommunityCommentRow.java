@@ -10,6 +10,7 @@ public record CommunityCommentRow(
 		String status,
 		int likeCount,
 		LocalDateTime createdAt,
+		LocalDateTime editedAt,
 		Long authorMemberId,
 		String authorName,
 		String authorTag,

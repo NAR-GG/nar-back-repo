@@ -44,6 +44,15 @@ public class MobileCommunityCommentController {
 		return ResponseEntity.ok(Map.of("id", commentService.create(postId, memberId, request)));
 	}
 
+	@org.springframework.web.bind.annotation.PutMapping("/comments/{commentId}")
+	public ResponseEntity<Void> update(
+			@PathVariable long commentId,
+			@RequestBody com.toy.nar.app.community.dto.CommunityDtos.CommentUpdateRequest request,
+			@AuthenticationPrincipal Long memberId) {
+		commentService.update(commentId, memberId, request);
+		return ResponseEntity.noContent().build();
+	}
+
 	@DeleteMapping("/comments/{commentId}")
 	public ResponseEntity<Void> delete(
 			@PathVariable long commentId,

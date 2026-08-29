@@ -15,5 +15,6 @@ public record CommunityMyCommentRow(
 		String boardTeamCode,
 		String body,
 		int likeCount,
-		LocalDateTime createdAt) {
+		LocalDateTime createdAt,
+		LocalDateTime editedAt) {
 }

@@ -25,6 +25,7 @@ public class CommunityCommentRepositoryImpl implements CommunityCommentRepositor
 			rs.getString("status"),
 			rs.getInt("like_count"),
 			rs.getTimestamp("created_at").toLocalDateTime(),
+			rs.getTimestamp("edited_at") == null ? null : rs.getTimestamp("edited_at").toLocalDateTime(),
 			rs.getObject("author_member_id", Long.class),
 			rs.getString("author_name"),
 			rs.getString("author_tag"),
@@ -41,7 +42,7 @@ public class CommunityCommentRepositoryImpl implements CommunityCommentRepositor
 	@Override
 	public List<CommunityCommentRow> findPage(long postId, Long cursorId, int size) {
 		StringBuilder sql = new StringBuilder("""
-				SELECT c.id, c.parent_id, c.body, c.status, c.like_count, c.created_at,
+				SELECT c.id, c.parent_id, c.body, c.status, c.like_count, c.created_at, c.edited_at,
 				       c.member_id AS author_member_id, m.name AS author_name, m.tag AS author_tag,
 				       m.profile_image_url AS author_profile_image_url,
 				       t.team_id AS author_team_id, t.team_code AS author_team_code,
@@ -70,7 +71,7 @@ public class CommunityCommentRepositoryImpl implements CommunityCommentRepositor
 		StringBuilder sql = new StringBuilder("""
 				SELECT c.id, c.post_id, p.title AS post_title,
 				       p.board_team_id, bt.team_code AS board_team_code,
-				       c.body, c.like_count, c.created_at
+				       c.body, c.like_count, c.created_at, c.edited_at
 				FROM community_comment c
 				JOIN community_post p ON p.id = c.post_id
 				LEFT JOIN teams bt ON bt.team_id = p.board_team_id
@@ -95,7 +96,9 @@ public class CommunityCommentRepositoryImpl implements CommunityCommentRepositor
 						rs.getString("board_team_code"),
 						rs.getString("body"),
 						rs.getInt("like_count"),
-						rs.getTimestamp("created_at").toLocalDateTime()),
+						rs.getTimestamp("created_at").toLocalDateTime(),
+						rs.getTimestamp("edited_at") == null ? null
+								: rs.getTimestamp("edited_at").toLocalDateTime()),
 				params.toArray());
 	}
 
