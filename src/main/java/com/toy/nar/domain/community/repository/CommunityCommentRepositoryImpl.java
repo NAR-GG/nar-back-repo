@@ -68,9 +68,12 @@ public class CommunityCommentRepositoryImpl implements CommunityCommentRepositor
 	@Override
 	public List<CommunityMyCommentRow> findMyCommentPage(long memberId, Long cursorId, int size) {
 		StringBuilder sql = new StringBuilder("""
-				SELECT c.id, c.post_id, p.title AS post_title, c.body, c.like_count, c.created_at
+				SELECT c.id, c.post_id, p.title AS post_title,
+				       p.board_team_id, bt.team_code AS board_team_code,
+				       c.body, c.like_count, c.created_at
 				FROM community_comment c
 				JOIN community_post p ON p.id = c.post_id
+				LEFT JOIN teams bt ON bt.team_id = p.board_team_id
 				WHERE c.member_id = ?
 				  AND c.status = 'VISIBLE'
 				  AND p.status = 'VISIBLE'
@@ -88,6 +91,8 @@ public class CommunityCommentRepositoryImpl implements CommunityCommentRepositor
 						rs.getLong("id"),
 						rs.getLong("post_id"),
 						rs.getString("post_title"),
+						rs.getObject("board_team_id", Long.class),
+						rs.getString("board_team_code"),
 						rs.getString("body"),
 						rs.getInt("like_count"),
 						rs.getTimestamp("created_at").toLocalDateTime()),

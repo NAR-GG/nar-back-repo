@@ -41,7 +41,18 @@ public final class CommunityDtos {
 			Long teamId, String teamCode, String teamImageUrl) {
 	}
 
-	public record PostSummaryResponse(Long id, Long boardTeamId, String title, String bodyPreview,
+	/**
+	 * boardTeamId 가 null 이면 전체 게시판, 값이 있으면 그 팀 게시판이다.
+	 *
+	 * <p>boardTeamCode 를 같이 싣는 이유: 내 활동 목록(내 글·좋아요·스크랩)은 여러 게시판 글이
+	 * 섞여 나오므로 줄마다 어느 게시판인지 배지를 붙여야 한다. id 만 주면 앱이 팀 목록 API
+	 * (`/auth/onboarding/teams`)를 받아 매핑해야 하는데, 그 호출이 실패하면 배지가 통째로 사라진다.
+	 * 이 쿼리는 이미 author_team_id 로 teams 를 조인하고 있어 컬럼 하나 더 얹는 비용뿐이다.
+	 *
+	 * <p>전체 게시판이면 boardTeamCode 도 null 이다.
+	 */
+	public record PostSummaryResponse(Long id, Long boardTeamId, String boardTeamCode,
+			String title, String bodyPreview,
 			AuthorResponse author, int viewCount, int likeCount, int commentCount,
 			boolean edited, LocalDateTime createdAt, String thumbnailUrl, int imageCount) {
 	}
@@ -67,7 +78,12 @@ public final class CommunityDtos {
 	public record PostViewerResponse(boolean liked, boolean scrapped, boolean mine, boolean blockedAuthor) {
 	}
 
-	public record PostDetailResponse(Long id, Long boardTeamId, String title, String body,
+	/**
+	 * 상세도 boardTeamCode 를 싣는다. 헤더가 '{팀} 게시판'인데 뒤로가기·더보기 아이콘 사이
+	 * 좁은 폭이라 팀 풀네임('한화생명e스포츠')은 들어가지 않는다 — 코드('HLE')가 필요하다.
+	 */
+	public record PostDetailResponse(Long id, Long boardTeamId, String boardTeamCode,
+			String title, String body,
 			AuthorResponse author, int viewCount, int likeCount, int commentCount,
 			boolean edited, LocalDateTime createdAt, PostViewerResponse viewer,
 			List<PostImageResponse> images) {
@@ -101,8 +117,14 @@ public final class CommunityDtos {
 	public record LikedPostListResponse(List<LikedPostItemResponse> items, Long nextCursor) {
 	}
 
-	/** 내가 쓴 댓글. postTitle 로 원글 이동. 삭제·블라인드(댓글·원글 모두)는 목록에서 빠진다. */
-	public record MyCommentResponse(Long id, Long postId, String postTitle, String body,
+	/**
+	 * 내가 쓴 댓글. postTitle 로 원글 이동. 삭제·블라인드(댓글·원글 모두)는 목록에서 빠진다.
+	 *
+	 * <p>boardTeamId/boardTeamCode 는 **원글이 속한 게시판**이다(댓글 작성자의 응원팀이 아니다).
+	 * 내 활동 목록은 게시판이 섞여 나오므로 이게 없으면 어느 게시판 댓글인지 알 방법이 없다.
+	 */
+	public record MyCommentResponse(Long id, Long postId, String postTitle,
+			Long boardTeamId, String boardTeamCode, String body,
 			int likeCount, LocalDateTime createdAt) {
 	}
 

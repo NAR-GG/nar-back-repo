@@ -14,8 +14,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.toy.nar.domain.community.entity.CommunityReport.TargetType;
+import com.toy.nar.domain.community.repository.CommunityCommentRepositoryImpl;
 import com.toy.nar.domain.community.repository.CommunityInteractionRepository;
 import com.toy.nar.domain.community.repository.CommunityInteractionRepository.ToggleResult;
+import com.toy.nar.domain.community.repository.CommunityMyCommentRow;
 import com.toy.nar.domain.community.repository.CommunityModerationRepository;
 import com.toy.nar.domain.community.repository.CommunityPostRepositoryImpl;
 import com.toy.nar.domain.community.repository.CommunityPostRow;
@@ -93,6 +95,43 @@ class CommunityRepositoryMySqlIntegrationTest {
 		List<CommunityPostRow> teamPage = postRepository.findPage(1L, null, List.of(), 10);
 		assertThat(teamPage).extracting(CommunityPostRow::id).containsExactly(6L);
 		assertThat(teamPage.get(0).authorTeamId()).isNull(); // author_team_id 는 안 넣었다
+	}
+
+	/**
+	 * 게시판 코드는 board_team_id 로 teams 를 따로 조인해 온다 — 작성자 응원팀 조인(t)과
+	 * 별개의 조인(bt)이다. 둘을 헷갈려 t 를 재사용하면 위 테스트처럼 author_team_id 가
+	 * 비어 있는 데이터에서 조용히 null 이 되므로, 두 값을 같은 행에서 대조한다.
+	 */
+	@Test
+	void 게시판코드는_작성자팀과_다른_조인에서_온다() {
+		CommunityPostRow teamPost = postRepository.findPage(1L, null, List.of(), 10).get(0);
+		assertThat(teamPost.boardTeamId()).isEqualTo(1L);
+		assertThat(teamPost.boardTeamCode()).isEqualTo("T1");
+		assertThat(teamPost.authorTeamId()).isNull();   // 작성자 응원팀은 비어 있는데
+		assertThat(teamPost.authorTeamCode()).isNull(); // 게시판 코드는 나온다
+
+		// 전체 게시판은 둘 다 null 이다 — LEFT JOIN 이라 행이 사라지지 않는다.
+		CommunityPostRow allBoardPost = postRepository.findPage(null, null, List.of(), 1).get(0);
+		assertThat(allBoardPost.boardTeamId()).isNull();
+		assertThat(allBoardPost.boardTeamCode()).isNull();
+	}
+
+	/** 내가 쓴 댓글도 원글이 속한 게시판을 실어야 한다 — 목록에 게시판이 섞여 나오기 때문. */
+	@Test
+	void 내댓글은_원글의_게시판을_싣는다() {
+		CommunityCommentRepositoryImpl comments = new CommunityCommentRepositoryImpl(jdbc);
+		jdbc.update("INSERT INTO community_comment (id, post_id, member_id, body)"
+				+ " VALUES (100, 6, 1, '팀글 댓글'), (101, 1, 1, '전체글 댓글')");
+
+		List<CommunityMyCommentRow> rows = comments.findMyCommentPage(1L, null, 10);
+
+		CommunityMyCommentRow onTeamBoard = rows.stream().filter(r -> r.id() == 100L).findFirst().orElseThrow();
+		assertThat(onTeamBoard.boardTeamId()).isEqualTo(1L);
+		assertThat(onTeamBoard.boardTeamCode()).isEqualTo("T1");
+
+		CommunityMyCommentRow onAllBoard = rows.stream().filter(r -> r.id() == 101L).findFirst().orElseThrow();
+		assertThat(onAllBoard.boardTeamId()).isNull();
+		assertThat(onAllBoard.boardTeamCode()).isNull();
 	}
 
 	@Test

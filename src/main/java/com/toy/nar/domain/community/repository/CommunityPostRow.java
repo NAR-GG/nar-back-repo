@@ -6,6 +6,8 @@ import java.time.LocalDateTime;
 public record CommunityPostRow(
 		long id,
 		Long boardTeamId,
+		/** 게시판 팀의 코드. 전체 게시판이면 null. 작성자 응원팀(authorTeamCode)과 다른 값이다. */
+		String boardTeamCode,
 		String title,
 		String body,
 		int viewCount,
