@@ -22,7 +22,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 
 	private static final String SELECT_COLUMNS = """
 			SELECT p.id, p.board_team_id, bt.team_code AS board_team_code,
-			       p.title, p.body, p.view_count, p.like_count,
+			       p.title, p.body, p.body_format, p.preview, p.view_count, p.like_count,
 			       p.comment_count, p.status, p.created_at, p.edited_at,
 			       p.member_id AS author_member_id, m.name AS author_name, m.tag AS author_tag,
 			       m.profile_image_url AS author_profile_image_url,
@@ -41,6 +41,8 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 			rs.getString("board_team_code"),
 			rs.getString("title"),
 			rs.getString("body"),
+			rs.getString("body_format"),
+			rs.getString("preview"),
 			rs.getInt("view_count"),
 			rs.getInt("like_count"),
 			rs.getInt("comment_count"),

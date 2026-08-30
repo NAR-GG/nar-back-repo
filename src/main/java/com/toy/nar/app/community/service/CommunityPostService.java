@@ -41,11 +41,13 @@ public class CommunityPostService {
 	private static final int MAX_BODY_LENGTH = 10_000;
 	private static final int MAX_IMAGES = 5;
 	private static final int MAX_IMAGE_URL_LENGTH = 500; // 컬럼 상한
+	private static final int MAX_RAW_BLOCKS_LENGTH = 100_000; // 블록 JSON 원문 안전 상한
 
 	private final CommunityPostRepository postRepository;
 	private final CommunityInteractionRepository interactionRepository;
 	private final MemberRepository memberRepository;
 	private final CommunityWriteGuard writeGuard;
+	private final CommunityBlockValidator blockValidator;
 	private final com.toy.nar.app.auth.profile.CloudinarySignatureService cloudinarySignatureService;
 
 	public PostListResponse getPosts(Long boardTeamId, Long cursor, Integer size, Long viewerId) {
@@ -113,6 +115,7 @@ public class CommunityPostService {
 		return new PostDetailResponse(row.id(), row.boardTeamId(), row.boardTeamCode(),
 				blockedAuthor ? null : row.title(),
 				blockedAuthor ? null : row.body(),
+				row.bodyFormat(),
 				toAuthor(row), row.viewCount(), row.likeCount(), row.commentCount(),
 				row.editedAt() != null, row.createdAt(), viewer, images);
 	}
@@ -121,11 +124,10 @@ public class CommunityPostService {
 	public long create(Long memberId, PostCreateRequest request) {
 		Member member = requireMember(memberId);
 		String title = requireLength(request.title(), MAX_TITLE_LENGTH);
-		String body = requireLength(request.body(), MAX_BODY_LENGTH);
 		writeGuard.checkBoardWritable(member, request.boardTeamId());
 		writeGuard.checkPostInterval(memberId, request.boardTeamId());
 
-		List<String> imageUrls = validateImageUrls(request.imageUrls());
+		ValidatedBody validated = validateBody(request.body(), request.bodyFormat(), request.imageUrls());
 
 		Long authorTeamId = member.getFavoriteTeam() == null ? null : member.getFavoriteTeam().getId();
 		CommunityPost post = CommunityPost.builder()
@@ -133,11 +135,13 @@ public class CommunityPostService {
 				.memberId(memberId)
 				.authorTeamId(authorTeamId)
 				.title(title)
-				.body(body)
+				.body(validated.body())
+				.bodyFormat(validated.format())
+				.preview(validated.preview())
 				.build();
 		long postId = postRepository.save(post).getId();
-		if (!imageUrls.isEmpty()) {
-			postRepository.replaceImages(postId, imageUrls);
+		if (!validated.imageUrls().isEmpty()) {
+			postRepository.replaceImages(postId, validated.imageUrls());
 		}
 		return postId;
 	}
@@ -149,10 +153,15 @@ public class CommunityPostService {
 		if (!post.isAuthor(memberId)) {
 			throw new CustomException(ErrorCode.COMMUNITY_NOT_AUTHOR);
 		}
-		post.edit(requireLength(request.title(), MAX_TITLE_LENGTH), requireLength(request.body(), MAX_BODY_LENGTH));
-		// null = 이미지 변경 없음, 빈 배열 = 전부 제거 (DTO 계약)
-		if (request.imageUrls() != null) {
-			postRepository.replaceImages(postId, validateImageUrls(request.imageUrls()));
+		ValidatedBody validated = validateBody(request.body(), request.bodyFormat(), request.imageUrls());
+		post.edit(requireLength(request.title(), MAX_TITLE_LENGTH),
+				validated.body(), validated.format(), validated.preview());
+		if ("BLOCKS".equals(validated.format())) {
+			// 블록이 이미지의 진실 — 항상 블록에서 추출한 목록으로 동기화한다.
+			postRepository.replaceImages(postId, validated.imageUrls());
+		} else if (request.imageUrls() != null) {
+			// PLAIN 은 기존 계약: null = 이미지 변경 없음, 빈 배열 = 전부 제거
+			postRepository.replaceImages(postId, validated.imageUrls());
 		}
 	}
 
@@ -254,9 +263,12 @@ public class CommunityPostService {
 
 	static PostSummaryResponse toSummary(CommunityPostRow row,
 			List<com.toy.nar.domain.community.repository.CommunityPostImageRow> images) {
-		String preview = row.body().length() <= PREVIEW_LENGTH
-				? row.body()
-				: row.body().substring(0, PREVIEW_LENGTH);
+		// BLOCKS 는 body 가 JSON 이라 절단하면 미리보기가 깨진다 — 저장 시 계산한 preview 사용.
+		String preview = "BLOCKS".equals(row.bodyFormat())
+				? (row.preview() == null ? "" : row.preview())
+				: (row.body().length() <= PREVIEW_LENGTH
+						? row.body()
+						: row.body().substring(0, PREVIEW_LENGTH));
 		String thumbnailUrl = images.isEmpty() ? null : images.get(0).imageUrl();
 		return new PostSummaryResponse(row.id(), row.boardTeamId(), row.boardTeamCode(), row.title(), preview,
 				toAuthor(row), row.viewCount(), row.likeCount(), row.commentCount(),
@@ -273,6 +285,30 @@ public class CommunityPostService {
 				.stream()
 				.collect(java.util.stream.Collectors.groupingBy(
 						com.toy.nar.domain.community.repository.CommunityPostImageRow::postId));
+	}
+
+	/** 검증이 끝난 본문. PLAIN 은 preview=null(목록에서 body 절단), BLOCKS 는 저장 시 계산. */
+	record ValidatedBody(String body, String format, String preview, List<String> imageUrls) {
+	}
+
+	/**
+	 * PLAIN 은 기존 규칙(본문 1만자 + imageUrls 검증). BLOCKS 는 블록 JSON 을 파싱·정규화하고
+	 * 이미지도 블록에서 추출한다 — imageUrls 파라미터는 무시된다(블록이 진실).
+	 * 블록 JSON 원문은 텍스트 1만자 + 메타라 10K 를 넘을 수 있어 원문 자체는 100K 로만 막는다.
+	 */
+	private ValidatedBody validateBody(String body, String bodyFormat, List<String> imageUrls) {
+		if ("BLOCKS".equals(bodyFormat)) {
+			if (body == null || body.isBlank() || body.length() > MAX_RAW_BLOCKS_LENGTH) {
+				throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+			}
+			var parsed = blockValidator.validate(body);
+			return new ValidatedBody(parsed.normalizedBody(), "BLOCKS", parsed.preview(), parsed.imageUrls());
+		}
+		if (bodyFormat != null && !"PLAIN".equals(bodyFormat)) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+		return new ValidatedBody(requireLength(body, MAX_BODY_LENGTH), "PLAIN", null,
+				validateImageUrls(imageUrls));
 	}
 
 	private List<String> validateImageUrls(List<String> imageUrls) {

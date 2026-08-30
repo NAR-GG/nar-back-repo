@@ -4,7 +4,7 @@
 `community_dummy.dart` 를 실제 API 로 교체할 수 있게 쓴다.
 설계 배경·결정 근거는 `docs/community-backend-design.md`.
 
-- **총 20개 엔드포인트** (게시글 8, 댓글 4, 신고·차단 3, 내 활동 4, 사진 서명 1)
+- **총 21개 엔드포인트** (게시글 8, 댓글 4, 신고·차단 3, 내 활동 4, 사진 서명 1, 링크 프리뷰 1)
 - 아직 없는 것: 투표, 규칙 전문 API(D-6), 제재 사유 응답, 금칙어 — 뒤 단계에서 온다
 - Swagger: `https://api.nar.kr/swagger-ui.html` (Basic Auth 는 기존과 동일)
 
@@ -118,6 +118,41 @@ offset 없다. 전부 커서다.
 
 작성과 같은 몸체. **`imageUrls` 는 전체 교체** — `null` 보내면 이미지 변경 없음,
 `[]` 보내면 전부 제거. 수정하면 `edited` 가 true 로 바뀐다.
+
+### 블록 본문 — `bodyFormat: "BLOCKS"` (작성 툴 고도화, V83)
+
+작성·수정 요청에 `bodyFormat` 을 실을 수 있다. 생략/`"PLAIN"` 은 기존 평문 그대로.
+`"BLOCKS"` 면 `body` 가 **블록 JSON 배열 문자열**이고 서버가 파싱·검증·정규화한다:
+
+```json
+[{"type":"text","text":"...","style":"body|heading"},
+ {"type":"image","url":"https://res.cloudinary.com/..."},
+ {"type":"link","url":"...","title":"...","description":"...","imageUrl":"...","siteName":"..."},
+ {"type":"embed","provider":"youtube|chzzk|soop|x","url":"..."}]
+```
+
+- 제한: 블록 ≤50, 텍스트 합 ≤1만자, 이미지 ≤5(우리 Cloudinary URL 만),
+  embed 는 제공자 도메인만(youtube.com/youtu.be, chzzk.naver.com, sooplive.co.kr,
+  x.com/twitter.com), link 는 임의 도메인 가능(http/https 만). 위반은 400
+- **BLOCKS 면 `imageUrls` 는 무시된다** — 이미지는 블록에서 추출해
+  `community_post_image` 로 동기화한다(썸네일·imageCount·IMAGE 신고 전부 기존대로)
+- 목록 `bodyPreview` = 첫 text 블록 앞 150자(서버가 저장 시 계산)
+- 상세 응답에 `bodyFormat` 이 내려온다 — `"BLOCKS"` 면 `body` 를 블록 JSON 으로
+  파싱해 렌더, `"PLAIN"` 은 기존 평문 렌더(옛 글 하위호환)
+- 서버는 모르는 필드를 떨궈 저장한다(정규화) — 앱은 계약된 필드만 믿으면 된다
+
+### `GET /api/mobile/community/link-preview?url=` — 링크 프리뷰 (인증 필수)
+
+앱이 URL 붙여넣기를 감지하면(임베드 패턴이 아니면) 호출해 링크 카드를 만든다.
+응답 스냅샷을 link 블록에 저장하므로 **조회 때는 재크롤이 없다**.
+
+```json
+{ "url": "...", "title": "...", "description": "...", "imageUrl": "...", "siteName": "..." }
+```
+
+- 긁기 실패(타임아웃·OG 없음·비 HTML)는 200 + `title` 이하 null — 맨 링크 카드로 그린다
+- 400 은 URL 자체가 부적합(http/https 아님, 사설 IP 등 SSRF 가드)
+- 서버 캐시 1시간 — 같은 URL 반복 호출은 싸다. 그래도 디바운스는 앱 몫
 
 ### `DELETE /api/mobile/community/posts/{id}` — 삭제 (작성자만, 소프트)
 
