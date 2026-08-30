@@ -37,6 +37,12 @@ public class CommunityCommentNotifier {
 	private final MobilePushGateway pushGateway;
 	private final QuietAwarePushSender quietAwarePushSender;
 
+	// REQUIRES_NEW 가 없으면 알림함 INSERT 가 조용히 증발한다 — AFTER_COMMIT 리스너는
+	// 이미 커밋된 원 트랜잭션의 스레드에서 돌아서, 기본 전파(REQUIRED)로는 record() 가
+	// 그 죽은 트랜잭션에 합류해 커밋되지 않는다(실사고: 푸시는 오는데 알림함이 빔).
+	// 이 트랜잭션이 잡는 락은 수신자 자신의 알림 행뿐이라 FCM 을 품어도 경합이 없다.
+	@org.springframework.transaction.annotation.Transactional(
+			propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
 	@TransactionalEventListener
 	public void onCommentCreated(CommunityCommentCreatedEvent event) {
 		try {
