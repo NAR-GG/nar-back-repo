@@ -59,6 +59,7 @@ public class MemberNotificationRetentionService {
 		// 댓글 알림은 열람 후에도 "어느 글이었지" 하고 되찾는 용도가 있어 SET 와 같은 30일.
 		retentionDays.put(MemberNotificationType.COMMUNITY_COMMENT, communityDays);
 		retentionDays.put(MemberNotificationType.COMMUNITY_REPLY, communityDays);
+		retentionDays.put(MemberNotificationType.COMMUNITY_LIKE, communityDays);
 		retentionDays.put(MemberNotificationType.COMMUNITY_REPORT_RESULT, communityDays);
 		retentionDays.put(MemberNotificationType.COMMUNITY_RESTRICTION, communityDays);
 	}

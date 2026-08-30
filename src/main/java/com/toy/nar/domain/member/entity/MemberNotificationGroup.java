@@ -12,6 +12,7 @@ public enum MemberNotificationGroup {
 	COMMUNITY(Set.of(
 			MemberNotificationType.COMMUNITY_COMMENT,
 			MemberNotificationType.COMMUNITY_REPLY,
+			MemberNotificationType.COMMUNITY_LIKE,
 			MemberNotificationType.COMMUNITY_REPORT_RESULT,
 			MemberNotificationType.COMMUNITY_RESTRICTION));
 

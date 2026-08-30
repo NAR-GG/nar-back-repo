@@ -79,6 +79,20 @@ public class CommunityInteractionRepository {
 				Long.class, params.toArray()));
 	}
 
+	/**
+	 * 좋아요 알림 발송 기록. 처음이면 true — 이때만 알림을 보낸다.
+	 * 취소해도 행을 지우지 않아 좋아요↔취소 반복이 알림 도배가 되지 않는다.
+	 */
+	public boolean markLikeNotified(long postId, long memberId) {
+		try {
+			jdbcTemplate.update(
+					"INSERT INTO community_like_notification (post_id, member_id) VALUES (?, ?)", postId, memberId);
+			return true;
+		} catch (DuplicateKeyException e) {
+			return false;
+		}
+	}
+
 	private ToggleResult toggle(String table, String targetColumn, long targetId, long memberId) {
 		int deleted = jdbcTemplate.update(
 				"DELETE FROM " + table + " WHERE " + targetColumn + " = ? AND member_id = ?", targetId, memberId);
