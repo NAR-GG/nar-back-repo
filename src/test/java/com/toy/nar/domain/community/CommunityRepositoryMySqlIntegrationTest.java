@@ -136,6 +136,17 @@ class CommunityRepositoryMySqlIntegrationTest {
 	}
 
 	@Test
+	void 글_알림_mute_토글이_판정과_같이_돈다() {
+		assertThat(interactions.isNotificationMuted(3L, 1L)).isFalse(); // 기본 = 수신
+		assertThat(interactions.toggleNotificationMute(3L, 1L))
+				.isEqualTo(ToggleResult.ADDED); // 끔
+		assertThat(interactions.isNotificationMuted(3L, 1L)).isTrue();
+		assertThat(interactions.toggleNotificationMute(3L, 1L))
+				.isEqualTo(ToggleResult.REMOVED); // 다시 켬
+		assertThat(interactions.isNotificationMuted(3L, 1L)).isFalse();
+	}
+
+	@Test
 	void 좋아요_토글은_멱등이고_카운터와_같이_움직인다() {
 		assertThat(interactions.togglePostLike(1L, 3L)).isEqualTo(ToggleResult.ADDED);
 		assertThat(postRepository.applyLikeDelta(1L, 1)).isEqualTo(1);

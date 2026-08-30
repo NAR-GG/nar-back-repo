@@ -70,6 +70,10 @@ public class CommunityCommentNotifier {
 		if (interactionRepository.findBlockedMemberIds(targetMemberId).contains(event.authorId())) {
 			return;
 		}
+		// 이 글의 알림을 꺼둔 수신자(벨 토글) — 댓글·답글 모두 이 글에서는 조용히.
+		if (interactionRepository.isNotificationMuted(event.postId(), targetMemberId)) {
+			return;
+		}
 		Map<String, String> data = Map.of(
 				"type", type.name(),
 				"postId", String.valueOf(event.postId()),

@@ -79,7 +79,12 @@ public final class CommunityDtos {
 	}
 
 	/** blockedAuthor 면 title/body 는 null — 앱이 "차단한 사용자의 글" 자리를 그린다. */
-	public record PostViewerResponse(boolean liked, boolean scrapped, boolean mine, boolean blockedAuthor) {
+	/** notificationEnabled: 이 글에서 오는 알림 수신 여부(기본 true, 벨 토글로 끔). 비로그인은 true. */
+	public record PostViewerResponse(boolean liked, boolean scrapped, boolean mine, boolean blockedAuthor,
+			boolean notificationEnabled) {
+	}
+
+	public record NotificationToggleResponse(boolean enabled) {
 	}
 
 	/**
