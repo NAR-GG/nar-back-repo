@@ -48,12 +48,12 @@ public class CommunityCommentNotifier {
 		try {
 			// 답글 대상이 원글 작성자와 같은 사람이면 REPLY 하나만 — 두 번 울리면 도배다.
 			notify(event.replyTargetId(), MemberNotificationType.COMMUNITY_REPLY,
-					event.authorNickname() + "님이 회원님의 댓글에 답글을 남겼어요",
+					event.authorNickname() + "님이 내 댓글에 답글을 남겼어요",
 					event.authorNickname() + "님이 답글을 남겼습니다", event);
 			Long postAuthor = event.postAuthorId();
 			if (postAuthor != null && !postAuthor.equals(event.replyTargetId())) {
 				notify(postAuthor, MemberNotificationType.COMMUNITY_COMMENT,
-						event.authorNickname() + "님이 회원님의 글에 댓글을 남겼어요",
+						event.authorNickname() + "님이 내 글에 댓글을 남겼어요",
 						event.authorNickname() + "님이 댓글을 남겼습니다", event);
 			}
 		} catch (Exception e) {
