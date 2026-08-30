@@ -48,6 +48,7 @@ public class CommunityPostService {
 	private final MemberRepository memberRepository;
 	private final CommunityWriteGuard writeGuard;
 	private final CommunityBlockValidator blockValidator;
+	private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 	private final com.toy.nar.app.auth.profile.CloudinarySignatureService cloudinarySignatureService;
 
 	public PostListResponse getPosts(Long boardTeamId, Long cursor, Integer size, Long viewerId) {
@@ -191,13 +192,19 @@ public class CommunityPostService {
 	@Transactional
 	public LikeToggleResponse toggleLike(long postId, Long memberId) {
 		requireLogin(memberId);
-		requireVisiblePost(postId);
+		CommunityPost post = requireVisiblePost(postId);
 		ToggleResult result = interactionRepository.togglePostLike(postId, memberId);
 		int likeCount = switch (result) {
 			case ADDED -> postRepository.applyLikeDelta(postId, 1);
 			case REMOVED -> postRepository.applyLikeDelta(postId, -1);
 			case ALREADY_ADDED -> postRepository.applyLikeDelta(postId, 0);
 		};
+		if (result == ToggleResult.ADDED) {
+			// 알림(원글 작성자)은 커밋 후 리스너가 보낸다 — 최초 1회 dedupe 도 리스너 몫.
+			memberRepository.findById(memberId).ifPresent(actor ->
+					eventPublisher.publishEvent(new CommunityPostLikedEvent(
+							postId, memberId, actor.getNickname(), post.getMemberId(), post.getTitle())));
+		}
 		return new LikeToggleResponse(result != ToggleResult.REMOVED, likeCount);
 	}
 
