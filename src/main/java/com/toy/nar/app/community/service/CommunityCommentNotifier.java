@@ -42,19 +42,32 @@ public class CommunityCommentNotifier {
 		try {
 			// 답글 대상이 원글 작성자와 같은 사람이면 REPLY 하나만 — 두 번 울리면 도배다.
 			notify(event.replyTargetId(), MemberNotificationType.COMMUNITY_REPLY,
-					event.authorNickname() + "님이 회원님의 댓글에 답글을 남겼어요", event);
+					event.authorNickname() + "님이 회원님의 댓글에 답글을 남겼어요",
+					shortName(event.authorNickname()) + "님의 답글", event);
 			Long postAuthor = event.postAuthorId();
 			if (postAuthor != null && !postAuthor.equals(event.replyTargetId())) {
 				notify(postAuthor, MemberNotificationType.COMMUNITY_COMMENT,
-						event.authorNickname() + "님이 회원님의 글에 댓글을 남겼어요", event);
+						event.authorNickname() + "님이 회원님의 글에 댓글을 남겼어요",
+						shortName(event.authorNickname()) + "님의 댓글", event);
 			}
 		} catch (Exception e) {
 			log.warn("[community] 댓글 알림 발송 실패 commentId={}", event.commentId(), e);
 		}
 	}
 
-	private void notify(Long targetMemberId, MemberNotificationType type, String title,
-			CommunityCommentCreatedEvent event) {
+	/** 푸시 제목용 짧은 이름 — 닉네임(이름#태그)에서 태그를 뗀다. 한 줄 배너에서 태그는 노이즈다. */
+	private static String shortName(String nickname) {
+		int hash = nickname.lastIndexOf('#');
+		return hash > 0 ? nickname.substring(0, hash) : nickname;
+	}
+
+	/**
+	 * @param inboxTitle 알림함 카드 제목 — 공간이 있어 맥락을 다 쓴다
+	 * @param pushTitle  푸시 배너 제목 — iOS 한 줄(~25자)에서 잘리지 않게 짧게
+	 *                   (카톡·인스타 방식: 제목은 누가, 내용은 본문으로)
+	 */
+	private void notify(Long targetMemberId, MemberNotificationType type, String inboxTitle,
+			String pushTitle, CommunityCommentCreatedEvent event) {
 		if (targetMemberId == null || targetMemberId == event.authorId()) {
 			return; // 탈퇴한 작성자(SET NULL)거나 자기 글·댓글에 단 경우
 		}
@@ -68,7 +81,7 @@ public class CommunityCommentNotifier {
 				"postId", String.valueOf(event.postId()),
 				"commentId", String.valueOf(event.commentId()));
 
-		notificationService.record(targetMemberId, type, title, event.bodyPreview(), data);
+		notificationService.record(targetMemberId, type, inboxTitle, event.bodyPreview(), data);
 
 		if (!pushGateway.isAvailable()) {
 			return;
@@ -80,6 +93,6 @@ public class CommunityCommentNotifier {
 			return;
 		}
 		quietAwarePushSender.send(Map.of(targetMemberId, tokens),
-				new MobilePushMessage(title, event.bodyPreview(), data));
+				new MobilePushMessage(pushTitle, event.bodyPreview(), data));
 	}
 }
