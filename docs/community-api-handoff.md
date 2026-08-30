@@ -4,6 +4,14 @@
 `community_dummy.dart` 를 실제 API 로 교체할 수 있게 쓴다.
 설계 배경·결정 근거는 `docs/community-backend-design.md`.
 
+> **방향 전환 (2026-08-30, 앱 1.0.22+45~)** — 팀별 게시판은 보류(글 리젠 악순환
+> 우려). 앱은 **단일 전체 게시판**만 노출하고 `boardTeamId` 는 항상 `null` 로
+> 보낸다. 이 문서의 팀 게시판 관련 절(boardTeamId 값, `COMMUNITY_TEAM_COOLDOWN`,
+> `COMMUNITY_BOARD_FORBIDDEN`, NOT_FAN 잠금 바)은 **서버에 살아 있으나 앱이 밟지
+> 않는 dormant 경로**다 — 부활 대비로 걷어내지 않았다. 팀변경 30일 제한 자체는
+> 프로필 수정에서 그대로 동작한다. 알림함은 커뮤니티 전용이 됐다(아래 "알림함
+> group 필터" 절).
+
 - **총 20개 엔드포인트** (게시글 8, 댓글 4, 신고·차단 3, 내 활동 4, 사진 서명 1)
 - 아직 없는 것: 투표, 규칙 전문 API(D-6), 제재 사유 응답, 금칙어 — 뒤 단계에서 온다
 - Swagger: `https://api.nar.kr/swagger-ui.html` (Basic Auth 는 기존과 동일)
@@ -275,18 +283,28 @@ true. **글·댓글 모두 `edited == true` 면 "(수정됨)" 라벨을 붙인�
 댓글이 달리면 서버가 **알림함 기록 + FCM 푸시**를 보낸다. 기존 알림 파이프라인
 (`member_notification` + FCM, 알림 잠자기 존중) 그대로다.
 
-| 타입 | 수신자 | 제목 |
-|---|---|---|
-| `COMMUNITY_COMMENT` | 원글 작성자 | "닉네임님이 회원님의 글에 댓글을 남겼어요" |
-| `COMMUNITY_REPLY` | 답글 대상(멘션 대상) | "닉네임님이 회원님의 댓글에 답글을 남겼어요" |
+| 타입 | 수신자 | 알림함 제목 | 푸시 제목 |
+|---|---|---|---|
+| `COMMUNITY_COMMENT` | 원글 작성자 | "닉네임#태그님이 내 글에 댓글을 남겼어요" | "닉네임#태그님이 댓글을 남겼습니다" |
+| `COMMUNITY_REPLY` | 답글 대상(멘션 대상) | "닉네임#태그님이 내 댓글에 답글을 남겼어요" | "닉네임#태그님이 답글을 남겼습니다" |
 
 - 본문 = 댓글 앞 80자. `data`: `{ type, postId, commentId }` — **postId 로 글 상세 딥링크**
-- 자기 글·댓글에 자기가 단 것, 수신자가 작성자를 차단한 경우 발송 안 함.
-  답글 대상 == 원글 작성자면 REPLY 하나만
+- 자기 글·댓글에 자기가 단 것, 수신자가 작성자를 차단한 경우, 수신자가 그 글의
+  알림을 꺼둔 경우(벨 토글) 발송 안 함. 답글 대상 == 원글 작성자면 REPLY 하나만
 - `COMMUNITY_REPORT_RESULT` / `COMMUNITY_RESTRICTION` 타입은 예약만 — 발송 주체
   (신고 큐·제재)가 생기면 붙는다
-- 앱 몫: 알림함 분리·타입 탭(warding-mobile `docs/community-followups.md` A절),
-  FCM `data.type` 별 딥링크 라우팅. 알림 목록 API 의 타입 필터는 기존 그대로 동작
+
+## 알림함 group 필터 (커뮤니티 전용 알림함)
+
+앱 알림함은 커뮤니티 탭 우측 상단 벨로 진입하며 **커뮤니티 알림만** 보인다
+(경기 알림은 마이구독 피드 담당). 서버가 묶음 필터를 제공한다.
+
+- `GET /api/mobile/me/notifications?group=COMMUNITY` — 목록을 커뮤니티 4종
+  (COMMENT/REPLY/REPORT_RESULT/RESTRICTION)으로 거르고, **`unreadCount` 도 그 묶음
+  기준**으로 내려온다 → 벨 배지에 경기 미읽음이 새지 않는다
+- `POST /api/mobile/me/notifications/read?group=COMMUNITY` — 그 묶음만 모두읽음
+- `group` 미지정·`type` 단일 필터는 기존 그대로(후방호환). 둘 다 주면 type 우선
+- 묶음 구성은 서버(`MemberNotificationGroup`)가 정의 — 타입이 늘어도 앱 배포 불필요
 
 ## 아직 서버에 없는 것 (더미 유지)
 
