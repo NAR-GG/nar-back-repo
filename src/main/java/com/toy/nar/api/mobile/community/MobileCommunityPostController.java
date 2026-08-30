@@ -89,6 +89,14 @@ public class MobileCommunityPostController {
 		return ResponseEntity.ok(postService.toggleLike(postId, memberId));
 	}
 
+	/** 이 글의 알림 켬/끔 토글 — 끄면 이 글에서 오는 댓글·답글 알림이 안 온다. */
+	@PostMapping("/posts/{postId}/notification")
+	public ResponseEntity<com.toy.nar.app.community.dto.CommunityDtos.NotificationToggleResponse> toggleNotification(
+			@PathVariable long postId,
+			@AuthenticationPrincipal Long memberId) {
+		return ResponseEntity.ok(postService.toggleNotification(postId, memberId));
+	}
+
 	@PostMapping("/posts/{postId}/scrap")
 	public ResponseEntity<ScrapToggleResponse> toggleScrap(
 			@PathVariable long postId,

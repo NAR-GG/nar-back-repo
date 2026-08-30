@@ -94,7 +94,8 @@ offset 없다. 전부 커서다.
 ```json
 { ..., "body": "전문",
   "images": [ { "id": 3, "url": "https://res.cloudinary.com/..." } ],
-  "viewer": { "liked": true, "scrapped": false, "mine": false, "blockedAuthor": false } }
+  "viewer": { "liked": true, "scrapped": false, "mine": false, "blockedAuthor": false,
+              "notificationEnabled": true } }
 ```
 
 - `images[].id` 를 들고 있어야 한다 — **이미지 신고의 targetId** 다
@@ -129,6 +130,12 @@ offset 없다. 전부 커서다.
 
 응답 `{ "liked": true, "likeCount": 4 }` — **서버 카운트가 진실**이니 응답 값으로 갱신.
 더블탭해도 안전(멱등).
+
+### `POST /api/mobile/community/posts/{id}/notification` — 이 글 알림 켬/끔 토글
+
+응답 `{ "enabled": false }`. 끄면 **이 글에서 오는 댓글·답글 알림이 전부 안 온다**
+(유튜브·레딧의 per-post mute). 기본은 켬 — 상세 `viewer.notificationEnabled` 로
+현재 상태를 그린다(벨 아이콘).
 
 ### `POST /api/mobile/community/posts/{id}/scrap` — 스크랩 토글
 

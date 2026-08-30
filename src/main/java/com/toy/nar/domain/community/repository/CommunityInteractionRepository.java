@@ -47,6 +47,16 @@ public class CommunityInteractionRepository {
 		return toggle("community_scrap", "post_id", postId, memberId);
 	}
 
+	/** 글 단위 알림 mute 토글. ADDED = 방금 껐다(mute 행 생성), REMOVED = 다시 켰다. */
+	public ToggleResult toggleNotificationMute(long postId, long memberId) {
+		return toggle("community_post_notification_mute", "post_id", postId, memberId);
+	}
+
+	/** 이 회원이 이 글의 알림을 꺼뒀는지 — 발송 판정·상세 viewer 용 uk 점조회. */
+	public boolean isNotificationMuted(long postId, long memberId) {
+		return exists("community_post_notification_mute", "post_id", postId, memberId);
+	}
+
 	public boolean existsPostLike(long postId, long memberId) {
 		return exists("community_post_like", "post_id", postId, memberId);
 	}

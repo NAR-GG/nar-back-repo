@@ -92,15 +92,18 @@ public class CommunityPostService {
 		boolean scrapped = false;
 		boolean mine = false;
 		boolean blockedAuthor = false;
+		boolean notificationEnabled = true;
 		if (viewerId != null) {
 			liked = interactionRepository.existsPostLike(postId, viewerId);
 			scrapped = interactionRepository.existsScrap(postId, viewerId);
 			mine = viewerId.equals(row.authorMemberId());
+			notificationEnabled = !interactionRepository.isNotificationMuted(postId, viewerId);
 			// 목록은 숨기지만 상세 직진입(딥링크·스크랩 경유)은 자리만 마스킹해서 내려준다.
 			blockedAuthor = row.authorMemberId() != null
 					&& interactionRepository.findBlockedMemberIds(viewerId).contains(row.authorMemberId());
 		}
-		PostViewerResponse viewer = new PostViewerResponse(liked, scrapped, mine, blockedAuthor);
+		PostViewerResponse viewer = new PostViewerResponse(liked, scrapped, mine, blockedAuthor,
+				notificationEnabled);
 		List<com.toy.nar.app.community.dto.CommunityDtos.PostImageResponse> images = blockedAuthor
 				? List.of()
 				: postRepository.findVisibleImages(postId).stream()
@@ -187,6 +190,18 @@ public class CommunityPostService {
 			case ALREADY_ADDED -> postRepository.applyLikeDelta(postId, 0);
 		};
 		return new LikeToggleResponse(result != ToggleResult.REMOVED, likeCount);
+	}
+
+	/** 이 글의 알림 켬/끔 토글. mute 행 존재 = 끔 — 응답은 켜짐 여부로 뒤집어 준다. */
+	@Transactional
+	public com.toy.nar.app.community.dto.CommunityDtos.NotificationToggleResponse toggleNotification(
+			long postId, Long memberId) {
+		requireLogin(memberId);
+		requireVisiblePost(postId);
+		ToggleResult result = interactionRepository.toggleNotificationMute(postId, memberId);
+		// ADDED = mute 생성(끔), REMOVED = mute 해제(켬). 중복 생성 레이스는 끔 유지.
+		return new com.toy.nar.app.community.dto.CommunityDtos.NotificationToggleResponse(
+				result == ToggleResult.REMOVED);
 	}
 
 	@Transactional

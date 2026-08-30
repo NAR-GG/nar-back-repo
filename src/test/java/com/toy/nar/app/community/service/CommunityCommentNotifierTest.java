@@ -67,6 +67,16 @@ class CommunityCommentNotifierTest {
 	}
 
 	@Test
+	void 글_알림을_꺼둔_수신자에게는_알림이_없다() {
+		when(interactions.findBlockedMemberIds(2L)).thenReturn(List.of());
+		when(interactions.isNotificationMuted(1L, 2L)).thenReturn(true);
+
+		notifier.onCommentCreated(event(2L, null, 7L));
+
+		verify(notifications, never()).record(any(), any(), any(), any(), any());
+	}
+
+	@Test
 	void 수신자가_작성자를_차단했으면_알림이_없다() {
 		when(interactions.findBlockedMemberIds(2L)).thenReturn(List.of(7L));
 
