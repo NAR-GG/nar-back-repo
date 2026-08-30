@@ -69,6 +69,39 @@ jobs:
         if: steps.changed.outputs.code == 'true'
         run: ./gradlew build
 
+      # 테스트가 통과한 트리로 이미지를 미리 빌드해 둔다. 머지 후 배포 워크플로가
+      # main 의 트리 해시와 대조해 바이트 동일하면 registry 레벨 retag 로 재사용한다
+      # (풀빌드 ~90초 → ~25초). 트리가 다르면 — 베이스가 낡은 채 머지된 경우 —
+      # 배포 워크플로가 알아서 풀빌드로 폴백하므로 정합성은 항상 트리 해시가 보장한다.
+      #
+      # 태그가 커밋이 아니라 트리 해시인 이유: squash 머지는 커밋 sha 를 새로 만들지만
+      # 트리는 (베이스가 안 움직였다면) PR 머지 ref 와 동일하다. 내용 주소화라
+      # PR 번호 추적도, 베이스 이동 레이스 분석도 필요 없다.
+      - name: Set up Docker Buildx
+        if: steps.changed.outputs.code == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: steps.changed.outputs.code == 'true'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: 트리 해시 계산
+        if: steps.changed.outputs.code == 'true'
+        id: tree
+        run: echo "hash=$(git rev-parse HEAD^{tree})" >> "$GITHUB_OUTPUT"
+
+      - name: 이미지 선빌드 (머지 후 재사용용)
+        if: steps.changed.outputs.code == 'true'
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          platforms: linux/arm64
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/nar-gg:tree-${{ steps.tree.outputs.hash }}
+
       - name: Upload test report on failure
         if: failure()
         uses: actions/upload-artifact@v4

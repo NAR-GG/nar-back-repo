@@ -108,3 +108,21 @@ ArgoCD 는 **Git 에 선언된 필드만** 소유한다. 손으로 어노테이�
 
 선언된 필드는 제대로 잡는다 — `replicas` 를 손으로 0 으로 내리면 `OutOfSync`
 가 되고, 동기화하면 Git 의 1 로 돌아온다(검증함).
+
+## 폴링 간격 — 20초 (기본 3분에서 단축)
+
+머지→반영 지연의 최대 구간이 ArgoCD 의 Git 폴링(기본 3분)이었다. 웹훅으로 0초도
+가능하지만 argocd-server 를 외부에 노출해야 해서, 폴링 단축이 더 싸다.
+repo-server 가 20초마다 deploy 브랜치를 fetch 하는 비용은 무시 가능하다
+(매니페스트 몇 개짜리 저장소).
+
+argocd-cm 은 이 디렉토리가 아니라 손으로 적용하는 영역이다. **맥미니를 새로
+세울 때 이 설정도 같이 복원해야 한다** — 빠뜨려도 배포가 3분 폴링으로 느려질
+뿐 깨지지는 않는다.
+
+```bash
+kubectl -n argocd patch configmap argocd-cm --type merge \
+  -p '{"data":{"timeout.reconciliation":"20s"}}'
+# 설정은 application-controller 재시작 후 반영된다 (앱 파드는 안 건드린다)
+kubectl -n argocd rollout restart statefulset argocd-application-controller
+```
