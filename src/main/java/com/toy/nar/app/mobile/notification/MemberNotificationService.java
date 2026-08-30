@@ -3,6 +3,7 @@ package com.toy.nar.app.mobile.notification;
 import com.toy.nar.app.mobile.notification.dto.MemberNotificationListResponse;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.MemberNotification;
+import com.toy.nar.domain.member.entity.MemberNotificationGroup;
 import com.toy.nar.domain.member.entity.MemberNotificationType;
 import com.toy.nar.domain.member.repository.MemberNotificationRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -66,33 +67,52 @@ public class MemberNotificationService {
 		notificationRepository.insertAll(memberIds, type, title, body, data);
 	}
 
+	/**
+	 * type 은 한 종류만, group 은 묶음(커뮤니티 4종)을 거른다. 둘 다 오면 더 좁은
+	 * type 을 따른다. group 이 있으면 unreadCount 도 그 묶음 기준이다 — 앱 알림함이
+	 * 커뮤니티 전용이라, 경기 알림 미읽음이 커뮤니티 벨 배지에 새면 안 된다.
+	 */
 	public MemberNotificationListResponse getNotifications(
 			Long memberId,
 			MemberNotificationType type,
+			MemberNotificationGroup group,
 			int page,
 			int size) {
 		requireLogin(memberId);
 		int safePage = Math.max(0, page);
 		int safeSize = Math.max(1, Math.min(size, 100));
 		PageRequest pageable = PageRequest.of(safePage, safeSize);
-		Page<MemberNotification> notifications = type == null
-				? notificationRepository.findByMember_IdOrderByCreatedAtDesc(memberId, pageable)
-				: notificationRepository.findByMember_IdAndTypeOrderByCreatedAtDesc(memberId, type, pageable);
+		Page<MemberNotification> notifications;
+		if (type != null) {
+			notifications = notificationRepository.findByMember_IdAndTypeOrderByCreatedAtDesc(memberId, type, pageable);
+		} else if (group != null) {
+			notifications = notificationRepository
+					.findByMember_IdAndTypeInOrderByCreatedAtDesc(memberId, group.types(), pageable);
+		} else {
+			notifications = notificationRepository.findByMember_IdOrderByCreatedAtDesc(memberId, pageable);
+		}
+		long unreadCount = type == null && group != null
+				? notificationRepository.countByMember_IdAndTypeInAndReadAtIsNull(memberId, group.types())
+				: notificationRepository.countByMember_IdAndReadAtIsNull(memberId);
 
 		return new MemberNotificationListResponse(
 				notifications.getContent().stream()
 						.map(MemberNotificationListResponse.Item::from)
 						.toList(),
-				notificationRepository.countByMember_IdAndReadAtIsNull(memberId),
+				unreadCount,
 				notifications.getNumber(),
 				notifications.getSize(),
 				notifications.getTotalElements(),
 				notifications.getTotalPages());
 	}
 
+	/** group 이 있으면 그 묶음만 읽음 처리한다 — 커뮤니티 알림함의 '모두 읽음'이 경기 알림을 건드리면 안 된다. */
 	@Transactional
-	public int markAllRead(Long memberId) {
+	public int markAllRead(Long memberId, MemberNotificationGroup group) {
 		requireLogin(memberId);
+		if (group != null) {
+			return notificationRepository.markAllReadByMemberAndTypes(memberId, group.types(), LocalDateTime.now());
+		}
 		return notificationRepository.markAllReadByMember(memberId, LocalDateTime.now());
 	}
 
