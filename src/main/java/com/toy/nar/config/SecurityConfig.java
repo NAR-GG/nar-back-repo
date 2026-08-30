@@ -69,6 +69,8 @@ public class SecurityConfig {
                         // 커뮤니티 — 읽기는 비회원 허용(아래 /api/** permitAll), 쓰기만 막는다.
                         // 조회수 +1 은 쓰기(POST)지만 비회원 포함이라 먼저 열어 둔다.
                         .requestMatchers(HttpMethod.POST, "/api/mobile/community/posts/*/view").permitAll()
+                        // 링크 프리뷰는 서버가 대신 크롤하는 GET — 익명에게 열면 크롤 대행 창구가 된다.
+                        .requestMatchers(HttpMethod.GET, "/api/mobile/community/link-preview").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/mobile/community/**").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/mobile/community/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/mobile/community/**").authenticated()

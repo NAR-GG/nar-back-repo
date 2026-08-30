@@ -10,6 +10,9 @@ public record CommunityPostRow(
 		String boardTeamCode,
 		String title,
 		String body,
+		/** PLAIN / BLOCKS. BLOCKS 면 body 는 블록 JSON 이고 미리보기는 preview 컬럼이다. */
+		String bodyFormat,
+		String preview,
 		int viewCount,
 		int likeCount,
 		int commentCount,

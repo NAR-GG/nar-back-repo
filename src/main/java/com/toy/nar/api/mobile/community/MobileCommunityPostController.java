@@ -34,6 +34,7 @@ import lombok.RequiredArgsConstructor;
 public class MobileCommunityPostController {
 
 	private final CommunityPostService postService;
+	private final com.toy.nar.app.community.service.CommunityLinkPreviewService linkPreviewService;
 
 	@GetMapping("/posts")
 	public ResponseEntity<PostListResponse> getPosts(
@@ -49,6 +50,13 @@ public class MobileCommunityPostController {
 			@PathVariable long postId,
 			@AuthenticationPrincipal Long memberId) {
 		return ResponseEntity.ok(postService.getPost(postId, memberId));
+	}
+
+	/** 링크 프리뷰(OG 스냅샷). 인증 필수(SecurityConfig) — 익명 크롤 대행을 막는다. */
+	@GetMapping("/link-preview")
+	public ResponseEntity<com.toy.nar.app.community.dto.CommunityDtos.LinkPreviewResponse> linkPreview(
+			@RequestParam String url) {
+		return ResponseEntity.ok(linkPreviewService.preview(url));
 	}
 
 	@PostMapping("/posts")

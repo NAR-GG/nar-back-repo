@@ -27,6 +27,7 @@ public class CacheConfig {
 	private static final long MOBILE_SCHEDULE_CALENDAR_MAX_SIZE = 256;
 
 	private static final long STANDINGS_MAX_SIZE = 16;     // 리그 수만큼
+	private static final long LINK_PREVIEW_MAX_SIZE = 2000; // URL 하나 ~1KB 수준
 
 	@Bean
 	public CacheManager cacheManager() {
@@ -68,7 +69,11 @@ public class CacheConfig {
 			// 커넥션을 오래 잡아 나머지 요청까지 풀에서 대기시킨다(MobileScheduleCacheableService).
 			// TTL 은 컨트롤러가 클라이언트에 내리는 Cache-Control 값과 맞췄다.
 			createCacheWithTTL("mobileScheduleFilters", 1, TimeUnit.HOURS, MOBILE_SCHEDULE_FILTER_MAX_SIZE),
-			createCacheWithTTL("mobileScheduleCalendar", 30, TimeUnit.SECONDS, MOBILE_SCHEDULE_CALENDAR_MAX_SIZE)
+			createCacheWithTTL("mobileScheduleCalendar", 30, TimeUnit.SECONDS, MOBILE_SCHEDULE_CALENDAR_MAX_SIZE),
+
+			// 커뮤니티 링크 프리뷰(OG 크롤 스냅샷). 같은 URL 을 여러 사용자가 붙여넣을 때
+			// 재크롤을 막는다. 키가 임의 URL 이라 상한으로 힙을 지킨다.
+			createCacheWithTTL("communityLinkPreview", 1, TimeUnit.HOURS, LINK_PREVIEW_MAX_SIZE)
 		);
 
 		SimpleCacheManager cacheManager = new SimpleCacheManager();

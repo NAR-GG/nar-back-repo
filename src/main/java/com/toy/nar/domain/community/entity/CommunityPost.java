@@ -50,8 +50,16 @@ public class CommunityPost {
 	@Column(nullable = false, length = 100)
 	private String title;
 
-	@Column(nullable = false, columnDefinition = "TEXT")
+	@Column(nullable = false, columnDefinition = "MEDIUMTEXT")
 	private String body;
+
+	/** PLAIN = 평문, BLOCKS = 블록 JSON(V83). 렌더러가 이 값으로 body 해석을 가른다. */
+	@Column(name = "body_format", nullable = false, length = 10)
+	private String bodyFormat = "PLAIN";
+
+	/** BLOCKS 글의 목록 미리보기(저장 시 계산). PLAIN 은 null — body 절단으로 만든다. */
+	@Column(length = 300)
+	private String preview;
 
 	@Column(name = "view_count", nullable = false)
 	private int viewCount;
@@ -76,18 +84,23 @@ public class CommunityPost {
 	private LocalDateTime createdAt;
 
 	@Builder
-	public CommunityPost(Long boardTeamId, Long memberId, Long authorTeamId, String title, String body) {
+	public CommunityPost(Long boardTeamId, Long memberId, Long authorTeamId, String title, String body,
+			String bodyFormat, String preview) {
 		this.boardTeamId = boardTeamId;
 		this.memberId = memberId;
 		this.authorTeamId = authorTeamId;
 		this.title = title;
 		this.body = body;
+		this.bodyFormat = bodyFormat == null ? "PLAIN" : bodyFormat;
+		this.preview = preview;
 		this.createdAt = LocalDateTime.now();
 	}
 
-	public void edit(String title, String body) {
+	public void edit(String title, String body, String bodyFormat, String preview) {
 		this.title = title;
 		this.body = body;
+		this.bodyFormat = bodyFormat == null ? "PLAIN" : bodyFormat;
+		this.preview = preview;
 		this.editedAt = LocalDateTime.now();
 	}
 

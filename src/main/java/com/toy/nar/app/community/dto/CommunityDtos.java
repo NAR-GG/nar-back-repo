@@ -16,12 +16,17 @@ public final class CommunityDtos {
 
 	/* ---------- 요청 ---------- */
 
-	/** imageUrls: 서명 업로드 후 받은 secure_url 목록(≤5). 우리 Cloudinary URL 만 통과한다. */
-	public record PostCreateRequest(Long boardTeamId, String title, String body, List<String> imageUrls) {
+	/**
+	 * imageUrls: 서명 업로드 후 받은 secure_url 목록(≤5). 우리 Cloudinary URL 만 통과한다.
+	 * bodyFormat: null/PLAIN = 평문, BLOCKS = body 가 블록 JSON 배열(서버가 파싱·검증).
+	 * BLOCKS 면 imageUrls 는 무시된다 — 이미지는 블록에서 추출해 동기화한다.
+	 */
+	public record PostCreateRequest(Long boardTeamId, String title, String body, String bodyFormat,
+			List<String> imageUrls) {
 	}
 
-	/** imageUrls 는 전체 교체다 — null 은 변경 없음, 빈 배열은 전부 제거. */
-	public record PostUpdateRequest(String title, String body, List<String> imageUrls) {
+	/** imageUrls 는 전체 교체다 — null 은 변경 없음, 빈 배열은 전부 제거. bodyFormat 은 작성과 동일. */
+	public record PostUpdateRequest(String title, String body, String bodyFormat, List<String> imageUrls) {
 	}
 
 	/** replyToCommentId 만 받는다 — parent 올려붙이기·멘션 대상은 서버가 유도한다(위조 방지). */
@@ -91,11 +96,17 @@ public final class CommunityDtos {
 	 * 상세도 boardTeamCode 를 싣는다. 헤더가 '{팀} 게시판'인데 뒤로가기·더보기 아이콘 사이
 	 * 좁은 폭이라 팀 풀네임('한화생명e스포츠')은 들어가지 않는다 — 코드('HLE')가 필요하다.
 	 */
+	/** bodyFormat 이 BLOCKS 면 body 는 블록 JSON — 앱 렌더러가 이 값으로 해석을 가른다. */
 	public record PostDetailResponse(Long id, Long boardTeamId, String boardTeamCode,
-			String title, String body,
+			String title, String body, String bodyFormat,
 			AuthorResponse author, int viewCount, int likeCount, int commentCount,
 			boolean edited, LocalDateTime createdAt, PostViewerResponse viewer,
 			List<PostImageResponse> images) {
+	}
+
+	/** 링크 프리뷰(OG 태그) 스냅샷. 못 긁으면 title 이하 전부 null — 앱은 맨 링크로 그린다. */
+	public record LinkPreviewResponse(String url, String title, String description,
+			String imageUrl, String siteName) {
 	}
 
 	/** status: VISIBLE / DELETED / HIDDEN / BLOCKED. VISIBLE 이 아니면 body 는 null. */
