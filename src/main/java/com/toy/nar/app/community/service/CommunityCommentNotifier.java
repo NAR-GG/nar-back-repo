@@ -43,22 +43,16 @@ public class CommunityCommentNotifier {
 			// 답글 대상이 원글 작성자와 같은 사람이면 REPLY 하나만 — 두 번 울리면 도배다.
 			notify(event.replyTargetId(), MemberNotificationType.COMMUNITY_REPLY,
 					event.authorNickname() + "님이 회원님의 댓글에 답글을 남겼어요",
-					shortName(event.authorNickname()) + "님의 답글", event);
+					event.authorNickname() + "님이 답글을 남겼습니다", event);
 			Long postAuthor = event.postAuthorId();
 			if (postAuthor != null && !postAuthor.equals(event.replyTargetId())) {
 				notify(postAuthor, MemberNotificationType.COMMUNITY_COMMENT,
 						event.authorNickname() + "님이 회원님의 글에 댓글을 남겼어요",
-						shortName(event.authorNickname()) + "님의 댓글", event);
+						event.authorNickname() + "님이 댓글을 남겼습니다", event);
 			}
 		} catch (Exception e) {
 			log.warn("[community] 댓글 알림 발송 실패 commentId={}", event.commentId(), e);
 		}
-	}
-
-	/** 푸시 제목용 짧은 이름 — 닉네임(이름#태그)에서 태그를 뗀다. 한 줄 배너에서 태그는 노이즈다. */
-	private static String shortName(String nickname) {
-		int hash = nickname.lastIndexOf('#');
-		return hash > 0 ? nickname.substring(0, hash) : nickname;
 	}
 
 	/**
