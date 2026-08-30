@@ -28,7 +28,7 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p><b>SSRF 가드</b> — 서버가 임의 URL 을 대신 fetch 하는 API 라 필수다:
  * http(s)만 · 호스트를 리졸브해 사설/루프백/링크로컬 IP 차단 · 리다이렉트는 수동으로
- * 최대 3회(매 hop 재검증) · 타임아웃 3초 · 응답 본문 512KB 상한.
+ * 최대 3회(매 hop 재검증) · 타임아웃 3초 · 응답 본문 1.5MB 상한.
  * ponytail: 리졸브-후-검증이라 DNS 리바인딩 창이 이론상 남는다 — 커넥터 레벨 IP 고정은
  * 악용 신호가 보이면 올린다.</p>
  *
@@ -40,7 +40,8 @@ import lombok.extern.slf4j.Slf4j;
 public class CommunityLinkPreviewService {
 
 	private static final int MAX_REDIRECTS = 3;
-	private static final int MAX_BODY_BYTES = 512 * 1024;
+	// 유튜브는 og 태그가 ~700KB 지점에 온다(실측 2026-08-30) — 512KB 로 자르면 못 읽는다.
+	private static final int MAX_BODY_BYTES = 1536 * 1024;
 	private static final int MAX_URL_LENGTH = 500;
 	private static final int MAX_TITLE = 200;
 	private static final int MAX_DESCRIPTION = 300;
