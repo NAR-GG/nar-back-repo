@@ -3,6 +3,7 @@ package com.toy.nar.app.mobile.notification;
 import com.toy.nar.app.mobile.notification.dto.MemberNotificationListResponse;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.entity.MemberNotification;
+import com.toy.nar.domain.member.entity.MemberNotificationGroup;
 import com.toy.nar.domain.member.entity.MemberNotificationType;
 import com.toy.nar.domain.member.repository.MemberNotificationRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -82,7 +83,7 @@ class MemberNotificationServiceTest {
 				.thenReturn(new PageImpl<>(List.of(unread, read), PageRequest.of(0, 20), 2));
 		when(notificationRepository.countByMember_IdAndReadAtIsNull(7L)).thenReturn(1L);
 
-		MemberNotificationListResponse response = service().getNotifications(7L, null, 0, 20);
+		MemberNotificationListResponse response = service().getNotifications(7L, null, null, 0, 20);
 
 		assertThat(response.notifications()).hasSize(2);
 		assertThat(response.unreadCount()).isEqualTo(1L);
@@ -98,11 +99,59 @@ class MemberNotificationServiceTest {
 				.thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 		when(notificationRepository.countByMember_IdAndReadAtIsNull(7L)).thenReturn(0L);
 
-		service().getNotifications(7L, MemberNotificationType.SET_END, 0, 20);
+		service().getNotifications(7L, MemberNotificationType.SET_END, null, 0, 20);
 
 		verify(notificationRepository).findByMember_IdAndTypeOrderByCreatedAtDesc(
 				eq(7L), eq(MemberNotificationType.SET_END), any());
 		verify(notificationRepository, never()).findByMember_IdOrderByCreatedAtDesc(any(), any());
+	}
+
+	@Test
+	void getNotificationsWithGroupFiltersListAndUnreadCount() {
+		when(notificationRepository.findByMember_IdAndTypeInOrderByCreatedAtDesc(
+				eq(7L), eq(MemberNotificationGroup.COMMUNITY.types()), any()))
+				.thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+		when(notificationRepository.countByMember_IdAndTypeInAndReadAtIsNull(
+				7L, MemberNotificationGroup.COMMUNITY.types())).thenReturn(4L);
+
+		MemberNotificationListResponse response =
+				service().getNotifications(7L, null, MemberNotificationGroup.COMMUNITY, 0, 20);
+
+		// 미읽음도 그룹 기준 — 경기 알림 미읽음이 커뮤니티 벨 배지에 새면 안 된다.
+		assertThat(response.unreadCount()).isEqualTo(4L);
+		verify(notificationRepository, never()).countByMember_IdAndReadAtIsNull(any());
+		verify(notificationRepository, never()).findByMember_IdOrderByCreatedAtDesc(any(), any());
+	}
+
+	@Test
+	void getNotificationsPrefersTypeOverGroup() {
+		when(notificationRepository.findByMember_IdAndTypeOrderByCreatedAtDesc(
+				eq(7L), eq(MemberNotificationType.COMMUNITY_COMMENT), any()))
+				.thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+		when(notificationRepository.countByMember_IdAndReadAtIsNull(7L)).thenReturn(0L);
+
+		service().getNotifications(7L, MemberNotificationType.COMMUNITY_COMMENT,
+				MemberNotificationGroup.COMMUNITY, 0, 20);
+
+		verify(notificationRepository, never())
+				.findByMember_IdAndTypeInOrderByCreatedAtDesc(any(), any(), any());
+	}
+
+	@Test
+	void markAllReadWithGroupOnlyTouchesGroupTypes() {
+		when(notificationRepository.markAllReadByMemberAndTypes(
+				eq(7L), eq(MemberNotificationGroup.COMMUNITY.types()), any())).thenReturn(2);
+
+		assertThat(service().markAllRead(7L, MemberNotificationGroup.COMMUNITY)).isEqualTo(2);
+		verify(notificationRepository, never()).markAllReadByMember(any(), any());
+	}
+
+	@Test
+	void markAllReadWithoutGroupTouchesEverything() {
+		when(notificationRepository.markAllReadByMember(eq(7L), any())).thenReturn(5);
+
+		assertThat(service().markAllRead(7L, null)).isEqualTo(5);
+		verify(notificationRepository, never()).markAllReadByMemberAndTypes(any(), any(), any());
 	}
 
 	@Test
@@ -117,7 +166,7 @@ class MemberNotificationServiceTest {
 
 	@Test
 	void getNotificationsRequiresLogin() {
-		assertThatThrownBy(() -> service().getNotifications(null, null, 0, 20))
+		assertThatThrownBy(() -> service().getNotifications(null, null, null, 0, 20))
 				.isInstanceOf(ResponseStatusException.class);
 	}
 

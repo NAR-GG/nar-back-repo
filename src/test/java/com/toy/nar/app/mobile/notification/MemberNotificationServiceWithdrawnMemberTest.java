@@ -29,7 +29,7 @@ class MemberNotificationServiceWithdrawnMemberTest {
 	void withdrawnMemberGetsUnauthorized() {
 		when(memberRepository.existsById(7L)).thenReturn(false);
 
-		assertThatThrownBy(() -> service.getNotifications(7L, null, 0, 20))
+		assertThatThrownBy(() -> service.getNotifications(7L, null, null, 0, 20))
 				.isInstanceOf(ResponseStatusException.class)
 				.hasFieldOrPropertyWithValue("statusCode", HttpStatus.UNAUTHORIZED);
 
@@ -41,7 +41,7 @@ class MemberNotificationServiceWithdrawnMemberTest {
 	@Test
 	@DisplayName("로그인하지 않으면 401")
 	void anonymousGetsUnauthorized() {
-		assertThatThrownBy(() -> service.getNotifications(null, null, 0, 20))
+		assertThatThrownBy(() -> service.getNotifications(null, null, null, 0, 20))
 				.isInstanceOf(ResponseStatusException.class)
 				.hasFieldOrPropertyWithValue("statusCode", HttpStatus.UNAUTHORIZED);
 	}

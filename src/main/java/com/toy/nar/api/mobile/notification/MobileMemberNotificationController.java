@@ -2,6 +2,7 @@ package com.toy.nar.api.mobile.notification;
 
 import com.toy.nar.app.mobile.notification.MemberNotificationService;
 import com.toy.nar.app.mobile.notification.dto.MemberNotificationListResponse;
+import com.toy.nar.domain.member.entity.MemberNotificationGroup;
 import com.toy.nar.domain.member.entity.MemberNotificationType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -26,22 +27,28 @@ public class MobileMemberNotificationController {
 	private final MemberNotificationService notificationService;
 
 	@Operation(summary = "알림 리스트 조회",
-			description = "로그인한 회원이 받은 알림을 최신순으로 조회한다. type 으로 필터(미지정 시 전체).")
+			description = "로그인한 회원이 받은 알림을 최신순으로 조회한다. type(한 종류) 또는 "
+					+ "group(묶음, 예: COMMUNITY) 으로 필터 — 미지정 시 전체. group 이 있으면 "
+					+ "unreadCount 도 그 묶음 기준이다.")
 	@SecurityRequirement(name = "bearerAuth")
 	@GetMapping
 	public ResponseEntity<MemberNotificationListResponse> getNotifications(
 			@AuthenticationPrincipal Long memberId,
 			@RequestParam(required = false) MemberNotificationType type,
+			@RequestParam(required = false) MemberNotificationGroup group,
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "20") int size) {
-		return ResponseEntity.ok(notificationService.getNotifications(memberId, type, page, size));
+		return ResponseEntity.ok(notificationService.getNotifications(memberId, type, group, page, size));
 	}
 
-	@Operation(summary = "알림 전체 읽음 처리", description = "미읽음 알림을 모두 읽음으로 표시하고 처리한 건수를 반환한다.")
+	@Operation(summary = "알림 전체 읽음 처리",
+			description = "미읽음 알림을 모두 읽음으로 표시하고 처리한 건수를 반환한다. group 이 있으면 그 묶음만.")
 	@SecurityRequirement(name = "bearerAuth")
 	@PostMapping("/read")
-	public ResponseEntity<Integer> markAllRead(@AuthenticationPrincipal Long memberId) {
-		return ResponseEntity.ok(notificationService.markAllRead(memberId));
+	public ResponseEntity<Integer> markAllRead(
+			@AuthenticationPrincipal Long memberId,
+			@RequestParam(required = false) MemberNotificationGroup group) {
+		return ResponseEntity.ok(notificationService.markAllRead(memberId, group));
 	}
 
 	@Operation(summary = "알림 단건 읽음 처리")
