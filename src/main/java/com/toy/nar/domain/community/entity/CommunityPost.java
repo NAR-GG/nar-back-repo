@@ -108,8 +108,18 @@ public class CommunityPost {
 		this.status = CommunityContentStatus.DELETED;
 	}
 
+	/**
+	 * 테스트 글로 표시 — 목록·상세에서 테스터에게만 보인다(prod 기능 확인용).
+	 * 작성자 본인이라 수정·삭제·댓글은 평소처럼 되게 {@link #isVisible()} 에 포함한다.
+	 */
+	public void markTest() {
+		this.status = CommunityContentStatus.TEST;
+	}
+
+	/** 쓰기·댓글이 허용되는 상태. TEST 도 살아 있는 글이라 포함한다. */
 	public boolean isVisible() {
-		return this.status == CommunityContentStatus.VISIBLE;
+		return this.status == CommunityContentStatus.VISIBLE
+				|| this.status == CommunityContentStatus.TEST;
 	}
 
 	public boolean isAuthor(Long candidateMemberId) {

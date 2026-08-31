@@ -182,3 +182,6 @@ community:
   post-interval-seconds: ${COMMUNITY_POST_INTERVAL_SECONDS:60}
   comment-interval-seconds: ${COMMUNITY_COMMENT_INTERVAL_SECONDS:0}
   team-change-cooldown-days: ${COMMUNITY_TEAM_CHANGE_COOLDOWN_DAYS:30}
+  # 테스트 글(status=TEST)을 볼 수 있는 회원 id 목록(쉼표 구분). prod 에서 기능을
+  # 확인하되 일반 사용자 목록은 어지럽히지 않으려는 용도 — 비우면 아무도 못 본다.
+  tester-member-ids: ${COMMUNITY_TESTER_MEMBER_IDS:}
