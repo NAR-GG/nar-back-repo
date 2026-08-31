@@ -49,6 +49,7 @@ public class CommunityPostService {
 	private final CommunityWriteGuard writeGuard;
 	private final CommunityBlockValidator blockValidator;
 	private final CommunityPollService pollService;
+	private final CommunityTesterRegistry testerRegistry;
 	private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 	private final com.toy.nar.app.auth.profile.CloudinarySignatureService cloudinarySignatureService;
 
@@ -57,7 +58,7 @@ public class CommunityPostService {
 		List<Long> blocked = viewerId == null
 				? List.of()
 				: interactionRepository.findBlockedMemberIds(viewerId);
-		List<CommunityPostRow> rows = postRepository.findPage(boardTeamId, cursor, blocked, pageSize);
+		List<CommunityPostRow> rows = postRepository.findPage(boardTeamId, cursor, blocked, pageSize, testerRegistry.isTester(viewerId));
 		var imagesByPost = imagesByPost(rows);
 		List<PostSummaryResponse> posts = rows.stream()
 				.map(row -> toSummary(row, imagesByPost.getOrDefault(row.id(), List.of())))
@@ -82,14 +83,17 @@ public class CommunityPostService {
 					var result = writeGuard.evaluateBoardWritability(member, boardTeamId);
 					return new com.toy.nar.app.community.dto.CommunityDtos.BoardViewerResponse(
 							result.canWrite(), result.reason(),
-							writeGuard.nextPostWritableAt(viewerId, boardTeamId));
+							writeGuard.nextPostWritableAt(viewerId, boardTeamId),
+							testerRegistry.isTester(viewerId));
 				})
 				.orElse(null);
 	}
 
 	public PostDetailResponse getPost(long postId, Long viewerId) {
+		// 테스트 글(TEST)은 테스터에게만 열린다 — 남은 링크·딥링크로도 남에게 안 보인다.
 		CommunityPostRow row = postRepository.findRowById(postId)
-				.filter(r -> "VISIBLE".equals(r.status()))
+				.filter(r -> "VISIBLE".equals(r.status())
+						|| ("TEST".equals(r.status()) && testerRegistry.isTester(viewerId)))
 				.orElseThrow(() -> new CustomException(ErrorCode.COMMUNITY_POST_NOT_FOUND));
 
 		boolean liked = false;
@@ -143,6 +147,11 @@ public class CommunityPostService {
 				.bodyFormat(validated.format())
 				.preview(validated.preview())
 				.build();
+		// 테스터가 test:true 로 올린 글은 TEST 상태 — 목록·상세에서 테스터에게만 보인다.
+		// 테스터가 아니면 플래그를 무시한다(일반 사용자가 숨은 글을 만들 수는 없다).
+		if (Boolean.TRUE.equals(request.test()) && testerRegistry.isTester(memberId)) {
+			post.markTest();
+		}
 		long postId = postRepository.save(post).getId();
 		if (!validated.imageUrls().isEmpty()) {
 			postRepository.replaceImages(postId, validated.imageUrls());
@@ -238,7 +247,7 @@ public class CommunityPostService {
 	public PostListResponse getMyPosts(Long memberId, Long cursor, Integer size) {
 		requireLogin(memberId);
 		int pageSize = clampSize(size);
-		List<CommunityPostRow> rows = postRepository.findMyPostPage(memberId, cursor, pageSize);
+		List<CommunityPostRow> rows = postRepository.findMyPostPage(memberId, cursor, pageSize, testerRegistry.isTester(memberId));
 		var imagesByPost = imagesByPost(rows);
 		List<PostSummaryResponse> posts = rows.stream()
 				.map(row -> toSummary(row, imagesByPost.getOrDefault(row.id(), List.of())))
@@ -250,7 +259,7 @@ public class CommunityPostService {
 			Long memberId, Long cursor, Integer size) {
 		requireLogin(memberId);
 		int pageSize = clampSize(size);
-		List<CommunityPostRow> rows = postRepository.findLikedPage(memberId, cursor, pageSize);
+		List<CommunityPostRow> rows = postRepository.findLikedPage(memberId, cursor, pageSize, testerRegistry.isTester(memberId));
 		var imagesByPost = imagesByPost(rows);
 		var items = rows.stream()
 				.map(row -> new com.toy.nar.app.community.dto.CommunityDtos.LikedPostItemResponse(
@@ -263,7 +272,7 @@ public class CommunityPostService {
 	public ScrapListResponse getMyScraps(Long memberId, Long cursor, Integer size) {
 		requireLogin(memberId);
 		int pageSize = clampSize(size);
-		List<CommunityPostRow> rows = postRepository.findScrapPage(memberId, cursor, pageSize);
+		List<CommunityPostRow> rows = postRepository.findScrapPage(memberId, cursor, pageSize, testerRegistry.isTester(memberId));
 		var imagesByPost = imagesByPost(rows);
 		List<ScrapItemResponse> items = rows.stream()
 				.map(row -> new ScrapItemResponse(row.scrapId(),
