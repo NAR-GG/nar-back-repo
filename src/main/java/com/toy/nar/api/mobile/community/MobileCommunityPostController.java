@@ -34,6 +34,7 @@ import lombok.RequiredArgsConstructor;
 public class MobileCommunityPostController {
 
 	private final CommunityPostService postService;
+	private final com.toy.nar.app.community.service.CommunityPollService pollService;
 	private final com.toy.nar.app.community.service.CommunityLinkPreviewService linkPreviewService;
 
 	@GetMapping("/posts")
@@ -50,6 +51,15 @@ public class MobileCommunityPostController {
 			@PathVariable long postId,
 			@AuthenticationPrincipal Long memberId) {
 		return ResponseEntity.ok(postService.getPost(postId, memberId));
+	}
+
+	/** 투표(단일 선택, 변경 불가). 이미 투표했으면 409 COMMUNITY_ALREADY_VOTED. */
+	@PostMapping("/posts/{postId}/poll/vote")
+	public ResponseEntity<com.toy.nar.app.community.dto.CommunityDtos.PollResponse> votePoll(
+			@PathVariable long postId,
+			@RequestBody com.toy.nar.app.community.dto.CommunityDtos.PollVoteRequest request,
+			@AuthenticationPrincipal Long memberId) {
+		return ResponseEntity.ok(pollService.vote(postId, memberId, request.optionId()));
 	}
 
 	/** 링크 프리뷰(OG 스냅샷). 인증 필수(SecurityConfig) — 익명 크롤 대행을 막는다. */

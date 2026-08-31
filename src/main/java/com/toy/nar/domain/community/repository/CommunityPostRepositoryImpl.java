@@ -28,6 +28,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 			       m.profile_image_url AS author_profile_image_url,
 			       t.team_id AS author_team_id, t.team_code AS author_team_code,
 			       t.team_image_url AS author_team_image_url,
+			       EXISTS(SELECT 1 FROM community_poll cp WHERE cp.post_id = p.id) AS has_poll,
 			       %s AS scrap_id
 			FROM community_post p
 			LEFT JOIN member m ON m.id = p.member_id
@@ -56,6 +57,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 			rs.getObject("author_team_id", Long.class),
 			rs.getString("author_team_code"),
 			rs.getString("author_team_image_url"),
+			rs.getBoolean("has_poll"),
 			rs.getObject("scrap_id", Long.class));
 
 	private final JdbcTemplate jdbcTemplate;

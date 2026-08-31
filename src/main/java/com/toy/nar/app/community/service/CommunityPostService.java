@@ -48,6 +48,7 @@ public class CommunityPostService {
 	private final MemberRepository memberRepository;
 	private final CommunityWriteGuard writeGuard;
 	private final CommunityBlockValidator blockValidator;
+	private final CommunityPollService pollService;
 	private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 	private final com.toy.nar.app.auth.profile.CloudinarySignatureService cloudinarySignatureService;
 
@@ -118,7 +119,9 @@ public class CommunityPostService {
 				blockedAuthor ? null : row.body(),
 				row.bodyFormat(),
 				toAuthor(row), row.viewCount(), row.likeCount(), row.commentCount(),
-				row.editedAt() != null, row.createdAt(), viewer, images);
+				row.editedAt() != null, row.createdAt(), viewer, images,
+				// 차단한 작성자의 글은 본문처럼 투표도 가린다.
+				blockedAuthor ? null : pollService.findForViewer(postId, viewerId));
 	}
 
 	@Transactional
@@ -143,6 +146,10 @@ public class CommunityPostService {
 		long postId = postRepository.save(post).getId();
 		if (!validated.imageUrls().isEmpty()) {
 			postRepository.replaceImages(postId, validated.imageUrls());
+		}
+		if (request.poll() != null) {
+			// 같은 트랜잭션 — 투표 검증 실패면 글도 함께 롤백된다.
+			pollService.attachPoll(postId, request.poll());
 		}
 		return postId;
 	}
@@ -279,7 +286,7 @@ public class CommunityPostService {
 		String thumbnailUrl = images.isEmpty() ? null : images.get(0).imageUrl();
 		return new PostSummaryResponse(row.id(), row.boardTeamId(), row.boardTeamCode(), row.title(), preview,
 				toAuthor(row), row.viewCount(), row.likeCount(), row.commentCount(),
-				row.editedAt() != null, row.createdAt(), thumbnailUrl, images.size());
+				row.editedAt() != null, row.createdAt(), thumbnailUrl, images.size(), row.hasPoll());
 	}
 
 	/** 페이지의 글 id 들로 VISIBLE 사진을 한 방에 긁어 post_id 로 접는다(썸네일·개수용). */

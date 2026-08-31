@@ -33,6 +33,8 @@ public enum ErrorCode {
 	COMMUNITY_ALREADY_REPORTED(HttpStatus.CONFLICT, "이미 신고한 대상입니다."),
 	COMMUNITY_BLOCK_SELF(HttpStatus.BAD_REQUEST, "자기 자신은 차단할 수 없습니다."),
 	COMMUNITY_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다."),
+	COMMUNITY_POLL_NOT_FOUND(HttpStatus.NOT_FOUND, "투표를 찾을 수 없습니다."),
+	COMMUNITY_ALREADY_VOTED(HttpStatus.CONFLICT, "이미 투표했습니다."),
 
 	/* 500 INTERNAL_SERVER_ERROR : 서버 내부 오류 */
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),
