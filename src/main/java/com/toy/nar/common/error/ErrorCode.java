@@ -35,6 +35,7 @@ public enum ErrorCode {
 	COMMUNITY_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다."),
 	COMMUNITY_POLL_NOT_FOUND(HttpStatus.NOT_FOUND, "투표를 찾을 수 없습니다."),
 	COMMUNITY_ALREADY_VOTED(HttpStatus.CONFLICT, "이미 투표했습니다."),
+	COMMUNITY_POLL_CLOSED(HttpStatus.CONFLICT, "마감된 투표입니다."),
 
 	/* 500 INTERNAL_SERVER_ERROR : 서버 내부 오류 */
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),

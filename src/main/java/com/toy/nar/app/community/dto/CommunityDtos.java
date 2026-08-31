@@ -25,8 +25,14 @@ public final class CommunityDtos {
 			List<String> imageUrls, PollCreateRequest poll) {
 	}
 
-	/** 글에 붙는 투표(글당 1개, 작성 시에만). 질문 ≤100자, 선택지 2~4개(각 ≤50자). */
-	public record PollCreateRequest(String question, List<String> options) {
+	/**
+	 * 글에 붙는 투표(글당 1개, 작성 시에만). 질문 ≤100자, 선택지 2~4개(각 ≤50자).
+	 * allowMultiple: 복수 선택 허용(기본 false).
+	 * alwaysShowResults: 투표 전에도 분포 공개(기본 false = 투표 후 공개).
+	 * closesHours: 지금부터 몇 시간 뒤 마감(1~168, null = 마감 없음).
+	 */
+	public record PollCreateRequest(String question, List<String> options,
+			Boolean allowMultiple, Boolean alwaysShowResults, Integer closesHours) {
 	}
 
 	/** voteCount 는 결과 비공개 상태(미투표 + 숨김 설정)면 null 로 온다. */
@@ -34,11 +40,14 @@ public final class CommunityDtos {
 	}
 
 	/**
-	 * resultsVisible: 분포(선택지별 표 수)를 보여줄 수 있는가 — 투표했거나 공개 설정.
-	 * myOptionId: 내가 고른 선택지(비로그인·미투표면 null). 투표 후 변경 불가.
+	 * totalVotes: 참여자 수(복수 선택이어도 사람 기준 — 퍼센트 분모).
+	 * resultsVisible: 분포를 보여줄 수 있는가 — 투표했거나, 공개 설정이거나, 마감됨.
+	 * myOptionIds: 내가 고른 선택지들(비로그인·미투표면 빈 배열).
+	 * closed: 마감됨(true 면 투표 불가). closesAt null = 마감 없음.
 	 */
 	public record PollResponse(Long id, String question, int totalVotes, boolean resultsVisible,
-			Long myOptionId, List<PollOptionResponse> options) {
+			boolean allowMultiple, LocalDateTime closesAt, boolean closed,
+			List<Long> myOptionIds, List<PollOptionResponse> options) {
 	}
 
 	public record PollVoteRequest(Long optionId) {
