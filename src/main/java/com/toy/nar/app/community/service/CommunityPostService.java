@@ -43,6 +43,10 @@ public class CommunityPostService {
 	private static final int MAX_IMAGE_URL_LENGTH = 500; // 컬럼 상한
 	private static final int MAX_RAW_BLOCKS_LENGTH = 100_000; // 블록 JSON 원문 안전 상한
 
+	/** 목록 썸네일 파생용 파서. static 메서드(toSummary)에서 쓰므로 주입이 아니라 상수다. */
+	private static final com.fasterxml.jackson.databind.ObjectMapper SUMMARY_MAPPER =
+			new com.fasterxml.jackson.databind.ObjectMapper();
+
 	private final CommunityPostRepository postRepository;
 	private final CommunityInteractionRepository interactionRepository;
 	private final MemberRepository memberRepository;
@@ -292,10 +296,82 @@ public class CommunityPostService {
 				: (row.body().length() <= PREVIEW_LENGTH
 						? row.body()
 						: row.body().substring(0, PREVIEW_LENGTH));
-		String thumbnailUrl = images.isEmpty() ? null : images.get(0).imageUrl();
+		// 첨부 사진이 없어도 본문에 유튜브 임베드·링크 카드가 있으면 그 썸네일을 쓴다 —
+		// 클립 공유 글이 목록에서 빈 줄로 보이면 안 된다(v1.0.23 피드백).
+		String thumbnailUrl = images.isEmpty()
+				? embedThumbnail(row)
+				: images.get(0).imageUrl();
 		return new PostSummaryResponse(row.id(), row.boardTeamId(), row.boardTeamCode(), row.title(), preview,
 				toAuthor(row), row.viewCount(), row.likeCount(), row.commentCount(),
 				row.editedAt() != null, row.createdAt(), thumbnailUrl, images.size(), row.hasPoll());
+	}
+
+	/**
+	 * 블록 본문에서 목록 썸네일로 쓸 이미지를 찾는다 — 유튜브 임베드는 영상
+	 * 썸네일(img.youtube.com), 링크 카드는 저장된 OG 이미지. 없으면 null.
+	 *
+	 * <p>파생값이라 저장하지 않는다(썸네일 규칙이 바뀌면 배포만으로 반영된다).
+	 * 목록 한 페이지에서 블록 글만 파싱하고, 첫 후보를 찾으면 멈춘다.</p>
+	 */
+	static String embedThumbnail(CommunityPostRow row) {
+		if (!"BLOCKS".equals(row.bodyFormat())) {
+			return null;
+		}
+		try {
+			com.fasterxml.jackson.databind.JsonNode blocks =
+					SUMMARY_MAPPER.readTree(row.body());
+			if (!blocks.isArray()) {
+				return null;
+			}
+			for (com.fasterxml.jackson.databind.JsonNode block : blocks) {
+				String type = block.path("type").asText("");
+				if ("embed".equals(type) && "youtube".equals(block.path("provider").asText(""))) {
+					String videoId = youtubeVideoId(block.path("url").asText(""));
+					if (videoId != null) {
+						return "https://img.youtube.com/vi/" + videoId + "/hqdefault.jpg";
+					}
+				}
+				if ("link".equals(type) && block.hasNonNull("imageUrl")) {
+					return block.path("imageUrl").asText();
+				}
+			}
+		} catch (Exception e) {
+			// 목록 썸네일은 있으면 좋은 값이다 — 파싱 실패로 목록이 깨지면 안 된다.
+			log.debug("[community] 임베드 썸네일 추출 실패 postId={}", row.id());
+		}
+		return null;
+	}
+
+	/** youtu.be/{id}, watch?v={id}, /shorts|embed|live/{id} 에서 영상 id 추출. */
+	private static String youtubeVideoId(String url) {
+		try {
+			java.net.URI uri = java.net.URI.create(url.trim());
+			String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(java.util.Locale.ROOT);
+			if (host.endsWith("youtu.be")) {
+				String path = uri.getPath();
+				return path == null || path.length() <= 1 ? null : path.substring(1).split("/")[0];
+			}
+			if (host.contains("youtube.com")) {
+				String query = uri.getQuery();
+				if (query != null) {
+					for (String param : query.split("&")) {
+						if (param.startsWith("v=")) {
+							return param.substring(2);
+						}
+					}
+				}
+				String[] segments = uri.getPath() == null ? new String[0] : uri.getPath().split("/");
+				for (int i = 0; i < segments.length - 1; i++) {
+					if (segments[i].equals("shorts") || segments[i].equals("embed")
+							|| segments[i].equals("live")) {
+						return segments[i + 1];
+					}
+				}
+			}
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+		return null;
 	}
 
 	/** 페이지의 글 id 들로 VISIBLE 사진을 한 방에 긁어 post_id 로 접는다(썸네일·개수용). */
