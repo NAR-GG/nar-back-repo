@@ -77,7 +77,9 @@ public class CommunityCommentRepositoryImpl implements CommunityCommentRepositor
 				LEFT JOIN teams bt ON bt.team_id = p.board_team_id
 				WHERE c.member_id = ?
 				  AND c.status = 'VISIBLE'
-				  AND p.status = 'VISIBLE'
+				  -- TEST 글의 댓글도 내 활동에 남긴다. TEST 글은 테스터만 볼 수 있어
+				  -- 거기에 댓글을 달 수 있는 사람도 테스터뿐이라 노출 위험이 없다.
+				  AND p.status IN ('VISIBLE', 'TEST')
 				""");
 		List<Object> params = new ArrayList<>();
 		params.add(memberId);

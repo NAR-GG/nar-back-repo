@@ -21,8 +21,12 @@ public final class CommunityDtos {
 	 * bodyFormat: null/PLAIN = 평문, BLOCKS = body 가 블록 JSON 배열(서버가 파싱·검증).
 	 * BLOCKS 면 imageUrls 는 무시된다 — 이미지는 블록에서 추출해 동기화한다.
 	 */
+	/**
+	 * test: 테스트 글로 올린다(테스터만 유효 — 목록·상세에서 테스터에게만 보인다).
+	 * 일반 사용자가 보내면 무시된다.
+	 */
 	public record PostCreateRequest(Long boardTeamId, String title, String body, String bodyFormat,
-			List<String> imageUrls, PollCreateRequest poll) {
+			List<String> imageUrls, PollCreateRequest poll, Boolean test) {
 	}
 
 	/**
@@ -105,7 +109,9 @@ public final class CommunityDtos {
 	 * nextWritableAt: 작성 간격(D-9)에 걸려 있으면 다음 작성 가능 시각, 아니면 null.
 	 * 자격(reason)과 간격(nextWritableAt)은 별개다 — 자격이 있어도 방금 썼으면 기다린다.
 	 */
-	public record BoardViewerResponse(boolean canWrite, String reason, LocalDateTime nextWritableAt) {
+	/** tester: 테스트 글을 만들 수 있는 계정인가 — 앱이 작성 화면에 토글을 노출할지 판단한다. */
+	public record BoardViewerResponse(boolean canWrite, String reason, LocalDateTime nextWritableAt,
+			boolean tester) {
 	}
 
 	public record PostListResponse(List<PostSummaryResponse> posts, Long nextCursor,

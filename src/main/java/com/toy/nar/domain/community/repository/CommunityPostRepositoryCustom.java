@@ -13,18 +13,19 @@ public interface CommunityPostRepositoryCustom {
 	 * @param cursorId          null 이면 첫 페이지, 값이 있으면 id < cursor
 	 * @param excludedMemberIds 차단한 작성자들. 비어 있으면 필터 자체를 안 넣는다
 	 */
-	List<CommunityPostRow> findPage(Long boardTeamId, Long cursorId, List<Long> excludedMemberIds, int size);
+	List<CommunityPostRow> findPage(Long boardTeamId, Long cursorId, List<Long> excludedMemberIds, int size,
+			boolean includeTest);
 
 	Optional<CommunityPostRow> findRowById(long postId);
 
 	/** 내 스크랩 페이지. 커서는 scrap.id (row 의 scrapId 로 내려간다). */
-	List<CommunityPostRow> findScrapPage(long memberId, Long cursorId, int size);
+	List<CommunityPostRow> findScrapPage(long memberId, Long cursorId, int size, boolean includeTest);
 
 	/** 내가 쓴 글. 커서는 post.id. 삭제·블라인드는 숨긴다(내 활동 화면 정책). */
-	List<CommunityPostRow> findMyPostPage(long memberId, Long cursorId, int size);
+	List<CommunityPostRow> findMyPostPage(long memberId, Long cursorId, int size, boolean includeTest);
 
 	/** 내가 좋아요한 글. 커서는 like.id (row 의 scrapId 슬롯에 실려 내려간다). */
-	List<CommunityPostRow> findLikedPage(long memberId, Long cursorId, int size);
+	List<CommunityPostRow> findLikedPage(long memberId, Long cursorId, int size, boolean includeTest);
 
 	/**
 	 * 작성 간격 검사용 마지막 작성 시각. status 무관 — 지웠다 다시 올리는 우회도 잡는다.

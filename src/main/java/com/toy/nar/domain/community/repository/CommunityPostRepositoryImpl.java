@@ -63,7 +63,8 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 	private final JdbcTemplate jdbcTemplate;
 
 	@Override
-	public List<CommunityPostRow> findPage(Long boardTeamId, Long cursorId, List<Long> excludedMemberIds, int size) {
+	public List<CommunityPostRow> findPage(Long boardTeamId, Long cursorId, List<Long> excludedMemberIds, int size,
+			boolean includeTest) {
 		StringBuilder sql = new StringBuilder(SELECT_COLUMNS.formatted("NULL"));
 		List<Object> params = new ArrayList<>();
 
@@ -73,7 +74,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 			sql.append("WHERE p.board_team_id = ?\n");
 			params.add(boardTeamId);
 		}
-		sql.append("  AND p.status = 'VISIBLE'\n");
+		sql.append(statusClause(includeTest));
 		if (cursorId != null) {
 			sql.append("  AND p.id < ?\n");
 			params.add(cursorId);
@@ -93,7 +94,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 	}
 
 	@Override
-	public List<CommunityPostRow> findScrapPage(long memberId, Long cursorId, int size) {
+	public List<CommunityPostRow> findScrapPage(long memberId, Long cursorId, int size, boolean includeTest) {
 		// idx_community_scrap_member (member_id, id DESC, post_id) 커버링으로 스크랩을 훑고
 		// post 는 PK 조인. 숨김·삭제된 글은 스크랩 목록에서도 뺀다.
 		StringBuilder sql = new StringBuilder(SELECT_COLUMNS.formatted("s.id")
@@ -106,7 +107,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 			sql.append("  AND s.id < ?\n");
 			params.add(cursorId);
 		}
-		sql.append("  AND p.status = 'VISIBLE'\n");
+		sql.append(statusClause(includeTest));
 		sql.append("ORDER BY s.id DESC LIMIT ?");
 		params.add(size);
 
@@ -114,13 +115,13 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 	}
 
 	@Override
-	public List<CommunityPostRow> findMyPostPage(long memberId, Long cursorId, int size) {
+	public List<CommunityPostRow> findMyPostPage(long memberId, Long cursorId, int size, boolean includeTest) {
 		// idx_community_post_member (member_id, id DESC) 가 필터·정렬·커서를 같이 처리한다.
 		StringBuilder sql = new StringBuilder(SELECT_COLUMNS.formatted("NULL"));
 		List<Object> params = new ArrayList<>();
 		sql.append("WHERE p.member_id = ?\n");
 		params.add(memberId);
-		sql.append("  AND p.status = 'VISIBLE'\n");
+		sql.append(statusClause(includeTest));
 		if (cursorId != null) {
 			sql.append("  AND p.id < ?\n");
 			params.add(cursorId);
@@ -131,7 +132,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 	}
 
 	@Override
-	public List<CommunityPostRow> findLikedPage(long memberId, Long cursorId, int size) {
+	public List<CommunityPostRow> findLikedPage(long memberId, Long cursorId, int size, boolean includeTest) {
 		// fk_community_post_like_member (member_id) 자동 인덱스가 실질 (member_id, id) 로
 		// 필터·정렬·커서를 처리한다(#490). 커서는 like.id — scrap_id 슬롯에 실린다.
 		StringBuilder sql = new StringBuilder(SELECT_COLUMNS.formatted("l.id")
@@ -144,7 +145,7 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 			sql.append("  AND l.id < ?\n");
 			params.add(cursorId);
 		}
-		sql.append("  AND p.status = 'VISIBLE'\n");
+		sql.append(statusClause(includeTest));
 		sql.append("ORDER BY l.id DESC LIMIT ?");
 		params.add(size);
 		return jdbcTemplate.query(sql.toString(), ROW_MAPPER, params.toArray());
@@ -229,6 +230,18 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 						+ " ORDER BY post_id, sort_order",
 				(rs, i) -> new CommunityPostImageRow(rs.getLong(1), rs.getLong(2), rs.getString(3)),
 				postIds.toArray());
+	}
+
+	/**
+	 * 목록에 보일 글의 상태 조건. 테스터({@code includeTest})에게만 TEST 글을 함께
+	 * 보여준다 — prod 에서 기능을 확인하면서 일반 사용자 목록은 건드리지 않는 장치.
+	 * 리터럴이라 파라미터 바인딩이 필요 없고, 인덱스 조건(board_team_id, id) 뒤의
+	 * 필터라 IN 으로 넓혀도 실행계획이 바뀌지 않는다.
+	 */
+	private static String statusClause(boolean includeTest) {
+		return includeTest
+				? "  AND p.status IN ('VISIBLE', 'TEST')\n"
+				: "  AND p.status = 'VISIBLE'\n";
 	}
 
 	static void appendExcludedAuthors(StringBuilder sql, List<Object> params, List<Long> excludedMemberIds) {

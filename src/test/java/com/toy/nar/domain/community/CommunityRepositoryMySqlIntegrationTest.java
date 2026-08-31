@@ -78,21 +78,21 @@ class CommunityRepositoryMySqlIntegrationTest {
 		assertThat(blocked).containsExactly(2L);
 
 		// 첫 페이지: 삭제(5)·팀글(6)·차단 작성자 글(2,4) 제외 → 3, 1
-		List<CommunityPostRow> page = postRepository.findPage(null, null, blocked, 2);
+		List<CommunityPostRow> page = postRepository.findPage(null, null, blocked, 2, false);
 		assertThat(page).extracting(CommunityPostRow::id).containsExactly(3L, 1L);
 
 		// 커서로 이어 읽기 — 남은 게 없다
-		List<CommunityPostRow> next = postRepository.findPage(null, 1L, blocked, 2);
+		List<CommunityPostRow> next = postRepository.findPage(null, 1L, blocked, 2, false);
 		assertThat(next).isEmpty();
 
 		// 차단 없는 사용자는 4개 전부(4,3,2,1) — 삭제·팀글만 빠진다
-		List<CommunityPostRow> all = postRepository.findPage(null, null, List.of(), 10);
+		List<CommunityPostRow> all = postRepository.findPage(null, null, List.of(), 10, false);
 		assertThat(all).extracting(CommunityPostRow::id).containsExactly(4L, 3L, 2L, 1L);
 	}
 
 	@Test
 	void 팀게시판은_보드분기로만_나온다() {
-		List<CommunityPostRow> teamPage = postRepository.findPage(1L, null, List.of(), 10);
+		List<CommunityPostRow> teamPage = postRepository.findPage(1L, null, List.of(), 10, false);
 		assertThat(teamPage).extracting(CommunityPostRow::id).containsExactly(6L);
 		assertThat(teamPage.get(0).authorTeamId()).isNull(); // author_team_id 는 안 넣었다
 	}
@@ -104,14 +104,14 @@ class CommunityRepositoryMySqlIntegrationTest {
 	 */
 	@Test
 	void 게시판코드는_작성자팀과_다른_조인에서_온다() {
-		CommunityPostRow teamPost = postRepository.findPage(1L, null, List.of(), 10).get(0);
+		CommunityPostRow teamPost = postRepository.findPage(1L, null, List.of(), 10, false).get(0);
 		assertThat(teamPost.boardTeamId()).isEqualTo(1L);
 		assertThat(teamPost.boardTeamCode()).isEqualTo("T1");
 		assertThat(teamPost.authorTeamId()).isNull();   // 작성자 응원팀은 비어 있는데
 		assertThat(teamPost.authorTeamCode()).isNull(); // 게시판 코드는 나온다
 
 		// 전체 게시판은 둘 다 null 이다 — LEFT JOIN 이라 행이 사라지지 않는다.
-		CommunityPostRow allBoardPost = postRepository.findPage(null, null, List.of(), 1).get(0);
+		CommunityPostRow allBoardPost = postRepository.findPage(null, null, List.of(), 1, false).get(0);
 		assertThat(allBoardPost.boardTeamId()).isNull();
 		assertThat(allBoardPost.boardTeamCode()).isNull();
 	}
@@ -197,13 +197,13 @@ class CommunityRepositoryMySqlIntegrationTest {
 	@Test
 	void 내활동_목록은_삭제된_것을_숨긴다() {
 		// 내가 쓴 글: member 1 의 글 1,3(전체),6(팀) — 삭제된 5는 빠진다
-		assertThat(postRepository.findMyPostPage(1L, null, 10))
+		assertThat(postRepository.findMyPostPage(1L, null, 10, false))
 				.extracting(CommunityPostRow::id).containsExactly(6L, 3L, 1L);
 
 		// 좋아요한 글: member 2 가 3(VISIBLE)과 5(DELETED)를 좋아요 → 3만 나온다
 		interactions.togglePostLike(3L, 2L);
 		interactions.togglePostLike(5L, 2L);
-		var liked = postRepository.findLikedPage(2L, null, 10);
+		var liked = postRepository.findLikedPage(2L, null, 10, false);
 		assertThat(liked).extracting(CommunityPostRow::id).containsExactly(3L);
 		assertThat(liked.get(0).scrapId()).isNotNull(); // 커서 = like.id
 
