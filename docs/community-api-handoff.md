@@ -162,27 +162,33 @@ offset 없다. 전부 커서다.
 - 400 은 URL 자체가 부적합(http/https 아님, 사설 IP 등 SSRF 가드)
 - 서버 캐시 1시간 — 같은 URL 반복 호출은 싸다. 그래도 디바운스는 앱 몫
 
-### 투표 — 글당 1개, 단일 선택, 변경 불가
+### 투표 — 글당 1개, 변경 불가 (복수 선택·결과 공개·마감 옵션)
 
 작성 요청에 `poll` 을 붙이면 글과 함께 생성된다(작성 시에만 — 수정으로 추가·변경 불가):
 
 ```json
-{ ..., "poll": { "question": "≤100자", "options": ["≤50자", "..."] } }
+{ ..., "poll": { "question": "≤100자", "options": ["≤50자", "..."],
+                 "allowMultiple": false, "alwaysShowResults": false, "closesHours": 24 } }
 ```
 
-- 선택지 2~4개. 검증 실패는 400이고 글까지 함께 롤백
+- 선택지 2~4개. `closesHours` 1~168(시간), null = 마감 없음. 검증 실패는 400이고 글까지 롤백
 - 목록 응답에 `hasPoll`(boolean) — 투표 배지용
 - 상세 응답에 `poll`(없으면 null):
 
 ```json
 "poll": { "id": 5, "question": "우승팀은?", "totalVotes": 3, "resultsVisible": false,
-          "myOptionId": null, "options": [ { "id": 10, "label": "T1", "voteCount": null } ] }
+          "allowMultiple": false, "closesAt": "2026-09-01T21:00:00", "closed": false,
+          "myOptionIds": [], "options": [ { "id": 10, "label": "T1", "voteCount": null } ] }
 ```
 
-- **`resultsVisible=false`(미투표) 면 `voteCount` 가 null** — 분포는 투표해야 보인다
-  (서버가 잘라서 내려보내므로 앱이 숨길 필요 없음). `totalVotes`(참여 수)는 항상 온다
-- `POST /api/mobile/community/posts/{id}/poll/vote` `{ "optionId": 10 }` → 투표 후 `poll` 전체 반환
-- **변경 불가** — 재투표는 409 `COMMUNITY_ALREADY_VOTED`. 이미 투표한 상태는 `myOptionId` 로 그린다
+- **`totalVotes` = 참여자 수(사람 기준)** — 복수 선택이어도 사람 수. 퍼센트 분모도 이것
+  (복수 선택은 합이 100%를 넘을 수 있다)
+- **`resultsVisible=false` 면 `voteCount` 가 null** — 분포는 투표했거나·공개 설정이거나·
+  **마감된 뒤** 보인다(서버가 잘라 보내므로 앱이 숨길 필요 없음)
+- `POST /api/mobile/community/posts/{id}/poll/vote` `{ "optionId": 10 }` → 투표 후 `poll` 전체 반환.
+  복수 선택은 선택지마다 한 번씩 호출
+- 409 두 종: `COMMUNITY_ALREADY_VOTED`(같은 선택지 재투표, 단일 선택의 두 번째 표),
+  `COMMUNITY_POLL_CLOSED`(마감 후 투표). `closed=true` 면 앱에서 탭 자체를 잠근다
 
 ### `DELETE /api/mobile/community/posts/{id}` — 삭제 (작성자만, 소프트)
 

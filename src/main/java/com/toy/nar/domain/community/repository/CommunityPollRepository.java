@@ -24,7 +24,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class CommunityPollRepository {
 
-	public record PollRow(long id, long postId, String question, boolean hideResultsUntilVoted, int totalVotes) {
+	public record PollRow(long id, long postId, String question, boolean hideResultsUntilVoted,
+			boolean allowMultiple, java.time.LocalDateTime closesAt, int totalVotes) {
 	}
 
 	public record PollOptionRow(long id, String label, int voteCount) {
@@ -32,15 +33,20 @@ public class CommunityPollRepository {
 
 	private final JdbcTemplate jdbcTemplate;
 
-	/** 투표 + 선택지 생성(글 작성 트랜잭션 안에서 호출). */
-	public void createPoll(long postId, String question, List<String> options) {
+	/** 투표 + 선택지 생성(글 작성 트랜잭션 안에서 호출). closesAt null = 마감 없음. */
+	public void createPoll(long postId, String question, List<String> options,
+			boolean hideResultsUntilVoted, boolean allowMultiple, java.time.LocalDateTime closesAt) {
 		GeneratedKeyHolder keyHolder = new GeneratedKeyHolder();
 		jdbcTemplate.update(connection -> {
 			PreparedStatement ps = connection.prepareStatement(
-					"INSERT INTO community_poll (post_id, question) VALUES (?, ?)",
+					"INSERT INTO community_poll (post_id, question, hide_results_until_voted,"
+							+ " allow_multiple, closes_at) VALUES (?, ?, ?, ?, ?)",
 					Statement.RETURN_GENERATED_KEYS);
 			ps.setLong(1, postId);
 			ps.setString(2, question);
+			ps.setBoolean(3, hideResultsUntilVoted);
+			ps.setBoolean(4, allowMultiple);
+			ps.setObject(5, closesAt);
 			return ps;
 		}, keyHolder);
 		long pollId = keyHolder.getKey().longValue();
@@ -63,10 +69,12 @@ public class CommunityPollRepository {
 
 	public Optional<PollRow> findByPostId(long postId) {
 		return jdbcTemplate.query(
-				"SELECT id, post_id, question, hide_results_until_voted, total_votes"
-						+ " FROM community_poll WHERE post_id = ?",
+				"SELECT id, post_id, question, hide_results_until_voted, allow_multiple,"
+						+ " closes_at, total_votes FROM community_poll WHERE post_id = ?",
 				(rs, i) -> new PollRow(rs.getLong(1), rs.getLong(2), rs.getString(3),
-						rs.getBoolean(4), rs.getInt(5)),
+						rs.getBoolean(4), rs.getBoolean(5),
+						rs.getTimestamp(6) == null ? null : rs.getTimestamp(6).toLocalDateTime(),
+						rs.getInt(7)),
 				postId).stream().findFirst();
 	}
 
@@ -78,12 +86,19 @@ public class CommunityPollRepository {
 				pollId);
 	}
 
-	/** 이 회원이 고른 선택지 id. 안 골랐으면 null. uk(poll_id, member_id) 점조회. */
-	public Long findMyOptionId(long pollId, long memberId) {
-		List<Long> result = jdbcTemplate.queryForList(
+	/** 이 회원이 고른 선택지 id 들(복수 선택이면 여러 개). 안 골랐으면 빈 목록. */
+	public List<Long> findMyOptionIds(long pollId, long memberId) {
+		return jdbcTemplate.queryForList(
 				"SELECT option_id FROM community_poll_vote WHERE poll_id = ? AND member_id = ?",
 				Long.class, pollId, memberId);
-		return result.isEmpty() ? null : result.get(0);
+	}
+
+	/** 참여자 수(복수 선택이어도 사람 기준). "N명 참여" 표시·퍼센트 분모용. */
+	public int countVoters(long pollId) {
+		Integer count = jdbcTemplate.queryForObject(
+				"SELECT COUNT(DISTINCT member_id) FROM community_poll_vote WHERE poll_id = ?",
+				Integer.class, pollId);
+		return count == null ? 0 : count;
 	}
 
 	public boolean optionBelongsToPoll(long optionId, long pollId) {
