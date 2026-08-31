@@ -1,5 +1,7 @@
 package com.toy.nar.app.data.source;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.toy.nar.app.data.source.dto.DataSyncResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,12 +12,15 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +41,18 @@ public class NotificationService {
 
 	@Value("${notification.discord.community-webhook-url:}")
 	private String communityDiscordWebhookUrl;
+
+	@Value("${notification.discord.error-webhook-url:}")
+	private String errorDiscordWebhookUrl;
+
+	/**
+	 * 서버 오류 알림 중복 억제. 500 하나가 초당 수십 번 터지면 채널이 잠기므로,
+	 * (예외 클래스 + 최상단 스택프레임) 당 5분에 1건만 내보낸다.
+	 */
+	private final Cache<String, Boolean> serverErrorAlertThrottle = Caffeine.newBuilder()
+			.expireAfterWrite(Duration.ofMinutes(5))
+			.maximumSize(500)
+			.build();
 
 	@Value("${notification.enabled:false}")
 	private boolean notificationEnabled;
@@ -330,6 +347,58 @@ public class NotificationService {
 		} catch (Exception e) {
 			log.error("커뮤니티 신고 알림 발송 실패", e);
 		}
+	}
+
+	/**
+	 * 서버 오류(5xx) 알림. 전용 채널이 없으면 기본 웹훅으로 폴백(로스터·커뮤니티와 같은 패턴) —
+	 * 파드가 env 를 못 받은 순간에도 알림이 조용히 사라지지 않게 한다.
+	 *
+	 * 이 경로는 이미 실패한 요청 위에서 돈다. 알림 자체가 절대 예외를 더 던지면 안 되므로 전부 감싼다.
+	 */
+	public void sendServerErrorNotification(String method, String path, Throwable e) {
+		if (!notificationEnabled || e == null) return;
+
+		try {
+			// putIfAbsent 가 null 이 아니면 5분 안에 같은 오류를 이미 알렸다.
+			if (serverErrorAlertThrottle.asMap().putIfAbsent(throttleKey(e), Boolean.TRUE) != null) return;
+
+			String webhookUrl = (errorDiscordWebhookUrl == null || errorDiscordWebhookUrl.isEmpty())
+					? discordWebhookUrl
+					: errorDiscordWebhookUrl;
+
+			String message = String.format("발생 시각: `%s`\n요청: `%s %s`\n\n" +
+					"```text\n%s: %s\n%s\n```\n" +
+					"같은 오류는 5분간 다시 알리지 않습니다. 전체 스택은 Grafana(Loki) 에서 본다.",
+				LocalDateTime.now().format(ALERT_TIME_FORMATTER),
+				method == null || method.isBlank() ? "-" : method,
+				path == null || path.isBlank() ? "-" : path,
+				e.getClass().getSimpleName(),
+				truncate(e.getMessage(), 500),
+				topStackFrames(e, 5)
+			);
+
+			sendNotification(webhookUrl, "[서버 오류] 500", message, "danger");
+		} catch (Exception ex) {
+			log.error("서버 오류 알림 발송 실패", ex);
+		}
+	}
+
+	private String throttleKey(Throwable e) {
+		StackTraceElement[] trace = e.getStackTrace();
+		return e.getClass().getName() + "@" + (trace.length == 0 ? "unknown" : trace[0].toString());
+	}
+
+	private String topStackFrames(Throwable e, int limit) {
+		// Discord embed description 은 4096자 제한이다. 상단 몇 줄이면 어디서 터졌는지 잡힌다.
+		return Arrays.stream(e.getStackTrace())
+				.limit(limit)
+				.map(frame -> "  at " + frame)
+				.collect(Collectors.joining("\n"));
+	}
+
+	private String truncate(String value, int max) {
+		if (value == null || value.isBlank()) return "메시지 없음";
+		return value.length() <= max ? value : value.substring(0, max) + "...(생략)";
 	}
 
 	private String teamDisplay(String teamSide, String teamName) {
