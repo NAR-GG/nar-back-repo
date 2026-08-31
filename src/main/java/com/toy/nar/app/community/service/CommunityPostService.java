@@ -139,7 +139,9 @@ public class CommunityPostService {
 		writeGuard.checkBoardWritable(member, request.boardTeamId());
 		writeGuard.checkPostInterval(memberId, request.boardTeamId());
 
-		ValidatedBody validated = validateBody(request.body(), request.bodyFormat(), request.imageUrls());
+		ValidatedBody validated = validateBody(request.body(), request.bodyFormat(), request.imageUrls(),
+				// 투표만 있는 글은 본문이 비는 게 정상이다 — 질문이 곧 내용.
+				request.poll() != null);
 
 		Long authorTeamId = member.getFavoriteTeam() == null ? null : member.getFavoriteTeam().getId();
 		CommunityPost post = CommunityPost.builder()
@@ -174,7 +176,9 @@ public class CommunityPostService {
 		if (!post.isAuthor(memberId)) {
 			throw new CustomException(ErrorCode.COMMUNITY_NOT_AUTHOR);
 		}
-		ValidatedBody validated = validateBody(request.body(), request.bodyFormat(), request.imageUrls());
+		// 수정에서도 빈 본문을 허용한다 — 투표만 있는 글의 제목만 고치는 경우.
+		ValidatedBody validated = validateBody(request.body(), request.bodyFormat(),
+				request.imageUrls(), true);
 		post.edit(requireLength(request.title(), MAX_TITLE_LENGTH),
 				validated.body(), validated.format(), validated.preview());
 		if ("BLOCKS".equals(validated.format())) {
@@ -395,12 +399,13 @@ public class CommunityPostService {
 	 * 이미지도 블록에서 추출한다 — imageUrls 파라미터는 무시된다(블록이 진실).
 	 * 블록 JSON 원문은 텍스트 1만자 + 메타라 10K 를 넘을 수 있어 원문 자체는 100K 로만 막는다.
 	 */
-	private ValidatedBody validateBody(String body, String bodyFormat, List<String> imageUrls) {
+	private ValidatedBody validateBody(String body, String bodyFormat, List<String> imageUrls,
+			boolean allowEmptyBody) {
 		if ("BLOCKS".equals(bodyFormat)) {
 			if (body == null || body.isBlank() || body.length() > MAX_RAW_BLOCKS_LENGTH) {
 				throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
 			}
-			var parsed = blockValidator.validate(body);
+			var parsed = blockValidator.validate(body, allowEmptyBody);
 			return new ValidatedBody(parsed.normalizedBody(), "BLOCKS", parsed.preview(), parsed.imageUrls());
 		}
 		if (bodyFormat != null && !"PLAIN".equals(bodyFormat)) {

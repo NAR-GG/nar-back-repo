@@ -65,8 +65,16 @@ public class CommunityBlockValidator {
 	}
 
 	public ParsedBlocks validate(String rawBody) {
+		return validate(rawBody, false);
+	}
+
+	/**
+	 * @param allowEmpty 블록이 0개여도 통과시킨다 — <b>투표만 있는 글</b>(질문이 곧 내용)에서
+	 *                   본문이 비는 게 정상이기 때문이다. 그 외에는 빈 본문을 거부한다.
+	 */
+	public ParsedBlocks validate(String rawBody, boolean allowEmpty) {
 		JsonNode root = parse(rawBody);
-		if (!root.isArray() || root.isEmpty() || root.size() > MAX_BLOCKS) {
+		if (!root.isArray() || root.size() > MAX_BLOCKS || (root.isEmpty() && !allowEmpty)) {
 			throw invalid();
 		}
 		ArrayNode normalized = objectMapper.createArrayNode();

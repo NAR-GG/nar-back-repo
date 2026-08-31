@@ -80,6 +80,15 @@ class CommunityBlockValidatorTest {
 	}
 
 	@Test
+	void 투표만_있는_글은_빈_본문을_허용한다() {
+		// 질문이 곧 내용이라 본문이 비는 게 정상 — allowEmpty 로만 열린다.
+		var parsed = validator().validate("[]", true);
+		assertThat(parsed.normalizedBody()).isEqualTo("[]");
+		assertThat(parsed.preview()).isNull();
+		assertThat(parsed.imageUrls()).isEmpty();
+	}
+
+	@Test
 	void 배열이_아니거나_모르는_타입이면_거부한다() {
 		assertThatThrownBy(() -> validator().validate("{\"type\":\"text\"}"))
 				.isInstanceOf(CustomException.class);
