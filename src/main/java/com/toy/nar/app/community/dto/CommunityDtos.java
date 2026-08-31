@@ -22,7 +22,26 @@ public final class CommunityDtos {
 	 * BLOCKS 면 imageUrls 는 무시된다 — 이미지는 블록에서 추출해 동기화한다.
 	 */
 	public record PostCreateRequest(Long boardTeamId, String title, String body, String bodyFormat,
-			List<String> imageUrls) {
+			List<String> imageUrls, PollCreateRequest poll) {
+	}
+
+	/** 글에 붙는 투표(글당 1개, 작성 시에만). 질문 ≤100자, 선택지 2~4개(각 ≤50자). */
+	public record PollCreateRequest(String question, List<String> options) {
+	}
+
+	/** voteCount 는 결과 비공개 상태(미투표 + 숨김 설정)면 null 로 온다. */
+	public record PollOptionResponse(Long id, String label, Integer voteCount) {
+	}
+
+	/**
+	 * resultsVisible: 분포(선택지별 표 수)를 보여줄 수 있는가 — 투표했거나 공개 설정.
+	 * myOptionId: 내가 고른 선택지(비로그인·미투표면 null). 투표 후 변경 불가.
+	 */
+	public record PollResponse(Long id, String question, int totalVotes, boolean resultsVisible,
+			Long myOptionId, List<PollOptionResponse> options) {
+	}
+
+	public record PollVoteRequest(Long optionId) {
 	}
 
 	/** imageUrls 는 전체 교체다 — null 은 변경 없음, 빈 배열은 전부 제거. bodyFormat 은 작성과 동일. */
@@ -63,7 +82,8 @@ public final class CommunityDtos {
 	public record PostSummaryResponse(Long id, Long boardTeamId, String boardTeamCode,
 			String title, String bodyPreview,
 			AuthorResponse author, int viewCount, int likeCount, int commentCount,
-			boolean edited, LocalDateTime createdAt, String thumbnailUrl, int imageCount) {
+			boolean edited, LocalDateTime createdAt, String thumbnailUrl, int imageCount,
+			boolean hasPoll) {
 	}
 
 	/** id 는 IMAGE 신고의 targetId 로 쓴다. */
@@ -101,7 +121,7 @@ public final class CommunityDtos {
 			String title, String body, String bodyFormat,
 			AuthorResponse author, int viewCount, int likeCount, int commentCount,
 			boolean edited, LocalDateTime createdAt, PostViewerResponse viewer,
-			List<PostImageResponse> images) {
+			List<PostImageResponse> images, PollResponse poll) {
 	}
 
 	/** 링크 프리뷰(OG 태그) 스냅샷. 못 긁으면 title 이하 전부 null — 앱은 맨 링크로 그린다. */

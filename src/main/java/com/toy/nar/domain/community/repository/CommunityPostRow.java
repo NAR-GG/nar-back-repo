@@ -26,5 +26,7 @@ public record CommunityPostRow(
 		Long authorTeamId,
 		String authorTeamCode,
 		String authorTeamImageUrl,
+		/** 이 글에 투표가 붙어 있는가 — 목록의 투표 배지용. */
+		boolean hasPoll,
 		Long scrapId) {
 }
