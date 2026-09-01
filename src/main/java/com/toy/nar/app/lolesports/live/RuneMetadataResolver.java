@@ -1,6 +1,7 @@
 package com.toy.nar.app.lolesports.live;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,7 +30,10 @@ public class RuneMetadataResolver {
 			5010, "이동 속도 +2%",
 			5011, "강인함 +10% 및 둔화 저항 +10%");
 
+	private static final String ICON_BASE = "https://ddragon.leagueoflegends.com/cdn/img/";
+
 	private final WebClient webClient;
+	private final ObjectMapper objectMapper;
 
 	@Value("${lolesports.live.rune-locale:ko_KR}")
 	private String runeLocale;
@@ -40,6 +44,10 @@ public class RuneMetadataResolver {
 	private volatile Instant loadedAt = Instant.EPOCH;
 	private volatile Map<Integer, String> runeNamesById = new HashMap<>(STAT_SHARD_NAMES);
 	private volatile Map<Integer, String> styleNamesById = new HashMap<>();
+	private volatile Map<Integer, String> styleIconsById = new HashMap<>();
+	private volatile Map<Integer, String> runeIconsById = new HashMap<>();
+	/** 룬 id → 트리 내 슬롯 인덱스. 0 이 핵심룬(키스톤) 슬롯이다. */
+	private volatile Map<Integer, Integer> runeSlotById = new HashMap<>();
 
 	public String resolveStyleName(Integer styleId) {
 		if (styleId == null) {
@@ -59,6 +67,38 @@ public class RuneMetadataResolver {
 			names.add(runeNamesById.getOrDefault(runeId, "룬-" + runeId));
 		}
 		return names;
+	}
+
+	/**
+	 * 스코어보드 한 줄에 들어갈 룬 아이콘 2개(핵심룬 + 부트리)를 뽑는다.
+	 *
+	 * <p>핵심룬은 {@code perks} 배열에서 슬롯 인덱스 0 인 룬을 찾아 고른다(배열 순서에 의존하지 않는다).
+	 * 파편(5xxx)은 ddragon runesReforged 에 없어 아이콘이 없다 — 스코어보드 행에도 안 들어가므로 뽑지 않는다.
+	 */
+	public RuneIcons resolveRuneIcons(String perksJson) {
+		if (perksJson == null || perksJson.isBlank() || "{}".equals(perksJson)) {
+			return new RuneIcons(null, null);
+		}
+		ensureLoaded();
+		try {
+			JsonNode node = objectMapper.readTree(perksJson);
+			String keystoneIconUrl = null;
+			for (JsonNode perk : node.path("perks")) {
+				if (!perk.isNumber()) {
+					continue;
+				}
+				int runeId = perk.asInt();
+				if (Integer.valueOf(0).equals(runeSlotById.get(runeId))) {
+					keystoneIconUrl = runeIconsById.get(runeId);
+					break;
+				}
+			}
+			JsonNode subStyleId = node.path("subStyleId");
+			String subStyleIconUrl = subStyleId.isNumber() ? styleIconsById.get(subStyleId.asInt()) : null;
+			return new RuneIcons(keystoneIconUrl, subStyleIconUrl);
+		} catch (Exception e) {
+			return new RuneIcons(null, null);
+		}
 	}
 
 	private void ensureLoaded() {
@@ -102,6 +142,9 @@ public class RuneMetadataResolver {
 
 			Map<Integer, String> newRuneNames = new HashMap<>(STAT_SHARD_NAMES);
 			Map<Integer, String> newStyleNames = new HashMap<>();
+			Map<Integer, String> newStyleIcons = new HashMap<>();
+			Map<Integer, String> newRuneIcons = new HashMap<>();
+			Map<Integer, Integer> newRuneSlots = new HashMap<>();
 
 			for (JsonNode style : runeTrees) {
 				int styleId = style.path("id").asInt(-1);
@@ -109,11 +152,16 @@ public class RuneMetadataResolver {
 				if (styleId > 0 && !styleName.isBlank()) {
 					newStyleNames.put(styleId, styleName);
 				}
+				String styleIcon = style.path("icon").asText("");
+				if (styleId > 0 && !styleIcon.isBlank()) {
+					newStyleIcons.put(styleId, ICON_BASE + styleIcon);
+				}
 
 				JsonNode slots = style.path("slots");
 				if (!slots.isArray()) {
 					continue;
 				}
+				int slotIndex = 0;
 				for (JsonNode slot : slots) {
 					JsonNode runes = slot.path("runes");
 					if (!runes.isArray()) {
@@ -125,12 +173,21 @@ public class RuneMetadataResolver {
 						if (runeId > 0 && !runeName.isBlank()) {
 							newRuneNames.put(runeId, runeName);
 						}
+						String runeIcon = rune.path("icon").asText("");
+						if (runeId > 0 && !runeIcon.isBlank()) {
+							newRuneIcons.put(runeId, ICON_BASE + runeIcon);
+							newRuneSlots.put(runeId, slotIndex);
+						}
 					}
+					slotIndex++;
 				}
 			}
 
 			this.runeNamesById = newRuneNames;
 			this.styleNamesById = newStyleNames;
+			this.styleIconsById = newStyleIcons;
+			this.runeIconsById = newRuneIcons;
+			this.runeSlotById = newRuneSlots;
 			this.loadedAt = Instant.now();
 			log.info("Loaded rune metadata from Data Dragon: version={}, runeCount={}, styleCount={}",
 					latestVersion, newRuneNames.size(), newStyleNames.size());
@@ -138,5 +195,8 @@ public class RuneMetadataResolver {
 			log.warn("Failed to refresh rune metadata: {}", e.getMessage());
 		}
 	}
-}
 
+	/** 스코어보드 행에 쓰는 룬 아이콘 URL 쌍. 로드 실패·미매핑이면 각 필드가 null. */
+	public record RuneIcons(String keystoneIconUrl, String subStyleIconUrl) {
+	}
+}
