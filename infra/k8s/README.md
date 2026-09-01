@@ -117,7 +117,9 @@ traefik 은 `Host(api.nar.kr)` 캐치올로 nar-web 에 보내므로 라우팅 �
 
 ### 4. 리뷰 폴링 켜기
 
-`nar-scheduler.yaml` 의 `APP_STORE_REVIEW_MONITOR_ENABLED` 를 `"true"` 로 바꿔 머지한다.
+`nar-scheduler.yaml` 의 `APP_STORE_REVIEW_MONITOR_ENABLED`. **2026-09-01 에 이미 `"true"`**
+(키 4H45HYAFAQ, appId 6786755741 으로 실호출 검증 후 켰다).
+
 **첫 폴링은 씨딩만 하고 발송하지 않는다** — 안 그러면 과거 리뷰 50건이 한꺼번에 쏟아진다.
 채널에 뭐가 오려면 두 번째 폴링(기본 30분 뒤)이 필요하다. 로그로 확인:
 

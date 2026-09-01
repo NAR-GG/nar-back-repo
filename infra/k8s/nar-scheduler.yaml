@@ -92,11 +92,11 @@ spec:
             # 앱스토어 신규 리뷰 폴링 → 디스코드. 여기만 있으면 된다 — @Scheduled 는
             # 스케줄러 파드에서만 돈다. 배포 알림은 웹훅이라 웹 파드가 받는다(플래그 없음).
             #
-            # false 로 머지해 두고, ASC 키·웹훅 URL 을 nar-env 에 봉인한 다음 켠다.
-            # 켜기 전에 백오피스가 아니라 첫 폴링으로 확인한다 — 첫 가동은 씨딩만 하고
-            # 발송하지 않으므로(AppStoreReviewMonitor), 채널에 뭐가 오려면 두 번째 폴링이 필요하다.
+            # ASC 키(4H45HYAFAQ)로 /v1/apps·customerReviews 를 직접 호출해 200 을 확인하고,
+            # 시크릿 6개를 nar-env 에 봉인한 뒤 켰다. 첫 폴링은 씨딩만 하고 발송하지 않으므로
+            # (AppStoreReviewMonitor) 켜는 순간 과거 리뷰가 쏟아지지 않는다 — 두 번째 주기부터 신규만.
             - name: APP_STORE_REVIEW_MONITOR_ENABLED
-              value: "false"
+              value: "true"
 
           resources:
             requests:
