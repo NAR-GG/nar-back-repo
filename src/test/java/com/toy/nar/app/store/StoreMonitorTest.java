@@ -190,7 +190,7 @@ class StoreMonitorTest {
 		// 새 버전이 단계적 출시로 올라간다.
 		client.releases = List.of(new PlayRelease("1.0.16", "inProgress", 0.1, List.of("41")));
 		monitor.pollReleases();
-		assertThat(notifications.deployTitles).containsExactly("[플레이 출시] 단계적 출시 진행 중");
+		assertThat(notifications.deployTitles).containsExactly("[플레이 출시] 프로덕션 단계적 출시 중");
 
 		// 같은 상태로 다시 폴링해도 재발송하지 않는다.
 		monitor.pollReleases();
@@ -200,7 +200,7 @@ class StoreMonitorTest {
 		client.releases = List.of(new PlayRelease("1.0.16", "completed", 1.0, List.of("41")));
 		monitor.pollReleases();
 		assertThat(notifications.deployTitles)
-				.containsExactly("[플레이 출시] 단계적 출시 진행 중", "[플레이 출시] 출시 완료");
+				.containsExactly("[플레이 출시] 프로덕션 단계적 출시 중", "[플레이 출시] 프로덕션 롤아웃 100%");
 	}
 
 	@Test

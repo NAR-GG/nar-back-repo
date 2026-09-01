@@ -168,10 +168,12 @@ public class PlayConsoleClient {
 	private String accessToken() throws java.io.IOException {
 		ServiceAccountCredentials cached = credentials;
 		if (cached == null) {
-			// 드라이브 설정과 같은 이유로 \n 을 되돌린다 — env 로 넣으면 개행이 이스케이프돼 온다.
-			String json = serviceAccountKeyJson.replace("\\n", "\n");
+			// JSON 원문을 그대로 넘긴다. GoogleDriveConfig 처럼 \n 을 치환하면 안 된다 —
+			// private_key 안의 \n 은 JSON 이스케이프라서 실제 개행으로 바꾸면 JSON 이 깨진다.
+			// 시크릿은 --from-file 로 파일 바이트 그대로 봉인하므로 이스케이프가 온전하다.
 			cached = (ServiceAccountCredentials) ServiceAccountCredentials
-					.fromStream(new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)))
+					.fromStream(new ByteArrayInputStream(
+							serviceAccountKeyJson.getBytes(StandardCharsets.UTF_8)))
 					.createScoped(List.of(SCOPE));
 			credentials = cached;
 		}

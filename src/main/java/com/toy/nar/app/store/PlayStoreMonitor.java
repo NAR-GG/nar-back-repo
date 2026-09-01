@@ -135,18 +135,28 @@ public class PlayStoreMonitor {
 						: "-");
 	}
 
+	/**
+	 * 문구가 트랙 데이터보다 더 주장하지 않게 한다.
+	 *
+	 * <p>{@code completed} 는 "우리가 롤아웃을 100%로 설정했다"는 뜻이고 <b>구글 심사 통과와
+	 * 무관하다.</b> 실측 2026-09-02: 콘솔의 최신 프로덕션은 1.0.18(40) 인데 트랙은
+	 * {@code 50 (1.0.25) completed} 였다 — 1.0.25 는 아직 검토 중이었다. 그래서 "출시 완료"
+	 * 라고 쓰면 게시되지 않은 버전을 게시된 것처럼 알린다.
+	 */
 	static String releaseTitle(PlayRelease release) {
 		String label = switch (release.status()) {
-			case "inProgress" -> "단계적 출시 진행 중";
-			case "completed" -> "출시 완료";
-			case "halted" -> "출시 중단";
+			case "inProgress" -> "프로덕션 단계적 출시 중";
+			case "completed" -> "프로덕션 롤아웃 100%";
+			case "halted" -> "프로덕션 출시 중단";
 			default -> release.status();
 		};
 		return "[플레이 출시] " + label;
 	}
 
 	static String releaseMessage(PlayRelease release) {
-		return String.format("```text\n버전 코드: %s\n릴리스명: %s\n상태: %s\n배포 비율: %.0f%%\n```",
+		return String.format("```text\n버전 코드: %s\n릴리스명: %s\n상태: %s\n배포 비율: %.0f%%\n```"
+						+ "※ 트랙 설정 기준이다. 구글 심사가 남아 있으면 실제 게시는 그 이후다"
+						+ "(심사 상태는 플레이 API 에 없어서 이메일로만 온다).",
 				StoreNotifyText.orPlaceholder(release.versionKey(), "-"),
 				StoreNotifyText.orPlaceholder(release.name(), "-"),
 				release.status(),

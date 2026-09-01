@@ -161,7 +161,20 @@ kubectl create secret generic nar-env -n nar --dry-run=client -o yaml \
 ### 3. 실호출로 확인한 뒤 켠다
 
 `nar-scheduler.yaml` 의 `PLAY_REVIEW_MONITOR_ENABLED` / `PLAY_RELEASE_MONITOR_ENABLED`.
+**2026-09-02 에 둘 다 `"true"`** — `warding-monitor@gen-lang-client-0887649677` 로
+reviews 200, edits.insert 200 → tracks/production 200 → delete 204 확인 후 켰다.
+
 리뷰와 출시를 따로 켜는 이유는 필요 권한이 달라서다 — 리뷰만 되고 출시는 403 일 수 있다.
+
+`403 PERMISSION_DENIED` 와 `403 SERVICE_DISABLED` 를 구분해라. 앞은 Play Console 초대·권한
+문제, 뒤는 GCP 에서 Google Play Android Developer API 를 안 켠 것이다.
+
+### `status=completed` 는 "게시됨" 이 아니다
+
+트랙의 `completed` 는 **우리가 롤아웃을 100%로 설정했다**는 뜻이고 구글 심사 통과와 무관하다.
+실측 2026-09-02: 콘솔의 최신 프로덕션은 `1.0.18(40)` 인데 트랙은 `50 (1.0.25) completed`
+였다 — 1.0.25 는 아직 검토 중이었다. 그래서 알림 문구를 "출시 완료" 가 아니라
+"프로덕션 롤아웃 100%" 로 쓰고, 심사가 남아 있을 수 있다는 단서를 본문에 붙인다.
 
 **리뷰·출시 모두 첫 폴링은 씨딩만** 한다. 채널에 뭐가 오려면 두 번째 주기가 필요하다.
 
