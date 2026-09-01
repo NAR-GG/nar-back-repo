@@ -87,6 +87,7 @@ common/       Error handling, filters, utilities
 | `youtube/` | YouTube broadcast discovery and metadata sync |
 | `riot/` | Riot API integration (player ranks, accounts) |
 | `participant/` | Player, team, champion management |
+| `store/` | 앱스토어·플레이 리뷰와 플레이 출시 폴링 → 디스코드 (애플 심사·배포는 `api/webhook/` 이 웹훅으로 받는다) |
 
 ### Data Persistence
 - **JPA + Hibernate** with MySQL8Dialect; `open-in-view: false` (explicit fetch required)
@@ -152,6 +153,8 @@ RIOT_API_KEY
 DISCORD_WEBHOOK_URL, DISCORD_PLAYER_WEBHOOK_URL
 DISCORD_ROSTER_WEBHOOK_URL                # LCK 로스터 변동 알림. 비우면 DISCORD_WEBHOOK_URL로 폴백
 DISCORD_COMMUNITY_WEBHOOK_URL             # 커뮤니티 신고 임계 알림(텍스트 3건/이미지 1건). 비우면 DISCORD_WEBHOOK_URL로 폴백
+DISCORD_STORE_DEPLOY_WEBHOOK_URL          # 마켓 심사·배포 알림(애플 웹훅 + 플레이 트랙 폴링). 비우면 DISCORD_WEBHOOK_URL로 폴백
+DISCORD_STORE_REVIEW_WEBHOOK_URL          # 마켓 신규 고객 리뷰(애플·플레이 폴링). 배포와 채널을 나눈다 — 배포 알림이 잦아 리뷰가 묻힌다
 GOOGLE_DRIVE_CSV_ID
 GOOGLE_SERVICE_ACCOUNT_KEY                # 구글 드라이브 서비스 계정 키 JSON 원문. 없으면 클래스패스 service-account-key.json 폴백(로컬 전용)
 RIOT_MONITOR_ENABLED, RIOT_API_ENABLED   # feature flags for scheduling
@@ -164,6 +167,23 @@ APNS_KEY_PATH                            # Apple Developer 에서 받은 .p8 파
 APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID
 APNS_HOST                                # 기본 https://api.push.apple.com (개발 빌드는 api.sandbox.push.apple.com)
 APNS_PUSH_TO_START_ENABLED               # 서버가 잠금화면 카드를 생성(push-to-start, iOS 17.2+). 기본 false
+
+# 앱스토어 알림(iOS). 심사·배포는 애플 웹훅으로 받고, 고객 리뷰는 폴링으로 당겨온다 —
+# 애플 웹훅 이벤트에 리뷰/평점이 없다(빌드·베타빌드·앱버전상태·에셋팩·TestFlight 피드백 5종뿐).
+APP_STORE_APP_ID                         # App Store Connect 앱 URL 의 /apps/<여기> 숫자. 번들 id 아님
+APP_STORE_WEBHOOK_SECRET                 # 애플 웹훅 등록 시 정하는 시크릿. 비우면 /api/webhooks/appstore 가 503
+APP_STORE_CONNECT_KEY_BASE64             # ASC API 키 .p8 원문의 base64. APNS 키와 다른 키다
+APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID
+APP_STORE_REVIEW_MONITOR_ENABLED         # 리뷰 폴링 스위치. 기본 false. 스케줄러 파드에만 필요
+APP_STORE_REVIEW_MONITOR_CRON            # 기본 0 */30 * * * * (Asia/Seoul)
+
+# 플레이스토어. 웹훅이 아예 없어서(RTDN Pub/Sub 은 결제·구독 전용) 리뷰도 출시도 폴링이다.
+# 심사 중·거부 상태는 플레이 API 에 없다 — 구글 이메일로만 온다.
+PLAY_STORE_PACKAGE_NAME                  # 기본 com.warding.app
+PLAY_SERVICE_ACCOUNT_KEY                 # Play Console 에 연결한 GCP 서비스 계정 키 JSON. 드라이브 키와 다른 키다
+PLAY_REVIEW_MONITOR_ENABLED              # 기본 false. 구글은 리뷰를 최근 7일치만 준다 — 주기가 7일 넘으면 유실
+PLAY_RELEASE_MONITOR_ENABLED             # 기본 false. edits.insert 를 쓰므로 서비스 계정에 출시 권한 필요(없으면 403)
+PLAY_REVIEW_MONITOR_CRON, PLAY_RELEASE_MONITOR_CRON
 ```
 
 ### 스케줄러 전역 스위치
