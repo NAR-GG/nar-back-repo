@@ -81,11 +81,12 @@ notification:
     community-webhook-url: ${DISCORD_COMMUNITY_WEBHOOK_URL:}
     # 서버 오류(5xx) 알림. 비우면 운영 웹훅으로 폴백한다.
     error-webhook-url: ${DISCORD_ERROR_WEBHOOK_URL:}
-    # 앱스토어 알림. 배포와 리뷰를 나눈다 — 빌드 업로드 상태가 TestFlight 올릴 때마다 여러 건
-    # 나오고 심사 한 번에 버전 상태도 5~8건이라, 주에 몇 건인 리뷰가 묻힌다.
+    # 앱 마켓 알림. 애플·플레이가 같은 채널 두 개를 쓰고 스토어는 제목 접두사로 구분한다.
+    # 배포와 리뷰를 나누는 이유: 빌드 업로드 상태가 TestFlight 올릴 때마다 여러 건 나오고
+    # 심사 한 번에 버전 상태도 5~8건이라, 주에 몇 건인 리뷰가 묻힌다.
     # 둘 다 비우면 운영 웹훅으로 폴백한다.
-    appstore-deploy-webhook-url: ${DISCORD_APPSTORE_DEPLOY_WEBHOOK_URL:}
-    appstore-review-webhook-url: ${DISCORD_APPSTORE_REVIEW_WEBHOOK_URL:}
+    store-deploy-webhook-url: ${DISCORD_STORE_DEPLOY_WEBHOOK_URL:}
+    store-review-webhook-url: ${DISCORD_STORE_REVIEW_WEBHOOK_URL:}
   # 알림 피드 보존 정책. 타입별로 생성량·열람률이 달라 보존일을 나눈다(2026-08-04 실측 근거는
   # MemberNotificationRetentionService javadoc 참고). 보존 기간이 무한스크롤이 거슬러 올라갈 수 있는 한계다.
   retention:

@@ -99,8 +99,8 @@ kubectl -n nar get secret nar-env -o yaml \
 
 | 키 | 값 |
 |---|---|
-| `DISCORD_APPSTORE_DEPLOY_WEBHOOK_URL` | 심사·배포 채널. 비우면 운영 웹훅으로 폴백 |
-| `DISCORD_APPSTORE_REVIEW_WEBHOOK_URL` | 리뷰 채널. 배포와 나눈다 — 빌드 상태가 잦아 리뷰가 묻힌다 |
+| `DISCORD_STORE_DEPLOY_WEBHOOK_URL` | 심사·배포 채널(애플·플레이 공용). 비우면 운영 웹훅으로 폴백 |
+| `DISCORD_STORE_REVIEW_WEBHOOK_URL` | 리뷰 채널(애플·플레이 공용). 배포와 나눈다 — 빌드 상태가 잦아 리뷰가 묻힌다 |
 | `APP_STORE_APP_ID` | App Store Connect 앱 URL 의 `/apps/<여기>` 숫자 |
 | `APP_STORE_WEBHOOK_SECRET` | 위 `openssl rand` 값 |
 | `APP_STORE_CONNECT_KEY_BASE64` | `base64 -i AuthKey_XXX.p8` |
@@ -128,6 +128,53 @@ traefik 은 `Host(api.nar.kr)` 캐치올로 nar-web 에 보내므로 라우팅 �
 kubectl -n nar logs deploy/nar-scheduler | grep 앱스토어
 # "첫 가동 — N건 씨딩만" → 다음 주기부터 신규만 발송
 ```
+
+## 플레이스토어 알림 부트스트랩
+
+플레이에는 **웹훅이 없다.** RTDN(Pub/Sub)은 결제·구독 전용이라 리뷰도 출시도 폴링이다.
+그리고 **심사 중·거부 상태는 API 에 아예 없다** — 구글은 이메일만 보낸다. 여기서 잡는
+배포 신호는 "프로덕션 트랙에 올라간 버전과 그 롤아웃 상태"뿐이다.
+
+### 1. Play Console → 설정 → API 액세스
+
+GCP 프로젝트를 연결하고 서비스 계정을 만든 뒤 JSON 키를 받는다.
+**드라이브용 `GOOGLE_SERVICE_ACCOUNT_KEY` 와 다른 키다** — 권한 주체가 다르다.
+
+권한:
+
+| 하려는 것 | 필요한 권한 |
+|---|---|
+| 리뷰 읽기 | 앱 정보 및 다운로드 보기 (+ 리뷰 답글) |
+| 출시 상태 읽기 | **출시 관련 권한** — `edits.insert` 를 쓴다. 트랙 조회 전용 경로가 없어서 edit 트랜잭션을 열고 닫는다(커밋하지 않으니 스토어에 변화는 없다). 부족하면 403 |
+
+### 2. 봉인
+
+```bash
+kubectl create secret generic nar-env -n nar --dry-run=client -o yaml \
+  --from-file=PLAY_SERVICE_ACCOUNT_KEY=<서비스계정.json> \
+| kubeseal --cert ~/.nar/sealed-secrets.crt --scope namespace-wide --format yaml \
+    --merge-into infra/k8s/nar-env-sealed.yaml
+```
+
+`PLAY_STORE_PACKAGE_NAME` 은 기본값 `com.warding.app` 이라 안 넣어도 된다.
+
+### 3. 실호출로 확인한 뒤 켠다
+
+`nar-scheduler.yaml` 의 `PLAY_REVIEW_MONITOR_ENABLED` / `PLAY_RELEASE_MONITOR_ENABLED`.
+리뷰와 출시를 따로 켜는 이유는 필요 권한이 달라서다 — 리뷰만 되고 출시는 403 일 수 있다.
+
+**리뷰·출시 모두 첫 폴링은 씨딩만** 한다. 채널에 뭐가 오려면 두 번째 주기가 필요하다.
+
+```bash
+kubectl -n nar logs deploy/nar-scheduler | grep 플레이
+# "플레이 edit 생성 실패" 가 보이면 서비스 계정 출시 권한 문제다
+```
+
+### 구글은 리뷰를 최근 7일치만 준다
+
+`reviews.list` 는 지난 7일 안에 작성·수정된 리뷰만 돌려준다. 그보다 오래된 것은 API 로
+영구히 못 가져온다(Play Console CSV 뿐). **폴링을 7일 넘게 멈추면 그 사이 리뷰는 잃는다.**
+기본 주기가 30분이라 여유는 충분하지만, 플래그를 오래 꺼 두면 그 구간이 빈다.
 
 ## 파드가 둘이면 인메모리 상태도 둘이다
 

@@ -75,7 +75,7 @@ public class AppStoreWebhookController {
 
 		try {
 			JsonNode data = objectMapper.readTree(rawBody).path("data");
-			notificationService.sendAppStoreDeployNotification(
+			notificationService.sendStoreDeployNotification(
 					title(data.path("type").asText("unknown")), message(data), color(data));
 		} catch (Exception e) {
 			// 200 을 준다. 우리 파싱이 깨진 것으로 애플의 재전송을 유발할 이유가 없다.

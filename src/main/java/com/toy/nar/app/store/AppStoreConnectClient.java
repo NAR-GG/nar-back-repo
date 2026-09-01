@@ -1,4 +1,4 @@
-package com.toy.nar.app.appstore;
+package com.toy.nar.app.store;
 
 import java.security.KeyFactory;
 import java.security.PrivateKey;

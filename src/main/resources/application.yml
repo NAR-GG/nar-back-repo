@@ -205,3 +205,21 @@ app-store:
     enabled: ${APP_STORE_REVIEW_MONITOR_ENABLED:false}
     cron: ${APP_STORE_REVIEW_MONITOR_CRON:0 */30 * * * *}
     fetch-limit: ${APP_STORE_REVIEW_FETCH_LIMIT:50}
+
+# 플레이스토어 리뷰·출시 알림. 애플과 달리 웹훅이 아예 없어서 둘 다 폴링이다
+# (RTDN Pub/Sub 은 결제·구독 전용). 심사 중·거부 상태는 플레이 API 에 없다 — 구글 이메일뿐.
+play-store:
+  package-name: ${PLAY_STORE_PACKAGE_NAME:com.warding.app}
+  # Play Console → 설정 → API 액세스 에서 연결한 GCP 서비스 계정 키 JSON 원문.
+  # 드라이브용 GOOGLE_SERVICE_ACCOUNT_KEY 와 다른 키다(권한 주체가 다르다).
+  service-account-key: ${PLAY_SERVICE_ACCOUNT_KEY:}
+  review-monitor:
+    enabled: ${PLAY_REVIEW_MONITOR_ENABLED:false}
+    # 애플 리뷰 폴링(정시·30분)과 겹치지 않게 5분 밀었다.
+    # 구글은 최근 7일치만 주므로 주기가 7일을 넘으면 그 사이 리뷰를 영구히 잃는다.
+    cron: ${PLAY_REVIEW_MONITOR_CRON:0 5,35 * * * *}
+    fetch-limit: ${PLAY_REVIEW_FETCH_LIMIT:50}
+  release-monitor:
+    enabled: ${PLAY_RELEASE_MONITOR_ENABLED:false}
+    # edit 를 열고 닫는 왕복이라 리뷰보다 주기를 길게 잡는다(시간당 1회).
+    cron: ${PLAY_RELEASE_MONITOR_CRON:0 15 * * * *}

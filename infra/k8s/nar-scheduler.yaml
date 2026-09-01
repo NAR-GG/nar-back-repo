@@ -98,6 +98,14 @@ spec:
             - name: APP_STORE_REVIEW_MONITOR_ENABLED
               value: "true"
 
+            # 플레이스토어 리뷰·출시 폴링. 서비스 계정 키(PLAY_SERVICE_ACCOUNT_KEY)를 봉인하고
+            # 실호출로 200 을 확인한 뒤 켠다. 특히 출시 모니터는 edits.insert 를 부르므로
+            # 서비스 계정에 출시 권한이 없으면 403 이다(조회 전용 경로가 없다).
+            - name: PLAY_REVIEW_MONITOR_ENABLED
+              value: "false"
+            - name: PLAY_RELEASE_MONITOR_ENABLED
+              value: "false"
+
           resources:
             requests:
               memory: "1300Mi"

@@ -45,11 +45,11 @@ public class NotificationService {
 	@Value("${notification.discord.error-webhook-url:}")
 	private String errorDiscordWebhookUrl;
 
-	@Value("${notification.discord.appstore-deploy-webhook-url:}")
-	private String appStoreDeployDiscordWebhookUrl;
+	@Value("${notification.discord.store-deploy-webhook-url:}")
+	private String storeDeployDiscordWebhookUrl;
 
-	@Value("${notification.discord.appstore-review-webhook-url:}")
-	private String appStoreReviewDiscordWebhookUrl;
+	@Value("${notification.discord.store-review-webhook-url:}")
+	private String storeReviewDiscordWebhookUrl;
 
 	/**
 	 * 서버 오류 알림 중복 억제. 500 하나가 초당 수십 번 터지면 채널이 잠기므로,
@@ -440,22 +440,23 @@ public class NotificationService {
 	}
 
 	/**
-	 * 앱스토어 심사·배포 상태 알림(애플 웹훅 릴레이).
+	 * 마켓 심사·배포 알림. 애플(웹훅 릴레이)과 플레이(트랙 폴링)가 같은 채널로 나가고,
+	 * 어느 스토어인지는 제목 접두사로 구분한다.
 	 *
 	 * <p>리뷰와 채널을 나눈다 — 빌드 업로드 상태는 TestFlight 를 올릴 때마다 여러 건 나오고
 	 * 심사 한 번에 앱 버전 상태도 5~8건이라, 주에 몇 건인 리뷰가 그 사이에 묻힌다.
 	 */
-	public void sendAppStoreDeployNotification(String title, String message, String color) {
-		sendAppStoreNotification(appStoreDeployDiscordWebhookUrl, title, message, color);
+	public void sendStoreDeployNotification(String title, String message, String color) {
+		sendStoreNotification(storeDeployDiscordWebhookUrl, title, message, color);
 	}
 
-	/** 앱스토어 신규 고객 리뷰 알림(폴링). */
-	public void sendAppStoreReviewNotification(String title, String message, String color) {
-		sendAppStoreNotification(appStoreReviewDiscordWebhookUrl, title, message, color);
+	/** 마켓 신규 고객 리뷰 알림(애플·플레이 모두 폴링). */
+	public void sendStoreReviewNotification(String title, String message, String color) {
+		sendStoreNotification(storeReviewDiscordWebhookUrl, title, message, color);
 	}
 
 	/** 전용 채널이 없으면 운영 웹훅으로 폴백(로스터·커뮤니티와 같은 패턴). */
-	private void sendAppStoreNotification(String webhookUrl, String title, String message, String color) {
+	private void sendStoreNotification(String webhookUrl, String title, String message, String color) {
 		if (!notificationEnabled) return;
 
 		sendNotification(
