@@ -81,6 +81,8 @@ notification:
     community-webhook-url: ${DISCORD_COMMUNITY_WEBHOOK_URL:}
     # 서버 오류(5xx) 알림. 비우면 운영 웹훅으로 폴백한다.
     error-webhook-url: ${DISCORD_ERROR_WEBHOOK_URL:}
+    # 앱스토어 심사·배포 상태(웹훅)와 신규 고객 리뷰(폴링). 비우면 운영 웹훅으로 폴백한다.
+    appstore-webhook-url: ${DISCORD_APPSTORE_WEBHOOK_URL:}
   # 알림 피드 보존 정책. 타입별로 생성량·열람률이 달라 보존일을 나눈다(2026-08-04 실측 근거는
   # MemberNotificationRetentionService javadoc 참고). 보존 기간이 무한스크롤이 거슬러 올라갈 수 있는 한계다.
   retention:

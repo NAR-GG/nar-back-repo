@@ -45,6 +45,9 @@ public class NotificationService {
 	@Value("${notification.discord.error-webhook-url:}")
 	private String errorDiscordWebhookUrl;
 
+	@Value("${notification.discord.appstore-webhook-url:}")
+	private String appStoreDiscordWebhookUrl;
+
 	/**
 	 * 서버 오류 알림 중복 억제. 500 하나가 초당 수십 번 터지면 채널이 잠기므로,
 	 * (예외 클래스 + 최상단 스택프레임) 당 5분에 1건만 내보낸다.
@@ -431,6 +434,19 @@ public class NotificationService {
 			case "KILL" -> "⚔️ 킬";
 			default -> eventType;
 		};
+	}
+
+	/**
+	 * 앱스토어 알림 — 심사·배포 상태(웹훅)와 신규 고객 리뷰(폴링) 둘 다 이 문으로 나간다.
+	 * 전용 채널이 없으면 운영 웹훅으로 폴백(로스터·커뮤니티와 같은 패턴).
+	 */
+	public void sendAppStoreNotification(String title, String message, String color) {
+		if (!notificationEnabled) return;
+
+		String webhookUrl = (appStoreDiscordWebhookUrl == null || appStoreDiscordWebhookUrl.isEmpty())
+				? discordWebhookUrl
+				: appStoreDiscordWebhookUrl;
+		sendNotification(webhookUrl, title, message, color);
 	}
 
 	/**

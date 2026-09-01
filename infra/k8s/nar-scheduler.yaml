@@ -89,6 +89,15 @@ spec:
             - name: RIOT_MATCH_FALLBACK_ENABLED
               value: "true"
 
+            # 앱스토어 신규 리뷰 폴링 → 디스코드. 여기만 있으면 된다 — @Scheduled 는
+            # 스케줄러 파드에서만 돈다. 배포 알림은 웹훅이라 웹 파드가 받는다(플래그 없음).
+            #
+            # false 로 머지해 두고, ASC 키·웹훅 URL 을 nar-env 에 봉인한 다음 켠다.
+            # 켜기 전에 백오피스가 아니라 첫 폴링으로 확인한다 — 첫 가동은 씨딩만 하고
+            # 발송하지 않으므로(AppStoreReviewMonitor), 채널에 뭐가 오려면 두 번째 폴링이 필요하다.
+            - name: APP_STORE_REVIEW_MONITOR_ENABLED
+              value: "false"
+
           resources:
             requests:
               memory: "1300Mi"

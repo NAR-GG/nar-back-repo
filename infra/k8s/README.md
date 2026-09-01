@@ -74,6 +74,58 @@ kubectl -n nar get secret nar-env -o jsonpath='{.metadata.ownerReferences[0].kin
 # SealedSecret 이 나와야 정상. 비어 있으면 컨트롤러가 관리하지 않는 것이다.
 ```
 
+## 앱스토어 알림 부트스트랩
+
+심사·배포는 애플 웹훅으로 받고(`/api/webhooks/appstore`), 고객 리뷰는 폴링으로 당겨온다.
+**리뷰가 폴링인 건 우리 선택이 아니다** — 애플 웹훅 이벤트 5종에 리뷰/평점이 없다.
+
+### 1. App Store Connect 에서 키 발급 (Admin 권한 필요)
+
+사용자 및 접근 → 통합 → App Store Connect API 에서 키를 만든다. **APNs 키로는 안 된다** —
+같은 `.p8` 모양이지만 발급처가 다르고 JWT `aud` 도 다르다. 받은 값 셋: Issuer ID, Key ID, `.p8` 파일.
+
+### 2. 시크릿 봉인
+
+```bash
+# 웹훅 HMAC 시크릿은 우리가 정한다 — 애플 포털에 같은 값을 넣는다
+openssl rand -hex 32
+
+kubectl -n nar get secret nar-env -o yaml \
+  | kubeseal --cert ~/.nar/sealed-secrets.crt --format yaml --scope namespace-wide \
+  > infra/k8s/nar-env-sealed.yaml
+```
+
+넣을 키 여섯 개. 하나라도 비면 해당 경로가 조용히 꺼진다(반쯤 채운 설정으로 401 을 반복하지 않는다).
+
+| 키 | 값 |
+|---|---|
+| `DISCORD_APPSTORE_WEBHOOK_URL` | 전용 채널 웹훅. 비우면 운영 웹훅으로 폴백 |
+| `APP_STORE_APP_ID` | App Store Connect 앱 URL 의 `/apps/<여기>` 숫자 |
+| `APP_STORE_WEBHOOK_SECRET` | 위 `openssl rand` 값 |
+| `APP_STORE_CONNECT_KEY_BASE64` | `base64 -i AuthKey_XXX.p8` |
+| `APP_STORE_CONNECT_KEY_ID` | 통합 페이지의 Key ID |
+| `APP_STORE_CONNECT_ISSUER_ID` | 통합 페이지 상단 Issuer ID (Key ID 와 다른 값) |
+
+### 3. 애플 포털에 웹훅 등록
+
+사용자 및 접근 → 통합 → 웹훅 → 이름 / URL `https://api.nar.kr/api/webhooks/appstore` / 시크릿(2번 값).
+이벤트는 원하는 것만 골라도 된다 — 릴레이가 `attributes` 를 그대로 펼치므로 종류를 안 가린다.
+
+`/api/webhooks/**` 는 `SecurityConfig` 의 `/api/**` permitAll 에 걸려 **인증 없이 열려 있다.**
+HMAC 검증이 유일한 관문이라, 시크릿이 비면 엔드포인트가 `503` 으로 닫힌다(무검증 통과 금지).
+traefik 은 `Host(api.nar.kr)` 캐치올로 nar-web 에 보내므로 라우팅 변경은 없다.
+
+### 4. 리뷰 폴링 켜기
+
+`nar-scheduler.yaml` 의 `APP_STORE_REVIEW_MONITOR_ENABLED` 를 `"true"` 로 바꿔 머지한다.
+**첫 폴링은 씨딩만 하고 발송하지 않는다** — 안 그러면 과거 리뷰 50건이 한꺼번에 쏟아진다.
+채널에 뭐가 오려면 두 번째 폴링(기본 30분 뒤)이 필요하다. 로그로 확인:
+
+```bash
+kubectl -n nar logs deploy/nar-scheduler | grep 앱스토어
+# "첫 가동 — N건 씨딩만" → 다음 주기부터 신규만 발송
+```
+
 ## 파드가 둘이면 인메모리 상태도 둘이다
 
 `#442` 로 스케줄러를 뗀 뒤로 **`@Scheduled` 는 `nar-scheduler` 에서만 돈다**
