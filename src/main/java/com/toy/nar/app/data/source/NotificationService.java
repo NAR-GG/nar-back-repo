@@ -45,8 +45,11 @@ public class NotificationService {
 	@Value("${notification.discord.error-webhook-url:}")
 	private String errorDiscordWebhookUrl;
 
-	@Value("${notification.discord.appstore-webhook-url:}")
-	private String appStoreDiscordWebhookUrl;
+	@Value("${notification.discord.appstore-deploy-webhook-url:}")
+	private String appStoreDeployDiscordWebhookUrl;
+
+	@Value("${notification.discord.appstore-review-webhook-url:}")
+	private String appStoreReviewDiscordWebhookUrl;
 
 	/**
 	 * 서버 오류 알림 중복 억제. 500 하나가 초당 수십 번 터지면 채널이 잠기므로,
@@ -437,16 +440,27 @@ public class NotificationService {
 	}
 
 	/**
-	 * 앱스토어 알림 — 심사·배포 상태(웹훅)와 신규 고객 리뷰(폴링) 둘 다 이 문으로 나간다.
-	 * 전용 채널이 없으면 운영 웹훅으로 폴백(로스터·커뮤니티와 같은 패턴).
+	 * 앱스토어 심사·배포 상태 알림(애플 웹훅 릴레이).
+	 *
+	 * <p>리뷰와 채널을 나눈다 — 빌드 업로드 상태는 TestFlight 를 올릴 때마다 여러 건 나오고
+	 * 심사 한 번에 앱 버전 상태도 5~8건이라, 주에 몇 건인 리뷰가 그 사이에 묻힌다.
 	 */
-	public void sendAppStoreNotification(String title, String message, String color) {
+	public void sendAppStoreDeployNotification(String title, String message, String color) {
+		sendAppStoreNotification(appStoreDeployDiscordWebhookUrl, title, message, color);
+	}
+
+	/** 앱스토어 신규 고객 리뷰 알림(폴링). */
+	public void sendAppStoreReviewNotification(String title, String message, String color) {
+		sendAppStoreNotification(appStoreReviewDiscordWebhookUrl, title, message, color);
+	}
+
+	/** 전용 채널이 없으면 운영 웹훅으로 폴백(로스터·커뮤니티와 같은 패턴). */
+	private void sendAppStoreNotification(String webhookUrl, String title, String message, String color) {
 		if (!notificationEnabled) return;
 
-		String webhookUrl = (appStoreDiscordWebhookUrl == null || appStoreDiscordWebhookUrl.isEmpty())
-				? discordWebhookUrl
-				: appStoreDiscordWebhookUrl;
-		sendNotification(webhookUrl, title, message, color);
+		sendNotification(
+				(webhookUrl == null || webhookUrl.isEmpty()) ? discordWebhookUrl : webhookUrl,
+				title, message, color);
 	}
 
 	/**

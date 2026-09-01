@@ -99,7 +99,8 @@ kubectl -n nar get secret nar-env -o yaml \
 
 | 키 | 값 |
 |---|---|
-| `DISCORD_APPSTORE_WEBHOOK_URL` | 전용 채널 웹훅. 비우면 운영 웹훅으로 폴백 |
+| `DISCORD_APPSTORE_DEPLOY_WEBHOOK_URL` | 심사·배포 채널. 비우면 운영 웹훅으로 폴백 |
+| `DISCORD_APPSTORE_REVIEW_WEBHOOK_URL` | 리뷰 채널. 배포와 나눈다 — 빌드 상태가 잦아 리뷰가 묻힌다 |
 | `APP_STORE_APP_ID` | App Store Connect 앱 URL 의 `/apps/<여기>` 숫자 |
 | `APP_STORE_WEBHOOK_SECRET` | 위 `openssl rand` 값 |
 | `APP_STORE_CONNECT_KEY_BASE64` | `base64 -i AuthKey_XXX.p8` |

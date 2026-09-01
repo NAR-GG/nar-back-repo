@@ -68,7 +68,7 @@ public class AppStoreReviewMonitor {
 			if (!isNew || seeding) {
 				continue;
 			}
-			notificationService.sendAppStoreNotification(
+			notificationService.sendAppStoreReviewNotification(
 					reviewTitle(review), reviewMessage(review), reviewColor(review.rating()));
 			notified++;
 		}

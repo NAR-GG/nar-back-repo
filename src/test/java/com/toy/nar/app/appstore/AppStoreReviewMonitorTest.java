@@ -48,7 +48,7 @@ class AppStoreReviewMonitorTest {
 		}
 
 		@Override
-		public void sendAppStoreNotification(String title, String message, String color) {
+		public void sendAppStoreReviewNotification(String title, String message, String color) {
 			sent.add(title);
 		}
 	}
