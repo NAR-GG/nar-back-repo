@@ -89,6 +89,27 @@ spec:
             - name: RIOT_MATCH_FALLBACK_ENABLED
               value: "true"
 
+            # 앱스토어 신규 리뷰 폴링 → 디스코드. 여기만 있으면 된다 — @Scheduled 는
+            # 스케줄러 파드에서만 돈다. 배포 알림은 웹훅이라 웹 파드가 받는다(플래그 없음).
+            #
+            # ASC 키(4H45HYAFAQ)로 /v1/apps·customerReviews 를 직접 호출해 200 을 확인하고,
+            # 시크릿 6개를 nar-env 에 봉인한 뒤 켰다. 첫 폴링은 씨딩만 하고 발송하지 않으므로
+            # (AppStoreReviewMonitor) 켜는 순간 과거 리뷰가 쏟아지지 않는다 — 두 번째 주기부터 신규만.
+            - name: APP_STORE_REVIEW_MONITOR_ENABLED
+              value: "true"
+
+            # 플레이스토어 리뷰·출시 폴링. 2026-09-02 실호출로 확인하고 켰다 —
+            # warding-monitor@gen-lang-client-0887649677 로 reviews 200(2건),
+            # edits.insert 200 → tracks/production 200(versionCode 50) → delete 204.
+            #
+            # 리뷰와 출시를 따로 두는 이유는 필요 권한이 달라서다. 출시는 edits.insert 를
+            # 부르므로(트랙 조회 전용 경로가 없다) 서비스 계정에 출시 권한이 없으면 403 이고,
+            # 그때 리뷰만 켜고 갈 수 있어야 한다.
+            - name: PLAY_REVIEW_MONITOR_ENABLED
+              value: "true"
+            - name: PLAY_RELEASE_MONITOR_ENABLED
+              value: "true"
+
           resources:
             requests:
               memory: "1300Mi"
