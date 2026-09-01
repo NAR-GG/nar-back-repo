@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>경기 상세 — 스코어보드 배치안 (GEN vs T1, 2026-08-16)</title>
+<style>
+  :root{
+    --bg:#101113; --bg-content:#141517; --bg-secondary:#1A1B1E; --bg-last:#25262B;
+    --dark400:#373A40; --dark500:#2C2E33;
+    --text:#fff; --text2:#A6A7AB; --text3:#C1C2C5; --line:#343A40; --line2:#495057;
+    --blue:#748FFC; --red:#FF8787; --win:#69DB7C;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0A0B0C;color:var(--text);
+       font-family:-apple-system,BlinkMacSystemFont,'Pretendard','Apple SD Gothic Neo',sans-serif;
+       padding:28px;display:flex;gap:24px;align-items:flex-start}
+  h1{font-size:17px;margin:0 0 6px}
+  .note{color:var(--text2);font-size:12px;line-height:1.7;width:320px;flex:none}
+  .note code{color:var(--text3);font-size:11px}
+  .note b{color:var(--text3)}
+  .col{display:flex;flex-direction:column;gap:10px;flex:none}
+  .caption{font-size:13px;color:var(--text3);font-weight:600}
+  .caption .tag{font-size:10px;color:#0A0B0C;background:var(--win);border-radius:4px;padding:1px 5px;margin-left:4px}
+  .sub{font-size:11px;color:var(--text2)}
+  .phone{width:390px;background:var(--bg);border:1px solid var(--line);border-radius:22px;overflow:hidden}
+
+  .appbar{display:flex;align-items:center;gap:8px;padding:12px 14px;font-size:14px;color:var(--text3)}
+  .appbar b{color:#fff}
+  .setpill{margin-left:auto;font-size:11px;color:var(--text2);border:1px solid var(--line);
+           border-radius:999px;padding:3px 10px;cursor:pointer}
+  .score{display:flex;align-items:center;justify-content:space-between;padding:4px 20px 12px}
+  .team{display:flex;flex-direction:column;align-items:center;gap:5px;width:120px}
+  .team .logo{width:34px;height:34px;border-radius:50%;background:var(--dark500);
+              display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text2)}
+  .team .nm{font-size:11px;color:var(--text3)}
+  .score .n{font-size:24px;font-weight:700}
+  .tabbar{display:flex;border-bottom:1px solid var(--line)}
+  .tabbar div{flex:1;text-align:center;padding:11px 0;font-size:13px;color:var(--text2)}
+  .tabbar div.on{color:#fff;font-weight:700;box-shadow:inset 0 -2px 0 #C865C9}
+  /* 하위 탭 (안 B) */
+  .subtab{display:flex;gap:6px;padding:10px 12px;background:var(--bg-content)}
+  .subtab span{font-size:12px;color:var(--text2);padding:5px 12px;border-radius:999px;border:1px solid var(--line)}
+  .subtab span.on{color:#fff;background:var(--bg-last);border-color:var(--line2);font-weight:600}
+
+  /* 밴픽 (기존 그대로 — 아이템 없음) */
+  .picksec{background:var(--bg-content);padding:14px 10px 10px;position:relative}
+  .frame{padding:6px 7px;display:flex;flex-direction:column}
+  .frame.red{align-items:flex-end}
+  .picks{display:flex}
+  .pickcard{width:60px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:2px 0}
+  .pick{width:56px;height:74px;border-radius:6px;overflow:hidden;background:var(--dark500)}
+  .pick img{width:100%;height:100%;object-fit:cover;transform:scale(1.25);display:block}
+  .pname{font-size:9px;color:var(--text3);max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .teamrow{display:flex;justify-content:space-between;width:300px;margin-top:6px;align-items:center}
+  .badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px}
+  .badge.b{background:rgba(76,110,245,.18);color:var(--blue)}
+  .badge.r{background:rgba(240,62,62,.18);color:var(--red)}
+  .win{font-size:9px;color:var(--win);border:1px solid rgba(105,219,124,.4);border-radius:4px;padding:1px 5px}
+  .vs{position:absolute;left:50%;transform:translateX(-50%);top:150px;font-size:20px;font-weight:800;
+      background:linear-gradient(90deg,#E87558,#C865C9,#791BB8);-webkit-background-clip:text;color:transparent}
+  .divider{height:8px;background:#0C0D0F}
+
+  /* 팀 요약 (골드 차이 · 오브젝트) */
+  .summary{background:var(--bg-content);padding:12px 12px 14px}
+  .srow{display:flex;align-items:center;justify-content:space-between}
+  .sname{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+  .sname .k{font-size:11px;color:var(--text2);font-weight:500}
+  .goldbar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin:9px 0 6px;background:var(--bg-last)}
+  .goldbar i{display:block;height:100%}
+  .goldbar i.b{background:linear-gradient(90deg,#4C6EF5,#748FFC)}
+  .goldbar i.r{background:linear-gradient(90deg,#FF8787,#F03E3E)}
+  .gnums{display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--text2)}
+  .gnums b{color:var(--text3);font-weight:600}
+  .gdiff{font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px}
+  .objs{display:flex;justify-content:space-between;margin-top:11px;gap:8px}
+  .objside{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .objside.r{justify-content:flex-end}
+  .drg{width:15px;height:15px;border-radius:50%;font-size:8px;font-weight:700;color:#0A0B0C;
+       display:flex;align-items:center;justify-content:center}
+  .ocount{font-size:10px;color:var(--text2)}
+  .ocount b{color:var(--text3);font-weight:700}
+
+  /* op.gg 형 스코어보드 */
+  .sb{background:var(--bg-content);padding:0 12px 14px}
+  .sbhead{display:flex;align-items:center;gap:8px;padding:11px 0 9px;font-size:11px}
+  .sbhead .side{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px}
+  .sbhead .tn{font-weight:700;font-size:12px}
+  .sbhead .agg{margin-left:auto;color:var(--text2)}
+  .sbhead .agg b{color:var(--text3);font-weight:600}
+  .row{display:flex;align-items:center;gap:6px;padding:6px 0;cursor:pointer;border-radius:8px}
+  .row:hover,.row.sel{background:rgba(200,101,201,.10)}
+  .champ{position:relative;width:34px;height:34px;border-radius:6px;overflow:hidden;background:var(--dark500);flex:none}
+  .champ img{width:100%;height:100%;display:block;transform:scale(1.08)}
+  .champ .lv{position:absolute;left:0;bottom:0;background:rgba(0,0,0,.78);color:#fff;
+             font-size:8px;line-height:1;padding:2px 3px;border-radius:0 4px 0 4px}
+  .rune{display:flex;flex-direction:column;gap:2px;flex:none}
+  .rune img{width:15px;height:15px;border-radius:50%;background:#000;display:block}
+  .rune img.sub{width:11px;height:11px;margin-left:2px}
+  .who{width:80px;flex:none;min-width:0}
+  .who .n{font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .who .s{font-size:9px;color:var(--text2);margin-top:2px}
+  .kda{width:56px;flex:none;text-align:center}
+  .kda .v{font-size:11px;font-weight:700}
+  .kda .s{font-size:9px;color:var(--text2);margin-top:2px}
+  .its{display:flex;gap:2px;margin-left:auto;flex:none}
+  .islot{width:17px;height:17px;border-radius:4px;background:#1D1E22;border:1px solid #232428;overflow:hidden}
+  .islot img{width:100%;height:100%;display:block}
+  .islot.trinket{border-color:var(--line2);border-radius:50%}
+
+  /* 빌드 시트 */
+  .sheet{background:var(--bg-secondary);border-radius:20px 20px 0 0;padding:14px 16px 20px;border-top:1px solid var(--line)}
+  .grab{width:44px;height:4px;border-radius:2px;background:var(--dark400);margin:0 auto 14px}
+  .bhead{display:flex;align-items:center;gap:10px}
+  .bhead .ch{width:46px;height:46px;border-radius:8px;overflow:hidden;background:var(--dark500)}
+  .bhead .ch img{width:100%;height:100%;display:block}
+  .bhead .who2{flex:1}
+  .bhead .who2 .p{font-size:14px;font-weight:700}
+  .bhead .who2 .c{font-size:11px;color:var(--text2);margin-top:3px}
+  .lvl{font-size:10px;color:var(--text3);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;font-weight:400}
+  .nav{display:flex;gap:6px}
+  .nav span{width:26px;height:26px;border-radius:50%;background:var(--bg-last);color:var(--text2);
+            display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;user-select:none}
+  .kv{display:flex;margin:14px 0 4px;background:var(--bg-last);border-radius:10px;padding:10px 0}
+  .kv div{flex:1;text-align:center;border-right:1px solid #2E2F34}
+  .kv div:last-child{border-right:0}
+  .kv .k{font-size:10px;color:var(--text2)}
+  .kv .v{font-size:13px;font-weight:700;margin-top:3px}
+  .sectitle{font-size:12px;color:var(--text2);margin:16px 0 8px}
+  .items{display:flex;gap:5px;flex-wrap:wrap}
+  .items .islot{width:38px;height:38px;border-radius:6px}
+  .items .islot.trinket{border-radius:50%}
+  .runes{display:flex;gap:16px;align-items:flex-start}
+  .tree{flex:1;min-width:0}
+  .treehead{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3);margin-bottom:8px}
+  .treehead img{width:16px;height:16px}
+  .rrow{display:flex;gap:7px;align-items:center;margin-bottom:6px}
+  .rrow img{width:24px;height:24px;border-radius:50%;background:#000;flex:none}
+  .rrow img.key{width:34px;height:34px;box-shadow:0 0 0 1px var(--line2)}
+  .rrow .rn{font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .shards{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
+  .shards span{font-size:9px;color:var(--text2);border:1px solid var(--line);border-radius:999px;padding:2px 6px}
+  .dim{opacity:.5}
+  .ghost{height:110px;background:var(--bg-content);opacity:.3;display:flex;align-items:center;
+         justify-content:center;color:var(--text2);font-size:12px}
+</style>
+</head>
+<body>
+
+<!-- 안 1 -->
+<div class="col">
+  <div class="caption">안 1. 챔피언 픽 탭 하단에 이어붙이기 <span class="tag">추천</span></div>
+  <div class="sub">밴픽 → 팀 요약(골드차·오브젝트) → 선수별 스코어보드</div>
+  <div class="phone">
+    <div class="appbar">← <b>GEN vs T1</b> <span class="setpill" id="setToggle">2세트 ▾</span></div>
+    <div class="score">
+      <div class="team"><div class="logo">GEN</div><div class="nm">Gen.G Esports</div></div>
+      <div style="text-align:center"><div class="n">2 : 0</div><div class="sub">종료 · LCK 12주 차</div></div>
+      <div class="team"><div class="logo">T1</div><div class="nm">T1</div></div>
+    </div>
+    <div class="tabbar"><div class="on">챔피언 픽</div><div>라이브 이벤트</div><div>선수 평점</div></div>
+    <div class="picksec">
+      <div class="frame blue">
+        <div class="picks" id="bluePicks"></div>
+        <div class="teamrow"><span class="badge b">BLUE</span>
+          <span><span class="win">WIN</span> <span class="sub">Gen.G Esports</span></span></div>
+      </div>
+      <div class="vs">VS</div>
+      <div class="frame red">
+        <div class="teamrow"><span class="sub">T1</span><span class="badge r">RED</span></div>
+        <div class="picks" id="redPicks"></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div id="sbA"></div>
+  </div>
+</div>
+
+<!-- 안 2 -->
+<div class="col">
+  <div class="caption">안 2. 라이브 이벤트 탭의 하위 탭</div>
+  <div class="sub">칩 하나 추가. 픽 탭은 안 건드림</div>
+  <div class="phone">
+    <div class="appbar">← <b>GEN vs T1</b> <span class="setpill">2세트 ▾</span></div>
+    <div class="score">
+      <div class="team"><div class="logo">GEN</div><div class="nm">Gen.G Esports</div></div>
+      <div style="text-align:center"><div class="n">2 : 0</div><div class="sub">종료 · LCK 12주 차</div></div>
+      <div class="team"><div class="logo">T1</div><div class="nm">T1</div></div>
+    </div>
+    <div class="tabbar"><div>챔피언 픽</div><div class="on">라이브 이벤트</div><div>선수 평점</div></div>
+    <div class="subtab"><span>타임라인</span><span class="on">스코어보드</span></div>
+    <div id="sbB"></div>
+  </div>
+</div>
+
+<!-- 시트 -->
+<div class="col">
+  <div class="caption">공통. 행 탭 → 빌드 시트</div>
+  <div class="sub">룬 전체·파편은 여기서만. 두 안 모두 동일</div>
+  <div class="phone">
+    <div class="ghost">(뒤 화면 — 스코어보드)</div>
+    <div class="sheet" id="sheet"></div>
+  </div>
+</div>
+
+<div class="col note">
+  <h1>어디에 붙일까</h1>
+  <p><b>추천: 안 1 (챔피언 픽 탭 하단)</b><br>
+     · 픽 = "누가 뭘 골랐나", 스코어보드 = "그래서 어떻게 됐나". 같은 질문의 연속이라 한 화면에서 스크롤로 이어짐<br>
+     · 탭 개수 그대로. 390px에 탭 4개 넣으면 한글 라벨이 깨진다<br>
+     · API 추가 0 — 픽 탭이 이미 부르는 <code>/champions</code> 응답에 필드만 붙이면 됨.
+       안 2는 <code>/events</code>를 보는 탭이라 스코어보드용 호출이 따로 붙는다</p>
+  <p><b>안 2가 나은 경우</b> — 라이브 중 "지금 상황판"으로 쓰게 할 거면. 타임라인 ↔ 스코어보드를
+     칩으로 오가는 게 자연스럽다. 대신 종료된 경기에서 "라이브 이벤트 &gt; 스코어보드"는 이름이 어색하다.</p>
+  <p><b>안 한 것</b> — 4번째 최상위 탭. 폭도 문제고, 픽/스코어보드가 따로 놀면 세트 드롭다운을 두 번 만지게 된다.</p>
+  <h1 style="margin-top:18px">팀 요약</h1>
+  <p>골드 차이·총킬은 <b>참가자 행 합산</b>이라 새 저장이 필요 없다.
+     오브젝트는 <code>live_game_object_event</code>에 이미 쌓이는 중 —
+     <code>DRAGON</code>(6종 + <code>elder</code>) · <code>BARON</code> · <code>TOWER</code> ·
+     <code>INHIBITOR</code> · <code>KILL</code>, 각각 <code>value_after</code>에 팀 누적 수치가 들어있다.</p>
+  <p><b>피드에 없는 것</b> — 전령·유충·아타칸. 이벤트 타입 자체가 안 내려온다.</p>
+
+  <h1 style="margin-top:18px">행 구성</h1>
+  <p>op.gg 모바일과 같은 순서. 390px에서 실측으로 들어간다:<br>
+     <code>챔피언34 + 룬15 + 이름80 + KDA56 + 아이템 8×17</code> = 359 / 366</p>
+  <p>· 아이템 8칸 = 코어 7 + 장신구. 2026 퀘스트로 원딜·서포터가 7개를 들기 때문 (원딜 최종분 24%가 실제로 7개)<br>
+     · 룬은 핵심룬 + 부트리 아이콘 2개까지만. 나머지는 시트에서<br>
+     · KDA 아래 킬관여, 이름 아래 CS·골드 — 두 줄로 나눠야 폭이 산다</p>
+  <p class="dim">데이터는 프로덕션 <code>nardb</code> 실값 (GEN 2:0 T1, 세트별 마지막 분 스냅샷 22831 / 22932).
+     아이콘은 ddragon 16.16.1.</p>
+</div>
+
+<script>
+const DATA = {"rows":[{"set":1,"side":"Red","role":"top","p":"T1 Doran","ch":"Vayne","lv":20,"k":4,"d":2,"a":6,"cs":355,"g":17533,"kp":0.7692,"dmg":0.2566,"items":[3006,3073,3363,3508,3097,3036,1038],"perks":{"styleId":8000,"subStyleId":8200,"perks":[8008,8009,9104,8017,8275,8234,5005,5010,5011]}},{"set":1,"side":"Red","role":"jungle","p":"T1 Oner","ch":"Pantheon","lv":18,"k":3,"d":3,"a":9,"cs":242,"g":15868,"kp":0.9231,"dmg":0.1966,"items":[3364,6610,3047,3071,3026,2019,3133,2140],"perks":{"styleId":8000,"subStyleId":8300,"perks":[8010,9111,9105,8017,8304,8347,5008,5011]}},{"set":1,"side":"Red","role":"mid","p":"T1 Faker","ch":"Orianna","lv":18,"k":1,"d":4,"a":8,"cs":364,"g":16136,"kp":0.6923,"dmg":0.2748,"items":[3363,2503,3137,3089,2139,3157,2055,2055],"perks":{"styleId":8200,"subStyleId":8000,"perks":[8214,8226,8233,8237,9105,8017,5005,5010,5011]}},{"set":1,"side":"Red","role":"bottom","p":"T1 Peyz","ch":"Jhin","lv":18,"k":4,"d":4,"a":6,"cs":384,"g":19081,"kp":0.7692,"dmg":0.1946,"items":[3142,3363,3097,3033,3031,3094,3134],"perks":{"styleId":8000,"subStyleId":8300,"perks":[8021,8009,9103,8017,8347,8313,5008,5011]}},{"set":1,"side":"Red","role":"support","p":"T1 Keria","ch":"Camille","lv":15,"k":1,"d":5,"a":7,"cs":65,"g":11414,"kp":0.6154,"dmg":0.0774,"items":[3364,6610,3111,3814,1028,1037,2055],"perks":{"styleId":8100,"subStyleId":8400,"perks":[9923,8143,8141,8135,8401,8473,5008,5011]}},{"set":1,"side":"Blue","role":"top","p":"GEN Kiin","ch":"Olaf","lv":20,"k":4,"d":4,"a":7,"cs":334,"g":16219,"kp":0.6111,"dmg":0.2082,"items":[3047,6631,3073,3364,6333,3143],"perks":{"styleId":8200,"subStyleId":8300,"perks":[8230,8275,8234,8237,8345,8410,5008,5011]}},{"set":1,"side":"Blue","role":"jungle","p":"GEN Canyon","ch":"LeeSin","lv":18,"k":3,"d":3,"a":7,"cs":319,"g":16573,"kp":0.5556,"dmg":0.1429,"items":[3340,6610,3047,3071,3026,3140],"perks":{"styleId":8000,"subStyleId":8300,"perks":[8010,9111,9104,8017,8304,8347,5005,5008,5011]}},{"set":1,"side":"Blue","role":"mid","p":"GEN Chovy","ch":"Galio","lv":18,"k":3,"d":3,"a":9,"cs":404,"g":18912,"kp":0.6667,"dmg":0.2828,"items":[3363,2504,3047,4005,3089,3157,3147,2139],"perks":{"styleId":8200,"subStyleId":8400,"perks":[8230,8226,8210,8237,8444,8242,5008,5011]}},{"set":1,"side":"Blue","role":"bottom","p":"GEN Ruler","ch":"Kalista","lv":18,"k":7,"d":2,"a":7,"cs":488,"g":22669,"kp":0.7778,"dmg":0.3136,"items":[3087,3363,3124,6665,3302,3143],"perks":{"styleId":8000,"subStyleId":8400,"perks":[8008,9111,9103,8017,8473,8242,5005,5008,5011]}},{"set":1,"side":"Blue","role":"support","p":"GEN Duro","ch":"Renata","lv":17,"k":1,"d":1,"a":15,"cs":45,"g":12021,"kp":0.8889,"dmg":0.0524,"items":[3364,3190,3158,3109,2524,3067,2055],"perks":{"styleId":8400,"subStyleId":8300,"perks":[8465,8401,8473,8242,8347,8304,5005,5008,5011]}},{"set":2,"side":"Red","role":"top","p":"T1 Doran","ch":"Ambessa","lv":20,"k":3,"d":2,"a":1,"cs":379,"g":15451,"kp":0.5,"dmg":0.2143,"items":[6692,3364,3071,3047,3053,6333,2055,2140],"perks":{"styleId":8400,"subStyleId":8300,"perks":[8437,8401,8444,8242,8345,8347,5008,5011]}},{"set":2,"side":"Red","role":"jungle","p":"T1 Oner","ch":"XinZhao","lv":17,"k":0,"d":3,"a":2,"cs":274,"g":12916,"kp":0.25,"dmg":0.0878,"items":[3364,6610,3111,3071,2055,3026,3133],"perks":{"styleId":8000,"subStyleId":8300,"perks":[8010,9111,9104,8017,8304,8347,5005,5008,5011]}},{"set":2,"side":"Red","role":"mid","p":"T1 Faker","ch":"TwistedFate","lv":18,"k":1,"d":7,"a":5,"cs":312,"g":15807,"kp":0.75,"dmg":0.1791,"items":[6657,3363,3100,3094,4005,1058],"perks":{"styleId":8300,"subStyleId":8400,"perks":[8360,8321,8313,8316,8242,8473,5005,5010,5011]}},{"set":2,"side":"Red","role":"bottom","p":"T1 Peyz","ch":"Caitlyn","lv":18,"k":3,"d":1,"a":2,"cs":466,"g":20333,"kp":0.625,"dmg":0.4082,"items":[6676,3031,3363,3036,3094,3072,3155,2140],"perks":{"styleId":8000,"subStyleId":8200,"perks":[8008,8009,9103,8017,8233,8236,5005,5008,5011]}},{"set":2,"side":"Red","role":"support","p":"T1 Keria","ch":"Karma","lv":15,"k":1,"d":0,"a":3,"cs":48,"g":10160,"kp":0.5,"dmg":0.1106,"items":[3364,6620,3158,3222,6617,1052],"perks":{"styleId":8200,"subStyleId":8300,"perks":[8214,8275,8210,8237,8304,8347,5008,5011]}},{"set":2,"side":"Blue","role":"top","p":"GEN Kiin","ch":"KSante","lv":20,"k":1,"d":2,"a":7,"cs":317,"g":14393,"kp":0.6154,"dmg":0.1484,"items":[3075,3111,3143,3363,6665,3082,3024],"perks":{"styleId":8400,"subStyleId":8300,"perks":[8437,8401,8444,8453,8345,8347,5005,5001,5011]}},{"set":2,"side":"Blue","role":"jungle","p":"GEN Canyon","ch":"JarvanIV","lv":18,"k":2,"d":2,"a":9,"cs":261,"g":15292,"kp":0.8462,"dmg":0.1412,"items":[6610,3047,3071,3026,3082],"perks":{"styleId":8000,"subStyleId":8300,"perks":[8010,9111,9105,8017,8304,8347,5005,5008,5011]}},{"set":2,"side":"Blue","role":"mid","p":"GEN Chovy","ch":"Syndra","lv":18,"k":6,"d":0,"a":5,"cs":411,"g":19142,"kp":0.8462,"dmg":0.3312,"items":[3363,2503,3152,3089,3041,3157,2139],"perks":{"styleId":8200,"subStyleId":8300,"perks":[8229,8226,8210,8237,8313,8347,5005,5008,5011]}},{"set":2,"side":"Blue","role":"bottom","p":"GEN Ruler","ch":"Ezreal","lv":18,"k":4,"d":3,"a":5,"cs":428,"g":19405,"kp":0.6923,"dmg":0.3085,"items":[3078,3363,3008,3161,2517,3140,3133],"perks":{"styleId":8000,"subStyleId":8300,"perks":[8008,8009,9105,8017,8316,8313,5005,5008,5011]}},{"set":2,"side":"Blue","role":"support","p":"GEN Duro","ch":"Seraphine","lv":16,"k":0,"d":1,"a":9,"cs":32,"g":10330,"kp":0.6923,"dmg":0.0707,"items":[3070,3364,3222,3158,6620,6617],"perks":{"styleId":8200,"subStyleId":8300,"perks":[8214,8275,8210,8237,8347,8304,5008,5011]}}],"rune":{"8112":{"n":"감전","i":"perk-images/Styles/Domination/Electrocute/Electrocute.png","s":0},"8128":{"n":"어둠의 수확","i":"perk-images/Styles/Domination/DarkHarvest/DarkHarvest.png","s":0},"9923":{"n":"칼날비","i":"perk-images/Styles/Domination/HailOfBlades/HailOfBlades.png","s":0},"8126":{"n":"비열한 한 방","i":"perk-images/Styles/Domination/CheapShot/CheapShot.png","s":1},"8139":{"n":"피의 맛","i":"perk-images/Styles/Domination/TasteOfBlood/GreenTerror_TasteOfBlood.png","s":1},"8143":{"n":"돌발 일격","i":"perk-images/Styles/Domination/SuddenImpact/SuddenImpact.png","s":1},"8137":{"n":"육감","i":"perk-images/Styles/Domination/SixthSense/SixthSense.png","s":2},"8140":{"n":"섬뜩한 기념품","i":"perk-images/Styles/Domination/GrislyMementos/GrislyMementos.png","s":2},"8141":{"n":"깊은 와드","i":"perk-images/Styles/Domination/DeepWard/DeepWard.png","s":2},"8135":{"n":"보물 사냥꾼","i":"perk-images/Styles/Domination/TreasureHunter/TreasureHunter.png","s":3},"8105":{"n":"끈질긴 사냥꾼","i":"perk-images/Styles/Domination/RelentlessHunter/RelentlessHunter.png","s":3},"8106":{"n":"궁극의 사냥꾼","i":"perk-images/Styles/Domination/UltimateHunter/UltimateHunter.png","s":3},"8351":{"n":"빙결 강화","i":"perk-images/Styles/Inspiration/GlacialAugment/GlacialAugment.png","s":0},"8360":{"n":"봉인 풀린 주문서","i":"perk-images/Styles/Inspiration/UnsealedSpellbook/UnsealedSpellbook.png","s":0},"8369":{"n":"선제공격","i":"perk-images/Styles/Inspiration/FirstStrike/FirstStrike.png","s":0},"8306":{"n":"마법공학 점멸기","i":"perk-images/Styles/Inspiration/HextechFlashtraption/HextechFlashtraption.png","s":1},"8304":{"n":"마법의 신발","i":"perk-images/Styles/Inspiration/MagicalFootwear/MagicalFootwear.png","s":1},"8321":{"n":"환급","i":"perk-images/Styles/Inspiration/CashBack/CashBack2.png","s":1},"8313":{"n":"삼중 물약","i":"perk-images/Styles/Inspiration/PerfectTiming/AlchemistCabinet.png","s":2},"8352":{"n":"시간 왜곡 물약","i":"perk-images/Styles/Inspiration/TimeWarpTonic/TimeWarpTonic.png","s":2},"8345":{"n":"비스킷 배달","i":"perk-images/Styles/Inspiration/BiscuitDelivery/BiscuitDelivery.png","s":2},"8347":{"n":"우주적 통찰력","i":"perk-images/Styles/Inspiration/CosmicInsight/CosmicInsight.png","s":3},"8410":{"n":"쾌속 접근","i":"perk-images/Styles/Resolve/ApproachVelocity/ApproachVelocity.png","s":3},"8316":{"n":"다재다능","i":"perk-images/Styles/Inspiration/JackOfAllTrades/JackofAllTrades2.png","s":3},"8005":{"n":"집중 공격","i":"perk-images/Styles/Precision/PressTheAttack/PressTheAttack.png","s":0},"8008":{"n":"치명적 속도","i":"perk-images/Styles/Precision/LethalTempo/LethalTempoTemp.png","s":0},"8021":{"n":"기민한 발놀림","i":"perk-images/Styles/Precision/FleetFootwork/FleetFootwork.png","s":0},"8010":{"n":"정복자","i":"perk-images/Styles/Precision/Conqueror/Conqueror.png","s":0},"9101":{"n":"생명 흡수","i":"perk-images/Styles/Precision/AbsorbLife/AbsorbLife.png","s":1},"9111":{"n":"승전보","i":"perk-images/Styles/Precision/Triumph.png","s":1},"8009":{"n":"침착","i":"perk-images/Styles/Precision/PresenceOfMind/PresenceOfMind.png","s":1},"9104":{"n":"전설: 민첩함","i":"perk-images/Styles/Precision/LegendAlacrity/LegendAlacrity.png","s":2},"9105":{"n":"전설: 가속","i":"perk-images/Styles/Precision/LegendHaste/LegendHaste.png","s":2},"9103":{"n":"전설: 핏빛 길","i":"perk-images/Styles/Precision/LegendBloodline/LegendBloodline.png","s":2},"8014":{"n":"최후의 일격","i":"perk-images/Styles/Precision/CoupDeGrace/CoupDeGrace.png","s":3},"8017":{"n":"체력차 극복","i":"perk-images/Styles/Precision/CutDown/CutDown.png","s":3},"8299":{"n":"최후의 저항","i":"perk-images/Styles/Sorcery/LastStand/LastStand.png","s":3},"8437":{"n":"착취의 손아귀","i":"perk-images/Styles/Resolve/GraspOfTheUndying/GraspOfTheUndying.png","s":0},"8439":{"n":"여진","i":"perk-images/Styles/Resolve/VeteranAftershock/VeteranAftershock.png","s":0},"8465":{"n":"수호자","i":"perk-images/Styles/Resolve/Guardian/Guardian.png","s":0},"8446":{"n":"철거","i":"perk-images/Styles/Resolve/Demolish/Demolish.png","s":1},"8463":{"n":"생명의 샘","i":"perk-images/Styles/Resolve/FontOfLife/FontOfLife.png","s":1},"8401":{"n":"보호막 강타","i":"perk-images/Styles/Resolve/MirrorShell/MirrorShell.png","s":1},"8429":{"n":"사전 준비","i":"perk-images/Styles/Resolve/Conditioning/Conditioning.png","s":2},"8444":{"n":"재생의 바람","i":"perk-images/Styles/Resolve/SecondWind/SecondWind.png","s":2},"8473":{"n":"뼈 방패","i":"perk-images/Styles/Resolve/BonePlating/BonePlating.png","s":2},"8451":{"n":"과잉성장","i":"perk-images/Styles/Resolve/Overgrowth/Overgrowth.png","s":3},"8453":{"n":"소생","i":"perk-images/Styles/Resolve/Revitalize/Revitalize.png","s":3},"8242":{"n":"불굴의 의지","i":"perk-images/Styles/Sorcery/Unflinching/Unflinching.png","s":3},"8214":{"n":"콩콩이 소환","i":"perk-images/Styles/Sorcery/SummonAery/SummonAery.png","s":0},"8229":{"n":"신비로운 유성","i":"perk-images/Styles/Sorcery/ArcaneComet/ArcaneComet.png","s":0},"8230":{"n":"폭풍전사의 포효","i":"perk-images/Styles/Sorcery/PhaseRush/StormraidersSurgeRuneIcon2.png","s":0},"8992":{"n":"죽음불꽃 손길","i":"perk-images/Styles/Sorcery/DeathfireTouch/DEATHFIRE_TOUCH_KEYSTONE.png","s":0},"8224":{"n":"액시옴 비전 마법사","i":"perk-images/Styles/Sorcery/NullifyingOrb/Axiom_Arcanist.png","s":1},"8226":{"n":"마나순환 팔찌","i":"perk-images/Styles/Sorcery/ManaflowBand/ManaflowBand.png","s":1},"8275":{"n":"빛의 망토","i":"perk-images/Styles/Sorcery/NimbusCloak/6361.png","s":1},"8210":{"n":"깨달음","i":"perk-images/Styles/Sorcery/Transcendence/Transcendence.png","s":2},"8234":{"n":"기민함","i":"perk-images/Styles/Sorcery/Celerity/CelerityTemp.png","s":2},"8233":{"n":"절대 집중","i":"perk-images/Styles/Sorcery/AbsoluteFocus/AbsoluteFocus.png","s":2},"8237":{"n":"주문 작열","i":"perk-images/Styles/Sorcery/Scorch/Scorch.png","s":3},"8232":{"n":"물 위를 걷는 자","i":"perk-images/Styles/Sorcery/Waterwalking/Waterwalking.png","s":3},"8236":{"n":"폭풍의 결집","i":"perk-images/Styles/Sorcery/GatheringStorm/GatheringStorm.png","s":3}},"style":{"8100":{"n":"지배","i":"perk-images/Styles/7200_Domination.png"},"8300":{"n":"영감","i":"perk-images/Styles/7203_Whimsy.png"},"8000":{"n":"정밀","i":"perk-images/Styles/7201_Precision.png"},"8400":{"n":"결의","i":"perk-images/Styles/7204_Resolve.png"},"8200":{"n":"마법","i":"perk-images/Styles/7202_Sorcery.png"}},"styleRunes":{"8100":[8112,8128,9923,8126,8139,8143,8137,8140,8141,8135,8105,8106],"8300":[8351,8360,8369,8306,8304,8321,8313,8352,8345,8347,8410,8316],"8000":[8005,8008,8021,8010,9101,9111,8009,9104,9105,9103,8014,8017,8299],"8400":[8437,8439,8465,8446,8463,8401,8429,8444,8473,8451,8453,8242],"8200":[8214,8229,8230,8992,8224,8226,8275,8210,8234,8233,8237,8232,8236]},"shard":{"5001":"체력 +65","5002":"방어력 +10","5003":"마법 저항력 +10","5005":"공격 속도 +10%","5007":"스킬 가속 +8","5008":"적응형 능력치 +9","5010":"이동 속도 +2%","5011":"강인함 +10%"},"itemName":{"1028":"루비 수정","1037":"곡괭이","1038":"B.F. 대검","1052":"증폭의 고서","1058":"쓸데없이 큰 지팡이","2019":"강철 인장","2055":"제어 와드","2139":"마법의 영약","2140":"분노의 영약","2503":"어둠불꽃 횃불","2504":"케이닉 루컨","2517":"끝없는 갈망","2524":"밴들파이프","3006":"광전사의 군화","3008":"탐욕의 군화","3024":"얼음 방패","3026":"수호 천사","3031":"무한의 대검","3033":"필멸자의 운명","3036":"도미닉 경의 인사","3041":"메자이의 영혼약탈자","3047":"판금 장화","3053":"스테락의 도전","3067":"점화석","3070":"여신의 눈물","3071":"칠흑의 양날 도끼","3072":"피바라기","3073":"실험적 마공학판","3075":"가시 갑옷","3078":"삼위일체","3082":"파수꾼의 갑옷","3087":"스태틱의 단검","3089":"라바돈의 죽음모자","3094":"고속 연사포","3097":"폭풍갈퀴","3100":"리치베인","3109":"기사의 맹세","3111":"헤르메스의 발걸음","3124":"구인수의 격노검","3133":"콜필드의 전투 망치","3134":"톱날 단검","3137":"무덤꽃","3140":"수은 장식띠","3142":"요우무의 유령검","3143":"란두인의 예언","3147":"기괴한 가면","3152":"마법공학 로켓 벨트","3155":"주문포식자","3157":"존야의 모래시계","3158":"명석함의 아이오니아 장화","3161":"쇼진의 창","3190":"강철의 솔라리 펜던트","3222":"미카엘의 축복","3302":"경계","3340":"투명 와드","3363":"망원형 개조","3364":"예언자의 렌즈","3508":"정수 약탈자","3814":"밤의 끝자락","4005":"제국의 명령","6333":"죽음의 무도","6610":"갈라진 하늘","6617":"월석 재생기","6620":"헬리아의 메아리","6631":"발걸음 분쇄기","6657":"영겁의 지팡이","6665":"해신 작쇼","6676":"징수의 총","6692":"월식"}};
+
+const V = '16.16.1';
+const DD = 'https://ddragon.leagueoflegends.com/cdn/';
+const TRINKETS = new Set([3340,3363,3364,3330]);
+// 물약·비약만 제외한다. 제어와드(2055)는 서포터의 실질 7번째 칸이라 남긴다.
+const POTIONS = new Set([2003,2010,2019,2031,2033,2051,2052,2138,2139,2140,2422,2523]);
+const ROLE_KO = {top:'탑',jungle:'정글',mid:'미드',bottom:'원딜',support:'서포터'};
+const ORDER = ['top','jungle','mid','bottom','support'];
+const WINNER = {1:'Blue', 2:'Blue'};   // set_winners = B,B
+
+// live_game_object_event 집계 (게임 115548147900619034 / ...035). 킬·골드는 참가자 행에서 계산한다.
+const OBJ = {
+  1: {Blue: {dragons:['infernal','mountain','ocean','ocean','elder'], baron:1, tower:11, inhib:3},
+      Red:  {dragons:['elder'],                                       baron:2, tower:7,  inhib:1}},
+  2: {Blue: {dragons:['hextech','hextech','hextech','hextech'],       baron:2, tower:11, inhib:5},
+      Red:  {dragons:['chemtech','cloud'],                            baron:0, tower:4,  inhib:0}},
+};
+const DRAGON = {
+  infernal: ['불', '#FF8787'], mountain: ['산', '#D9A066'], ocean:   ['물', '#4DABF7'],
+  cloud:    ['풍', '#8CE99A'], chemtech: ['독', '#B197FC'], hextech: ['공', '#66D9E8'],
+  elder:    ['장', '#FFD43B'],
+};
+
+let curSet = 2;
+let curKey = null;
+
+const itemImg = id => `${DD}${V}/img/item/${id}.png`;
+const chImg = ch => `${DD}${V}/img/champion/${ch}.png`;
+const perkImg = icon => `${DD}img/${icon}`;
+const keyOf = r => `${r.set}|${r.side}|${r.role}`;
+const rowsOf = (set, side) => DATA.rows.filter(r => r.set === set && r.side === side)
+  .sort((a, b) => ORDER.indexOf(a.role) - ORDER.indexOf(b.role));
+
+const slot = id => id
+  ? `<div class="islot${TRINKETS.has(id) ? ' trinket' : ''}" title="${DATA.itemName[id] || id}">
+       <img src="${itemImg(id)}"></div>`
+  : '<div class="islot"></div>';
+
+/** 평평한 perks 배열을 주/부 트리와 파편으로 가른다. */
+function groupRunes(p) {
+  const by = {[p.styleId]: [], [p.subStyleId]: []}, shards = [];
+  for (const id of p.perks) {
+    if (DATA.shard[id]) { shards.push(id); continue; }
+    const tree = Object.keys(DATA.styleRunes).find(s => DATA.styleRunes[s].includes(id));
+    if (by[tree]) by[tree].push(id);
+  }
+  return {primary: by[p.styleId] || [], sub: by[p.subStyleId] || [], shards};
+}
+
+function teamSummary() {
+  const agg = side => {
+    const rs = rowsOf(curSet, side);
+    return {kills: rs.reduce((s, r) => s + r.k, 0), gold: rs.reduce((s, r) => s + r.g, 0)};
+  };
+  const b = agg('Blue'), r = agg('Red');
+  const total = b.gold + r.gold;
+  const lead = b.gold >= r.gold ? 'Blue' : 'Red';
+  const diff = Math.abs(b.gold - r.gold);
+  const objs = (side, cls) => {
+    const o = OBJ[curSet][side];
+    return `<div class="objside ${cls}">
+      ${o.dragons.map(d => `<span class="drg" style="background:${DRAGON[d][1]}" title="${d}">${DRAGON[d][0]}</span>`).join('')}
+      <span class="ocount">바론 <b>${o.baron}</b></span>
+      <span class="ocount">타워 <b>${o.tower}</b></span>
+      <span class="ocount">억제 <b>${o.inhib}</b></span>
+    </div>`;
+  };
+  return `<div class="summary">
+    <div class="srow">
+      <div class="sname"><span class="badge b">BLUE</span>Gen.G <span class="k">${b.kills}킬</span></div>
+      <div class="sname"><span class="k">${r.kills}킬</span> T1 <span class="badge r">RED</span></div>
+    </div>
+    <div class="goldbar">
+      <i class="b" style="width:${(b.gold / total * 100).toFixed(1)}%"></i>
+      <i class="r" style="width:${(r.gold / total * 100).toFixed(1)}%"></i>
+    </div>
+    <div class="gnums">
+      <span><b>${(b.gold / 1000).toFixed(1)}k</b></span>
+      <span class="gdiff" style="background:${lead === 'Blue' ? 'rgba(76,110,245,.2);color:#748FFC' : 'rgba(240,62,62,.2);color:#FF8787'}">
+        ${lead === 'Blue' ? 'GEN' : 'T1'} +${(diff / 1000).toFixed(1)}k</span>
+      <span><b>${(r.gold / 1000).toFixed(1)}k</b></span>
+    </div>
+    ${`<div class="objs">${objs('Blue', 'b')}${objs('Red', 'r')}</div>`}
+  </div>`;
+}
+
+function scoreboard(side) {
+  const rows = rowsOf(curSet, side);
+  const isWin = WINNER[curSet] === side;
+  const kills = rows.reduce((s, r) => s + r.k, 0);
+  const gold = rows.reduce((s, r) => s + r.g, 0);
+  return `<div class="sbhead">
+      <span class="side badge ${side === 'Blue' ? 'b' : 'r'}">${side.toUpperCase()}</span>
+      <span class="tn">${side === 'Blue' ? 'Gen.G' : 'T1'}</span>
+      ${isWin ? '<span class="win">WIN</span>' : ''}
+      <span class="agg"><b>${kills}</b> 킬 · <b>${(gold / 1000).toFixed(1)}k</b> 골드</span>
+    </div>` +
+    rows.map(r => {
+      const g = groupRunes(r.perks);
+      const key = DATA.rune[g.primary[0]];
+      const subStyle = DATA.style[r.perks.subStyleId];
+      // 인벤은 7칸 + 장신구 전용 1칸. 2026 퀘스트로 원딜(신발 포함)·서포터(제어와드 포함)는
+      // 실제로 7개를 든다. 그래서 7칸 + 장신구 = 8칸을 그린다. 물약만 빼고 장신구는 마지막 고정.
+      const trinket = r.items.find(id => TRINKETS.has(id)) || null;
+      const its = r.items.filter(id => !TRINKETS.has(id) && !POTIONS.has(id)).slice(0, 7);
+      while (its.length < 7) its.push(null);
+      its.push(trinket);
+      return `<div class="row${keyOf(r) === curKey ? ' sel' : ''}" data-key="${keyOf(r)}">
+        <div class="champ"><img src="${chImg(r.ch)}"><span class="lv">${r.lv}</span></div>
+        <div class="rune">
+          <img src="${perkImg(key.i)}" title="${key.n}">
+          <img class="sub" src="${perkImg(subStyle.i)}" title="${subStyle.n}">
+        </div>
+        <div class="who">
+          <div class="n">${r.p.split(' ').slice(1).join(' ')}</div>
+          <div class="s">CS ${r.cs} · ${(r.g / 1000).toFixed(1)}k</div>
+        </div>
+        <div class="kda">
+          <div class="v">${r.k} / ${r.d} / ${r.a}</div>
+          <div class="s">킬관여 ${Math.round(r.kp * 100)}%</div>
+        </div>
+        <div class="its">${its.map(slot).join('')}</div>
+      </div>`;
+    }).join('');
+}
+
+function renderPicks() {
+  for (const side of ['Blue', 'Red']) {
+    document.getElementById(side.toLowerCase() + 'Picks').innerHTML =
+      rowsOf(curSet, side).map(r => `<div class="pickcard">
+        <div class="pick"><img src="${chImg(r.ch)}"></div>
+        <div class="pname">${r.p.split(' ').slice(1).join(' ')}</div>
+      </div>`).join('');
+  }
+}
+
+function renderBoards() {
+  const html = teamSummary() + `<div class="divider"></div>
+                <div class="sb">${scoreboard('Blue')}</div><div class="divider"></div>
+                <div class="sb">${scoreboard('Red')}</div>`;
+  document.getElementById('sbA').innerHTML = html;
+  document.getElementById('sbB').innerHTML = html;
+  document.querySelectorAll('.row').forEach(el =>
+    el.onclick = () => { curKey = el.dataset.key; renderBoards(); renderSheet(); });
+}
+
+function renderSheet() {
+  const r = DATA.rows.find(x => keyOf(x) === curKey) || rowsOf(curSet, 'Blue')[2];
+  curKey = keyOf(r);
+  const g = groupRunes(r.perks);
+  const tree = (styleId, ids, isPrimary) => {
+    const st = DATA.style[styleId];
+    return `<div class="tree">
+      <div class="treehead"><img src="${perkImg(st.i)}">${st.n}</div>
+      ${ids.map((id, i) => `<div class="rrow">
+          <img class="${isPrimary && i === 0 ? 'key' : ''}" src="${perkImg(DATA.rune[id].i)}">
+          <span class="rn">${DATA.rune[id].n}</span></div>`).join('')}
+    </div>`;
+  };
+  document.getElementById('sheet').innerHTML = `
+    <div class="grab"></div>
+    <div class="bhead">
+      <div class="ch"><img src="${chImg(r.ch)}"></div>
+      <div class="who2">
+        <div class="p">${r.p} <span class="lvl">Lv.${r.lv}</span></div>
+        <div class="c">${r.ch} · ${ROLE_KO[r.role]} · ${r.side.toUpperCase()} · ${r.set}세트</div>
+      </div>
+      <div class="nav"><span id="prev">←</span><span id="next">→</span></div>
+    </div>
+    <div class="kv">
+      <div><div class="k">KDA</div><div class="v">${r.k}/${r.d}/${r.a}</div></div>
+      <div><div class="k">CS</div><div class="v">${r.cs}</div></div>
+      <div><div class="k">골드</div><div class="v">${(r.g / 1000).toFixed(1)}k</div></div>
+      <div><div class="k">킬관여</div><div class="v">${Math.round(r.kp * 100)}%</div></div>
+      <div><div class="k">딜비중</div><div class="v">${Math.round(r.dmg * 100)}%</div></div>
+    </div>
+    <div class="sectitle">아이템 <span class="dim">· 경기 종료 시점</span></div>
+    <div class="items">${r.items.map(slot).join('')}</div>
+    <div class="sectitle">룬</div>
+    <div class="runes">${tree(r.perks.styleId, g.primary, true)}${tree(r.perks.subStyleId, g.sub, false)}</div>
+    <div class="shards">${g.shards.map(id => `<span>${DATA.shard[id]}</span>`).join('')}</div>`;
+
+  const all = [...rowsOf(curSet, 'Blue'), ...rowsOf(curSet, 'Red')];
+  const i = all.findIndex(x => keyOf(x) === curKey);
+  const go = d => { curKey = keyOf(all[(i + d + all.length) % all.length]); renderBoards(); renderSheet(); };
+  document.getElementById('prev').onclick = () => go(-1);
+  document.getElementById('next').onclick = () => go(1);
+}
+
+document.getElementById('setToggle').onclick = () => {
+  curSet = curSet === 1 ? 2 : 1;
+  document.getElementById('setToggle').textContent = `${curSet}세트 ▾`;
+  curKey = null;
+  renderPicks(); renderBoards(); renderSheet();
+};
+
+renderPicks(); renderBoards(); renderSheet();
+</script>
+</body>
+</html>
