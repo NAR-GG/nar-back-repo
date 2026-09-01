@@ -42,6 +42,8 @@ public class CommunityPostService {
 	private static final int MAX_IMAGES = 5;
 	private static final int MAX_IMAGE_URL_LENGTH = 500; // 컬럼 상한
 	private static final int MAX_RAW_BLOCKS_LENGTH = 100_000; // 블록 JSON 원문 안전 상한
+	private static final int MIN_SEARCH_LENGTH = 2;
+	private static final int MAX_SEARCH_LENGTH = 50;
 
 	/** 목록 썸네일 파생용 파서. static 메서드(toSummary)에서 쓰므로 주입이 아니라 상수다. */
 	private static final com.fasterxml.jackson.databind.ObjectMapper SUMMARY_MAPPER =
@@ -91,6 +93,31 @@ public class CommunityPostService {
 							testerRegistry.isTester(viewerId));
 				})
 				.orElse(null);
+	}
+
+	/**
+	 * 키워드 검색(제목·미리보기·평문 본문, 최신순). 목록과 같은 응답 모양이라 앱은
+	 * 같은 카드를 쓴다. boardViewer 는 안 싣는다 — 검색 결과에서 글을 쓰지 않는다.
+	 *
+	 * <p>키워드는 2~50자. 한 글자를 허용하면 사실상 전체 목록을 풀스캔으로 훑게 되고,
+	 * 너무 길면 매칭이 없으면서 스캔 비용만 든다.</p>
+	 */
+	public PostListResponse searchPosts(String keyword, Long cursor, Integer size, Long viewerId) {
+		String trimmed = keyword == null ? "" : keyword.trim();
+		if (trimmed.length() < MIN_SEARCH_LENGTH || trimmed.length() > MAX_SEARCH_LENGTH) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+		int pageSize = clampSize(size);
+		List<Long> blocked = viewerId == null
+				? List.of()
+				: interactionRepository.findBlockedMemberIds(viewerId);
+		List<CommunityPostRow> rows = postRepository.searchPage(trimmed, cursor, blocked, pageSize,
+				testerRegistry.isTester(viewerId));
+		var imagesByPost = imagesByPost(rows);
+		List<PostSummaryResponse> posts = rows.stream()
+				.map(row -> toSummary(row, imagesByPost.getOrDefault(row.id(), List.of())))
+				.toList();
+		return new PostListResponse(posts, nextCursor(rows, pageSize), null);
 	}
 
 	public PostDetailResponse getPost(long postId, Long viewerId) {

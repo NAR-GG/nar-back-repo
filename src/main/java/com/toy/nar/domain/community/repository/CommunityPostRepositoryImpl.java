@@ -87,6 +87,46 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 	}
 
 	@Override
+	public List<CommunityPostRow> searchPage(String keyword, Long cursorId, List<Long> excludedMemberIds,
+			int size, boolean includeTest) {
+		StringBuilder sql = new StringBuilder(SELECT_COLUMNS.formatted("NULL"));
+		List<Object> params = new ArrayList<>();
+
+		// 전체 게시판만 검색한다 — 팀 게시판은 dormant 다(앱이 boardTeamId=null 만 쓴다).
+		sql.append("WHERE p.board_team_id IS NULL\n");
+		sql.append(statusClause(includeTest));
+		// 제목 + 미리보기 + (평문 글의) 본문. BLOCKS 의 body 는 건드리지 않는다 —
+		// JSON 이라 type/url 문자열이 얻어걸려 검색 품질이 나빠지고 스캔도 무겁다
+		// (그래서 블록 글은 저장 시 계산한 preview 로 대신 찾는다).
+		// LIKE '%..%' 는 인덱스를 못 타지만 지금 규모(수만 행)에서 수십 ms 다 —
+		// 100ms 를 넘기 시작하면 FULLTEXT(ngram)로 옮긴다.
+		sql.append("  AND (p.title LIKE ? OR p.preview LIKE ?"
+				+ " OR (p.body_format = 'PLAIN' AND p.body LIKE ?))\n");
+		String pattern = "%" + escapeLike(keyword) + "%";
+		params.add(pattern);
+		params.add(pattern);
+		params.add(pattern);
+		if (cursorId != null) {
+			sql.append("  AND p.id < ?\n");
+			params.add(cursorId);
+		}
+		appendExcludedAuthors(sql, params, excludedMemberIds);
+		sql.append("ORDER BY p.id DESC LIMIT ?");
+		params.add(size);
+
+		return jdbcTemplate.query(sql.toString(), ROW_MAPPER, params.toArray());
+	}
+
+	/**
+	 * LIKE 와일드카드 이스케이프. 이걸 빼면 사용자가 {@code %} 하나만 넣어도 전체 매칭이
+	 * 되고, {@code _} 로 한 글자 와일드카드를 쓸 수 있다(의도 밖 결과 + 무거운 스캔).
+	 * MySQL 기본 이스케이프 문자가 백슬래시라 백슬래시 자체도 먼저 막는다.
+	 */
+	private static String escapeLike(String keyword) {
+		return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+	}
+
+	@Override
 	public Optional<CommunityPostRow> findRowById(long postId) {
 		List<CommunityPostRow> rows = jdbcTemplate.query(
 				SELECT_COLUMNS.formatted("NULL") + "WHERE p.id = ?", ROW_MAPPER, postId);

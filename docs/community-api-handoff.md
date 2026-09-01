@@ -95,6 +95,17 @@ offset 없다. 전부 커서다.
 
 서버 검사(403 + `Retry-After`)는 그대로 최종 방어선이다 — 잠금 바는 UX 일 뿐.
 
+### `GET /api/mobile/community/posts/search?q=&cursor=&size=` — 검색
+
+응답은 목록과 같은 모양(`{ posts, nextCursor }`, `boardViewer` 는 null) — 앱은 같은 카드를 쓴다.
+
+- 대상: **제목 + 미리보기 + 평문 글의 본문**. 블록 글은 `preview`(저장 시 계산)로 찾는다 —
+  body 는 JSON 이라 `type`/`url` 문자열이 얻어걸리면 검색 품질이 나빠진다
+- `q` 2~50자(그 밖이면 400). `%`·`_` 는 이스케이프되어 리터럴로 취급된다
+- 최신순 커서(`nextCursor` → 다음 `cursor`), 차단 작성자·삭제·팀 게시판 글은 제외
+- 지금은 LIKE 스캔이다(수만 행에서 수십 ms). 느려지면 FULLTEXT(ngram)로 갈아탄다 —
+  API 계약은 그대로
+
 ### `GET /api/mobile/community/posts/{id}` — 상세
 
 목록 필드 + `body` 전문 + `images` + `viewer`:
