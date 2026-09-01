@@ -66,7 +66,9 @@ public class AppStoreWebhookController {
 			log.error("앱스토어 웹훅 요청을 받았지만 APP_STORE_WEBHOOK_SECRET 이 비어 있다 — 검증 불가로 거절");
 			return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
 		}
-		if (!isSignatureValid(secret, rawBody, signature)) {
+		// trim: 시크릿을 파일로 봉인하면 도구가 끝에 개행을 남기기 쉽다. 그 한 바이트가
+		// 키에 섞이면 서명이 영구히 불일치하고, 증상은 "전부 401" 이라 원인이 안 보인다.
+		if (!isSignatureValid(secret.trim(), rawBody, signature)) {
 			log.warn("앱스토어 웹훅 서명 불일치 — 거절");
 			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
 		}

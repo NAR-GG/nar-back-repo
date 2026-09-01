@@ -112,6 +112,14 @@ class AppStoreReviewMonitorTest {
 	}
 
 	@Test
+	@DisplayName("작성 시각을 KST 로 옮긴다 — ASC 는 애플 본사 오프셋으로 준다")
+	void createdDateInSeoulTime() {
+		assertThat(AppStoreReviewMonitor.toSeoul("2026-08-30T05:25:54-07:00")).isEqualTo("2026-08-30 21:25");
+		// 모양이 바뀌면 원문 그대로 — 파싱 실패로 알림을 잃지 않는다.
+		assertThat(AppStoreReviewMonitor.toSeoul("알 수 없음")).isEqualTo("알 수 없음");
+	}
+
+	@Test
 	@DisplayName("별점 1~2 는 danger, 3 은 warning, 4~5 는 good")
 	void colorByRating() {
 		assertThat(AppStoreReviewMonitor.reviewColor(1)).isEqualTo("danger");

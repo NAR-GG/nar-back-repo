@@ -1,5 +1,8 @@
 package com.toy.nar.app.appstore;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -31,6 +34,8 @@ import lombok.extern.slf4j.Slf4j;
 public class AppStoreReviewMonitor {
 
 	static final String PLATFORM_IOS = "IOS";
+
+	private static final DateTimeFormatter KST_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
 	private final AppStoreConnectClient client;
 	private final AppStoreReviewRepository repository;
@@ -86,7 +91,22 @@ public class AppStoreReviewMonitor {
 				body,
 				review.nickname(),
 				review.territory(),
-				review.createdDate());
+				toSeoul(review.createdDate()));
+	}
+
+	/**
+	 * ASC 는 애플 본사 시간대 오프셋으로 준다(예: {@code 2026-08-30T05:25:54-07:00}).
+	 * 그대로 실으면 알림을 읽을 때마다 시차를 손으로 더해야 해서 KST 로 옮긴다.
+	 * 모양이 바뀌면 원문을 그대로 보낸다 — 형식 파싱 실패로 알림을 잃지 않는다.
+	 */
+	static String toSeoul(String isoOffsetDateTime) {
+		try {
+			return OffsetDateTime.parse(isoOffsetDateTime)
+					.atZoneSameInstant(ZoneId.of("Asia/Seoul"))
+					.format(KST_FORMAT);
+		} catch (RuntimeException e) {
+			return isoOffsetDateTime;
+		}
 	}
 
 	/** 별점 1~2 는 즉시 대응 대상이라 빨강, 3 은 주황, 4~5 는 초록. */

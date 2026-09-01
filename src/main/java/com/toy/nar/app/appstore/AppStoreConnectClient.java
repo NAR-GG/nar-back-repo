@@ -135,7 +135,8 @@ public class AppStoreConnectClient {
 		}
 		try {
 			// env 에는 .p8 파일 원문이 base64 로 들어 있다. 벗기면 PEM, 거기서 다시 벗기면 DER.
-			String pem = new String(Base64.getDecoder().decode(keyBase64.trim()))
+			// MIME 디코더를 쓴다 — base64 를 줄바꿈으로 접어 넣어도(도구마다 다르다) 통과한다.
+			String pem = new String(Base64.getMimeDecoder().decode(keyBase64.trim()))
 					.replace("-----BEGIN PRIVATE KEY-----", "")
 					.replace("-----END PRIVATE KEY-----", "")
 					.replaceAll("\\s", "");
