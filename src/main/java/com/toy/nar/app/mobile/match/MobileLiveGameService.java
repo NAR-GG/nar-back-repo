@@ -1,6 +1,8 @@
 package com.toy.nar.app.mobile.match;
 
 import com.toy.nar.app.lolesports.live.LiveStateQueryService;
+import com.toy.nar.app.lolesports.live.RuneMetadataResolver;
+import com.toy.nar.app.lolesports.live.dto.LiveObjectEventResponse;
 import com.toy.nar.app.lolesports.live.dto.LiveGameState;
 import com.toy.nar.app.lolesports.live.dto.LiveParticipantState;
 import com.toy.nar.app.lolesports.live.entity.LiveGameMapping;
@@ -44,6 +46,10 @@ public class MobileLiveGameService {
 	private static final String RED_SIDE_KEY = "RED";
 	private static final String EVENT_KILL = "KILL";
 	private static final String EVENT_DRAGON = "DRAGON";
+	private static final String EVENT_BARON = "BARON";
+	private static final String EVENT_TOWER = "TOWER";
+	private static final String EVENT_INHIBITOR = "INHIBITOR";
+	private static final String ELDER = "elder";
 
 	// 픽 정렬 기준: top → jungle → mid → bottom → support. 알 수 없는 역할은 맨 뒤.
 	private static final Map<String, Integer> ROLE_ORDER = Map.of(
@@ -60,6 +66,7 @@ public class MobileLiveGameService {
 	private final TeamRepository teamRepository;
 	private final LiveGameMappingRepository liveGameMappingRepository;
 	private final BanRepository banRepository;
+	private final RuneMetadataResolver runeMetadataResolver;
 
 	public LiveGameChampionsResponse getChampions(String gameId) {
 		LiveGameState state = requireState(gameId);
@@ -75,12 +82,56 @@ public class MobileLiveGameService {
 
 		Map<String, List<LiveGameChampionsResponse.Ban>> bansBySide = resolveBans(gameId);
 
+		// 오브젝트는 getLatestState 가 이미 실어 온 타임라인에서 센다(추가 조회 없음).
 		return new LiveGameChampionsResponse(
 				gameId,
 				toTeamChampions(state.blueTeamName(), blue,
 						bansBySide.getOrDefault(BLUE_SIDE_KEY, List.of())),
 				toTeamChampions(state.redTeamName(), red,
-						bansBySide.getOrDefault(RED_SIDE_KEY, List.of())));
+						bansBySide.getOrDefault(RED_SIDE_KEY, List.of())),
+				new LiveGameChampionsResponse.Objectives(
+						countObjectives(state.objectTimeline(), BLUE),
+						countObjectives(state.objectTimeline(), RED)));
+	}
+
+	/**
+	 * 한 진영의 오브젝트 획득 수를 센다.
+	 *
+	 * <p>이벤트는 (game, side, type, order) 유니크라 중복이 없어 단순 카운트로 충분하다.
+	 * {@code valueAfter} 최댓값을 쓰지 않는 이유는 그 값이 장로용을 드래곤 카운터에 포함하기
+	 * 때문이다(피드 window 의 {@code dragons[]} 인덱스를 그대로 쓴다).
+	 */
+	private LiveGameChampionsResponse.TeamObjectives countObjectives(
+			List<LiveObjectEventResponse> timeline, String teamSide) {
+		List<String> dragonTypes = new ArrayList<>();
+		int elders = 0;
+		int barons = 0;
+		int towers = 0;
+		int inhibitors = 0;
+
+		for (LiveObjectEventResponse event : timeline) {
+			if (!teamSide.equalsIgnoreCase(event.teamSide())) {
+				continue;
+			}
+			switch (event.eventType() == null ? "" : event.eventType()) {
+				case EVENT_DRAGON -> {
+					if (ELDER.equalsIgnoreCase(event.eventSubType())) {
+						elders++;
+					} else if (event.eventSubType() != null) {
+						dragonTypes.add(event.eventSubType());
+					}
+				}
+				case EVENT_BARON -> barons++;
+				case EVENT_TOWER -> towers++;
+				case EVENT_INHIBITOR -> inhibitors++;
+				default -> {
+					// KILL 등 오브젝트가 아닌 이벤트는 센지 않는다.
+				}
+			}
+		}
+
+		return new LiveGameChampionsResponse.TeamObjectives(
+				dragonTypes.size(), dragonTypes, elders, barons, towers, inhibitors);
 	}
 
 	/**
@@ -170,14 +221,50 @@ public class MobileLiveGameService {
 			String teamName, List<LiveParticipantState> participants,
 			List<LiveGameChampionsResponse.Ban> bans) {
 		List<LiveGameChampionsResponse.Pick> picks = participants.stream()
-				.map(p -> new LiveGameChampionsResponse.Pick(
-						canonicalPosition(p.role()),
-						p.championName(),
-						resolveChampionLoadingImageUrl(p.championName()),
-						p.playerName()))
+				.map(this::toPick)
 				.toList();
 		// 밴은 reconcile 된 배치 데이터에서 채운다(라이브 피드엔 밴이 없음). 없으면 빈 목록.
-		return new LiveGameChampionsResponse.TeamChampions(teamName, picks, bans);
+		return new LiveGameChampionsResponse.TeamChampions(
+				teamName, picks, bans, summarize(participants));
+	}
+
+	private LiveGameChampionsResponse.Pick toPick(LiveParticipantState p) {
+		RuneMetadataResolver.RuneIcons runeIcons = runeMetadataResolver.resolveRuneIcons(p.perksJson());
+		return new LiveGameChampionsResponse.Pick(
+				canonicalPosition(p.role()),
+				p.championName(),
+				resolveChampionLoadingImageUrl(p.championName()),
+				p.playerName(),
+				p.level(),
+				p.kills(),
+				p.deaths(),
+				p.assists(),
+				p.creepScore(),
+				p.totalGoldEarned(),
+				p.killParticipation(),
+				p.championDamageShare(),
+				p.itemImageUrls(),
+				runeIcons.keystoneIconUrl(),
+				runeIcons.subStyleIconUrl());
+	}
+
+	/** 팀 헤더 줄(총 KDA · CS · 골드). 참가자 값 합산이라 추가 조회가 없다. */
+	private LiveGameChampionsResponse.TeamSummary summarize(List<LiveParticipantState> participants) {
+		return new LiveGameChampionsResponse.TeamSummary(
+				sum(participants, LiveParticipantState::kills),
+				sum(participants, LiveParticipantState::deaths),
+				sum(participants, LiveParticipantState::assists),
+				sum(participants, LiveParticipantState::creepScore),
+				sum(participants, LiveParticipantState::totalGoldEarned));
+	}
+
+	private int sum(List<LiveParticipantState> participants,
+			java.util.function.Function<LiveParticipantState, Integer> field) {
+		return participants.stream()
+				.map(field)
+				.filter(java.util.Objects::nonNull)
+				.mapToInt(Integer::intValue)
+				.sum();
 	}
 
 	private LiveGameEventsResponse.Event toEvent(
