@@ -16,6 +16,13 @@ public interface CommunityPostRepositoryCustom {
 	List<CommunityPostRow> findPage(Long boardTeamId, Long cursorId, List<Long> excludedMemberIds, int size,
 			boolean includeTest);
 
+	/**
+	 * 제목·미리보기 키워드 검색(전체 게시판, 최신순 커서). 차단 작성자는 제외된다.
+	 * 지금 규모에선 LIKE 풀스캔으로 충분하다 — 근거는 구현부 주석.
+	 */
+	List<CommunityPostRow> searchPage(String keyword, Long cursorId, List<Long> excludedMemberIds,
+			int size, boolean includeTest);
+
 	Optional<CommunityPostRow> findRowById(long postId);
 
 	/** 내 스크랩 페이지. 커서는 scrap.id (row 의 scrapId 로 내려간다). */

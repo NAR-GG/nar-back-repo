@@ -73,6 +73,39 @@ class CommunityRepositoryMySqlIntegrationTest {
 	}
 
 	@Test
+	void 검색은_제목_미리보기_평문본문을_보고_차단_삭제_팀글을_뺀다() {
+		// 검색 전용 데이터 — 블록 글은 preview 로, 평문 글은 body 로 찾힌다.
+		jdbc.update("INSERT INTO community_post (id, board_team_id, member_id, title, body,"
+				+ " body_format, preview) VALUES"
+				+ " (101, NULL, 1, '제목에 젠지', 'body', 'PLAIN', NULL),"
+				+ " (102, NULL, 1, '무관한 제목', '본문에 젠지 있음', 'PLAIN', NULL),"
+				+ " (103, NULL, 1, '블록 글', '[{\"type\":\"text\",\"text\":\"젠지 화이팅\"}]',"
+				+ "     'BLOCKS', '젠지 화이팅'),"
+				+ " (104, NULL, 2, '차단된 사람의 젠지 글', 'body', 'PLAIN', NULL),"
+				+ " (105, NULL, 1, '삭제된 젠지 글', 'body', 'PLAIN', NULL),"
+				+ " (106, 1, 1, '팀게시판 젠지 글', 'body', 'PLAIN', NULL)");
+		jdbc.update("UPDATE community_post SET status = 'DELETED' WHERE id = 105");
+		// BLOCKS 글의 body(JSON)는 검색 대상이 아니다 — type/url 이 얻어걸리지 않는지 확인용
+		jdbc.update("INSERT INTO community_post (id, board_team_id, member_id, title, body,"
+				+ " body_format, preview) VALUES"
+				+ " (107, NULL, 1, '유튜브만', '[{\"type\":\"embed\",\"provider\":\"youtube\","
+				+ "\"url\":\"https://youtu.be/x\"}]', 'BLOCKS', NULL)");
+
+		List<Long> blocked = interactions.findBlockedMemberIds(3L);
+		List<CommunityPostRow> found = postRepository.searchPage("젠지", null, blocked, 10, false);
+
+		assertThat(found).extracting(CommunityPostRow::id)
+				.containsExactly(103L, 102L, 101L); // 최신순, 차단(104)·삭제(105)·팀글(106) 제외
+
+		// 블록 JSON 내부 문자열은 안 걸린다
+		assertThat(postRepository.searchPage("youtube", null, List.of(), 10, false)).isEmpty();
+		// 와일드카드 이스케이프 — '%' 로 전체 매칭이 되면 안 된다
+		assertThat(postRepository.searchPage("%", null, List.of(), 10, false)).isEmpty();
+
+		jdbc.update("DELETE FROM community_post WHERE id >= 101");
+	}
+
+	@Test
 	void 전체게시판_커서와_차단필터가_같이_돈다() {
 		List<Long> blocked = interactions.findBlockedMemberIds(3L);
 		assertThat(blocked).containsExactly(2L);

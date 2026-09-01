@@ -46,6 +46,16 @@ public class MobileCommunityPostController {
 		return ResponseEntity.ok(postService.getPosts(boardTeamId, cursor, size, memberId));
 	}
 
+	/** 글 검색(제목·미리보기·평문 본문). 비로그인도 되고, 로그인이면 차단 필터가 붙는다. */
+	@GetMapping("/posts/search")
+	public ResponseEntity<PostListResponse> searchPosts(
+			@RequestParam String q,
+			@RequestParam(required = false) Long cursor,
+			@RequestParam(required = false) Integer size,
+			@AuthenticationPrincipal Long memberId) {
+		return ResponseEntity.ok(postService.searchPosts(q, cursor, size, memberId));
+	}
+
 	@GetMapping("/posts/{postId}")
 	public ResponseEntity<PostDetailResponse> getPost(
 			@PathVariable long postId,
