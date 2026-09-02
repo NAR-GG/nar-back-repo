@@ -55,6 +55,7 @@ class MobileLiveGameServiceTest {
 		// 룬 아이콘·아이템 분류는 ddragon 로드가 필요한 별개 관심사 — 여기서는 빈 값으로 고정한다.
 		when(runeMetadataResolver.resolveRuneIcons(any()))
 				.thenReturn(new RuneMetadataResolver.RuneIcons(null, null));
+		when(runeMetadataResolver.resolveRuneBuild(any())).thenReturn(null);
 		// 아이템 섹션 분류는 ItemMetadataResolverTest 가 따로 검증한다.
 		when(itemMetadataResolver.resolveItemGroups(any()))
 				.thenReturn(new ItemMetadataResolver.ItemGroups(List.of(), null, null, List.of()));
