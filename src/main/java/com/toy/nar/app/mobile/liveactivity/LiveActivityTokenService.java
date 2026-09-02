@@ -8,35 +8,40 @@ import com.toy.nar.domain.member.repository.LiveActivityStartTokenRepository;
 import com.toy.nar.domain.member.repository.LiveActivityTokenRepository;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+// 클래스 레벨 @Transactional(readOnly = true) 를 두지 않는다 — 등록 경로가 자기 트랜잭션을
+// TransactionTemplate 으로 직접 열어야 unique 위반 뒤 새 트랜잭션에서 재시도할 수 있다.
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class LiveActivityTokenService {
 
 	private final MemberRepository memberRepository;
 	private final LiveActivityTokenRepository tokenRepository;
 	private final LiveActivityStartTokenRepository startTokenRepository;
+	private final TransactionTemplate transactionTemplate;
 
 	/**
 	 * 토큰 등록 또는 갱신. 같은 토큰이 다시 오면 매치와 활성 여부만 갱신한다
 	 * (앱이 카드를 내렸다가 같은 토큰으로 다시 띄우는 경우).
 	 */
-	@Transactional
 	public void register(Long memberId, LiveActivityTokenRequest request) {
-		Member member = requireMember(memberId);
-		tokenRepository.findByPushToken(request.pushToken())
-				.ifPresentOrElse(
-						token -> token.reactivate(member, request.matchId()),
-						() -> tokenRepository.save(LiveActivityToken.builder()
-								.member(member)
-								.matchId(request.matchId())
-								.pushToken(request.pushToken())
-								.build()));
+		upsert(() -> {
+			Member member = requireMember(memberId);
+			tokenRepository.findByPushToken(request.pushToken())
+					.ifPresentOrElse(
+							token -> token.reactivate(member, request.matchId()),
+							() -> tokenRepository.save(LiveActivityToken.builder()
+									.member(member)
+									.matchId(request.matchId())
+									.pushToken(request.pushToken())
+									.build()));
+		});
 	}
 
 	/**
@@ -45,16 +50,34 @@ public class LiveActivityTokenService {
 	 * <p>카드 단위 토큰과 달리 앱 단위라 매치를 받지 않는다. 이 토큰이 있어야 서버가 카드를
 	 * 새로 만들 수 있다({@code Activity.pushToStartTokenUpdates}, iOS 17.2+).</p>
 	 */
-	@Transactional
 	public void registerStartToken(Long memberId, String pushToken) {
-		Member member = requireMember(memberId);
-		startTokenRepository.findByPushToken(pushToken)
-				.ifPresentOrElse(
-						token -> token.reactivate(member),
-						() -> startTokenRepository.save(LiveActivityStartToken.builder()
-								.member(member)
-								.pushToken(pushToken)
-								.build()));
+		upsert(() -> {
+			Member member = requireMember(memberId);
+			startTokenRepository.findByPushToken(pushToken)
+					.ifPresentOrElse(
+							token -> token.reactivate(member),
+							() -> startTokenRepository.save(LiveActivityStartToken.builder()
+									.member(member)
+									.pushToken(pushToken)
+									.build()));
+		});
+	}
+
+	/**
+	 * 조회 후 없으면 insert 하는 등록 경로를 트랜잭션으로 감싸고, unique 위반이면 한 번 재시도한다.
+	 *
+	 * <p>같은 푸시 토큰이 거의 동시에 두 번 올라오면(앱 재시도, 토큰 스트림 중복 발화) 두 요청이
+	 * 모두 "없음"으로 읽고 둘 다 insert 해 진 쪽이 unique 키를 위반한다. 위반 시점엔 이긴 행이
+	 * 이미 커밋돼 있으므로, 새 트랜잭션에서 다시 읽으면 갱신 경로로 흘러 정상 종료한다.
+	 * 위반 난 트랜잭션은 롤백만 가능해서 같은 트랜잭션 안에서는 복구할 수 없다.</p>
+	 */
+	private void upsert(Runnable registration) {
+		try {
+			transactionTemplate.executeWithoutResult(status -> registration.run());
+		} catch (DataIntegrityViolationException e) {
+			// ponytail: 재시도 1회로 충분하다. 두 번째도 지려면 그 사이에 행이 지워져야 하는데 삭제 경로가 없다.
+			transactionTemplate.executeWithoutResult(status -> registration.run());
+		}
 	}
 
 	/** 사용자가 실시간 활동을 끄거나 로그아웃할 때 호출한다. */
