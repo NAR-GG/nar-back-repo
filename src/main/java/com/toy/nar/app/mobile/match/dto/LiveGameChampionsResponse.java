@@ -36,8 +36,16 @@ public record LiveGameChampionsResponse(
 			Double killParticipation,
 			/** 0~1. 분모는 자기 팀 5명 딜 합 — 상대 팀과 비교할 수 없다. */
 			Double championDamageShare,
-			/** 구매 순서대로. 최대 8개(슬롯 7 + 장신구)이고, 하위템 잔재로 더 길 수 있다. */
+			/** 구매 순서대로 섞여 있는 원본 목록. 섹션이 필요하면 아래 4개를 쓴다. */
 			List<String> itemImageUrls,
+			/** 장비 코어. 최대 6개. */
+			List<String> coreItemImageUrls,
+			/** 2026 바텀 퀘스트 보상으로 7번째 칸에 옮겨진 신발. 퀘스트 미완이면 null(신발은 코어에 있다). */
+			String questItemImageUrl,
+			/** 장신구(3340·3363·3364) 한 칸. 안 샀으면 null. */
+			String trinketItemImageUrl,
+			/** 제어와드·물약·영약. 없으면 빈 목록. */
+			List<String> consumableItemImageUrls,
 			String keystoneIconUrl,
 			String subStyleIconUrl) {
 	}

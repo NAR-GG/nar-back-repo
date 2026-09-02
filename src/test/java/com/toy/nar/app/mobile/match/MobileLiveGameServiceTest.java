@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.match;
 
+import com.toy.nar.app.lolesports.live.ItemMetadataResolver;
 import com.toy.nar.app.lolesports.live.LiveStateQueryService;
 import com.toy.nar.app.lolesports.live.RuneMetadataResolver;
 import com.toy.nar.app.lolesports.live.dto.LiveObjectEventResponse;
@@ -36,6 +37,7 @@ class MobileLiveGameServiceTest {
 	private final LiveGameMappingRepository liveGameMappingRepository = mock(LiveGameMappingRepository.class);
 	private final BanRepository banRepository = mock(BanRepository.class);
 	private final RuneMetadataResolver runeMetadataResolver = mock(RuneMetadataResolver.class);
+	private final ItemMetadataResolver itemMetadataResolver = mock(ItemMetadataResolver.class);
 
 	private final MobileLiveGameService service = new MobileLiveGameService(
 			liveStateQueryService,
@@ -45,13 +47,17 @@ class MobileLiveGameServiceTest {
 			teamRepository,
 			liveGameMappingRepository,
 			banRepository,
-			runeMetadataResolver);
+			runeMetadataResolver,
+			itemMetadataResolver);
 
 	@BeforeEach
 	void stubRuneIcons() {
-		// 룬 아이콘은 ddragon 로드가 필요한 별개 관심사 — 이 테스트에서는 빈 값으로 고정한다.
+		// 룬 아이콘·아이템 분류는 ddragon 로드가 필요한 별개 관심사 — 여기서는 빈 값으로 고정한다.
 		when(runeMetadataResolver.resolveRuneIcons(any()))
 				.thenReturn(new RuneMetadataResolver.RuneIcons(null, null));
+		// 아이템 섹션 분류는 ItemMetadataResolverTest 가 따로 검증한다.
+		when(itemMetadataResolver.resolveItemGroups(any()))
+				.thenReturn(new ItemMetadataResolver.ItemGroups(List.of(), null, null, List.of()));
 	}
 
 	private LiveGameState stateWith(String blueTeam, String redTeam) {

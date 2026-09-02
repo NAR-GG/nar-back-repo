@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.match;
 
+import com.toy.nar.app.lolesports.live.ItemMetadataResolver;
 import com.toy.nar.app.lolesports.live.LiveStateQueryService;
 import com.toy.nar.app.lolesports.live.RuneMetadataResolver;
 import com.toy.nar.app.lolesports.live.dto.LiveObjectEventResponse;
@@ -67,6 +68,7 @@ public class MobileLiveGameService {
 	private final LiveGameMappingRepository liveGameMappingRepository;
 	private final BanRepository banRepository;
 	private final RuneMetadataResolver runeMetadataResolver;
+	private final ItemMetadataResolver itemMetadataResolver;
 
 	public LiveGameChampionsResponse getChampions(String gameId) {
 		LiveGameState state = requireState(gameId);
@@ -230,6 +232,7 @@ public class MobileLiveGameService {
 
 	private LiveGameChampionsResponse.Pick toPick(LiveParticipantState p) {
 		RuneMetadataResolver.RuneIcons runeIcons = runeMetadataResolver.resolveRuneIcons(p.perksJson());
+		ItemMetadataResolver.ItemGroups items = itemMetadataResolver.resolveItemGroups(p.itemIds());
 		return new LiveGameChampionsResponse.Pick(
 				canonicalPosition(p.role()),
 				p.championName(),
@@ -244,6 +247,10 @@ public class MobileLiveGameService {
 				p.killParticipation(),
 				p.championDamageShare(),
 				p.itemImageUrls(),
+				items.coreImageUrls(),
+				items.questItemImageUrl(),
+				items.trinketImageUrl(),
+				items.consumableImageUrls(),
 				runeIcons.keystoneIconUrl(),
 				runeIcons.subStyleIconUrl());
 	}
