@@ -40,7 +40,7 @@ public record LiveGameChampionsResponse(
 			List<String> itemImageUrls,
 			/** 장비 코어. 최대 6개. */
 			List<String> coreItemImageUrls,
-			/** 2026 퀘스트로 열리는 7번째 코어 칸. 없으면 null. */
+			/** 2026 바텀 퀘스트 보상으로 7번째 칸에 옮겨진 신발. 퀘스트 미완이면 null(신발은 코어에 있다). */
 			String questItemImageUrl,
 			/** 장신구(3340·3363·3364) 한 칸. 안 샀으면 null. */
 			String trinketItemImageUrl,

@@ -13,6 +13,10 @@ class ItemMetadataResolverTest {
 		return new ItemMetadataResolver.ResolvedItem(url, Set.of("Damage"));
 	}
 
+	private static ItemMetadataResolver.ResolvedItem boots(String url) {
+		return new ItemMetadataResolver.ResolvedItem(url, Set.of("Boots", "NonbootsMovement"));
+	}
+
 	private static ItemMetadataResolver.ResolvedItem trinket(String url) {
 		return new ItemMetadataResolver.ResolvedItem(url, Set.of("Active", "Trinket", "Vision"));
 	}
@@ -22,16 +26,26 @@ class ItemMetadataResolverTest {
 	}
 
 	@Test
-	void groupItems_코어_6개까지_채우고_7번째는_퀘스트_칸으로_뺀다() {
-		// 원딜 퀘스트 케이스: 신발 포함 코어 7 + 장신구 + 제어와드.
+	void groupItems_코어가_7개면_신발을_퀘스트_칸으로_뺀다() {
+		// 원딜 퀘스트 완료: 피드 배열은 구매 순서라 신발이 3번째에 있다(실측). 마지막 템이 아니라 신발이 퀘스트 칸.
 		ItemMetadataResolver.ItemGroups groups = ItemMetadataResolver.groupItems(List.of(
-				core("i1"), core("i2"), core("i3"), core("i4"),
-				trinket("t"), core("i5"), core("i6"), core("quest"), consumable("ward")));
+				core("i1"), core("i2"), boots("boots"), trinket("t"),
+				core("i3"), core("i4"), core("i5"), core("i6"), consumable("ward")));
 
 		assertThat(groups.coreImageUrls()).containsExactly("i1", "i2", "i3", "i4", "i5", "i6");
-		assertThat(groups.questItemImageUrl()).isEqualTo("quest");
+		assertThat(groups.questItemImageUrl()).isEqualTo("boots");
 		assertThat(groups.trinketImageUrl()).isEqualTo("t");
 		assertThat(groups.consumableImageUrls()).containsExactly("ward");
+	}
+
+	@Test
+	void groupItems_코어가_6개_이하면_신발도_코어에_그대로_둔다() {
+		// 퀘스트 미완: 신발은 평범한 코어 한 칸이다.
+		ItemMetadataResolver.ItemGroups groups = ItemMetadataResolver.groupItems(List.of(
+				core("i1"), boots("boots"), core("i2")));
+
+		assertThat(groups.coreImageUrls()).containsExactly("i1", "boots", "i2");
+		assertThat(groups.questItemImageUrl()).isNull();
 	}
 
 	@Test
@@ -55,12 +69,13 @@ class ItemMetadataResolverTest {
 	}
 
 	@Test
-	void groupItems_코어가_8개를_넘으면_뒤쪽_잔재는_버린다() {
+	void groupItems_코어가_7개인데_신발이_없으면_7번째를_퀘스트_칸으로_쓰고_나머지는_버린다() {
+		// 실측 0건인 방어 경로. 신발 없이 7개면 배열 순서대로 7번째, 그 뒤는 하위템 잔재로 버린다.
 		ItemMetadataResolver.ItemGroups groups = ItemMetadataResolver.groupItems(List.of(
 				core("i1"), core("i2"), core("i3"), core("i4"), core("i5"), core("i6"),
-				core("quest"), core("leftover")));
+				core("seventh"), core("leftover")));
 
-		assertThat(groups.coreImageUrls()).hasSize(6);
-		assertThat(groups.questItemImageUrl()).isEqualTo("quest");
+		assertThat(groups.coreImageUrls()).containsExactly("i1", "i2", "i3", "i4", "i5", "i6");
+		assertThat(groups.questItemImageUrl()).isEqualTo("seventh");
 	}
 }

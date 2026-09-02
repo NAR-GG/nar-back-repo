@@ -23,6 +23,7 @@ public class ItemMetadataResolver {
 
 	private static final String TAG_TRINKET = "Trinket";
 	private static final String TAG_CONSUMABLE = "Consumable";
+	private static final String TAG_BOOTS = "Boots";
 	/** 퀘스트 없이 채울 수 있는 코어 칸 수. 7번째는 퀘스트 칸으로 뺀다. */
 	private static final int CORE_SLOTS = 6;
 
@@ -58,9 +59,9 @@ public class ItemMetadataResolver {
 	 * {@code Consumable} 이면 소모품(제어와드·물약·영약), 나머지는 코어(장화 포함)다.
 	 * ddragon 에 없는 id 는 코어로 둔다(구버전 아이템이 남은 경우).
 	 *
-	 * <p>코어 7번째는 2026 퀘스트로 열리는 칸이라 {@code questItemImageUrl} 로 따로 뺀다
-	 * (원딜은 신발 포함, 서포터는 제어와드 포함 조건). 실데이터에서 코어는 7개를 넘지 않지만,
-	 * 넘으면 하위템 잔재이므로 뒤쪽을 버린다.
+	 * <p>코어가 6칸을 넘으면 2026 바텀 퀘스트 보상(신발이 7번째 칸으로 이동)이므로 신발을
+	 * {@code questItemImageUrl} 로 따로 뺀다. 실데이터에서 코어는 7개를 넘지 않지만, 넘으면
+	 * 하위템 잔재이므로 뒤쪽을 버린다.
 	 */
 	public ItemGroups resolveItemGroups(List<Integer> itemIds) {
 		ensureLoaded();
@@ -87,7 +88,7 @@ public class ItemMetadataResolver {
 	/** 분류 규칙 본문. ddragon 로드와 분리해 단위 테스트한다. */
 	static ItemGroups groupItems(List<ResolvedItem> items) {
 		List<String> core = new ArrayList<>();
-		String questItemImageUrl = null;
+		List<String> bootsInCore = new ArrayList<>();
 		String trinketImageUrl = null;
 		List<String> consumables = new ArrayList<>();
 
@@ -99,10 +100,25 @@ public class ItemMetadataResolver {
 				}
 			} else if (item.tags().contains(TAG_CONSUMABLE)) {
 				consumables.add(item.imageUrl());
-			} else if (core.size() < CORE_SLOTS) {
+			} else {
 				core.add(item.imageUrl());
-			} else if (questItemImageUrl == null) {
-				questItemImageUrl = item.imageUrl();
+				if (item.tags().contains(TAG_BOOTS)) {
+					bootsInCore.add(item.imageUrl());
+				}
+			}
+		}
+
+		// 퀘스트 칸(V26.01 바텀 퀘스트 보상)은 "신발이 7번째 칸으로 이동"하는 것이다 — 마지막에 산
+		// 아이템이 아니다. 피드 items[] 는 구매 순서라 신발이 2~4번째에 있으므로(실측 29건 전부),
+		// 코어가 6칸을 넘으면 신발을 뽑아 퀘스트 칸에 놓는다. 서포터 퀘스트 칸은 제어와드 전용이라
+		// 이미 소모품으로 빠져 있다(코어 7 인 서포터 실측 0건).
+		String questItemImageUrl = null;
+		if (core.size() > CORE_SLOTS) {
+			questItemImageUrl = bootsInCore.isEmpty() ? core.get(CORE_SLOTS) : bootsInCore.get(0);
+			core.remove(questItemImageUrl);
+			if (core.size() > CORE_SLOTS) {
+				// 그래도 넘치면 하위템 잔재다. 뒤쪽을 버린다.
+				core = new ArrayList<>(core.subList(0, CORE_SLOTS));
 			}
 		}
 
