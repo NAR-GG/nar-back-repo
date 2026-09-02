@@ -1,5 +1,6 @@
 package com.toy.nar.app.mobile.match.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -10,6 +11,8 @@ import java.util.List;
  */
 public record LiveGameChampionsResponse(
 		String gameId,
+		/** 이 응답이 기준한 프레임 시각(UTC). 라이브면 최신 폴링, 종료 경기면 마지막 분 스냅샷. "N분 기준" 라벨용. */
+		LocalDateTime frameTimestampUtc,
 		TeamChampions blueTeam,
 		TeamChampions redTeam,
 		Objectives objectives) {
@@ -47,7 +50,37 @@ public record LiveGameChampionsResponse(
 			/** 제어와드·물약·영약. 없으면 빈 목록. */
 			List<String> consumableItemImageUrls,
 			String keystoneIconUrl,
-			String subStyleIconUrl) {
+			String subStyleIconUrl,
+			/** 빌드 시트용 룬 전체. perks 가 없으면 null. */
+			RuneBuild runes) {
+	}
+
+	public record RuneBuild(
+			RuneTree primary,
+			RuneTree sub,
+			/** 파편. 같은 파편을 두 칸에 찍으면 피드가 하나로 합쳐 2개가 된다(25%). 고정 3칸으로 그리면 안 된다. */
+			List<Shard> shards) {
+	}
+
+	public record RuneTree(
+			String styleName,
+			String styleIconUrl,
+			/** 주 트리 4개(핵심룬이 첫 원소) / 부 트리 2개. 슬롯 순. */
+			List<Rune> runes) {
+	}
+
+	public record Rune(
+			String name,
+			String iconUrl,
+			/** ddragon shortDesc 평문. 툴팁용. */
+			String description) {
+	}
+
+	public record Shard(
+			String name,
+			String iconUrl,
+			/** 수치. "+9", "+10~180". 칩 라벨 = name + " " + label */
+			String label) {
 	}
 
 	public record Ban(

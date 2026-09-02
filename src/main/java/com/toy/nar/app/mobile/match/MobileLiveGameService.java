@@ -87,6 +87,7 @@ public class MobileLiveGameService {
 		// 오브젝트는 getLatestState 가 이미 실어 온 타임라인에서 센다(추가 조회 없음).
 		return new LiveGameChampionsResponse(
 				gameId,
+				state.frameTimestampUtc(),
 				toTeamChampions(state.blueTeamName(), blue,
 						bansBySide.getOrDefault(BLUE_SIDE_KEY, List.of())),
 				toTeamChampions(state.redTeamName(), red,
@@ -231,6 +232,7 @@ public class MobileLiveGameService {
 	}
 
 	private LiveGameChampionsResponse.Pick toPick(LiveParticipantState p) {
+		RuneMetadataResolver.RuneBuild build = runeMetadataResolver.resolveRuneBuild(p.perksJson());
 		RuneMetadataResolver.RuneIcons runeIcons = runeMetadataResolver.resolveRuneIcons(p.perksJson());
 		ItemMetadataResolver.ItemGroups items = itemMetadataResolver.resolveItemGroups(p.itemIds());
 		return new LiveGameChampionsResponse.Pick(
@@ -252,7 +254,29 @@ public class MobileLiveGameService {
 				items.trinketImageUrl(),
 				items.consumableImageUrls(),
 				runeIcons.keystoneIconUrl(),
-				runeIcons.subStyleIconUrl());
+				runeIcons.subStyleIconUrl(),
+				toRuneBuild(build));
+	}
+
+	private LiveGameChampionsResponse.RuneBuild toRuneBuild(RuneMetadataResolver.RuneBuild build) {
+		if (build == null) {
+			return null;
+		}
+		return new LiveGameChampionsResponse.RuneBuild(
+				toRuneTree(build.primary()),
+				toRuneTree(build.sub()),
+				build.shards().stream()
+						.map(s -> new LiveGameChampionsResponse.Shard(s.name(), s.iconUrl(), s.label()))
+						.toList());
+	}
+
+	private LiveGameChampionsResponse.RuneTree toRuneTree(RuneMetadataResolver.RuneTree tree) {
+		return new LiveGameChampionsResponse.RuneTree(
+				tree.styleName(),
+				tree.styleIconUrl(),
+				tree.runes().stream()
+						.map(r -> new LiveGameChampionsResponse.Rune(r.name(), r.iconUrl(), r.description()))
+						.toList());
 	}
 
 	/** 팀 헤더 줄(총 KDA · CS · 골드). 참가자 값 합산이라 추가 조회가 없다. */
