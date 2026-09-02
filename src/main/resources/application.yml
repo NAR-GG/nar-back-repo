@@ -211,7 +211,8 @@ app-store:
 play-store:
   package-name: ${PLAY_STORE_PACKAGE_NAME:com.warding.app}
   # Play Console → 설정 → API 액세스 에서 연결한 GCP 서비스 계정 키 JSON 원문.
-  # 드라이브용 GOOGLE_SERVICE_ACCOUNT_KEY 와 다른 키다(권한 주체가 다르다).
+  # 2026-09-02 부터 드라이브용 GOOGLE_SERVICE_ACCOUNT_KEY 와 같은 키(NARGG 프로젝트 warding-monitor SA).
+  # 옛 드라이브 키의 GCP 프로젝트(pathpal-b6b43)가 삭제돼 403 이 났고, 이 프로젝트에 Drive API 를 켜서 합쳤다.
   service-account-key: ${PLAY_SERVICE_ACCOUNT_KEY:}
   review-monitor:
     enabled: ${PLAY_REVIEW_MONITOR_ENABLED:false}

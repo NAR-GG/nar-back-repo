@@ -157,6 +157,7 @@ DISCORD_STORE_DEPLOY_WEBHOOK_URL          # 마켓 심사·배포 알림(애플 
 DISCORD_STORE_REVIEW_WEBHOOK_URL          # 마켓 신규 고객 리뷰(애플·플레이 폴링). 배포와 채널을 나눈다 — 배포 알림이 잦아 리뷰가 묻힌다
 GOOGLE_DRIVE_CSV_ID
 GOOGLE_SERVICE_ACCOUNT_KEY                # 구글 드라이브 서비스 계정 키 JSON 원문. 없으면 클래스패스 service-account-key.json 폴백(로컬 전용)
+                                          # 2026-09-02 부터 PLAY_SERVICE_ACCOUNT_KEY 와 같은 키(NARGG 프로젝트, Drive API 활성화됨). 옛 pathpal 프로젝트 삭제로 교체
 RIOT_MONITOR_ENABLED, RIOT_API_ENABLED   # feature flags for scheduling
 JWT_SECRET
 
