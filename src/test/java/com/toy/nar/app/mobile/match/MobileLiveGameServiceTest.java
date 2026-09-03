@@ -12,7 +12,9 @@ import com.toy.nar.app.lolesports.live.repository.LiveGameObjectEventRepository;
 import com.toy.nar.app.lolesports.live.dto.LiveParticipantState;
 import com.toy.nar.app.mobile.match.dto.LiveBanRow;
 import com.toy.nar.app.mobile.match.dto.LiveGameChampionsResponse;
+import com.toy.nar.app.mobile.match.dto.LiveWardRow;
 import com.toy.nar.domain.game.repository.BanRepository;
+import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.repository.ChampionRepository;
 import com.toy.nar.domain.participant.repository.TeamRepository;
@@ -38,6 +40,7 @@ class MobileLiveGameServiceTest {
 	private final BanRepository banRepository = mock(BanRepository.class);
 	private final RuneMetadataResolver runeMetadataResolver = mock(RuneMetadataResolver.class);
 	private final ItemMetadataResolver itemMetadataResolver = mock(ItemMetadataResolver.class);
+	private final GameParticipantRepository gameParticipantRepository = mock(GameParticipantRepository.class);
 
 	private final MobileLiveGameService service = new MobileLiveGameService(
 			liveStateQueryService,
@@ -48,7 +51,8 @@ class MobileLiveGameServiceTest {
 			liveGameMappingRepository,
 			banRepository,
 			runeMetadataResolver,
-			itemMetadataResolver);
+			itemMetadataResolver,
+			gameParticipantRepository);
 
 	@BeforeEach
 	void stubRuneIcons() {
@@ -204,6 +208,40 @@ class MobileLiveGameServiceTest {
 		assertThat(summary.kills()).isEqualTo(3);
 		assertThat(summary.creepScore()).isEqualTo(250);
 		assertThat(summary.totalGoldEarned()).isEqualTo(12_000);
+	}
+
+	@Test
+	void getChampions_와드가_없는_옛_경기는_배치_CSV_에서_진영_포지션으로_채운다() {
+		// V87 이전 스냅샷: wards 둘 다 null. reconcile 된 경기라 CSV 스탯이 있다.
+		LiveParticipantState oner = new LiveParticipantState(
+				2, "Blue", "jungle", "T1 Oner", null, "XinZhao",
+				16, 2, 7, 4, 13_000, 240, 0.7, 0.2,
+				List.of(), List.of(), List.of(), null, null, null, List.of(), null, null);
+		// 라이브 값이 이미 있는 선수는 CSV 로 덮어쓰지 않는다.
+		LiveParticipantState kanavi = new LiveParticipantState(
+				7, "Red", "jungle", "HLE Kanavi", null, "Vi",
+				16, 1, 4, 16, 12_000, 230, 0.7, 0.2,
+				List.of(), List.of(), List.of(), null, null, null, List.of(), 30, 9);
+		LiveGameState state = new LiveGameState("LIVE_G", "M1", "LCK", "T1", "HLE", null, null,
+				List.of(oner, kanavi), List.of());
+		when(liveStateQueryService.getLatestState("LIVE_G")).thenReturn(Optional.of(state));
+
+		LiveGameMapping mapping = mock(LiveGameMapping.class);
+		when(mapping.getInternalGameId()).thenReturn(100L);
+		when(liveGameMappingRepository.findByLiveGameId("LIVE_G")).thenReturn(Optional.of(mapping));
+		// CSV 표기: side 'Blue'/'Red', position 'jng' — 라이브 'jungle' 과 정규화로 맞춘다. 선수명은 안 쓴다.
+		when(gameParticipantRepository.findLiveWardRowsByGameId(100L)).thenReturn(List.of(
+				new LiveWardRow("Blue", "jng", 14, 5),
+				new LiveWardRow("Red", "jng", 99, 99)));
+
+		LiveGameChampionsResponse response = service.getChampions("LIVE_G");
+
+		LiveGameChampionsResponse.Pick blueJungle = response.blueTeam().picks().get(0);
+		assertThat(blueJungle.wardsPlaced()).isEqualTo(14);
+		assertThat(blueJungle.wardsDestroyed()).isEqualTo(5);
+		LiveGameChampionsResponse.Pick redJungle = response.redTeam().picks().get(0);
+		assertThat(redJungle.wardsPlaced()).isEqualTo(30);
+		assertThat(redJungle.wardsDestroyed()).isEqualTo(9);
 	}
 
 	@Test
