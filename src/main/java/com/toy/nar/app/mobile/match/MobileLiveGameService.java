@@ -14,6 +14,8 @@ import com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotReposito
 import com.toy.nar.app.lolesports.live.repository.LiveGameObjectEventRepository;
 import com.toy.nar.app.mobile.match.dto.LiveGameChampionsResponse;
 import com.toy.nar.app.mobile.match.dto.LiveGameEventsResponse;
+import com.toy.nar.app.mobile.match.dto.LiveWardRow;
+import com.toy.nar.domain.game.repository.GameParticipantRepository;
 import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.domain.game.repository.BanRepository;
 import com.toy.nar.domain.participant.entity.Champion;
@@ -69,6 +71,7 @@ public class MobileLiveGameService {
 	private final BanRepository banRepository;
 	private final RuneMetadataResolver runeMetadataResolver;
 	private final ItemMetadataResolver itemMetadataResolver;
+	private final GameParticipantRepository gameParticipantRepository;
 
 	public LiveGameChampionsResponse getChampions(String gameId) {
 		LiveGameState state = requireState(gameId);
@@ -82,16 +85,18 @@ public class MobileLiveGameService {
 				.sorted(pickComparator())
 				.toList();
 
-		Map<String, List<LiveGameChampionsResponse.Ban>> bansBySide = resolveBans(gameId);
+		Long internalGameId = resolveInternalGameId(gameId);
+		Map<String, List<LiveGameChampionsResponse.Ban>> bansBySide = resolveBans(internalGameId);
+		Map<String, LiveWardRow> wardFallback = resolveWardFallback(internalGameId, state.participants());
 
 		// 오브젝트는 getLatestState 가 이미 실어 온 타임라인에서 센다(추가 조회 없음).
 		return new LiveGameChampionsResponse(
 				gameId,
 				state.frameTimestampUtc(),
 				toTeamChampions(state.blueTeamName(), blue,
-						bansBySide.getOrDefault(BLUE_SIDE_KEY, List.of())),
+						bansBySide.getOrDefault(BLUE_SIDE_KEY, List.of()), wardFallback),
 				toTeamChampions(state.redTeamName(), red,
-						bansBySide.getOrDefault(RED_SIDE_KEY, List.of())),
+						bansBySide.getOrDefault(RED_SIDE_KEY, List.of()), wardFallback),
 				new LiveGameChampionsResponse.Objectives(
 						countObjectives(state.objectTimeline(), BLUE),
 						countObjectives(state.objectTimeline(), RED)));
@@ -137,17 +142,21 @@ public class MobileLiveGameService {
 				dragonTypes.size(), dragonTypes, elders, barons, towers, inhibitors);
 	}
 
-	/**
-	 * 라이브 gameId 를 reconcile 된 배치 game 으로 매핑해 진영(BLUE/RED)별 밴 목록을 만든다.
-	 *
-	 * <p>라이브 피드에는 밴이 없어 배치 {@code bans} 테이블에서 가져온다. 아직 reconcile 되지
-	 * 않았거나(매핑의 internalGameId 가 null) 배치 적재 전이면 빈 맵을 반환한다. 배치는 6시간
-	 * 주기 적재라, 갓 끝난 경기의 밴은 다음 적재 + reconcile 이후에 노출된다(그 전엔 빈 목록).
-	 */
-	private Map<String, List<LiveGameChampionsResponse.Ban>> resolveBans(String liveGameId) {
-		Long internalGameId = liveGameMappingRepository.findByLiveGameId(liveGameId)
+	/** 라이브 gameId → reconcile 된 배치 game id. 아직 reconcile 전이면 null. */
+	private Long resolveInternalGameId(String liveGameId) {
+		return liveGameMappingRepository.findByLiveGameId(liveGameId)
 				.map(LiveGameMapping::getInternalGameId)
 				.orElse(null);
+	}
+
+	/**
+	 * 진영(BLUE/RED)별 밴 목록.
+	 *
+	 * <p>라이브 피드에는 밴이 없어 배치 {@code bans} 테이블에서 가져온다. 아직 reconcile 되지
+	 * 않았거나(internalGameId 가 null) 배치 적재 전이면 빈 맵을 반환한다. 배치는 6시간
+	 * 주기 적재라, 갓 끝난 경기의 밴은 다음 적재 + reconcile 이후에 노출된다(그 전엔 빈 목록).
+	 */
+	private Map<String, List<LiveGameChampionsResponse.Ban>> resolveBans(Long internalGameId) {
 		if (internalGameId == null) {
 			return Map.of();
 		}
@@ -159,6 +168,29 @@ public class MobileLiveGameService {
 								row -> new LiveGameChampionsResponse.Ban(
 										row.getChampionName(), row.getImageUrl()),
 								Collectors.toList())));
+	}
+
+	/**
+	 * 와드 수 폴백 — 라이브 스냅샷에 wards 가 없는 경기(V87 이전 수집분)만 배치 CSV 에서 채운다.
+	 *
+	 * <p>키는 {@code SIDE/position}(예: {@code BLUE/jungle}). 선수명이 아니라 진영·포지션으로 붙이는
+	 * 이유: 라이브 피드 표기("T1 Oner")와 CSV 표기("Oner")가 달라 이름 매칭은 깨지고, 진영·포지션은
+	 * 한 게임에 10개가 유일하다. 스냅샷에 값이 있으면 조회 자체를 하지 않는다.
+	 */
+	private Map<String, LiveWardRow> resolveWardFallback(Long internalGameId, List<LiveParticipantState> participants) {
+		boolean missing = participants.stream().anyMatch(p -> p.wardsPlaced() == null && p.wardsDestroyed() == null);
+		if (internalGameId == null || !missing) {
+			return Map.of();
+		}
+		Map<String, LiveWardRow> bySlot = new java.util.HashMap<>();
+		for (LiveWardRow row : gameParticipantRepository.findLiveWardRowsByGameId(internalGameId)) {
+			bySlot.put(slotKey(row.side(), row.position()), row);
+		}
+		return bySlot;
+	}
+
+	private String slotKey(String side, String position) {
+		return (side == null ? "" : side.toUpperCase(Locale.ROOT)) + "/" + canonicalPosition(position);
 	}
 
 	public LiveGameEventsResponse getEvents(String gameId) {
@@ -222,16 +254,16 @@ public class MobileLiveGameService {
 
 	private LiveGameChampionsResponse.TeamChampions toTeamChampions(
 			String teamName, List<LiveParticipantState> participants,
-			List<LiveGameChampionsResponse.Ban> bans) {
+			List<LiveGameChampionsResponse.Ban> bans, Map<String, LiveWardRow> wardFallback) {
 		List<LiveGameChampionsResponse.Pick> picks = participants.stream()
-				.map(this::toPick)
+				.map(p -> toPick(p, wardFallback.get(slotKey(p.teamSide(), p.role()))))
 				.toList();
 		// 밴은 reconcile 된 배치 데이터에서 채운다(라이브 피드엔 밴이 없음). 없으면 빈 목록.
 		return new LiveGameChampionsResponse.TeamChampions(
 				teamName, picks, bans, summarize(participants));
 	}
 
-	private LiveGameChampionsResponse.Pick toPick(LiveParticipantState p) {
+	private LiveGameChampionsResponse.Pick toPick(LiveParticipantState p, LiveWardRow wardFallback) {
 		RuneMetadataResolver.RuneBuild build = runeMetadataResolver.resolveRuneBuild(p.perksJson());
 		RuneMetadataResolver.RuneIcons runeIcons = runeMetadataResolver.resolveRuneIcons(p.perksJson());
 		ItemMetadataResolver.ItemGroups items = itemMetadataResolver.resolveItemGroups(p.itemIds());
@@ -248,8 +280,8 @@ public class MobileLiveGameService {
 				p.totalGoldEarned(),
 				p.killParticipation(),
 				p.championDamageShare(),
-				p.wardsPlaced(),
-				p.wardsDestroyed(),
+				p.wardsPlaced() != null || wardFallback == null ? p.wardsPlaced() : wardFallback.wardsPlaced(),
+				p.wardsDestroyed() != null || wardFallback == null ? p.wardsDestroyed() : wardFallback.wardsKilled(),
 				p.itemImageUrls(),
 				items.coreImageUrls(),
 				items.questItemImageUrl(),

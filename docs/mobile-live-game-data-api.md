@@ -195,7 +195,7 @@ URL 원형: 아이템 `https://ddragon.leagueoflegends.com/cdn/{ver}/img/item/{i
 | KDA      | `kills / deaths / assists`           |                                     |
 | CS · 골드  | `creepScore`, `totalGoldEarned`      | 골드는 `14.3k` 식 축약은 앱에서               |
 | 킬관여      | `killParticipation`                  | 0~1 실수. `85%` 로                     |
-| 와드 | `wardsPlaced`, `wardsDestroyed` | 설치 / 파괴 개수(누적). **시야점수가 아니다.** 2026-09-03 이전 경기는 null → 칸 숨김 |
+| 와드 | `wardsPlaced`, `wardsDestroyed` | 설치 / 파괴 개수(누적). **시야점수가 아니다.** 라이브 수집분(2026-09-03~)은 즉시, 그 전 경기는 종료 후 배치 CSV 로 채움(reconcile 전엔 null → 칸 숨김) |
 | 딜분배      | `championDamageShare`                | 0~1 실수. **분모가 자기 팀 5명** — 팀 간 비교 불가 |
 | 아이템 8칸   | 아래 아이템 절                             |                                     |
 

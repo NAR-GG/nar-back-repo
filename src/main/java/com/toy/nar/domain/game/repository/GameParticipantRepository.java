@@ -1,5 +1,6 @@
 package com.toy.nar.domain.game.repository;
 
+import com.toy.nar.app.mobile.match.dto.LiveWardRow;
 import com.toy.nar.app.schedule.dto.GameDetailParticipantRow;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -33,6 +34,11 @@ public interface GameParticipantRepository
 			"WHERE g.id IN :gameIds " +
 			"ORDER BY g.gameNumber ASC, gp.side ASC, gp.position ASC")
 	List<GameDetailParticipantRow> findScheduleDetailRowsByGameIds(@Param("gameIds") Set<Long> gameIds);
+
+	/** 라이브 경기상세 와드 수 폴백용. 한 게임 10행. 배치 스탯이 아직 없으면 빈 목록. */
+	@Query("SELECT new com.toy.nar.app.mobile.match.dto.LiveWardRow(gp.side, gp.position, s.wardsPlaced, s.wardsKilled) "
+			+ "FROM GameParticipant gp JOIN gp.stat s WHERE gp.game.id = :gameId")
+	List<LiveWardRow> findLiveWardRowsByGameId(@Param("gameId") Long gameId);
 
 	@Query("SELECT DISTINCT gp.game.league, gp.team FROM GameParticipant gp " +
 			"JOIN gp.game.league l " +
