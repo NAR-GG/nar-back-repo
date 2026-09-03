@@ -164,7 +164,9 @@ public class LiveStateQueryService {
 				participant.getPerksJson(),
 				perkInfo.primaryStyleName(),
 				perkInfo.subStyleName(),
-				perkInfo.runeNames());
+				perkInfo.runeNames(),
+				participant.getWardsPlaced(),
+				participant.getWardsDestroyed());
 	}
 
 	private List<Integer> parseItemIds(String itemIdsJson) {
