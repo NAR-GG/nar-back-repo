@@ -39,6 +39,10 @@ public record LiveGameChampionsResponse(
 			Double killParticipation,
 			/** 0~1. 분모는 자기 팀 5명 딜 합 — 상대 팀과 비교할 수 없다. */
 			Double championDamageShare,
+			/** 설치한 와드 수(일반+제어 합산, 누적). 시야점수가 아니다. 2026-09-03 이전 경기는 null. */
+			Integer wardsPlaced,
+			/** 부순 상대 와드 수(누적). */
+			Integer wardsDestroyed,
 			/** 구매 순서대로 섞여 있는 원본 목록. 섹션이 필요하면 아래 4개를 쓴다. */
 			List<String> itemImageUrls,
 			/** 장비 코어. 최대 6개. */

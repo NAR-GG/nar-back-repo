@@ -71,6 +71,14 @@ public class LiveGameMinuteParticipantSnapshot {
 	@Column(name = "champion_damage_share")
 	private Double championDamageShare;
 
+	/** 설치한 와드 수(일반+제어 합산, 누적). 피드 wardsPlaced. V87 이전 행은 null. */
+	@Column(name = "wards_placed")
+	private Integer wardsPlaced;
+
+	/** 부순 상대 와드 수(누적). 피드 wardsDestroyed. */
+	@Column(name = "wards_destroyed")
+	private Integer wardsDestroyed;
+
 	@Column(name = "item_ids_json", columnDefinition = "TEXT")
 	private String itemIdsJson;
 
@@ -94,7 +102,9 @@ public class LiveGameMinuteParticipantSnapshot {
 			Double killParticipation,
 			Double championDamageShare,
 			String itemIdsJson,
-			String perksJson) {
+			String perksJson,
+			Integer wardsPlaced,
+			Integer wardsDestroyed) {
 		this.snapshot = snapshot;
 		this.participantId = participantId;
 		this.teamSide = teamSide;
@@ -112,6 +122,8 @@ public class LiveGameMinuteParticipantSnapshot {
 		this.championDamageShare = championDamageShare;
 		this.itemIdsJson = itemIdsJson;
 		this.perksJson = perksJson;
+		this.wardsPlaced = wardsPlaced;
+		this.wardsDestroyed = wardsDestroyed;
 	}
 }
 

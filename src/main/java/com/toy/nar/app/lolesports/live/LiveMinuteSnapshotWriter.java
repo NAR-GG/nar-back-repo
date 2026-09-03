@@ -65,7 +65,9 @@ public class LiveMinuteSnapshotWriter {
 					participant.killParticipation(),
 					participant.championDamageShare(),
 					toJson(participant.itemIds()),
-					participant.perksJson()));
+					participant.perksJson(),
+					participant.wardsPlaced(),
+					participant.wardsDestroyed()));
 		}
 
 		participantSnapshotRepository.saveAllAndFlush(participantRows);

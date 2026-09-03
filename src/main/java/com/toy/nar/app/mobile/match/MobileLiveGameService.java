@@ -248,6 +248,8 @@ public class MobileLiveGameService {
 				p.totalGoldEarned(),
 				p.killParticipation(),
 				p.championDamageShare(),
+				p.wardsPlaced(),
+				p.wardsDestroyed(),
 				p.itemImageUrls(),
 				items.coreImageUrls(),
 				items.questItemImageUrl(),

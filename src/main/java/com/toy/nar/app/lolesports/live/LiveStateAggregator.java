@@ -105,7 +105,9 @@ public class LiveStateAggregator {
 						perksJson,
 						primaryStyleName,
 						subStyleName,
-						runeNames));
+						runeNames,
+						intOrNull(frameParticipant, "wardsPlaced"),
+						intOrNull(frameParticipant, "wardsDestroyed")));
 			}
 		}
 
