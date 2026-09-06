@@ -189,9 +189,8 @@ public class ItemMetadataResolver {
 					int itemId = Integer.parseInt(entry.getKey());
 					JsonNode itemNode = entry.getValue();
 					String name = itemNode.path("name").asText("");
-					// 설명은 description(스탯+효과, 마크업 포함)을 평문화한다. 비면 plaintext 폴백.
-					String description = RuneMetadataResolver.stripMarkup(
-							itemNode.path("description").asText(null));
+					// 설명은 description(스탯+효과, 마크업 포함)을 줄 구조를 살려 평문화한다. 비면 plaintext 폴백.
+					String description = toMultilineText(itemNode.path("description").asText(null));
 					if (description == null) {
 						description = itemNode.path("plaintext").asText(null);
 					}
@@ -219,6 +218,39 @@ public class ItemMetadataResolver {
 		}
 	}
 
+	/**
+	 * ddragon 아이템 description 을 줄 구조를 살려 평문으로 만든다.
+	 *
+	 * <p>룬의 {@link RuneMetadataResolver#stripMarkup} 은 {@code <br>} 을 공백으로 뭉개는데, 아이템은
+	 * 그러면 스탯("공격력 40 공격 속도 20%")과 효과 이름("마공학 충전")과 본문이 한 줄에 붙어 읽을 수
+	 * 없다(2026-09-06 실측 피드백). 아이템 마크업은 {@code <br>} = 줄바꿈, {@code <br><br>} = 단락으로
+	 * 일관되게 쓰이므로(스탯 블록 → 빈 줄 → 효과 이름 → 본문) 그 구조를 그대로 살린다.
+	 */
+	static String toMultilineText(String html) {
+		if (html == null) {
+			return null;
+		}
+		String text = html.replaceAll("<br\\s*/?>", "\n")
+				.replaceAll("<li>", "\n· ")
+				.replaceAll("<[^>]+>", "");
+		StringBuilder out = new StringBuilder();
+		int blankRun = 0;
+		for (String rawLine : text.split("\n")) {
+			String line = rawLine.replaceAll("\\s+", " ").trim();
+			if (line.isEmpty()) {
+				blankRun++;
+				continue;
+			}
+			if (out.length() > 0) {
+				// 빈 줄이 몇 개 있었든 단락 구분 하나로 접는다. <stats></stats> 가 빈 장신구는 앞 빈 줄이 사라진다.
+				out.append(blankRun > 0 ? "\n\n" : "\n");
+			}
+			out.append(line);
+			blankRun = 0;
+		}
+		return out.length() == 0 ? null : out.toString();
+	}
+
 	private String buildFallbackImageUrl(Integer itemId) {
 		if (dataDragonVersion == null || dataDragonVersion.isBlank()) {
 			return null;
@@ -236,7 +268,7 @@ public class ItemMetadataResolver {
 		}
 	}
 
-	/** 빌드 시트용 아이템 한 칸. description 은 ddragon description 평문(stripMarkup). */
+	/** 빌드 시트용 아이템 한 칸. description 은 줄 구조를 살린 평문({@link #toMultilineText}). */
 	public record Item(String name, String imageUrl, String description) {
 	}
 
