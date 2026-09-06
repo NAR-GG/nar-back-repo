@@ -47,6 +47,34 @@ class ItemMetadataResolverTest {
 	}
 
 	@Test
+	void toMultilineText_스탯_효과이름_본문을_줄과_단락으로_가른다() {
+		// 실제 ddragon 3073(실험적 마공학판) 마크업 축약. <br>=줄바꿈, <br><br>=단락.
+		String html = "<mainText><stats>공격력 <attention>40</attention><br>공격 속도 <attention>20%</attention></stats>"
+				+ "<br><br><passive>마공학 충전</passive><br>궁극기 가속이 30 증가합니다.<br><br>"
+				+ "<passive>폭주</passive><br>8초 동안 <attackSpeed>공격 속도가 0%</attackSpeed> 증가합니다. </mainText>";
+
+		assertThat(ItemMetadataResolver.toMultilineText(html)).isEqualTo(
+				"공격력 40\n공격 속도 20%"
+						+ "\n\n마공학 충전\n궁극기 가속이 30 증가합니다."
+						+ "\n\n폭주\n8초 동안 공격 속도가 0% 증가합니다.");
+	}
+
+	@Test
+	void toMultilineText_스탯이_빈_장신구는_앞_빈줄_없이_본문부터_시작한다() {
+		// 3364(예언자의 렌즈): <stats></stats><br><br> 로 시작한다. 선행 단락 구분이 남으면 카드 위가 뜬다.
+		String html = "<mainText><stats></stats><br><br><active>사용 시</active> (160초)<br>주변 와드를 드러냅니다.</mainText>";
+
+		assertThat(ItemMetadataResolver.toMultilineText(html))
+				.isEqualTo("사용 시 (160초)\n주변 와드를 드러냅니다.");
+	}
+
+	@Test
+	void toMultilineText_null_이나_태그만_있으면_null() {
+		assertThat(ItemMetadataResolver.toMultilineText(null)).isNull();
+		assertThat(ItemMetadataResolver.toMultilineText("<mainText><stats></stats></mainText>")).isNull();
+	}
+
+	@Test
 	void groupItems_코어가_6개_이하면_신발도_코어에_그대로_둔다() {
 		// 퀘스트 미완: 신발은 평범한 코어 한 칸이다.
 		ItemMetadataResolver.ItemGroups groups = ItemMetadataResolver.groupItems(List.of(
