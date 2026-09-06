@@ -48,7 +48,6 @@ flowchart LR
     POLL -->|"세트 시작·종료·매치 종료"| LA["라이브 액티비티 푸시<br/>LiveActivityPushService"]
     LA -->|"진행도 워터마크 · 카드 발행 이력"| LADB[("live_activity_*")]
     LA -->|"content-state 갱신<br/>(alert 없음)"| APNS["APNs 클라이언트"]
-```
 
 %% POLL   → app/lolesports/live/LivePollingScheduler, LiveObjectEventRecorder
 %% SOLO   → app/riot/PlayerSoloRankMonitorService, SoloRankEndNotificationService
@@ -58,6 +57,7 @@ flowchart LR
 %% GW     → app/mobile/push/MobilePushGateway, FirebaseMobilePushGateway
 %% LA     → app/mobile/push/LiveActivityPushService, LiveActivityCatchUpService, LiveActivityOrphanCardSweeper
 %% FEED   → app/mobile/notification/MemberNotificationService, MemberNotificationRetentionService
+```
 
 읽는 법
 - **일반 알림 경로**(위쪽): 이벤트 → 발송 이력에 수신자 예약(멱등) → 알림함 기록 → 잠자기 필터 → FCM.
