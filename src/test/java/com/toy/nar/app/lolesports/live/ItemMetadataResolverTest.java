@@ -10,19 +10,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ItemMetadataResolverTest {
 
 	private static ItemMetadataResolver.ResolvedItem core(String url) {
-		return new ItemMetadataResolver.ResolvedItem(url, Set.of("Damage"));
+		return new ItemMetadataResolver.ResolvedItem(url + "-name", url, url + "-desc", Set.of("Damage"));
 	}
 
 	private static ItemMetadataResolver.ResolvedItem boots(String url) {
-		return new ItemMetadataResolver.ResolvedItem(url, Set.of("Boots", "NonbootsMovement"));
+		return new ItemMetadataResolver.ResolvedItem(url + "-name", url, url + "-desc",
+				Set.of("Boots", "NonbootsMovement"));
 	}
 
 	private static ItemMetadataResolver.ResolvedItem trinket(String url) {
-		return new ItemMetadataResolver.ResolvedItem(url, Set.of("Active", "Trinket", "Vision"));
+		return new ItemMetadataResolver.ResolvedItem(url + "-name", url, url + "-desc",
+				Set.of("Active", "Trinket", "Vision"));
 	}
 
 	private static ItemMetadataResolver.ResolvedItem consumable(String url) {
-		return new ItemMetadataResolver.ResolvedItem(url, Set.of("Consumable", "Vision"));
+		return new ItemMetadataResolver.ResolvedItem(url + "-name", url, url + "-desc",
+				Set.of("Consumable", "Vision"));
 	}
 
 	@Test
@@ -36,6 +39,11 @@ class ItemMetadataResolverTest {
 		assertThat(groups.questItemImageUrl()).isEqualTo("boots");
 		assertThat(groups.trinketImageUrl()).isEqualTo("t");
 		assertThat(groups.consumableImageUrls()).containsExactly("ward");
+		// 이름·설명도 같은 칸으로 따라온다 (빌드 시트 상세용)
+		assertThat(groups.questItem().name()).isEqualTo("boots-name");
+		assertThat(groups.questItem().description()).isEqualTo("boots-desc");
+		assertThat(groups.trinket().name()).isEqualTo("t-name");
+		assertThat(groups.core().get(0).description()).isEqualTo("i1-desc");
 	}
 
 	@Test

@@ -56,7 +56,25 @@ public record LiveGameChampionsResponse(
 			String keystoneIconUrl,
 			String subStyleIconUrl,
 			/** 빌드 시트용 룬 전체. perks 가 없으면 null. */
-			RuneBuild runes) {
+			RuneBuild runes,
+			/** 빌드 시트용 아이템 전체(이름·설명 포함). 위 *ItemImageUrls 와 같은 분류의 상세판. */
+			ItemBuild items) {
+	}
+
+	/** 룬(RuneBuild)과 같은 패턴 — 섹션 구성은 coreItemImageUrls 류와 동일하다. */
+	public record ItemBuild(
+			/** 장비 코어. 최대 6개. */
+			List<Item> core,
+			/** 퀘스트 칸으로 옮겨진 신발. 퀘스트 미완이면 null. */
+			Item questItem,
+			/** 장신구 한 칸. 안 샀으면 null. */
+			Item trinket,
+			/** 제어와드·물약·영약. 없으면 빈 목록. */
+			List<Item> consumables) {
+	}
+
+	/** description 은 ddragon description 평문(마크업 제거). 메타 미적재면 null. */
+	public record Item(String name, String iconUrl, String description) {
 	}
 
 	public record RuneBuild(

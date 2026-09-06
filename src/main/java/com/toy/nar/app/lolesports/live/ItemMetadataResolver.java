@@ -80,30 +80,31 @@ public class ItemMetadataResolver {
 			String imageUrl = itemInfo.imageUrl() != null && !itemInfo.imageUrl().isBlank()
 					? itemInfo.imageUrl()
 					: buildFallbackImageUrl(itemId);
-			resolved.add(new ResolvedItem(imageUrl, itemInfo.tags()));
+			resolved.add(new ResolvedItem(itemInfo.name(), imageUrl, itemInfo.description(), itemInfo.tags()));
 		}
 		return groupItems(resolved);
 	}
 
 	/** 분류 규칙 본문. ddragon 로드와 분리해 단위 테스트한다. */
 	static ItemGroups groupItems(List<ResolvedItem> items) {
-		List<String> core = new ArrayList<>();
-		List<String> bootsInCore = new ArrayList<>();
-		String trinketImageUrl = null;
-		List<String> consumables = new ArrayList<>();
+		List<Item> core = new ArrayList<>();
+		List<Item> bootsInCore = new ArrayList<>();
+		Item trinket = null;
+		List<Item> consumables = new ArrayList<>();
 
 		for (ResolvedItem item : items) {
 			if (item.tags().contains(TAG_TRINKET)) {
 				// 장신구는 한 칸뿐이다. 잔재로 둘이 남으면 먼저 산 쪽을 남긴다.
-				if (trinketImageUrl == null) {
-					trinketImageUrl = item.imageUrl();
+				if (trinket == null) {
+					trinket = item.toItem();
 				}
 			} else if (item.tags().contains(TAG_CONSUMABLE)) {
-				consumables.add(item.imageUrl());
+				consumables.add(item.toItem());
 			} else {
-				core.add(item.imageUrl());
+				Item coreItem = item.toItem();
+				core.add(coreItem);
 				if (item.tags().contains(TAG_BOOTS)) {
-					bootsInCore.add(item.imageUrl());
+					bootsInCore.add(coreItem);
 				}
 			}
 		}
@@ -112,17 +113,17 @@ public class ItemMetadataResolver {
 		// 아이템이 아니다. 피드 items[] 는 구매 순서라 신발이 2~4번째에 있으므로(실측 29건 전부),
 		// 코어가 6칸을 넘으면 신발을 뽑아 퀘스트 칸에 놓는다. 서포터 퀘스트 칸은 제어와드 전용이라
 		// 이미 소모품으로 빠져 있다(코어 7 인 서포터 실측 0건).
-		String questItemImageUrl = null;
+		Item questItem = null;
 		if (core.size() > CORE_SLOTS) {
-			questItemImageUrl = bootsInCore.isEmpty() ? core.get(CORE_SLOTS) : bootsInCore.get(0);
-			core.remove(questItemImageUrl);
+			questItem = bootsInCore.isEmpty() ? core.get(CORE_SLOTS) : bootsInCore.get(0);
+			core.remove(questItem);
 			if (core.size() > CORE_SLOTS) {
 				// 그래도 넘치면 하위템 잔재다. 뒤쪽을 버린다.
 				core = new ArrayList<>(core.subList(0, CORE_SLOTS));
 			}
 		}
 
-		return new ItemGroups(core, questItemImageUrl, trinketImageUrl, consumables);
+		return new ItemGroups(core, questItem, trinket, consumables);
 	}
 
 	public List<String> resolveItemImageUrls(List<Integer> itemIds) {
@@ -188,6 +189,12 @@ public class ItemMetadataResolver {
 					int itemId = Integer.parseInt(entry.getKey());
 					JsonNode itemNode = entry.getValue();
 					String name = itemNode.path("name").asText("");
+					// 설명은 description(스탯+효과, 마크업 포함)을 평문화한다. 비면 plaintext 폴백.
+					String description = RuneMetadataResolver.stripMarkup(
+							itemNode.path("description").asText(null));
+					if (description == null) {
+						description = itemNode.path("plaintext").asText(null);
+					}
 					String imageFull = itemNode.path("image").path("full").asText("");
 					String imageUrl = imageFull.isBlank()
 							? null
@@ -196,7 +203,7 @@ public class ItemMetadataResolver {
 					for (JsonNode tag : itemNode.path("tags")) {
 						tags.add(tag.asText(""));
 					}
-					newItemsById.put(itemId, new ItemInfo(name, imageUrl, tags));
+					newItemsById.put(itemId, new ItemInfo(name, imageUrl, description, tags));
 				} catch (NumberFormatException ignore) {
 					// Ignore non-numeric item id keys.
 				}
@@ -219,18 +226,41 @@ public class ItemMetadataResolver {
 		return "https://ddragon.leagueoflegends.com/cdn/" + dataDragonVersion + "/img/item/" + itemId + ".png";
 	}
 
-	private record ItemInfo(String name, String imageUrl, Set<String> tags) {
+	private record ItemInfo(String name, String imageUrl, String description, Set<String> tags) {
 	}
 
-	/** 분류 입력 — 이미지 URL 과 ddragon 태그 쌍. */
-	record ResolvedItem(String imageUrl, Set<String> tags) {
+	/** 분류 입력 — 이름·이미지 URL·설명 평문·ddragon 태그. */
+	record ResolvedItem(String name, String imageUrl, String description, Set<String> tags) {
+		Item toItem() {
+			return new Item(name, imageUrl, description);
+		}
+	}
+
+	/** 빌드 시트용 아이템 한 칸. description 은 ddragon description 평문(stripMarkup). */
+	public record Item(String name, String imageUrl, String description) {
 	}
 
 	/** 스코어보드 아이템 칸 구성. 장신구·퀘스트 칸은 없으면 null. */
 	public record ItemGroups(
-			List<String> coreImageUrls,
-			String questItemImageUrl,
-			String trinketImageUrl,
-			List<String> consumableImageUrls) {
+			List<Item> core,
+			Item questItem,
+			Item trinket,
+			List<Item> consumables) {
+
+		public List<String> coreImageUrls() {
+			return core.stream().map(Item::imageUrl).toList();
+		}
+
+		public String questItemImageUrl() {
+			return questItem == null ? null : questItem.imageUrl();
+		}
+
+		public String trinketImageUrl() {
+			return trinket == null ? null : trinket.imageUrl();
+		}
+
+		public List<String> consumableImageUrls() {
+			return consumables.stream().map(Item::imageUrl).toList();
+		}
 	}
 }

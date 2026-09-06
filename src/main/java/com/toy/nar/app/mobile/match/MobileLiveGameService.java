@@ -289,7 +289,23 @@ public class MobileLiveGameService {
 				items.consumableImageUrls(),
 				runeIcons.keystoneIconUrl(),
 				runeIcons.subStyleIconUrl(),
-				toRuneBuild(build));
+				toRuneBuild(build),
+				toItemBuild(items));
+	}
+
+	private LiveGameChampionsResponse.ItemBuild toItemBuild(ItemMetadataResolver.ItemGroups groups) {
+		return new LiveGameChampionsResponse.ItemBuild(
+				groups.core().stream().map(this::toItem).toList(),
+				toItem(groups.questItem()),
+				toItem(groups.trinket()),
+				groups.consumables().stream().map(this::toItem).toList());
+	}
+
+	private LiveGameChampionsResponse.Item toItem(ItemMetadataResolver.Item item) {
+		if (item == null) {
+			return null;
+		}
+		return new LiveGameChampionsResponse.Item(item.name(), item.imageUrl(), item.description());
 	}
 
 	private LiveGameChampionsResponse.RuneBuild toRuneBuild(RuneMetadataResolver.RuneBuild build) {
