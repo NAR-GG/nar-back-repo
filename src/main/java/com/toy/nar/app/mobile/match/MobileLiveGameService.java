@@ -35,6 +35,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -230,26 +231,28 @@ public class MobileLiveGameService {
 
 	/** 팀명으로 로고 이미지 URL 을 조회한다. 매핑이 없거나 팀명이 비면 null. */
 	private String resolveTeamImageUrl(String teamName) {
-		if (teamName == null || teamName.isBlank()) {
-			return null;
-		}
-		String url = lookupTeamImage(teamName);
-		if (url == null) {
-			// 라이브 팀명은 "Gen.G Esports"처럼 접미사가 붙는 경우가 있어, 접미사를 떼고 재시도한다(예: DB "Gen.g").
-			String stripped = teamName
-					.replaceAll("(?i)\\s+(esports club|e-sports|esports|gaming)$", "")
-					.trim();
-			if (!stripped.isBlank() && !stripped.equalsIgnoreCase(teamName)) {
-				url = lookupTeamImage(stripped);
-			}
-		}
-		return url;
+		return resolveTeam(teamName).map(Team::getImageUrl).orElse(null);
 	}
 
-	private String lookupTeamImage(String name) {
-		return teamRepository.findByNameIgnoreCase(name)
-				.map(Team::getImageUrl)
-				.orElse(null);
+	/**
+	 * 라이브 팀명 → Team. 라이브 팀명은 "Gen.G Esports"처럼 접미사가 붙는 경우가 있어,
+	 * 정확히 못 찾으면 접미사를 떼고 재시도한다(예: DB "Gen.g").
+	 */
+	private Optional<Team> resolveTeam(String teamName) {
+		if (teamName == null || teamName.isBlank()) {
+			return Optional.empty();
+		}
+		Optional<Team> team = teamRepository.findByNameIgnoreCase(teamName);
+		if (team.isPresent()) {
+			return team;
+		}
+		String stripped = teamName
+				.replaceAll("(?i)\\s+(esports club|e-sports|esports|gaming)$", "")
+				.trim();
+		if (!stripped.isBlank() && !stripped.equalsIgnoreCase(teamName)) {
+			return teamRepository.findByNameIgnoreCase(stripped);
+		}
+		return Optional.empty();
 	}
 
 	private LiveGameChampionsResponse.TeamChampions toTeamChampions(
@@ -258,9 +261,15 @@ public class MobileLiveGameService {
 		List<LiveGameChampionsResponse.Pick> picks = participants.stream()
 				.map(p -> toPick(p, wardFallback.get(slotKey(p.teamSide(), p.role()))))
 				.toList();
+		// 팀 코드·로고는 라이브 팀명으로 Team 을 찾아 붙인다. 앱이 헤더 배지에 스케줄 A/B 순서 대신
+		// 이 진영의 실제 팀을 쓸 수 있게 — 세트마다 진영이 바뀌는데 스케줄 순서는 매치 단위다.
+		Optional<Team> team = resolveTeam(teamName);
 		// 밴은 reconcile 된 배치 데이터에서 채운다(라이브 피드엔 밴이 없음). 없으면 빈 목록.
 		return new LiveGameChampionsResponse.TeamChampions(
-				teamName, picks, bans, summarize(participants));
+				teamName,
+				team.map(Team::getCode).orElse(null),
+				team.map(Team::getImageUrl).orElse(null),
+				picks, bans, summarize(participants));
 	}
 
 	private LiveGameChampionsResponse.Pick toPick(LiveParticipantState p, LiveWardRow wardFallback) {
@@ -271,6 +280,7 @@ public class MobileLiveGameService {
 				canonicalPosition(p.role()),
 				p.championName(),
 				resolveChampionLoadingImageUrl(p.championName()),
+				resolveChampionImageUrl(p.championName()),
 				p.playerName(),
 				p.level(),
 				p.kills(),
