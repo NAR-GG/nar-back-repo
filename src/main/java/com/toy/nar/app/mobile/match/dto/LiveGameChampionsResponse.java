@@ -19,6 +19,10 @@ public record LiveGameChampionsResponse(
 
 	public record TeamChampions(
 			String teamName,
+			/** 팀 코드(예: "BLG"). 이 진영이 실제로 어느 팀인지 — 스케줄 A/B 순서가 아니라 피드의 세트별 진영이다. 매핑 없으면 null. */
+			String teamCode,
+			/** 팀 로고. 매핑 없으면 null. */
+			String teamImageUrl,
 			List<Pick> picks,
 			List<Ban> bans,
 			TeamSummary summary) {
@@ -27,7 +31,10 @@ public record LiveGameChampionsResponse(
 	public record Pick(
 			String position,
 			String championName,
+			/** 세로 픽 카드용 스플래시(400×600 크롭). 작은 정사각 썸네일엔 쓰지 말 것 — 얼굴이 잘린다. */
 			String championImageUrl,
+			/** 정사각 챔피언 아이콘(ddragon). 스코어보드 행·빌드 시트 헤더 등 작은 썸네일용. */
+			String championIconUrl,
 			String playerName,
 			Integer level,
 			Integer kills,

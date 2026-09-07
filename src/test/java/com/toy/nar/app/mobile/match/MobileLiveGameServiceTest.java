@@ -150,6 +150,8 @@ class MobileLiveGameServiceTest {
 
 		assertThat(response.blueTeam().picks().get(0).championImageUrl())
 				.isEqualTo("https://cdn.communitydragon.org/latest/champion/58/splash-art/centered");
+		// 작은 썸네일용 정사각 아이콘은 스플래시와 별개로 항상 정사각 URL 이다.
+		assertThat(response.blueTeam().picks().get(0).championIconUrl()).isEqualTo("sq/renekton.png");
 		assertThat(response.redTeam().picks().get(0).championImageUrl()).isEqualTo("sq/azir.png");
 	}
 
@@ -242,6 +244,28 @@ class MobileLiveGameServiceTest {
 		LiveGameChampionsResponse.Pick redJungle = response.redTeam().picks().get(0);
 		assertThat(redJungle.wardsPlaced()).isEqualTo(30);
 		assertThat(redJungle.wardsDestroyed()).isEqualTo(9);
+	}
+
+	@Test
+	void getChampions_진영별_팀코드는_라이브_팀명으로_찾고_접미사가_붙어도_맞춘다() {
+		// 라이브 "Gen.G Esports" 는 DB 에 "Gen.g" 로만 있다 — 접미사 폴백으로 찾아야 한다.
+		LiveGameState state = new LiveGameState("LIVE_G", "M1", "LCK", "Anyone's Legend", "Gen.G Esports", null, null,
+				List.of(), List.of());
+		when(liveStateQueryService.getLatestState("LIVE_G")).thenReturn(Optional.of(state));
+		when(liveGameMappingRepository.findByLiveGameId("LIVE_G")).thenReturn(Optional.empty());
+		when(teamRepository.findByNameIgnoreCase("Anyone's Legend"))
+				.thenReturn(Optional.of(com.toy.nar.domain.participant.entity.Team.builder()
+						.name("Anyone's Legend").code("AL").imageUrl("logo/al").build()));
+		when(teamRepository.findByNameIgnoreCase("Gen.G Esports")).thenReturn(Optional.empty());
+		when(teamRepository.findByNameIgnoreCase("Gen.G"))
+				.thenReturn(Optional.of(com.toy.nar.domain.participant.entity.Team.builder()
+						.name("Gen.g").code("GEN").imageUrl("logo/gen").build()));
+
+		LiveGameChampionsResponse response = service.getChampions("LIVE_G");
+
+		assertThat(response.blueTeam().teamCode()).isEqualTo("AL");
+		assertThat(response.blueTeam().teamImageUrl()).isEqualTo("logo/al");
+		assertThat(response.redTeam().teamCode()).isEqualTo("GEN");
 	}
 
 	@Test
