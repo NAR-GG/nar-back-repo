@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>FCM 발송 — 동기 SDK + 가상 스레드 vs sendAsync</title>
+<style>
+  body { font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; max-width: 960px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #222; }
+  h1 { font-size: 1.6em; } h2 { font-size: 1.25em; margin-top: 2em; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f6f6f6; }
+  .mermaid { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 16px; margin: 16px 0; }
+  code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+  blockquote { border-left: 4px solid #ccc; margin: 1em 0; padding: 4px 16px; color: #444; background: #fafafa; }
+</style>
+</head>
+<body>
+
+<h1>FCM 발송 — 동기 SDK + 가상 스레드 vs <code>sendAsync</code></h1>
+<p>2026-09-06. <code>FirebaseMobilePushGateway</code> 가 <code>sendEachForMulticast</code>(블로킹)를 쓰고, 호출부(<code>LivePollingScheduler</code>)가 <code>applicationTaskExecutor</code>(가상 스레드)로 떼는 구조의 근거.</p>
+
+<h2>A. 지금 — 동기 SDK + 가상 스레드로 떼기</h2>
+<pre class="mermaid">
+flowchart LR
+    A1[폴링 스레드] -->|"execute()<br/>즉시 반환"| A2[가상 스레드]
+    A2 -->|"sendEachForMulticast<br/>(블로킹)"| A3[FCM]
+    A3 -->|"BatchResponse"| A2
+    A2 -->|"markSent · 토큰 회수 · 알림함"| A4[(DB)]
+</pre>
+
+<h2>B. <code>sendEachForMulticastAsync</code></h2>
+<pre class="mermaid">
+flowchart LR
+    B1[폴링 스레드] -->|"sendAsync<br/>ApiFuture 반환"| B2[SDK 스레드풀]
+    B2 -->|"같은 HTTP 호출"| B3[FCM]
+    B3 -->|"BatchResponse"| B2
+    B2 -->|"addCallback()"| B4["markSent · 토큰 회수 · 알림함<br/>(콜백 안에서)"]
+    B4 --> B5[(DB)]
+</pre>
+
+<h2>같은 점 / 다른 점</h2>
+<p><b>같은 점</b>: FCM 왕복 시간 동일. <code>…Async</code> 는 네트워크를 빠르게 하는 게 아니라 "누가 기다리느냐"를 SDK 스레드풀로 옮기는 것. A 는 그걸 우리 가상 스레드가 한다.</p>
+<table>
+  <tr><th></th><th>A (지금)</th><th>B (sendAsync)</th></tr>
+  <tr><td>기다리는 스레드</td><td>가상 스레드 (블로킹 비용 ≈ 0)</td><td>SDK 플랫폼 스레드풀</td></tr>
+  <tr><td>후처리 (마감·토큰 회수)</td><td>순차 코드, try/catch</td><td>콜백 체인. 예외·트랜잭션·MDC 컨텍스트 흘리기 쉬움</td></tr>
+  <tr><td>결과 필요 여부</td><td>필요 — <code>successTokens</code> 로 누가 받았는지 기록</td><td>결국 콜백에서 같은 일. 안 기다릴 수 없다</td></tr>
+  <tr><td>동시 청크</td><td>순차 (1,500명 = 3회 직렬)</td><td>청크별 future 모아 병렬 가능</td></tr>
+</table>
+
+<blockquote>
+<b>결론</b>: Java 21 가상 스레드에선 A 가 정석 — "동기 코드, 비동기 성능". B 는 플랫폼 스레드 시절의 답.<br>
+<b>B 가 맞는 경우</b>: 요청이 수백 개로 팬아웃되고 동시성 제어가 필요할 때. 우리 APNs 가 그 경우 — 멀티캐스트 없이 카드 1장 = HTTP 1회라 <code>HttpClient.sendAsync</code> + <code>CompletableFuture</code> 로 쐈고, #404 에서 HTTP/2 동시 스트림 한도 초과로 200장이 버려져 동시성 제어까지 넣었다.
+</blockquote>
+
+<h2>참고 — APNs 경로 (진짜 비동기가 필요했던 곳)</h2>
+<pre class="mermaid">
+flowchart LR
+    P[세트 이벤트] --> LA[LiveActivityPushService]
+    LA -->|"카드마다 HTTP 1회<br/>sendAsync × N"| H[HttpClient HTTP/2]
+    H -->|"동시 스트림 한도<br/>(#404 제어)"| APNS[APNs]
+    APNS -->|"CompletableFuture&lt;Boolean&gt;"| LA
+    LA -->|"join 후 카드 발행 이력"| DB[(live_activity_*)]
+</pre>
+
+<h2>진짜 병목은 다른 곳</h2>
+<pre class="mermaid">
+flowchart LR
+    R["dedup 예약<br/>구독자 단위 쿼리 (순차)"] --> F["알림함 INSERT<br/>(배치됨)"]
+    F --> C1["FCM 청크 1"] --> C2["청크 2"] --> C3["청크 3"]
+    C3 --> M["markSent<br/>(배치됨)"]
+    style R fill:#ffe3e3,stroke:#c00
+</pre>
+<ul>
+  <li>FCM 청크 3개 직렬 → 병렬화 가치 작음 (왕복 3회 → 1회, 수백 ms)</li>
+  <li>코드 주석: "dedup 예약과 발송 기록은 아직 구독자 단위 쿼리" → 1,500명이면 쿼리 1,500번. 이게 크다</li>
+  <li>킬 알림(<code>LiveObjectEventRecorder.fireLiveEventPush</code>)은 executor 오프로드조차 없음 → 폴링 tick 을 막는다</li>
+</ul>
+<p><b>우선순위</b>: 킬 경로 오프로드(한 줄) &gt; dedup 예약 배치화 &gt; FCM 청크 병렬. <code>sendAsync</code> 전환은 셋 다 아니다.</p>
+
+<h2>이력</h2>
+<ul>
+  <li>#323 (2026-07-29 실측): 구독자별 <code>send</code> 호출 → 1,500명 팬아웃 8~18분, 마지막 구독자는 세트 끝난 뒤 수신. 멀티캐스트 1회로 묶음. 이때 동기 SDK 그대로 두고 폴링 스레드 분리는 executor 로.</li>
+  <li>#345 / #404: APNs 는 <code>CompletableFuture</code> 팬아웃 + 동시 스트림 제어.</li>
+  <li>기록된 "왜 sendAsync 안 썼나"는 없음. 결과적으로 맞는 선택이지만 의도된 결정이라기보단 관성.</li>
+</ul>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</body>
+</html>
