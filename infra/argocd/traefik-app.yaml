@@ -47,15 +47,46 @@ spec:
         ingressRoute:
           dashboard:
             enabled: false
-        # 단일 노드라 복제본 1. 파드가 죽으면 k8s 가 다시 띄우는 것으로 충분하다.
+        # **복제본 2다.** 원래 1이었고 근거는 "파드가 죽으면 k8s 가 다시 띄우는 것으로
+        # 충분하다" 였는데, 2026-09-06 17:21 에 그게 아니라는 게 드러났다 —
+        # 이 파드가 유저 트래픽의 유일한 관문이라 죽는 동안 대체 경로가 없다.
+        # cloudflared 로그에 실유저 요청이 `connection refused` 로 실패한 게 남아 있다.
+        #
+        # 2면 Service 엔드포인트에서 죽은 파드가 빠지고 부분 실패로 끝난다.
+        # 부수 효과로 파드당 부하와 메모리도 절반이 된다.
+        # 이후 traefik 변경은 항상 2개 중 1개씩 교체돼 단일 파드 교체 고민이 없어진다.
         deployment:
-          replicas: 1
+          replicas: 2
         resources:
           requests:
             cpu: 100m
-            memory: 100Mi
+            # 평상시 실사용 123Mi. requests 를 그 아래로 두면 노드 메모리 압박 때
+            # "requests 초과분이 큰 Burstable" 로 분류돼 evict 우선순위가 올라간다.
+            memory: 150Mi
           limits:
-            memory: 300Mi
+            # 300Mi → 1Gi. **자원이 부족해서 죽은 게 아니라 이 선 때문에 죽었다.**
+            #
+            # 2026-09-06 17:21, 경기 시작 트래픽이 166 req/분 → 5,853 req/분(35배)으로
+            # 튀면서 OOMKilled. 그때 노드는 9.69GiB 중 5.25GiB(54%)만 쓰고 있었다.
+            # 평상시 123Mi 에 천장 300Mi = 여유 2.4배로 35배 파도를 막고 있었다.
+            #
+            # limits 는 예약이 아니라 천장이라 올려도 실사용은 안 늘어난다.
+            # 복제본 2까지 합치면 실제 증가분은 두 번째 파드의 상주 ~123Mi 뿐이다.
+            #
+            # 1Gi 가 검증된 값은 아니다 — OOMKill 은 정확히 limit 에서 잘리므로
+            # 진짜 피크는 기록이 남을 수 없다. 이 값은 **측정을 가능하게 하는 값**이고,
+            # 다음 경기에 cAdvisor 로 실피크를 재서 조정한다(#534 가 그 계측을 깐다).
+            memory: 1Gi
+        # Go 는 자기 cgroup 천장을 모른다. GOGC 규칙대로 힙을 부풀리다 커널에
+        # SIGKILL 을 맞는다 — 경고도, graceful shutdown 도 없다.
+        #
+        # 이걸 주면 근처에서 GC 가 공격적으로 돌아 **"죽는다"가 "느려진다"로 바뀐다.**
+        # 프록시에선 그게 훨씬 낫다: 잠깐 느린 응답 > 전면 502 + 재시도 폭풍.
+        # 20% 간격을 두는 이유는 GC 가 즉발이 아니라서 목표와 천장 사이에 완충이
+        # 필요하기 때문이다.
+        env:
+          - name: GOMEMLIMIT
+            value: "800MiB"
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik
