@@ -8,6 +8,11 @@ services:
       - --storage.tsdb.retention.time=15d
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # kubelet cAdvisor 스크랩용 서비스어카운트 토큰. **Git 에 없다 — 서버에만 있다.**
+      # 만드는 절차: infra/k8s/prometheus-kubelet-reader.yaml 주석.
+      # 파일이 없는 상태로 올리면 docker 가 그 자리에 디렉토리를 만들고
+      # Prometheus 가 조용히 401 을 받는다. 먼저 만들 것.
+      - ./kubelet-token:/etc/prometheus/kubelet-token:ro
       - prom-data:/prometheus
     ports:
       - "9090:9090"
@@ -27,6 +32,11 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     restart: unless-stopped
+    environment:
+      # 알림 메시지의 "규칙 보기" 링크가 이 값으로 만들어진다. 없으면 Grafana 가
+      # 자기 바인드 주소로 `http://localhost:3000/...` 을 박아서 **디스코드에서 눌러도
+      # 안 열린다**(실제로 그랬다). 우리가 실제로 접속하는 주소는 터널 뒤의 DNS 다.
+      - GF_SERVER_ROOT_URL=https://grafana.nar.kr
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

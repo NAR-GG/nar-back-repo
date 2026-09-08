@@ -59,3 +59,8 @@ src/main/build/
 logs/
 test_result.log
 .env.local
+
+# 관측 스택 시크릿 — 서버에만 두고 저장소엔 .example 만 둔다
+# (mysqld-exporter/.my.cnf 도 같은 이유로 애초에 커밋 안 돼 있다)
+infra/monitoring/macmini/grafana/provisioning/alerting/contact-points.yaml
+infra/monitoring/macmini/kubelet-token

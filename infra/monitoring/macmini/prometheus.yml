@@ -47,3 +47,43 @@ scrape_configs:
     honor_labels: true
     static_configs:
       - targets: ['pushgateway:9091']
+
+  # 파드 상태 (kube-state-metrics, infra/k8s/kube-state-metrics.yaml).
+  # 재시작 횟수·종료 사유(OOMKilled)·리소스 limit. 앱 지표로는 알 수 없는 것들이다.
+  #
+  # 2026-09-08 까지 이 잡이 없어서 traefik·cloudflared 의 OOMKilled 16일치가
+  # 지표로 존재하지 않았다. 앱 5xx 는 0건이라 대시보드는 초록이었다.
+  - job_name: kube-state-metrics
+    static_configs:
+      - targets: ['172.17.0.1:30085']
+        labels:
+          instance: macmini-k3s
+
+  # 파드 실사용 메모리 (kubelet 내장 cAdvisor).
+  # kube-state-metrics 는 limit 만 알고 실사용은 모른다 — 둘을 나눠야 "천장까지 몇 %" 다.
+  #
+  # kubelet 은 10250 에서 TLS + bearer token 을 요구한다. 토큰은 Git 에 없고 서버에만
+  # 있다 — 만드는 절차는 infra/k8s/prometheus-kubelet-reader.yaml 주석에 있다.
+  # 인증서는 k3s 자체 서명이고 이 구간은 VM 안이라 검증을 끈다(외부 노출이 아니다).
+  #
+  # 172.17.0.1 은 NodePort 잡들과 같은 이유다 — docker 브리지 게이트웨이 = Colima VM 자신.
+  - job_name: kubelet-cadvisor
+    scheme: https
+    metrics_path: /metrics/cadvisor
+    bearer_token_file: /etc/prometheus/kubelet-token
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['172.17.0.1:10250']
+        labels:
+          instance: macmini-k3s
+    # cAdvisor 는 파드마다 수십 개 시리즈를 낸다. 알림·사이징에 쓰는 것만 남긴다 —
+    # 전부 받으면 15일 보존에 불필요한 부담이고, 대시보드 쿼리도 느려진다.
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'container_(memory_working_set_bytes|cpu_usage_seconds_total|start_time_seconds)'
+        action: keep
+      # 파드 단위 cgroup(container 라벨이 빈 것)은 컨테이너별 합계라 중복이다.
+      - source_labels: [container]
+        regex: '^$'
+        action: drop
