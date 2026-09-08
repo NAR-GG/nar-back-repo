@@ -1,0 +1,64 @@
+# 디스코드 컨택포인트 + 알림 라우팅 — **템플릿이다.**
+#
+# 실제 파일(`contact-points.yaml`)은 웹훅 URL 이 시크릿이라 Git 에 없고 서버에만 있다.
+# `mysqld-exporter/.my.cnf` 와 같은 취급이다.
+#
+# ## 서버에 만드는 법
+#
+#   cd ~/monitoring/grafana/provisioning/alerting
+#   cp contact-points.yaml.example contact-points.yaml
+#   # 아래 `url:` 한 줄을 실제 디스코드 웹훅 주소로 바꾼다 (에디터로 직접)
+#   chmod 600 contact-points.yaml
+#   docker restart grafana
+#
+# **sed 로 일괄 치환하지 말 것.** 플레이스홀더와 같은 문자열이 주석에도 있으면
+# 시크릿이 두 벌 남는다 — 실제로 밟아서 이 주석에서는 토큰을 아예 안 쓴다.
+#
+# ## 왜 규칙 파일과 나눴나
+#
+# `rules.yaml` 에는 시크릿이 없어서 Git 에 둘 수 있다. 컨택포인트와 라우팅 정책을
+# 한 파일에 묶은 이유는, 정책이 컨택포인트를 **이름으로** 참조하기 때문이다 —
+# 정책만 Git 에 두면 컨택포인트 파일이 없는 환경에서 Grafana 가
+# "receiver not found" 로 부팅에 실패한다.
+#
+# ## 확인할 때 헷갈리는 것
+#
+# Grafana 는 이 `url` 을 읽고 나서 **암호화 필드로 옮긴다.** DB 를 뒤져도
+# `settings` 는 비어 있고 `secureSettings: ["url"]` 만 보인다 — 실패가 아니라 정상이다.
+#
+# 진짜로 도달했는지는 지표로 본다:
+#
+#   curl -s localhost:3000/metrics | grep grafana_alerting_notification_latency
+#   # +Inf 버킷이 늘어나면 발송됐다는 뜻
+#
+# ## 채널을 나눈 이유
+#
+# ArgoCD 배포 알림(`argocd-notifications-cm`)과 **다른 채널**이다.
+# 배포 알림은 머지마다 오므로 섞으면 OOM 알림이 그 사이에 묻힌다.
+# CLAUDE.md 의 `DISCORD_STORE_REVIEW_WEBHOOK_URL` 이 배포와 채널을 나눈 것과 같은 이유다.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: discord-infra
+    receivers:
+      - uid: discord-infra
+        type: discord
+        settings:
+          url: WEBHOOK_URL_PLACEHOLDER
+        # 해소됐을 때도 보낸다. "울렸는데 지금 괜찮은지"를 손으로 확인하지 않게.
+        disableResolveMessage: false
+
+policies:
+  - orgId: 1
+    receiver: discord-infra
+    # 파드별로 묶는다. 복제본 2개가 같이 죽으면(2026-09-06 이 그랬다) 알림도 2건 와야
+    # "상관 실패"인 걸 안다. alertname 만으로 묶으면 1건으로 합쳐져 그 정보가 사라진다.
+    group_by:
+      - alertname
+      - namespace
+      - pod
+    group_wait: 30s
+    group_interval: 5m
+    # 안 고치면 1시간마다 다시 알린다. 더 짧으면 채널이 시끄러워 무시하게 된다.
+    repeat_interval: 1h

@@ -1,0 +1,142 @@
+# kube-state-metrics — 파드·노드의 "상태"를 Prometheus 지표로 번역한다.
+#
+# ## 왜 필요했나
+#
+# 2026-09-08 에 알았다. `traefik` 과 `cloudflared` 가 **경기 시작마다 OOMKilled 로
+# 죽고 있었는데 16일간 아무도 몰랐다** (08-29 17:36 / 09-02 17:14 / 09-05 17:14 /
+# 09-06 17:21 — 전부 경기 시작 시각, 전부 복제본 동시).
+#
+# 앱 5xx 는 0건이었으니 대시보드는 계속 초록이었다. 죽은 건 앱이 아니라 엣지 관문이고,
+# **파드 재시작·종료 사유가 지표로 존재하지 않았다** — Prometheus 타깃이 앱 2개,
+# MySQL 2개, pushgateway 뿐이었다.
+#
+# 앱은 자기 상태를 `/actuator/prometheus` 로 낸다. 하지만 "파드가 몇 번 재시작했나",
+# "왜 죽었나", "limit 이 얼마인가"는 앱이 모른다 — kube-apiserver 만 안다.
+# 그 간극을 이게 메운다.
+#
+# ## 범위를 좁혔다
+#
+# `--resources=pods,nodes` 만 수집한다. 기본값은 30여 종을 다 긁어서 RBAC 도 넓어지고
+# 시리즈도 불필요하게 늘어난다. 알림에 쓰는 건 셋뿐이다:
+#
+#   kube_pod_container_status_restarts_total            재시작 횟수
+#   kube_pod_container_status_last_terminated_reason    왜 죽었나 (OOMKilled 등)
+#   kube_pod_container_resource_limits                  천장 (실사용은 cAdvisor 쪽)
+#
+# 지표를 실제로 소비하는 곳: `infra/monitoring/macmini/prometheus.yml` 의
+# `kube-state-metrics` 잡 → Grafana 알림 규칙(`grafana/provisioning/alerting/rules.yaml`).
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics
+  namespace: nar
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-state-metrics
+rules:
+  # --resources 로 좁힌 것과 정확히 같은 범위. 넓히면 여기도 같이 넓혀야 한다.
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: kube-state-metrics
+    namespace: nar
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: nar
+spec:
+  # 관측 보조라 1개로 충분하다. 이게 죽으면 알림이 침묵하는데, 그건 아래
+  # "알려진 공백"으로 남긴다(README 참고).
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app: kube-state-metrics
+    spec:
+      serviceAccountName: kube-state-metrics
+      containers:
+        - name: kube-state-metrics
+          # 태그를 고정한다. 자동 업데이트가 없으므로 올릴 때는 이 줄만 바꾼다.
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
+          args:
+            - --resources=pods,nodes
+            - --port=8080
+          ports:
+            - name: metrics
+              containerPort: 8080
+            # 자기 자신에 대한 지표(telemetry). 스크랩하지는 않지만 readiness 가 여기 있다.
+            - name: telemetry
+              containerPort: 8081
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "48Mi"
+            limits:
+              # 실측 ~35Mi. 4배 여유를 둔다 — 이 파일을 만든 이유 자체가
+              # "천장을 빡빡하게 잡아서 죽었다" 라서, 같은 실수를 여기서 반복하지 않는다.
+              memory: "192Mi"
+          # 포트가 갈린다. 실측(2026-09-08):
+          #   8080  /livez 200 · /healthz 200 · /readyz **404** · /metrics 200
+          #   8081  /readyz 200 · /metrics 200 · /livez 404
+          # `/readyz` 를 8080 에 걸면 readiness 가 영구 404 → 엔드포인트가 안 붙고
+          # **NodePort 가 연결 거부**된다. 처음에 그렇게 짰다가 밟았다.
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: nar
+spec:
+  # NodePort 인 이유는 `nar-web`(30081)·`nar-scheduler-metrics`(30084) 와 같다 —
+  # Prometheus 는 클러스터 밖(같은 Colima VM 의 docker compose)에서 돌아서
+  # ClusterIP 에 닿지 못한다. 포트는 Service 에 고정이라 파드가 교체돼도 타깃이 안 죽는다.
+  #
+  # 이미 쓰는 NodePort: 30080·30443(argocd), 30081(nar-web), 30082(traefik),
+  #                    30084(nar-scheduler-metrics)
+  type: NodePort
+  selector:
+    app: kube-state-metrics
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+      nodePort: 30085

@@ -9,11 +9,13 @@
 
 ```
 맥미니 (100.111.167.92)
-  ├ nar-web 파드      NodePort 30081 ──pull──>  Prometheus ─┐
-  ├ nar-scheduler 파드 NodePort 30084 ──pull──>             ├─> Grafana :3000
-  ├ mysqld_exporter :9104          ──pull──>                │   (grafana.nar.kr)
-  └ Grafana Alloy                  ──push──>  Loki ─────────┘
-
+  ├ nar-web 파드           NodePort 30081 ──pull──>  Prometheus ─┐
+  ├ nar-scheduler 파드      NodePort 30084 ──pull──>             │
+  ├ kube-state-metrics 파드 NodePort 30085 ──pull──>             ├─> Grafana :3000
+  ├ kubelet cAdvisor            :10250 ──pull──>                │   (grafana.nar.kr)
+  ├ mysqld_exporter              :9104 ──pull──>                │        │
+  └ Grafana Alloy                      ──push──>  Loki ─────────┘        └─> 디스코드
+                                                                              (인프라 채널)
 춘천 es-vnic (100.71.240.23)
   └ Uptime Kuma :3001  (kuma.nar.kr) — 맥미니를 밖에서 찌른다
 ```
@@ -104,6 +106,40 @@ p95 가 높게 잡혀 "느린 엔드포인트 TOP 5" 상단을 차지하므로 �
 버킷은 시리즈 수를 곱하므로 기대 범위를 10ms~10s 로 좁혀 카디널리티를 억제했다.
 10ms 미만은 구분할 실익이 없고 10s 를 넘으면 어차피 다 같은 장애다.
 
+## 알림 (→ 디스코드 인프라 채널)
+
+2026-09-08 추가. **그 전까지 Grafana 알림이 아예 없었다** — provisioning 에 dashboards 와
+datasources 만 있었다. 그래서 `traefik`·`cloudflared` 가 경기 시작마다 OOMKilled 로 죽은
+16일치를 아무도 몰랐다(08-29 / 09-02 / 09-05 / 09-06, 전부 17시대). 앱 5xx 는 0건이라
+대시보드는 계속 초록이었고, 죽은 것은 앱이 아니라 엣지 관문이었다.
+
+| 파일 | 무엇 | Git |
+|---|---|---|
+| `grafana/provisioning/alerting/rules.yaml` | 알림 규칙 2개 | ✅ |
+| `grafana/provisioning/alerting/contact-points.yaml` | 디스코드 웹훅 + 라우팅 | ❌ 서버만 |
+| `grafana/provisioning/alerting/contact-points.yaml.example` | 위 파일 템플릿 | ✅ |
+
+**채널을 ArgoCD 배포 알림과 나눴다.** 배포 알림은 머지마다 오므로 섞으면 OOM 알림이 묻힌다.
+
+### 규칙 2개와 그 지표 출처
+
+| 규칙 | 조건 | 지표 출처 |
+|---|---|---|
+| 파드 재시작 | `increase(restarts_total[10m]) > 0`, `reason` 라벨 동반 | kube-state-metrics |
+| 파드 메모리 천장 근접 | `working_set / limit > 0.8`, 1분 지속 | cAdvisor ÷ kube-state-metrics |
+
+**출처가 둘로 갈리는 게 핵심이다.** kube-state-metrics 는 `limit` 만 알고 실사용을 모른다.
+kubelet cAdvisor 는 실사용만 알고 `limit` 을 모른다. "천장까지 몇 %" 는 둘을 나눠야 나온다.
+
+배포로는 재시작 알림이 안 울린다 — 롤링 교체는 새 파드를 만들고 `restartCount` 가 0 에서
+시작하므로 `increase()` 가 0 이다. 울리는 건 살아 있는 파드가 그 자리에서 다시 뜬 경우뿐이다.
+
+### 알려진 공백
+
+`noDataState: OK` 다. 이 규칙들은 "이상할 때만 데이터가 있는" 형태라 무데이터가 정상이다.
+대가로 **kube-state-metrics 가 죽으면 알림이 조용히 침묵한다.** 잡으려면 `up == 0` 규칙이
+따로 필요한데 아직 없다 — 16일간 못 봤던 것과 같은 종류의 구멍이라 알고 남긴다.
+
 ## 재구축
 
 ### 맥미니
@@ -116,6 +152,38 @@ brew services start colima
 mkdir -p ~/monitoring && cp -r macmini/* ~/monitoring/
 cd ~/monitoring && docker compose up -d
 ```
+
+**Git 에 없는 파일 2개를 먼저 만들어야 한다.** 없으면 docker 가 그 자리에 디렉토리를
+만들어 버리고 Prometheus·Grafana 가 조용히 반쯤 동작한다.
+
+```bash
+# 1) kubelet cAdvisor 스크랩용 토큰 (만료 없음 — `kubectl create token` 은 만료가 있어 못 쓴다)
+kubectl -n nar apply -f - <<'EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prometheus-kubelet-token
+  namespace: nar
+  annotations:
+    kubernetes.io/service-account.name: prometheus-kubelet
+type: kubernetes.io/service-account-token
+EOF
+kubectl -n nar get secret prometheus-kubelet-token \
+  -o jsonpath='{.data.token}' | base64 -d > ~/monitoring/kubelet-token
+chmod 600 ~/monitoring/kubelet-token
+
+# 2) 디스코드 컨택포인트
+cp ~/monitoring/grafana/provisioning/alerting/contact-points.yaml.example \
+   ~/monitoring/grafana/provisioning/alerting/contact-points.yaml
+# <WEBHOOK_URL> 을 실제 값으로 치환
+
+docker restart prometheus grafana
+```
+
+`ServiceAccount`·`ClusterRole` 쪽은 ArgoCD 가 관리한다
+(`infra/k8s/prometheus-kubelet-reader.yaml`, `infra/k8s/kube-state-metrics.yaml`).
+**토큰 Secret 만 손으로 만든다** — `infra/k8s` 는 `prune: true` 라, 컨트롤러가 채워 넣는
+`data` 와 Git 의 빈 `data` 가 계속 부딪힌다.
 
 대시보드는 Grafana API로 넣는다. 4701(JVM Micrometer), 12900(SpringBoot APM)은 import API로
 그대로 들어가지만, **14057(MySQL)은 `__inputs`가 비어 있고 `id`가 박혀 있어 import API가 거부한다.**
@@ -155,6 +223,10 @@ RSA 키 교환을 요구하는데, 소켓은 그 과정을 건너뛴다.
 
 - Grafana 관리자 비밀번호 — 맥미니 `grafana-data` 볼륨 안
 - mysqld_exporter 비밀번호 — Oracle VM 의 `/etc/mysqld_exporter/.my.cnf` (0600)
+- 디스코드 인프라 웹훅 — 맥미니 `~/monitoring/grafana/provisioning/alerting/contact-points.yaml`
+- kubelet 스크랩 토큰 — 맥미니 `~/monitoring/kubelet-token` (0600)
+
+뒤의 둘은 `.gitignore` 에 있고 저장소엔 `.example` 만 둔다. 만드는 절차는 「재구축」에 있다.
 
 Tailscale IP가 들어가지만 사설망 주소라 공개돼도 접근되지 않는다.
 

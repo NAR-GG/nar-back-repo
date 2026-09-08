@@ -1,0 +1,146 @@
+# 인프라 알림 규칙 → 디스코드.
+#
+# ## 왜 생겼나
+#
+# 2026-09-08 까지 **Grafana 알림이 아예 프로비저닝돼 있지 않았다** (provisioning 에
+# dashboards·datasources 만 있었다). 그래서 `traefik`·`cloudflared` 가 경기 시작마다
+# OOMKilled 로 죽은 16일치를 아무도 몰랐다. 앱 5xx 는 0건이라 대시보드는 초록이었고,
+# 죽은 것은 앱이 아니라 엣지 관문이었다.
+#
+# ## 지표 출처가 둘로 갈린다
+#
+#   재시작·종료사유·limit  →  kube-state-metrics  (infra/k8s/kube-state-metrics.yaml)
+#   실사용 메모리          →  kubelet cAdvisor    (infra/k8s/prometheus-kubelet-reader.yaml)
+#
+# 둘 다 `prometheus.yml` 의 잡으로 들어온다. 하나만 있으면 "천장까지 몇 %" 가 안 나온다.
+#
+# ## 컨택포인트는 이 파일에 없다
+#
+# 디스코드 웹훅 URL 이 시크릿이라 **`contact-points.yaml` 은 서버에만 둔다**
+# (`.gitignore` 에 있고, 형식은 `contact-points.yaml.example` 참고).
+# `mysqld-exporter/.my.cnf` 와 같은 취급이다.
+#
+# ## 알려진 공백
+#
+# `noDataState: OK` 다 — 이 규칙들은 "이상할 때만 데이터가 있는" 형태라 무데이터가
+# 정상 상태다. 대가로 **kube-state-metrics 가 죽으면 알림이 조용히 침묵한다.**
+# 그걸 잡으려면 `up == 0` 규칙이 따로 필요하다(아직 없다).
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: 인프라
+    folder: 알림
+    interval: 1m
+    rules:
+      # ── 파드가 재시작했다 (사유 포함) ──────────────────────────────────
+      #
+      # `reason` 라벨이 그대로 실려서 디스코드 메시지에 OOMKilled / Error /
+      # Completed 가 구분돼 나온다. 사유를 모르면 "죽었다"만 알고 원인 분류를
+      # 다시 손으로 해야 한다 — 2026-09-06 조사가 정확히 그랬다.
+      #
+      # 배포로는 안 울린다. 롤링 교체는 **새 파드**를 만들고 restartCount 가 0 에서
+      # 시작하므로 increase() 가 0 이다. 울리는 건 살아 있는 파드가 그 자리에서
+      # 다시 뜬 경우뿐이다.
+      - uid: infra-pod-restart
+        title: 파드 재시작
+        condition: THRESHOLD
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} · {{ $labels.container }} 재시작 — 사유 {{ $labels.reason }}"
+          description: "kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }} 로 lastState 확인. OOMKilled 면 limit 을 올릴 것 (infra/k8s, infra/argocd)."
+        data:
+          - refId: QUERY
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: QUERY
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              instant: true
+              range: false
+              expr: |
+                max by (namespace, pod, container, reason) (kube_pod_container_status_last_terminated_reason)
+                * on (namespace, pod, container) group_left ()
+                max by (namespace, pod, container) (increase(kube_pod_container_status_restarts_total[10m]) > 0)
+          - refId: THRESHOLD
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              datasource:
+                type: __expr__
+                uid: __expr__
+              type: threshold
+              expression: QUERY
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+
+      # ── 메모리가 천장에 근접했다 ────────────────────────────────────────
+      #
+      # OOM 은 초 단위로 터지지만 그 앞에 램프가 있다. 2026-09-06 은 17:12~17:20 에
+      # 8분간 요청이 올라갔고(237→327/분) 17:21 에 5,853/분 으로 튀면서 죽었다.
+      # 이 규칙이 있었으면 램프 구간에 울렸다.
+      #
+      # 80% 로 잡은 이유: Go 는 GOGC 규칙대로 힙을 부풀리므로 실사용이 80% 를 넘으면
+      # GC 가 따라잡기 전에 천장을 칠 여지가 크다. 90% 는 이미 늦다.
+      #
+      # limit 이 없는 파드는 오른쪽 시리즈가 없어 매칭이 안 되고 조용히 빠진다 —
+      # 의도된 것이다. 천장이 없으면 "천장까지 몇 %" 가 성립하지 않는다.
+      - uid: infra-pod-memory-ceiling
+        title: 파드 메모리 천장 근접
+        condition: THRESHOLD
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} · {{ $labels.container }} 메모리가 limit 의 {{ $values.THRESHOLD.Value | humanizePercentage }}"
+          description: "이대로 오르면 OOMKilled 다. limit 을 올리거나 GOMEMLIMIT 으로 GC 를 앞당길 것."
+        data:
+          - refId: QUERY
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: QUERY
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              instant: true
+              range: false
+              expr: |
+                max by (namespace, pod, container) (container_memory_working_set_bytes{container!=""})
+                /
+                max by (namespace, pod, container) (kube_pod_container_resource_limits{resource="memory"})
+          - refId: THRESHOLD
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              datasource:
+                type: __expr__
+                uid: __expr__
+              type: threshold
+              expression: QUERY
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.8]
