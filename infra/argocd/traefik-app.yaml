@@ -57,6 +57,23 @@ spec:
         # 이후 traefik 변경은 항상 2개 중 1개씩 교체돼 단일 파드 교체 고민이 없어진다.
         deployment:
           replicas: 2
+          # GOMEMLIMIT 을 `env` 로 직접 주면 안 된다 — 차트가 이미 넣는다.
+          # `_podtemplate.tpl:1003` 이 `resources.limits.memory × 이 비율`을 계산해
+          # GOMEMLIMIT 을 만들고, 그 뒤에 `.Values.env` 를 덧붙인다. 둘 다 있으면
+          # 컨테이너 env 에 같은 키가 두 개 생겨 ArgoCD 가 diff 를 못 낸다:
+          #   "duplicate entries for key [name=\"GOMEMLIMIT\"]" → sync 가 Unknown 에서 멈춘다.
+          # #535 에서 실제로 밟았고 그래서 traefik 만 반영이 안 됐다.
+          #
+          # 차트 기본값은 0.9 다. 그래서 **300Mi 시절에도 GOMEMLIMIT=270MiB 가 이미
+          # 걸려 있었는데 그대로 OOMKilled 됐다.** GOMEMLIMIT 은 소프트 한도라
+          # 라이브 힙보다 아래로는 못 줄이고, goroutine 스택·mmap 버퍼처럼 힙이 아닌
+          # 메모리는 애초에 관장하지 않는다. 천장까지 30Mi 만 남은 상태에서는
+          # GC 를 아무리 앞당겨도 못 버틴다.
+          #
+          # 즉 **GOMEMLIMIT 은 절대 여유분을 대체하지 못한다.** 근본은 limit 이고
+          # 이건 그 위에서 "죽음"을 "느려짐"으로 바꾸는 보조 장치다.
+          # 0.9 → 0.8 로 내려 완충을 30Mi 에서 205Mi 로 늘린다(1Gi 기준 819MiB).
+          goMemLimitPercentage: 0.8
         resources:
           requests:
             cpu: 100m
@@ -77,16 +94,6 @@ spec:
             # 진짜 피크는 기록이 남을 수 없다. 이 값은 **측정을 가능하게 하는 값**이고,
             # 다음 경기에 cAdvisor 로 실피크를 재서 조정한다(#534 가 그 계측을 깐다).
             memory: 1Gi
-        # Go 는 자기 cgroup 천장을 모른다. GOGC 규칙대로 힙을 부풀리다 커널에
-        # SIGKILL 을 맞는다 — 경고도, graceful shutdown 도 없다.
-        #
-        # 이걸 주면 근처에서 GC 가 공격적으로 돌아 **"죽는다"가 "느려진다"로 바뀐다.**
-        # 프록시에선 그게 훨씬 낫다: 잠깐 느린 응답 > 전면 502 + 재시도 폭풍.
-        # 20% 간격을 두는 이유는 GC 가 즉발이 아니라서 목표와 천장 사이에 완충이
-        # 필요하기 때문이다.
-        env:
-          - name: GOMEMLIMIT
-            value: "800MiB"
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik
