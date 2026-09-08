@@ -51,8 +51,10 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "{{ $labels.namespace }}/{{ $labels.pod }} · {{ $labels.container }} 재시작 — 사유 {{ $labels.reason }}"
-          description: "kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }} 로 lastState 확인. OOMKilled 면 limit 을 올릴 것 (infra/k8s, infra/argocd)."
+          # 디스코드 메시지는 이 summary 한 줄만 쓴다. description 을 두면 그대로 실려서
+          # 알림이 스크롤 세 줄이 된다 — 조치 방법은 이 파일과 README 에 있으면 되고
+          # 알림에 있을 필요가 없다.
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} · {{ $labels.container }} · {{ $labels.reason }}"
         data:
           - refId: QUERY
             relativeTimeRange:
@@ -108,8 +110,9 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "{{ $labels.namespace }}/{{ $labels.pod }} · {{ $labels.container }} 메모리가 limit 의 {{ $values.THRESHOLD.Value | humanizePercentage }}"
-          description: "이대로 오르면 OOMKilled 다. limit 을 올리거나 GOMEMLIMIT 으로 GC 를 앞당길 것."
+          # **`$values.QUERY`** 다. `THRESHOLD` 를 쓰면 임계 판정 결과(1)가 실려서
+          # 항상 100% 로 찍힌다 — 처음에 그렇게 썼다.
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} · {{ $labels.container }} · limit 의 {{ $values.QUERY.Value | humanizePercentage }}"
         data:
           - refId: QUERY
             relativeTimeRange:

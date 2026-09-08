@@ -28,6 +28,7 @@
 #
 # 진짜로 도달했는지는 지표로 본다:
 #
+#   # 맥미니에서 실행할 것 (노트북에서 localhost 는 안 닿는다 — macmini:3000 또는 grafana.nar.kr)
 #   curl -s localhost:3000/metrics | grep grafana_alerting_notification_latency
 #   # +Inf 버킷이 늘어나면 발송됐다는 뜻
 #
@@ -46,6 +47,16 @@ contactPoints:
         type: discord
         settings:
           url: WEBHOOK_URL_PLACEHOLDER
+          # 기본 템플릿(`default.title`/`default.message`)을 쓰지 않는다. 기본값은
+          # 라벨 전체·어노테이션 전체·규칙 링크·Silence 링크를 다 실어서 알림 한 건이
+          # 화면 한 페이지가 된다. 실제로 그래서 못 읽었다.
+          #
+          # 여기는 두 줄로 끝낸다 — 제목에 무슨 알림인지, 본문에 어느 파드가 왜.
+          # 자세한 건 링크를 눌러 Grafana 에서 본다.
+          title: '{{ if eq .Status "firing" }}🔴{{ else }}✅{{ end }} {{ .CommonLabels.alertname }}'
+          message: |
+            {{ range .Alerts }}{{ .Annotations.summary }}
+            {{ end }}
         # 해소됐을 때도 보낸다. "울렸는데 지금 괜찮은지"를 손으로 확인하지 않게.
         disableResolveMessage: false
 

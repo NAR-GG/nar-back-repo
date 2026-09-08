@@ -32,6 +32,11 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     restart: unless-stopped
+    environment:
+      # 알림 메시지의 "규칙 보기" 링크가 이 값으로 만들어진다. 없으면 Grafana 가
+      # 자기 바인드 주소로 `http://localhost:3000/...` 을 박아서 **디스코드에서 눌러도
+      # 안 열린다**(실제로 그랬다). 우리가 실제로 접속하는 주소는 터널 뒤의 DNS 다.
+      - GF_SERVER_ROOT_URL=https://grafana.nar.kr
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
