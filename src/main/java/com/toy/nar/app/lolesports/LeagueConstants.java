@@ -102,6 +102,25 @@ public final class LeagueConstants {
     }
 
     /**
+     * 리그 아이콘. 앱은 리그 11개의 아이콘을 에셋으로 갖고 있는데 아시안게임은 없다 —
+     * 에셋 추가는 Shorebird 패치 대상이 아니라 스토어 릴리스가 필요해서, 앱이 로컬에 없는
+     * 리그를 네트워크로 받을 수 있게 우리가 서빙한다.
+     *
+     * <p>원본(lolesports 리그 이미지)은 엠블럼 아래 "Aichi-Nagoya 2026" 텍스트가 붙어 있어
+     * 24px 로 줄이면 마크가 너무 작아진다. 다른 리그 아이콘처럼 마크만 남기고 잘라 뒀다.
+     */
+    private static final Map<String, String> LEAGUE_ICONS = Map.of(
+            "ASIAN_GAMES", "https://api.nar.kr/images/leagues/asian-games.png");
+
+    /** 리그 아이콘 URL. 앱이 에셋으로 갖고 있는 리그는 여기 없다(앱 쪽이 우선). */
+    public static String leagueIcon(String leagueName) {
+        if (leagueName == null || leagueName.isBlank()) {
+            return null;
+        }
+        return LEAGUE_ICONS.get(leagueName.trim().toUpperCase());
+    }
+
+    /**
      * 팀 코드에 해당하는 교체 로고. 교체 대상이 아니면 {@code null} 을 돌려주므로
      * 호출부는 원본 URL 을 그대로 쓰면 된다.
      */
