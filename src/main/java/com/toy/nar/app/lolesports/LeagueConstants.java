@@ -17,13 +17,15 @@ public final class LeagueConstants {
      * 동기화 및 API 대상 리그 목록
      */
     public static final List<String> TARGET_LEAGUES = List.of(
-            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA");
+            "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA",
+            "ASIAN_GAMES");
 
     /**
      * 일정 조회 시 허용되는 리그 목록 (TARGET_LEAGUES + 추가 리그)
      */
     public static final Set<String> ALLOWED_LEAGUES = Set.of(
-            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA");
+            "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA",
+            "ASIAN_GAMES");
 
     /**
      * lolesports API의 리그 ID 매핑
@@ -39,7 +41,8 @@ public final class LeagueConstants {
             Map.entry("WORLDS", "98767975604431411"),
             Map.entry("MSI", "98767991325878492"),
             Map.entry("EWC", "116838530616006090"),
-            Map.entry("KESPA", "116929044967296666"));
+            Map.entry("KESPA", "116929044967296666"),
+            Map.entry("ASIAN_GAMES", "117228885404001005"));
 
     /**
      * 리그별 기본 라이브 스트림 URL
@@ -64,8 +67,10 @@ public final class LeagueConstants {
     /**
      * 스트림 링크를 의도적으로 제공하지 않는 리그. SOOP 기본 폴백도 적용하지 않는다.
      * KeSPA Cup 은 Disney+ 글로벌 독점이라 앱에서 링크를 노출할 대체 채널이 없다.
+     * 아시안게임은 주최가 OCA 라 Riot 계열 중계 채널이 없다 — 국내 중계처가 확정되면
+     * LIVE_STREAM_URLS 에 넣고 여기서 빼면 된다. 그때까지 SOOP 폴백은 틀린 링크다.
      */
-    private static final Set<String> NO_STREAM_LEAGUES = Set.of("KESPA");
+    private static final Set<String> NO_STREAM_LEAGUES = Set.of("KESPA", "ASIAN_GAMES");
 
     /**
      * lolesports API 리그 slug → 내부 리그명. slug이 리그 코드와 다른 리그(EWC: ewc_lol, KESPA: kespa_cup)만 보정한다.
