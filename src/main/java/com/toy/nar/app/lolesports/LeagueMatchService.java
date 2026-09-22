@@ -1409,10 +1409,12 @@ public class LeagueMatchService {
 															// 가져오기
 				.blueTeamCode(dto.getBlueTeam().getCode()).blueTeamName(dto.getBlueTeam().getName())
 				.blueExternalTeamId(dto.getBlueTeam().getExternalTeamId())
-				.blueTeamImageUrl(imageCdn.team(dto.getBlueTeam().getImageUrl())).blueScore(dto.getBlueTeam().getWins())
+				.blueTeamImageUrl(imageCdn.team(dto.getBlueTeam().getImageUrl(), dto.getBlueTeam().getCode()))
+				.blueScore(dto.getBlueTeam().getWins())
 				.redTeamCode(dto.getRedTeam().getCode()).redTeamName(dto.getRedTeam().getName())
 				.redExternalTeamId(dto.getRedTeam().getExternalTeamId())
-				.redTeamImageUrl(imageCdn.team(dto.getRedTeam().getImageUrl())).redScore(dto.getRedTeam().getWins()).hasVod(hasVod)
+				.redTeamImageUrl(imageCdn.team(dto.getRedTeam().getImageUrl(), dto.getRedTeam().getCode()))
+				.redScore(dto.getRedTeam().getWins()).hasVod(hasVod)
 				.bestOf(dto.getBestOf())
 				.matchDetailsJson(jsonDetails).lastUpdated(LocalDateTime.now()).build();
 	}
@@ -1840,8 +1842,9 @@ public class LeagueMatchService {
 			updated = true;
 		}
 
-		// 저장값은 CDN 래핑된 URL 이므로 들어온 원본도 감싼 뒤 비교한다 — 안 그러면 매 동기화가 변경으로 잡힌다.
-		String incomingImage = imageCdn.team(info.getImageUrl());
+		// 저장값은 CDN 래핑(또는 국가팀 교체본) URL 이므로 들어온 원본도 같은 변환을 거친 뒤 비교한다 —
+		// 안 그러면 매 동기화가 변경으로 잡힌다. 교체본은 입력이 무엇이든 같은 값이라 멱등하다.
+		String incomingImage = imageCdn.team(info.getImageUrl(), newCode);
 		if (incomingImage != null && !incomingImage.isEmpty() && !incomingImage.equals(team.getImageUrl())) {
 			newImage = incomingImage;
 			updated = true;
@@ -1985,7 +1988,7 @@ public class LeagueMatchService {
 		Team team = Team.builder()
 				.name(NameNormalizer.normalizeTeamName(candidate.externalName()))
 				.code(candidate.externalCode())
-				.imageUrl(imageCdn.team(candidate.externalImageUrl()))
+				.imageUrl(imageCdn.team(candidate.externalImageUrl(), candidate.externalCode()))
 				.build();
 		return teamRepository.save(team);
 	}
