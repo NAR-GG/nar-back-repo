@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.toy.nar.app.lolesports.LeagueConstants;
 import com.toy.nar.config.CloudinaryProperties;
 
 class ImageCdnTest {
@@ -65,6 +66,15 @@ class ImageCdnTest {
 					.as("국기 리소스 %s.png", code)
 					.isNotNull();
 		}
+	}
+
+	@Test
+	@DisplayName("리그 아이콘 URL 도 실제 파일을 가리킨다")
+	void leagueIconFileExists() {
+		assertThat(getClass().getResource("/static/images/leagues/asian-games.png")).isNotNull();
+		assertThat(LeagueConstants.leagueIcon("ASIAN_GAMES"))
+				.isEqualTo("https://api.nar.kr/images/leagues/asian-games.png");
+		assertThat(LeagueConstants.leagueIcon("LCK")).isNull();
 	}
 
 	@Test
