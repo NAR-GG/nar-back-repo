@@ -73,6 +73,46 @@ public final class LeagueConstants {
     private static final Set<String> NO_STREAM_LEAGUES = Set.of("KESPA", "ASIAN_GAMES");
 
     /**
+     * 아시안게임 국가팀 로고 교체본.
+     *
+     * <p>lolesports 가 준 원본은 국기가 아니라 검은 테두리 안에 국가 코드를 쓴 임시 PNG 다
+     * (파일명이 {@code ..._kor1-Photoroom.png} — 배경 제거 앱 출력물을 그대로 올렸다).
+     * 앱 배경이 {@code #141517} 이라 검은 로고가 거의 보이지 않아 국기로 바꾼다.
+     *
+     * <p>호스팅은 우리 서버다. {@code src/main/resources/static/images/flags/} 에 넣고
+     * SecurityConfig 가 이미 열어 둔 {@code /images/**} 로 서빙한다 — Cloudinary 업로드도
+     * 외부 CDN 의존도 생기지 않는다. 호스트가 {@code ImageCdn} 의 fetch 화이트리스트 밖이라
+     * 래핑 없이 그대로 나간다(이미 200px 로 줄여 둬서 변환도 불필요하다).
+     *
+     * <p>키는 팀 코드다. 2026-09-23 기준 lolesports 전체 1586팀 중 이 여덟 코드를 쓰는 팀은
+     * 아시안게임 국가팀뿐이라 다른 리그와 충돌하지 않는다.
+     */
+    private static final Map<String, String> NATIONAL_TEAM_IMAGES = Map.of(
+            "KOR", flagUrl("kor"),
+            "TPE", flagUrl("tpe"),
+            "HKG", flagUrl("hkg"),
+            "IND", flagUrl("ind"),
+            "KSA", flagUrl("ksa"),
+            "VIE", flagUrl("vie"),
+            "MAS", flagUrl("mas"),
+            "UAE", flagUrl("uae"));
+
+    private static String flagUrl(String code) {
+        return "https://api.nar.kr/images/flags/" + code + ".png";
+    }
+
+    /**
+     * 팀 코드에 해당하는 교체 로고. 교체 대상이 아니면 {@code null} 을 돌려주므로
+     * 호출부는 원본 URL 을 그대로 쓰면 된다.
+     */
+    public static String nationalTeamImage(String teamCode) {
+        if (teamCode == null || teamCode.isBlank()) {
+            return null;
+        }
+        return NATIONAL_TEAM_IMAGES.get(teamCode.trim().toUpperCase());
+    }
+
+    /**
      * lolesports API 리그 slug → 내부 리그명. slug이 리그 코드와 다른 리그(EWC: ewc_lol, KESPA: kespa_cup)만 보정한다.
      */
     public static String fromApiSlug(String slug) {
