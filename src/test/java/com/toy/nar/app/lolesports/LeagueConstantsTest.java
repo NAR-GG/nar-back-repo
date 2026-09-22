@@ -26,6 +26,23 @@ class LeagueConstantsTest {
 	}
 
 	@Test
+	void 아시안게임은_세_목록에_모두_등록된다() {
+		// 셋 중 하나라도 빠지면 조용히 반쯤 동작한다 — 동기화는 도는데 필터에 안 뜨거나,
+		// 필터엔 뜨는데 리그 ID 가 없어 조회가 비거나.
+		assertThat(LeagueConstants.TARGET_LEAGUES).contains("ASIAN_GAMES");
+		assertThat(LeagueConstants.ALLOWED_LEAGUES).contains("ASIAN_GAMES");
+		assertThat(LeagueConstants.LEAGUE_IDS).containsEntry("ASIAN_GAMES", "117228885404001005");
+		assertThat(LeagueConstants.fromApiSlug("asian_games")).isEqualTo("ASIAN_GAMES");
+	}
+
+	@Test
+	void 아시안게임은_중계처가_없어_SOOP_폴백을_막는다() {
+		// OCA 주최라 Riot 계열 채널이 없다. 폴백이 걸리면 엉뚱한 LCK 방송으로 보낸다.
+		assertThat(LeagueConstants.getLiveStreamUrl("ASIAN_GAMES")).isNull();
+		assertThat(LeagueConstants.getStreamLinks("ASIAN_GAMES")).isEmpty();
+	}
+
+	@Test
 	void KeSPA는_스트림_링크가_없고_SOOP_폴백도_안_한다() {
 		// KeSPA Cup 은 Disney+ 독점 — 앱에 노출할 대체 채널이 없다. SOOP 폴백도 금지.
 		assertThat(LeagueConstants.getStreamLinks("KESPA")).isEmpty();
