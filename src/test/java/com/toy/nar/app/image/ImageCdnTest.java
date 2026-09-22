@@ -38,6 +38,36 @@ class ImageCdnTest {
 	}
 
 	@Test
+	@DisplayName("아시안게임 국가팀은 원본 대신 우리가 서빙하는 국기로 바꾼다")
+	void replacesNationalTeamLogo() {
+		// lolesports 원본은 검은 박스 안에 국가 코드만 쓴 임시 이미지라 다크 배경에서 안 보인다.
+		assertThat(cdn().team(TEAM_ORIGIN, "KOR")).isEqualTo("https://api.nar.kr/images/flags/kor.png");
+		assertThat(cdn().team(TEAM_ORIGIN, "tpe")).isEqualTo("https://api.nar.kr/images/flags/tpe.png");
+		// 교체본은 우리 서버 URL 이라 fetch 로 감싸지 않는다.
+		assertThat(cdn().team(TEAM_ORIGIN, "KOR")).doesNotContain("/image/fetch/");
+	}
+
+	@Test
+	@DisplayName("교체 대상이 아닌 팀은 기존 동작 그대로")
+	void keepsNormalTeamLogo() {
+		String wrapped = "https://res.cloudinary.com/nar/image/fetch/" + ImageCdn.TEAM + "/" + TEAM_ORIGIN;
+		assertThat(cdn().team(TEAM_ORIGIN, "BFX")).isEqualTo(wrapped);
+		assertThat(cdn().team(TEAM_ORIGIN, null)).isEqualTo(wrapped);
+		assertThat(cdn().team(TEAM_ORIGIN, "")).isEqualTo(wrapped);
+	}
+
+	@Test
+	@DisplayName("국기 URL 은 실제로 서빙되는 파일을 가리킨다")
+	void flagFilesExist() {
+		// URL 과 리소스가 어긋나면 앱에서 조용히 깨진 이미지가 된다. 파일이 지워지면 여기서 잡는다.
+		for (String code : new String[] { "kor", "tpe", "hkg", "ind", "ksa", "vie", "mas", "uae" }) {
+			assertThat(getClass().getResource("/static/images/flags/" + code + ".png"))
+					.as("국기 리소스 %s.png", code)
+					.isNotNull();
+		}
+	}
+
+	@Test
 	@DisplayName("허용 목록 밖 호스트는 손대지 않는다 — 감싸면 Cloudinary 가 401 을 준다")
 	void leavesForeignHostsAlone() {
 		String upload = "https://res.cloudinary.com/nar/image/upload/f_webp,q_auto,w_500,c_limit/v1/players/18.webp";

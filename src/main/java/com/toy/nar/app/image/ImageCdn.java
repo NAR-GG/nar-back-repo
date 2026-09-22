@@ -5,6 +5,7 @@ import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
+import com.toy.nar.app.lolesports.LeagueConstants;
 import com.toy.nar.config.CloudinaryProperties;
 
 import lombok.RequiredArgsConstructor;
@@ -61,6 +62,15 @@ public class ImageCdn {
 
 	public String team(String originUrl) {
 		return fetch(originUrl, TEAM);
+	}
+
+	/**
+	 * 팀 코드에 교체 로고가 지정돼 있으면 원본 대신 그것을 쓴다(아시안게임 국가팀 국기).
+	 * 교체본은 우리 서버가 서빙하는 완성된 URL 이라 fetch 로 감싸지 않는다.
+	 */
+	public String team(String originUrl, String teamCode) {
+		String override = LeagueConstants.nationalTeamImage(teamCode);
+		return override != null ? override : team(originUrl);
 	}
 
 	public String player(String originUrl) {
