@@ -1,5 +1,6 @@
 package com.toy.nar.app.lolesports;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -99,6 +100,46 @@ public final class LeagueConstants {
 
     private static String flagUrl(String code) {
         return "https://api.nar.kr/images/flags/" + code + ".png";
+    }
+
+    /**
+     * 아시안게임 경기 시각 보정(시간). lolesports 가 타임존을 잘못 실어 보낸다.
+     *
+     * <p>API 는 결승을 {@code 2026-10-01T20:00:00Z} 로 준다. 그런데 공식 확정 시각은
+     * <b>10/2 12:00 JST</b> 다 — 일본e스포츠협회 일정표({@code 10月2日 (金) 12:00～20:00
+     * League of Legends 決勝})와 Aichi Sky Expo 경기장 세션표(경기 시작 12:00, 종료 20:45)가
+     * 일치한다. {@code Z} 를 UTC 로 읽으면 KST 10/2 05:00 이 되어 7시간 이르다.
+     *
+     * <p>{@code API 값 + 16시간 = JST} 가 전 경기에서 맞아떨어진다(JST − 16h = PDT). 즉 태평양
+     * 시간 벽시계에 {@code Z} 를 붙여 내보내고 있다. 우리 {@code match_date} 는 오프셋 없는 UTC
+     * 벽시계이므로 {@code +7시간}(= 16 − 9)이면 KST 가 맞는다. 실제 슬롯은 그룹 09:00·11:30·14:00,
+     * 4강 09:00·13:30, 결승 12:00 (전부 JST=KST).
+     *
+     * <p>보정은 <b>KST 09시 이전</b>에만 건다. 아시안게임 경기장은 09:00 에 열려 20:45 에 닫으므로
+     * 새벽 경기가 존재할 수 없고, 보정 후 값(09:00~14:00)은 이 조건에 걸리지 않는다. 덕분에 두 번
+     * 적용해도 결과가 같고, <b>Riot 이 타임존을 고치면 보정이 저절로 멈춘다</b> — 고친 값은 이미
+     * 09시 이후라 조건 밖이다. 대회가 끝나면 이 메서드째 지우면 된다.
+     */
+    private static final int ASIAN_GAMES_TIME_CORRECTION_HOURS = 7;
+
+    /** 보정 대상 경계. 이 시각(KST) 이전이면 업스트림이 타임존을 빠뜨린 값으로 본다. */
+    private static final int ASIAN_GAMES_EARLIEST_KST_HOUR = 9;
+
+    private static final int KST_OFFSET_HOURS = 9;
+
+    /**
+     * 저장 직전의 경기 시각(오프셋 없는 UTC 벽시계)을 리그별로 보정한다.
+     * 보정 대상이 아니면 받은 값을 그대로 돌려준다.
+     */
+    public static LocalDateTime correctMatchDate(String leagueName, LocalDateTime utcWallClock) {
+        if (utcWallClock == null || leagueName == null
+                || !"ASIAN_GAMES".equals(leagueName.trim().toUpperCase())) {
+            return utcWallClock;
+        }
+        int kstHour = utcWallClock.plusHours(KST_OFFSET_HOURS).getHour();
+        return kstHour < ASIAN_GAMES_EARLIEST_KST_HOUR
+                ? utcWallClock.plusHours(ASIAN_GAMES_TIME_CORRECTION_HOURS)
+                : utcWallClock;
     }
 
     /**

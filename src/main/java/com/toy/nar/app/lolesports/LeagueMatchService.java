@@ -1394,13 +1394,14 @@ public class LeagueMatchService {
 	private LeagueMatch convertToEntity(MatchResultDto dto, String leagueSlug) throws JsonProcessingException {
 		// "2026-01-05T17:00:00Z" -> LocalDateTime 파싱
 		// 라이엇 API 날짜 포맷은 ISO-8601 (ex: 2024-10-19T12:00:00Z)
-		LocalDateTime matchDate = LocalDateTime.parse(dto.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
+		LocalDateTime parsedDate = LocalDateTime.parse(dto.getMatchDate(), DateTimeFormatter.ISO_DATE_TIME);
+		String resolvedLeagueName = resolveLeagueName(dto.getLeagueName(), leagueSlug);
+		// 업스트림이 타임존을 빠뜨리는 리그는 저장 전에 바로잡는다(현재 아시안게임뿐).
+		LocalDateTime matchDate = LeagueConstants.correctMatchDate(resolvedLeagueName, parsedDate);
 
 		String jsonDetails = objectMapper.writeValueAsString(dto.getSets());
 		boolean hasVod = dto.getSets() != null && !dto.getSets().isEmpty()
 				&& dto.getSets().stream().anyMatch(s -> s.getVodUrl() != null && !s.getVodUrl().isEmpty());
-
-		String resolvedLeagueName = resolveLeagueName(dto.getLeagueName(), leagueSlug);
 
 		return LeagueMatch.builder().id(dto.getMatchId()).leagueName(resolvedLeagueName).matchTitle(dto.getMatchTitle())
 				.matchDate(matchDate).state(dto.getState()) // [수정]
