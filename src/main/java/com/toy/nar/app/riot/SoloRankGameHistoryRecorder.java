@@ -35,6 +35,47 @@ public class SoloRankGameHistoryRecorder {
 		return repository.existsByPlayer_IdAndGameId(playerId, gameId);
 	}
 
+	/** Riot 의 epoch 밀리초를 이 테이블의 벽시계(detected_at 과 같은 JVM 시간대)로. 0·null 이면 null. */
+	public static LocalDateTime toLocal(Long epochMillis) {
+		return epochMillis == null || epochMillis <= 0
+				? null
+				: LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(epochMillis), java.time.ZoneId.systemDefault());
+	}
+
+	/** spectator 의 실제 시작 시각을 비어 있을 때만 채운다. 실패는 흡수한다(폴링을 깨지 않는다). */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public void fillStartedAt(Player player, String gameId, Long gameStartTimeMillis) {
+		LocalDateTime startedAt = toLocal(gameStartTimeMillis);
+		if (startedAt == null || player == null || player.getId() == null || gameId == null) {
+			return;
+		}
+		try {
+			repository.fillStartedAt(player.getId(), gameId, startedAt);
+		} catch (Exception e) {
+			log.warn("Failed to fill solo rank start time playerId={} gameId={}", player.getId(), gameId, e);
+		}
+	}
+
+	/** match-v5 결과를 이력 행에 싣는다. 실패는 흡수한다(알림 발송을 깨지 않는다). */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public void recordResult(Player player, String gameId,
+			com.toy.nar.app.riot.dto.RiotMatchResponse.Info info,
+			com.toy.nar.app.riot.dto.RiotMatchResponse.Participant tracked) {
+		if (player == null || player.getId() == null || gameId == null || info == null) {
+			return;
+		}
+		try {
+			repository.recordResult(player.getId(), gameId,
+					toLocal(info.gameStartTimestamp()), toLocal(info.gameEndTimestamp()), info.durationSeconds(),
+					tracked == null ? null : tracked.win(),
+					tracked == null ? null : tracked.kills(),
+					tracked == null ? null : tracked.deaths(),
+					tracked == null ? null : tracked.assists());
+		} catch (Exception e) {
+			log.warn("Failed to record solo rank result playerId={} gameId={}", player.getId(), gameId, e);
+		}
+	}
+
 	/** @return 신규 적재 여부. 이미 존재·실패 시 false — 폴백 경로의 알림 중복 방지 게이트로 쓴다. */
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public boolean record(Player player, String gameId, Champion champion, LocalDateTime detectedAt) {

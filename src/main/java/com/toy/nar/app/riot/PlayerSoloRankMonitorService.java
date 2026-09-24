@@ -108,6 +108,10 @@ public class PlayerSoloRankMonitorService {
 				if (currentGameId.equals(previousLastCheckedGameId)) {
 					account.markMatchCheckHeartbeat(checkedAt);
 					persist(account);
+					// 로딩 화면에 감지돼 시작 시각이 비었던 게임을 메운다(이미 있으면 0행 UPDATE).
+					if (account.getLiveStatus() == PlayerRiotAccountLiveStatus.IN_RANKED_SOLO) {
+						fillStartedAt(account, currentGameId, currentGame);
+					}
 					unchangedCount++;
 					continue;
 				}
@@ -122,6 +126,7 @@ public class PlayerSoloRankMonitorService {
 					// 구독 여부와 무관하게 솔랭 게임 이력 적재(선수 카드 최근 솔랭·챔프 폭).
 					soloRankGameHistoryRecorder.record(
 							account.getPlayer(), currentGameId, champion, checkedAt);
+					fillStartedAt(account, currentGameId, currentGame);
 				} else {
 					account.markRecentOtherQueue(currentGameId, checkedAt);
 					persist(account);
@@ -337,6 +342,14 @@ public class PlayerSoloRankMonitorService {
 			case ARENA_QUEUE_ID, ARENA_RANKED_QUEUE_ID -> "아레나";
 			default -> "기타 게임";
 		};
+	}
+
+	/** 시작 시각이 내려왔을 때만(로딩 화면이면 0) 이력 행에 한 번 채운다. */
+	private void fillStartedAt(PlayerRiotAccount account, String gameId, RiotCurrentGameResponse currentGame) {
+		Long startTime = currentGame.gameStartTime();
+		if (startTime != null && startTime > 0) {
+			soloRankGameHistoryRecorder.fillStartedAt(account.getPlayer(), gameId, startTime);
+		}
 	}
 
 	private Champion resolveTrackedChampion(RiotCurrentGameResponse currentGame, String trackedPuuid) {

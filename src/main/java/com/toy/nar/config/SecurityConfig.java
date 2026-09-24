@@ -44,7 +44,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/mobile/me/player-subscriptions/**",
                                 "/api/mobile/me/devices/**",
-                                "/api/mobile/me/ratings"
+                                "/api/mobile/me/ratings",
+                                "/api/mobile/me/solo-rank"
                         ).authenticated()
                         .requestMatchers(
                                 HttpMethod.PUT,

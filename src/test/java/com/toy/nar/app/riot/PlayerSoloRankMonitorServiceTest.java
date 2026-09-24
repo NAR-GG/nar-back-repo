@@ -187,6 +187,30 @@ class PlayerSoloRankMonitorServiceTest {
 	}
 
 	@Test
+	void fillsStartTimeOnHeartbeatOnceGameLeavesLoadingScreen() {
+		Player player = Player.builder().name("Faker").imageUrl(null).build();
+		PlayerRiotAccount account = PlayerRiotAccount.builder()
+				.player(player).riotId("Hide on bush#KR1").gameName("Hide on bush").tagLine("KR1")
+				.platform("KR").puuid("puuid").primaryAccount(true).enabled(true)
+				.liveStatus(PlayerRiotAccountLiveStatus.IN_RANKED_SOLO)
+				.lastCheckedMatchId("222").lastAlertedMatchId("222")
+				.build();
+		when(playerRiotAccountRepository.findAllTrackedAccounts()).thenReturn(List.of(account));
+		List<RiotCurrentGameResponse.RiotCurrentGameParticipantResponse> participants =
+				List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("puuid", 157, "Hide on bush#KR1"));
+		// 첫 폴링은 로딩 화면(0), 두 번째 폴링에서 실제 시작 시각이 내려온다.
+		when(riotApiClient.getActiveGameByPuuid("puuid", "KR"))
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(222L, 420, participants, 0L)))
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(222L, 420, participants, 1790300000000L)));
+
+		playerSoloRankMonitorService.pollTrackedAccounts();
+		verify(soloRankGameHistoryRecorder, never()).fillStartedAt(any(), anyString(), any());
+
+		playerSoloRankMonitorService.pollTrackedAccounts();
+		verify(soloRankGameHistoryRecorder).fillStartedAt(player, "222", 1790300000000L);
+	}
+
+	@Test
 	void primesBaselineWithoutSendingAlertOnFirstLivePoll() {
 		Player player = Player.builder()
 				.name("Faker")

@@ -164,6 +164,20 @@ public class SoloRankEndNotificationService {
 				RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 
 		soloRankGameRepository.markEndNotified(player.getId(), target.gameId, LocalDateTime.now());
+		// 홈 "오늘 끝난 경기"용 결과 저장. 알림은 이미 나갔으니 여기서 실패해도 흐름을 깨지 않는다.
+		try {
+			RiotMatchResponse.Info info = match.info();
+			soloRankGameRepository.recordResult(player.getId(), target.gameId,
+					SoloRankGameHistoryRecorder.toLocal(info.gameStartTimestamp()),
+					SoloRankGameHistoryRecorder.toLocal(info.gameEndTimestamp()),
+					info.durationSeconds(),
+					tracked == null ? null : tracked.win(),
+					tracked == null ? null : tracked.kills(),
+					tracked == null ? null : tracked.deaths(),
+					tracked == null ? null : tracked.assists());
+		} catch (Exception e) {
+			log.warn("[solo-rank-end] 결과 저장 실패 player={} gameId={}", player.getName(), target.gameId, e);
+		}
 		log.info("[solo-rank-end] 종료 알림 발송 player={} gameId={}", player.getName(), target.gameId);
 		return Outcome.SENT;
 	}
