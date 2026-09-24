@@ -58,7 +58,9 @@ public class NaverStandingsClient {
 	}
 
 	/**
-	 * {@code topLeagueId}(lck, lec …)에 해당하는 <b>지금 진행 중인</b> 시즌 id 를 찾는다.
+	 * {@code topLeagueId}(lck, lec …)에 해당하는 시즌 id 를 찾는다. 진행 중인 시즌이 있으면 그것,
+	 * 없으면(오프시즌) <b>가장 최근에 끝난 시즌</b>이다 — 시즌이 끝났다고 홈 순위표를 비우지 않고
+	 * 최종 순위를 보여준다.
 	 *
 	 * <p>시즌 slug 가 해마다 바뀌므로(lec_2026_summer → …) 하드코딩하지 않고 기간으로 고른다.
 	 * 후보가 여럿이면 기간이 긴 쪽을 쓴다 — LCK 는 하루짜리 {@code lck_2026_event}(이벤트 매치)가
@@ -79,30 +81,41 @@ public class NaverStandingsClient {
 		if (root == null) {
 			return Optional.empty();
 		}
-		long now = System.currentTimeMillis();
-		JsonNode best = null;
-		long bestSpan = -1;
-		for (JsonNode league : root.path("content")) {
+		Optional<String> picked = pickLeagueId(root.path("content"), topLeagueId, System.currentTimeMillis());
+		if (picked.isEmpty()) {
+			log.info("네이버에 진행 중이거나 끝난 시즌이 없다: topLeagueId={}", topLeagueId);
+		}
+		return picked;
+	}
+
+	/** 오프시즌 폴백에서 빼는 짧은 시즌 — 하루짜리 이벤트 매치가 "가장 최근에 끝난 시즌"으로 잡히지 않게. */
+	private static final long MIN_FALLBACK_SPAN_MS = Duration.ofDays(14).toMillis();
+
+	static Optional<String> pickLeagueId(JsonNode leagues, String topLeagueId, long now) {
+		JsonNode running = null;
+		long runningSpan = -1;
+		JsonNode ended = null;
+		long endedAt = -1;
+		for (JsonNode league : leagues) {
 			if (!"lol".equals(league.path("gameCode").asText())
 					|| !topLeagueId.equals(league.path("topLeagueId").asText())) {
 				continue;
 			}
 			long start = league.path("startDate").asLong();
 			long end = league.path("endDate").asLong();
-			if (start > now || end < now) {
-				continue;
-			}
 			long span = end - start;
-			if (span > bestSpan) {
-				bestSpan = span;
-				best = league;
+			if (start <= now && now <= end) {
+				if (span > runningSpan) {
+					runningSpan = span;
+					running = league;
+				}
+			} else if (end < now && span >= MIN_FALLBACK_SPAN_MS && end > endedAt) {
+				endedAt = end;
+				ended = league;
 			}
 		}
-		if (best == null) {
-			log.info("네이버에 진행 중인 시즌이 없다: topLeagueId={}", topLeagueId);
-			return Optional.empty();
-		}
-		return Optional.of(best.path("leagueId").asText());
+		JsonNode best = running != null ? running : ended;
+		return best == null ? Optional.empty() : Optional.of(best.path("leagueId").asText());
 	}
 
 	/** 순위 행. 실패하면 빈 목록을 준다 — 순위표가 없는 것과 조회 실패를 서비스에서 구분한다. */
