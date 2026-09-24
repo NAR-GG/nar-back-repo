@@ -23,6 +23,23 @@ public interface LivePlayerRatingRepository extends JpaRepository<LivePlayerRati
 	@EntityGraph(attributePaths = "player")
 	Page<LivePlayerRating> findByMember_IdOrderByCreatedAtDesc(Long memberId, Pageable pageable);
 
+	/**
+	 * 한줄평이 달린 평가를 경기와 상관없이 최신순으로. PK 역순 스캔이라 created_at 인덱스가 필요 없다.
+	 * 빈 한줄평은 저장 시 NULL 로 바뀌므로(LivePlayerRating#update) IS NOT NULL 로 충분하다.
+	 */
+	@EntityGraph(attributePaths = {"player", "member", "member.favoriteTeam"})
+	@Query("""
+			SELECT r FROM LivePlayerRating r
+			WHERE r.comment IS NOT NULL
+			  AND (:cursor IS NULL OR r.id < :cursor)
+			  AND r.member.id NOT IN :excludedMemberIds
+			ORDER BY r.id DESC
+			""")
+	List<LivePlayerRating> findRecentWithComment(
+			@Param("cursor") Long cursor,
+			@Param("excludedMemberIds") List<Long> excludedMemberIds,
+			Pageable pageable);
+
 	@EntityGraph(attributePaths = {"member", "member.favoriteTeam"})
 	Page<LivePlayerRating> findByLiveGameIdAndLiveParticipantIdOrderByCreatedAtDesc(
 			String liveGameId,

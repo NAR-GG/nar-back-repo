@@ -33,7 +33,11 @@ public record MyRatingListResponse(
 			@Schema(description = "작성자(나) 응원팀 로고 URL. 없으면 null", nullable = true)
 			String teamImageUrl,
 			@Schema(description = "세트가 속한 매치 정보. 매핑이 없으면 null", nullable = true)
-			MatchInfo match) {
+			MatchInfo match,
+			@Schema(description = "작성자 닉네임(이름#태그)", example = "젠지가족#4821")
+			String nickname,
+			@Schema(description = "작성자 응원팀 코드. 없으면 null", example = "GEN", nullable = true)
+			String teamCode) {
 	}
 
 	public record MatchInfo(

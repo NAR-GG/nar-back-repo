@@ -13,6 +13,7 @@ import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingListResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingDetailResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingRequest;
+import com.toy.nar.domain.community.repository.CommunityInteractionRepository;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
@@ -52,6 +53,7 @@ class MobileLivePlayerRatingServiceTest {
 	private LeagueMatchGameRepository leagueMatchGameRepository;
 	private LeagueMatchRepository leagueMatchRepository;
 	private MobileScheduleService mobileScheduleService;
+	private CommunityInteractionRepository interactionRepository;
 	private MobileLivePlayerRatingService service;
 
 	@BeforeEach
@@ -63,6 +65,7 @@ class MobileLivePlayerRatingServiceTest {
 		leagueMatchGameRepository = mock(LeagueMatchGameRepository.class);
 		leagueMatchRepository = mock(LeagueMatchRepository.class);
 		mobileScheduleService = mock(MobileScheduleService.class);
+		interactionRepository = mock(CommunityInteractionRepository.class);
 		service = new MobileLivePlayerRatingService(
 				liveStateQueryService,
 				ratingRepository,
@@ -70,7 +73,8 @@ class MobileLivePlayerRatingServiceTest {
 				playerRepository,
 				leagueMatchGameRepository,
 				leagueMatchRepository,
-				mobileScheduleService);
+				mobileScheduleService,
+				interactionRepository);
 	}
 
 	@Test
@@ -206,6 +210,39 @@ class MobileLivePlayerRatingServiceTest {
 		assertThat(updated.rating()).isEqualTo(5);
 		assertThat(updated.comment()).isEqualTo("생각이 바뀌었습니다");
 		verify(ratingRepository).delete(existing);
+	}
+
+	@Test
+	void recentWithCommentExcludesBlockedAndCarriesNickname() {
+		Member member = member(7L, "용맹한바론");
+		Team favoriteTeam = Team.builder().name("Gen.G").code("GEN").imageUrl("gen.png").build();
+		ReflectionTestUtils.setField(member, "favoriteTeam", favoriteTeam);
+		LivePlayerRating first = rating(member, 5, "라인전부터 다름");
+		ReflectionTestUtils.setField(first, "id", 30L);
+		LivePlayerRating second = rating(member, 4, "한타 좋았음");
+		ReflectionTestUtils.setField(second, "id", 29L);
+		when(interactionRepository.findBlockedMemberIds(3L)).thenReturn(List.of(9L));
+		when(ratingRepository.findRecentWithComment(null, List.of(9L), PageRequest.of(0, 2)))
+				.thenReturn(List.of(first, second));
+
+		var response = service.getRecentWithComment(null, 2, 3L);
+
+		assertThat(response.ratings()).extracting(item -> item.ratingId()).containsExactly(30L, 29L);
+		assertThat(response.ratings().get(0).nickname()).isEqualTo(member.getNickname());
+		assertThat(response.ratings().get(0).teamCode()).isEqualTo("GEN");
+		assertThat(response.nextCursor()).isEqualTo(29L); // 꽉 찼으니 다음이 있을 수 있다
+	}
+
+	@Test
+	void recentWithCommentUsesSentinelWhenNothingBlocked() {
+		when(ratingRepository.findRecentWithComment(null, List.of(-1L), PageRequest.of(0, 20)))
+				.thenReturn(List.of());
+
+		var response = service.getRecentWithComment(null, 20, null);
+
+		assertThat(response.ratings()).isEmpty();
+		assertThat(response.nextCursor()).isNull();
+		verify(interactionRepository, never()).findBlockedMemberIds(any(Long.class));
 	}
 
 	@Test
