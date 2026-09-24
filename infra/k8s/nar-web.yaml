@@ -50,7 +50,7 @@ spec:
 
       containers:
         - name: app
-          image: menten4859/nar-gg:59870c1d502c04169f39926b4561e32c3a5ef771
+          image: menten4859/nar-gg:3d2dce63c3b1ef79264e1c639004f005be7c5b81
           ports:
             - containerPort: 8080
 
