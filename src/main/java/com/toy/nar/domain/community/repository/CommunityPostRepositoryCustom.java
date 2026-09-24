@@ -17,6 +17,13 @@ public interface CommunityPostRepositoryCustom {
 			boolean includeTest);
 
 	/**
+	 * 인기순 한 페이지 — {@code since} 이후 글을 (좋아요 + 댓글) 내림차순, 동점은 최신순.
+	 * 점수순이라 id 커서로 이어 받을 수 없어 첫 페이지만 있다.
+	 */
+	List<CommunityPostRow> findHotPage(Long boardTeamId, LocalDateTime since,
+			List<Long> excludedMemberIds, int size, boolean includeTest);
+
+	/**
 	 * 제목·미리보기 키워드 검색(전체 게시판, 최신순 커서). 차단 작성자는 제외된다.
 	 * 지금 규모에선 LIKE 풀스캔으로 충분하다 — 근거는 구현부 주석.
 	 */

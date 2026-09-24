@@ -42,8 +42,10 @@ public class MobileCommunityPostController {
 			@RequestParam(required = false) Long boardTeamId,
 			@RequestParam(required = false) Long cursor,
 			@RequestParam(required = false) Integer size,
+			// latest(기본) | hot — hot 은 최근 7일 (좋아요 + 댓글) 순이고 첫 페이지만 있다
+			@RequestParam(required = false) String sort,
 			@AuthenticationPrincipal Long memberId) {
-		return ResponseEntity.ok(postService.getPosts(boardTeamId, cursor, size, memberId));
+		return ResponseEntity.ok(postService.getPosts(boardTeamId, cursor, size, sort, memberId));
 	}
 
 	/** 글 검색(제목·미리보기·평문 본문). 비로그인도 되고, 로그인이면 차단 필터가 붙는다. */

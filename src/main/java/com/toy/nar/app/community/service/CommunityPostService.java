@@ -1,5 +1,7 @@
 package com.toy.nar.app.community.service;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -59,17 +61,25 @@ public class CommunityPostService {
 	private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 	private final com.toy.nar.app.auth.profile.CloudinarySignatureService cloudinarySignatureService;
 
-	public PostListResponse getPosts(Long boardTeamId, Long cursor, Integer size, Long viewerId) {
+	/** 인기순이 보는 기간. 짧으면 글이 거의 없고, 길면 같은 글이 늘 위에 있다(2026-09 홈 개편 결정). */
+	static final Duration HOT_WINDOW = Duration.ofDays(7);
+
+	public PostListResponse getPosts(Long boardTeamId, Long cursor, Integer size, String sort, Long viewerId) {
 		int pageSize = clampSize(size);
 		List<Long> blocked = viewerId == null
 				? List.of()
 				: interactionRepository.findBlockedMemberIds(viewerId);
-		List<CommunityPostRow> rows = postRepository.findPage(boardTeamId, cursor, blocked, pageSize, testerRegistry.isTester(viewerId));
+		boolean includeTest = testerRegistry.isTester(viewerId);
+		boolean hot = "hot".equalsIgnoreCase(sort);
+		List<CommunityPostRow> rows = hot
+				? postRepository.findHotPage(boardTeamId, LocalDateTime.now().minus(HOT_WINDOW), blocked, pageSize, includeTest)
+				: postRepository.findPage(boardTeamId, cursor, blocked, pageSize, includeTest);
 		var imagesByPost = imagesByPost(rows);
 		List<PostSummaryResponse> posts = rows.stream()
 				.map(row -> toSummary(row, imagesByPost.getOrDefault(row.id(), List.of())))
 				.toList();
-		return new PostListResponse(posts, nextCursor(rows, pageSize), boardViewer(boardTeamId, viewerId));
+		Long next = hot ? null : nextCursor(rows, pageSize);
+		return new PostListResponse(posts, next, boardViewer(boardTeamId, viewerId));
 	}
 
 	/**
