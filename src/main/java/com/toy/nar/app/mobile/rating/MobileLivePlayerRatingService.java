@@ -20,7 +20,9 @@ import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.Team;
+import com.toy.nar.domain.participant.repository.ChampionRepository;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
+import com.toy.nar.common.util.NameNormalizer;
 import com.toy.nar.domain.rating.entity.LivePlayerRating;
 import com.toy.nar.domain.rating.repository.LivePlayerRatingRepository;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +62,7 @@ public class MobileLivePlayerRatingService {
 	private final LeagueMatchRepository leagueMatchRepository;
 	private final MobileScheduleService mobileScheduleService;
 	private final CommunityInteractionRepository interactionRepository;
+	private final ChampionRepository championRepository;
 
 	public LivePlayerRatingListResponse getRatings(String gameId, String teamSide, Long memberId) {
 		LiveGameState state = requireState(gameId);
@@ -226,13 +229,32 @@ public class MobileLivePlayerRatingService {
 		// 미매핑 게임은 경기상세 세트 목록 로직(라이브 스냅샷 보강 포함)으로 matchInfo를 만든다.
 		Map<String, MyRatingListResponse.MatchInfo> fallbackMatchInfoByGameId =
 				buildFallbackMatchInfo(ratings, matchGamesByGameId.keySet());
+		Map<String, String> championKrByEn = championKrByEn(ratings);
 
 		return ratings.stream()
 				.map(rating -> toMyRatingItem(
 						rating,
 						matchGamesByGameId.get(rating.getLiveGameId()),
-						fallbackMatchInfoByGameId.get(rating.getLiveGameId())))
+						fallbackMatchInfoByGameId.get(rating.getLiveGameId()),
+						championKrByEn))
 				.toList();
+	}
+
+	/**
+	 * 행의 챔피언명은 라이브 피드 영문명("KSante")이다. champions 테이블은 정규화한 영문명("Ksante")을
+	 * 키로 갖고 있어 같은 정규화로 한 번에 한글명을 찾는다. 못 찾으면 원문을 그대로 둔다.
+	 */
+	private Map<String, String> championKrByEn(List<LivePlayerRating> ratings) {
+		Set<String> normalized = ratings.stream()
+				.map(LivePlayerRating::getChampionName)
+				.filter(name -> name != null && !name.isBlank())
+				.map(NameNormalizer::normalizeChampionName)
+				.collect(Collectors.toSet());
+		if (normalized.isEmpty()) {
+			return Map.of();
+		}
+		return championRepository.findByChampionNameEnIn(normalized).stream()
+				.collect(Collectors.toMap(c -> c.getChampionNameEn(), c -> c.getChampionNameKr(), (left, right) -> left));
 	}
 
 	@Transactional
@@ -364,7 +386,8 @@ public class MobileLivePlayerRatingService {
 	private MyRatingListResponse.MyRatingItem toMyRatingItem(
 			LivePlayerRating rating,
 			LeagueMatchGame matchGame,
-			MyRatingListResponse.MatchInfo fallbackMatchInfo) {
+			MyRatingListResponse.MatchInfo fallbackMatchInfo,
+			Map<String, String> championKrByEn) {
 		Player player = rating.getPlayer();
 		Member member = rating.getMember();
 		Team favoriteTeam = member != null ? member.getFavoriteTeam() : null;
@@ -379,7 +402,9 @@ public class MobileLivePlayerRatingService {
 				player != null ? player.getImageUrl() : null,
 				rating.getTeamSide(),
 				rating.getRole(),
-				rating.getChampionName(),
+				rating.getChampionName() == null ? null
+						: championKrByEn.getOrDefault(
+								NameNormalizer.normalizeChampionName(rating.getChampionName()), rating.getChampionName()),
 				rating.getRating(),
 				rating.getComment(),
 				rating.getCreatedAt(),

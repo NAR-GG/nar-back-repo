@@ -18,6 +18,7 @@ import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.Team;
+import com.toy.nar.domain.participant.repository.ChampionRepository;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.rating.entity.LivePlayerRating;
 import com.toy.nar.domain.rating.repository.LivePlayerRatingRepository;
@@ -54,6 +55,7 @@ class MobileLivePlayerRatingServiceTest {
 	private LeagueMatchRepository leagueMatchRepository;
 	private MobileScheduleService mobileScheduleService;
 	private CommunityInteractionRepository interactionRepository;
+	private ChampionRepository championRepository;
 	private MobileLivePlayerRatingService service;
 
 	@BeforeEach
@@ -66,6 +68,7 @@ class MobileLivePlayerRatingServiceTest {
 		leagueMatchRepository = mock(LeagueMatchRepository.class);
 		mobileScheduleService = mock(MobileScheduleService.class);
 		interactionRepository = mock(CommunityInteractionRepository.class);
+		championRepository = mock(ChampionRepository.class);
 		service = new MobileLivePlayerRatingService(
 				liveStateQueryService,
 				ratingRepository,
@@ -74,7 +77,8 @@ class MobileLivePlayerRatingServiceTest {
 				leagueMatchGameRepository,
 				leagueMatchRepository,
 				mobileScheduleService,
-				interactionRepository);
+				interactionRepository,
+				championRepository);
 	}
 
 	@Test
@@ -235,7 +239,10 @@ class MobileLivePlayerRatingServiceTest {
 		Member member = member(7L, "용맹한바론");
 		Player zeus = Player.builder().name("Zeus").imageUrl("zeus.png").build();
 		LivePlayerRating rating = new LivePlayerRating("match-1", "game-1", 1, member, zeus, "Blue", "top",
-				"HLE Zeus", null, "그웬", 5, "탑 차이");
+				"HLE Zeus", null, "KSante", 5, "탑 차이");
+		when(championRepository.findByChampionNameEnIn(java.util.Set.of("Ksante"))).thenReturn(List.of(
+				com.toy.nar.domain.participant.entity.Champion.builder()
+						.championNameKr("크산테").championNameEn("Ksante").imageUrl("ksante.png").build()));
 		ReflectionTestUtils.setField(rating, "id", 40L);
 		LeagueMatch match = LeagueMatch.builder().id("match-1").leagueName("LCK").matchTitle("HLE vs T1")
 				.matchDate(LocalDateTime.of(2026, 6, 6, 9, 0)).state("completed")
@@ -249,6 +256,7 @@ class MobileLivePlayerRatingServiceTest {
 
 		assertThat(item.playerName()).isEqualTo("Zeus"); // 피드 이름 "HLE Zeus" 가 아니라
 		assertThat(item.playerTeamCode()).isEqualTo("HLE");
+		assertThat(item.championName()).isEqualTo("크산테"); // 피드 영문명 "KSante" → 한글
 	}
 
 	@Test
