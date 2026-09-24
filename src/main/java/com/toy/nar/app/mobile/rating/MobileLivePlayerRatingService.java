@@ -368,12 +368,14 @@ public class MobileLivePlayerRatingService {
 		Player player = rating.getPlayer();
 		Member member = rating.getMember();
 		Team favoriteTeam = member != null ? member.getFavoriteTeam() : null;
+		MyRatingListResponse.MatchInfo match = matchGame != null ? toMatchInfo(matchGame) : fallbackMatchInfo;
 		return new MyRatingListResponse.MyRatingItem(
 				rating.getId(),
 				rating.getLiveGameId(),
 				rating.getLiveParticipantId(),
 				player != null ? player.getId() : null,
-				rating.getPlayerName(),
+				// 행의 이름은 라이브 피드 참가자명("HLE Zeus")이다. 매칭된 선수가 있으면 그 이름을 쓴다.
+				player != null ? player.getName() : rating.getPlayerName(),
 				player != null ? player.getImageUrl() : null,
 				rating.getTeamSide(),
 				rating.getRole(),
@@ -384,9 +386,25 @@ public class MobileLivePlayerRatingService {
 				rating.getUpdatedAt(),
 				member != null ? CloudinaryUrls.with(member.getProfileImageUrl(), CloudinaryUrls.AVATAR) : null,
 				favoriteTeam != null ? favoriteTeam.getImageUrl() : null,
-				matchGame != null ? toMatchInfo(matchGame) : fallbackMatchInfo,
+				match,
 				member != null ? member.getNickname() : null,
-				favoriteTeam != null ? favoriteTeam.getCode() : null);
+				playerTeamCode(rating, match));
+	}
+
+	/** 선수의 그 경기 팀. 매치 진영이 1순위, 매치를 모르면 피드 이름 접두사("HLE Zeus" → HLE). */
+	static String playerTeamCode(LivePlayerRating rating, MyRatingListResponse.MatchInfo match) {
+		String side = rating.getTeamSide();
+		if (match != null && side != null) {
+			if ("BLUE".equalsIgnoreCase(side)) {
+				return match.blueTeamCode();
+			}
+			if ("RED".equalsIgnoreCase(side)) {
+				return match.redTeamCode();
+			}
+		}
+		String name = rating.getPlayerName();
+		int space = name == null ? -1 : name.lastIndexOf(' ');
+		return space > 0 ? name.substring(0, space).trim() : null;
 	}
 
 	private MyRatingListResponse.MatchInfo toMatchInfo(LeagueMatchGame matchGame) {
