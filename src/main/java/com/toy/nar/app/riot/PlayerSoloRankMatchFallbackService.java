@@ -101,6 +101,7 @@ public class PlayerSoloRankMatchFallbackService {
 					if (!newlyRecorded) {
 						continue;
 					}
+					soloRankGameHistoryRecorder.recordResult(account.getPlayer(), gameId, match.info(), tracked);
 					newGameCount++;
 
 					if (isFresh(match.info().gameEndTimestamp())) {

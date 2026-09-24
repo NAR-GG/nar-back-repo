@@ -87,6 +87,29 @@ public class CommunityPostRepositoryImpl implements CommunityPostRepositoryCusto
 	}
 
 	@Override
+	public List<CommunityPostRow> findHotPage(Long boardTeamId, LocalDateTime since,
+			List<Long> excludedMemberIds, int size, boolean includeTest) {
+		StringBuilder sql = new StringBuilder(SELECT_COLUMNS.formatted("NULL"));
+		List<Object> params = new ArrayList<>();
+
+		if (boardTeamId == null) {
+			sql.append("WHERE p.board_team_id IS NULL\n");
+		} else {
+			sql.append("WHERE p.board_team_id = ?\n");
+			params.add(boardTeamId);
+		}
+		sql.append(statusClause(includeTest));
+		// ponytail: 창 안의 글을 전부 읽어 정렬한다(filesort). 7일치가 수천 건을 넘으면 점수 컬럼 + 인덱스로.
+		sql.append("  AND p.created_at >= ?\n");
+		params.add(since);
+		appendExcludedAuthors(sql, params, excludedMemberIds);
+		sql.append("ORDER BY (p.like_count + p.comment_count) DESC, p.id DESC LIMIT ?");
+		params.add(size);
+
+		return jdbcTemplate.query(sql.toString(), ROW_MAPPER, params.toArray());
+	}
+
+	@Override
 	public List<CommunityPostRow> searchPage(String keyword, Long cursorId, List<Long> excludedMemberIds,
 			int size, boolean includeTest) {
 		StringBuilder sql = new StringBuilder(SELECT_COLUMNS.formatted("NULL"));

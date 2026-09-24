@@ -106,6 +106,28 @@ class CommunityRepositoryMySqlIntegrationTest {
 	}
 
 	@Test
+	void 인기순은_창_안에서_좋아요_댓글_합순이고_동점은_최신순이다() {
+		java.time.LocalDateTime now = java.time.LocalDateTime.now();
+		String insert = "INSERT INTO community_post (id, board_team_id, member_id, title, body,"
+				+ " like_count, comment_count, created_at) VALUES (?, NULL, ?, 'hot', 'body', ?, ?, ?)";
+		jdbc.update(insert, 201, 1, 5, 0, now.minusDays(3));   // 5점
+		jdbc.update(insert, 202, 1, 1, 4, now.minusDays(1));   // 5점 — 201 과 동점, 더 최신
+		jdbc.update(insert, 203, 1, 0, 1, now.minusDays(2));   // 1점
+		jdbc.update(insert, 204, 1, 50, 0, now.minusDays(10)); // 창 밖
+		jdbc.update(insert, 205, 2, 100, 0, now.minusDays(1)); // 차단당한 작성자
+
+		List<Long> blocked = interactions.findBlockedMemberIds(3L);
+		List<Long> hot = postRepository.findHotPage(null, now.minusDays(7), blocked, 50, false).stream()
+				.map(CommunityPostRow::id)
+				.filter(id -> id > 200) // 다른 테스트의 0점 글은 보지 않는다
+				.toList();
+
+		assertThat(hot).containsExactly(202L, 201L, 203L);
+
+		jdbc.update("DELETE FROM community_post WHERE id BETWEEN 201 AND 299");
+	}
+
+	@Test
 	void 전체게시판_커서와_차단필터가_같이_돈다() {
 		List<Long> blocked = interactions.findBlockedMemberIds(3L);
 		assertThat(blocked).containsExactly(2L);

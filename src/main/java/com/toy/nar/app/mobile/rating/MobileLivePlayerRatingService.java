@@ -14,6 +14,8 @@ import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingDetailResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingListResponse;
 import com.toy.nar.app.mobile.rating.dto.LivePlayerRatingRequest;
 import com.toy.nar.app.mobile.rating.dto.MyRatingListResponse;
+import com.toy.nar.app.mobile.rating.dto.RecentRatingListResponse;
+import com.toy.nar.domain.community.repository.CommunityInteractionRepository;
 import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
@@ -57,6 +59,7 @@ public class MobileLivePlayerRatingService {
 	private final LeagueMatchGameRepository leagueMatchGameRepository;
 	private final LeagueMatchRepository leagueMatchRepository;
 	private final MobileScheduleService mobileScheduleService;
+	private final CommunityInteractionRepository interactionRepository;
 
 	public LivePlayerRatingListResponse getRatings(String gameId, String teamSide, Long memberId) {
 		LiveGameState state = requireState(gameId);
@@ -187,7 +190,32 @@ public class MobileLivePlayerRatingService {
 				memberId,
 				PageRequest.of(safePage, safeSize));
 
-		Set<String> gameIds = ratings.getContent().stream()
+		List<MyRatingListResponse.MyRatingItem> items = toItems(ratings.getContent());
+		return new MyRatingListResponse(
+				items,
+				ratings.getNumber(),
+				ratings.getSize(),
+				ratings.getTotalElements(),
+				ratings.getTotalPages());
+	}
+
+	/**
+	 * 모든 경기를 가로지르는 최근 한줄평 — 한줄평이 달린 평가만, 최신순 id 커서.
+	 * 홈 커뮤니티의 평점 탭이 쓴다. 로그인이면 보는 사람이 차단한 회원의 평가를 뺀다.
+	 */
+	public RecentRatingListResponse getRecentWithComment(Long cursor, int size, Long viewerId) {
+		int safeSize = Math.max(1, Math.min(size, 50));
+		List<Long> blocked = viewerId == null ? List.of() : interactionRepository.findBlockedMemberIds(viewerId);
+		// ponytail: 빈 NOT IN 을 피하려는 센티널. 회원 id 는 1 부터라 -1 은 아무도 안 걸린다.
+		List<Long> excluded = blocked.isEmpty() ? List.of(-1L) : blocked;
+		List<LivePlayerRating> ratings = ratingRepository.findRecentWithComment(
+				cursor, excluded, PageRequest.of(0, safeSize));
+		Long next = ratings.size() < safeSize ? null : ratings.get(ratings.size() - 1).getId();
+		return new RecentRatingListResponse(toItems(ratings), next);
+	}
+
+	private List<MyRatingListResponse.MyRatingItem> toItems(List<LivePlayerRating> ratings) {
+		Set<String> gameIds = ratings.stream()
 				.map(LivePlayerRating::getLiveGameId)
 				.collect(Collectors.toSet());
 		Map<String, LeagueMatchGame> matchGamesByGameId = gameIds.isEmpty()
@@ -197,19 +225,14 @@ public class MobileLivePlayerRatingService {
 		// league_match_game 동기화 구멍(마지막 세트 누락 등)이 있어도 경기상세와 동일하게 보이도록,
 		// 미매핑 게임은 경기상세 세트 목록 로직(라이브 스냅샷 보강 포함)으로 matchInfo를 만든다.
 		Map<String, MyRatingListResponse.MatchInfo> fallbackMatchInfoByGameId =
-				buildFallbackMatchInfo(ratings.getContent(), matchGamesByGameId.keySet());
+				buildFallbackMatchInfo(ratings, matchGamesByGameId.keySet());
 
-		return new MyRatingListResponse(
-				ratings.getContent().stream()
-						.map(rating -> toMyRatingItem(
-								rating,
-								matchGamesByGameId.get(rating.getLiveGameId()),
-								fallbackMatchInfoByGameId.get(rating.getLiveGameId())))
-						.toList(),
-				ratings.getNumber(),
-				ratings.getSize(),
-				ratings.getTotalElements(),
-				ratings.getTotalPages());
+		return ratings.stream()
+				.map(rating -> toMyRatingItem(
+						rating,
+						matchGamesByGameId.get(rating.getLiveGameId()),
+						fallbackMatchInfoByGameId.get(rating.getLiveGameId())))
+				.toList();
 	}
 
 	@Transactional
@@ -361,7 +384,9 @@ public class MobileLivePlayerRatingService {
 				rating.getUpdatedAt(),
 				member != null ? CloudinaryUrls.with(member.getProfileImageUrl(), CloudinaryUrls.AVATAR) : null,
 				favoriteTeam != null ? favoriteTeam.getImageUrl() : null,
-				matchGame != null ? toMatchInfo(matchGame) : fallbackMatchInfo);
+				matchGame != null ? toMatchInfo(matchGame) : fallbackMatchInfo,
+				member != null ? member.getNickname() : null,
+				favoriteTeam != null ? favoriteTeam.getCode() : null);
 	}
 
 	private MyRatingListResponse.MatchInfo toMatchInfo(LeagueMatchGame matchGame) {
