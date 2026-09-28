@@ -36,8 +36,9 @@ public record MyRatingListResponse(
 			MatchInfo match,
 			@Schema(description = "작성자 닉네임(이름#태그)", example = "젠지가족#4821")
 			String nickname,
-			@Schema(description = "작성자 응원팀 코드. 없으면 null", example = "GEN", nullable = true)
-			String teamCode) {
+			@Schema(description = "평가 대상 선수의 그 경기 팀 코드. 매치 진영으로 정하고, 매치를 모르면 라이브 피드 이름 접두사(\"HLE Zeus\")로 정한다. 둘 다 없으면 null",
+					example = "HLE", nullable = true)
+			String playerTeamCode) {
 	}
 
 	public record MatchInfo(

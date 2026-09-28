@@ -18,6 +18,7 @@ import com.toy.nar.domain.member.entity.Member;
 import com.toy.nar.domain.member.repository.MemberRepository;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.Team;
+import com.toy.nar.domain.participant.repository.ChampionRepository;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.rating.entity.LivePlayerRating;
 import com.toy.nar.domain.rating.repository.LivePlayerRatingRepository;
@@ -54,6 +55,7 @@ class MobileLivePlayerRatingServiceTest {
 	private LeagueMatchRepository leagueMatchRepository;
 	private MobileScheduleService mobileScheduleService;
 	private CommunityInteractionRepository interactionRepository;
+	private ChampionRepository championRepository;
 	private MobileLivePlayerRatingService service;
 
 	@BeforeEach
@@ -66,6 +68,7 @@ class MobileLivePlayerRatingServiceTest {
 		leagueMatchRepository = mock(LeagueMatchRepository.class);
 		mobileScheduleService = mock(MobileScheduleService.class);
 		interactionRepository = mock(CommunityInteractionRepository.class);
+		championRepository = mock(ChampionRepository.class);
 		service = new MobileLivePlayerRatingService(
 				liveStateQueryService,
 				ratingRepository,
@@ -74,7 +77,8 @@ class MobileLivePlayerRatingServiceTest {
 				leagueMatchGameRepository,
 				leagueMatchRepository,
 				mobileScheduleService,
-				interactionRepository);
+				interactionRepository,
+				championRepository);
 	}
 
 	@Test
@@ -215,8 +219,6 @@ class MobileLivePlayerRatingServiceTest {
 	@Test
 	void recentWithCommentExcludesBlockedAndCarriesNickname() {
 		Member member = member(7L, "용맹한바론");
-		Team favoriteTeam = Team.builder().name("Gen.G").code("GEN").imageUrl("gen.png").build();
-		ReflectionTestUtils.setField(member, "favoriteTeam", favoriteTeam);
 		LivePlayerRating first = rating(member, 5, "라인전부터 다름");
 		ReflectionTestUtils.setField(first, "id", 30L);
 		LivePlayerRating second = rating(member, 4, "한타 좋았음");
@@ -229,8 +231,40 @@ class MobileLivePlayerRatingServiceTest {
 
 		assertThat(response.ratings()).extracting(item -> item.ratingId()).containsExactly(30L, 29L);
 		assertThat(response.ratings().get(0).nickname()).isEqualTo(member.getNickname());
-		assertThat(response.ratings().get(0).teamCode()).isEqualTo("GEN");
 		assertThat(response.nextCursor()).isEqualTo(29L); // 꽉 찼으니 다음이 있을 수 있다
+	}
+
+	@Test
+	void playerNameAndTeamComeFromMatchedPlayerAndMatchSide() {
+		Member member = member(7L, "용맹한바론");
+		Player zeus = Player.builder().name("Zeus").imageUrl("zeus.png").build();
+		LivePlayerRating rating = new LivePlayerRating("match-1", "game-1", 1, member, zeus, "Blue", "top",
+				"HLE Zeus", null, "KSante", 5, "탑 차이");
+		when(championRepository.findByChampionNameEnIn(java.util.Set.of("Ksante"))).thenReturn(List.of(
+				com.toy.nar.domain.participant.entity.Champion.builder()
+						.championNameKr("크산테").championNameEn("Ksante").imageUrl("ksante.png").build()));
+		ReflectionTestUtils.setField(rating, "id", 40L);
+		LeagueMatch match = LeagueMatch.builder().id("match-1").leagueName("LCK").matchTitle("HLE vs T1")
+				.matchDate(LocalDateTime.of(2026, 6, 6, 9, 0)).state("completed")
+				.blueTeamCode("HLE").redTeamCode("T1").build();
+		when(ratingRepository.findRecentWithComment(null, List.of(-1L), PageRequest.of(0, 20)))
+				.thenReturn(List.of(rating));
+		when(leagueMatchGameRepository.findAllWithMatchByGameIdIn(java.util.Set.of("game-1")))
+				.thenReturn(List.of(new LeagueMatchGame(match, "game-1", 1)));
+
+		var item = service.getRecentWithComment(null, 20, null).ratings().get(0);
+
+		assertThat(item.playerName()).isEqualTo("Zeus"); // 피드 이름 "HLE Zeus" 가 아니라
+		assertThat(item.playerTeamCode()).isEqualTo("HLE");
+		assertThat(item.championName()).isEqualTo("크산테"); // 피드 영문명 "KSante" → 한글
+	}
+
+	@Test
+	void playerTeamFallsBackToFeedNamePrefixWithoutMatch() {
+		LivePlayerRating rating = new LivePlayerRating(null, "game-9", 1, member(7L, "a"), null, "Red", "mid",
+				"T1 Faker", null, "아리", 4, "굿");
+
+		assertThat(MobileLivePlayerRatingService.playerTeamCode(rating, null)).isEqualTo("T1");
 	}
 
 	@Test

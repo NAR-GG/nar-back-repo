@@ -10,4 +10,6 @@ public interface ChampionRepository extends JpaRepository<Champion, Long> {
 	List<Champion> findAllByOrderByChampionNameKrAsc();
 
 	Optional<Champion> findByChampionNameEn(String championNameEn);
+
+	List<Champion> findByChampionNameEnIn(java.util.Collection<String> championNameEns);
 }
