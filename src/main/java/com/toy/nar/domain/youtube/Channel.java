@@ -42,6 +42,11 @@ public class Channel {
 	@Enumerated(EnumType.STRING)
 	@Column(name = "channel_type")
 	private ChannelType channelType;
+
+	// 팀 공식 채널이면 그 팀의 코드(teams.team_code). LCK 공식·유튜버 채널은 null.
+	@Column(name = "team_code", length = 10)
+	private String teamCode;
+
 	public void updateUploadPlaylistId(String uploadPlaylistId) {
 		this.uploadPlaylistId = uploadPlaylistId;
 	}

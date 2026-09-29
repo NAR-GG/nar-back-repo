@@ -36,6 +36,9 @@ public class YoutubeController {
 	private final VideoService videoService;
 	private final CommentService commentService;
 
+	// 상한이 없어 size=200 도 통과하던 것을 막는다. 기존 소비자가 쓸 수 있는 값을 넉넉히 남긴다.
+	private static final int MAX_PAGE_SIZE = 100;
+
 	@Operation(summary = "최신 영상 목록 조회", description = "카테고리, 정렬, 기간별로 영상을 조회합니다.")
 	@GetMapping("/api/story/videos")
 	public ResponseEntity<Page<VideoListResponse>> getVideos(
@@ -48,15 +51,18 @@ public class YoutubeController {
 		@Parameter(description = "기간 필터 (all: 전체, week: 최근 1주, month: 최근 1달)", example = "all")
 		@RequestParam(defaultValue = "all") String period,
 
+		@Parameter(description = "팀 코드 (예: T1, GEN). 그 팀 공식 채널의 영상만 준다. LCK 공식 채널은 팀이 아니라 걸리지 않는다", example = "GEN")
+		@RequestParam(required = false) String teamCode,
+
 		@Parameter(description = "페이지 번호 (0부터 시작)", example = "0")
 		@RequestParam(defaultValue = "0") int page,
 
-		@Parameter(description = "페이지 크기", example = "20")
+		@Parameter(description = "페이지 크기 (1~100, 범위를 벗어나면 맞춘다)", example = "20")
 		@RequestParam(defaultValue = "20") int size
 	) {
-		Pageable pageable = PageRequest.of(page, size);
-		
-		return ResponseEntity.ok(videoService.getVideos(category, sort, period, pageable));
+		Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE));
+
+		return ResponseEntity.ok(videoService.getVideos(category, sort, period, teamCode, pageable));
 	}
 
 	@Operation(summary = "영상 댓글 조회", description = "특정 영상의 댓글을 최신순 또는 인기순으로 조회합니다.")

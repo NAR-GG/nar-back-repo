@@ -31,11 +31,13 @@ public class VideoService {
 	 * @param category : "all", "pro", "shorts"(LCK·팀 공식 채널의 쇼츠)
 	 * @param sort     : "latest" (최신순), "popular" (조회수순)
 	 * @param period   : "all", "week", "month"
+	 * @param teamCode : 팀 공식 채널만 그 팀 것으로 거른다. null·공백이면 거르지 않는다
 	 * @param pageable : 페이징 정보
 	 */
-	public Page<VideoListResponse> getVideos(String category, String sort, String period, Pageable pageable) {
+	public Page<VideoListResponse> getVideos(String category, String sort, String period, String teamCode,
+		Pageable pageable) {
 		// 1. Specification 생성 (필터링 조건)
-		Specification<Video> spec = createSpecification(category, period);
+		Specification<Video> spec = createSpecification(category, period, teamCode);
 
 		// 2. Sort 생성 (정렬 조건)
 		Sort sorting = createSort(sort);
@@ -52,7 +54,7 @@ public class VideoService {
 			.map(VideoListResponse::from);
 	}
 
-	private Specification<Video> createSpecification(String category, String period) {
+	private Specification<Video> createSpecification(String category, String period, String teamCode) {
 		return (root, query, criteriaBuilder) -> {
 			// 유튜버 쇼츠 채널(SHORTS)은 더 노출하지 않는다. 데이터는 남겨 둔다 — 되돌리려면 이 줄만 지우면 된다.
 			Predicate predicate = criteriaBuilder.notEqual(root.get("channel").get("channelType"), ChannelType.SHORTS);
@@ -66,6 +68,12 @@ public class VideoService {
 					// 공식 쇼츠: LCK·팀 공식 채널이 올린 쇼츠.
 					predicate = criteriaBuilder.and(predicate, criteriaBuilder.isTrue(root.get("isShort")));
 				}
+			}
+
+			// 팀 필터
+			if (teamCode != null && !teamCode.isBlank()) {
+				predicate = criteriaBuilder.and(predicate,
+					criteriaBuilder.equal(root.get("channel").get("teamCode"), teamCode.trim()));
 			}
 
 			// 기간 필터

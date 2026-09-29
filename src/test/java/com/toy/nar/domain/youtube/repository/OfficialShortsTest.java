@@ -57,19 +57,49 @@ class OfficialShortsTest {
 		flushAndClear();
 
 		List<String> ids = new VideoService(videoRepository)
-				.getVideos("shorts", "latest", "all", PageRequest.of(0, 20))
+				.getVideos("shorts", "latest", "all", null, PageRequest.of(0, 20))
 				.map(VideoListResponse::youtubeVideoId)
 				.getContent();
 
 		assertThat(ids).containsExactly("official-short");
 
 		List<String> all = new VideoService(videoRepository)
-				.getVideos("all", "latest", "all", PageRequest.of(0, 20))
+				.getVideos("all", "latest", "all", null, PageRequest.of(0, 20))
 				.map(VideoListResponse::youtubeVideoId)
 				.getContent();
 
 		assertThat(all).as("유튜버 채널은 all 에서도 빠진다")
 				.containsExactlyInAnyOrder("official-short", "long-form", "unclassified");
+	}
+
+	@Test
+	@DisplayName("teamCode 로 그 팀 공식 채널의 영상만 거르고, 응답에 팀 코드를 싣는다 — LCK 채널(팀 없음)은 걸리지 않는다")
+	void teamCodeFilter_returnsOnlyThatTeam_andExposesTeamCode() {
+		Channel gen = channelWithTeam("UC_gen", "GEN");
+		Channel t1 = channelWithTeam("UC_t1", "T1");
+		Channel lck = channelWithTeam("UC_lck", null);
+
+		video(gen, "gen-short", true);
+		video(gen, "gen-long", false);
+		video(t1, "t1-short", true);
+		video(lck, "lck-short", true);
+		flushAndClear();
+
+		VideoService service = new VideoService(videoRepository);
+		List<VideoListResponse> genShorts = service
+				.getVideos("shorts", "latest", "all", "GEN", PageRequest.of(0, 20)).getContent();
+		assertThat(genShorts).extracting(VideoListResponse::youtubeVideoId).containsExactly("gen-short");
+		assertThat(genShorts).extracting(VideoListResponse::teamCode).containsExactly("GEN");
+
+		assertThat(service.getVideos("shorts", "latest", "all", " ", PageRequest.of(0, 20)).getContent())
+				.as("공백은 필터 없음")
+				.extracting(VideoListResponse::youtubeVideoId)
+				.containsExactlyInAnyOrder("gen-short", "t1-short", "lck-short");
+		assertThat(service.getVideos("shorts", "latest", "all", "DK", PageRequest.of(0, 20)).getContent())
+				.as("쇼츠가 없는 팀은 빈 목록")
+				.isEmpty();
+		assertThat(service.getVideos("shorts", "latest", "all", null, PageRequest.of(0, 20)).getContent())
+				.extracting(VideoListResponse::teamCode).containsNull();
 	}
 
 	@Test
@@ -116,6 +146,15 @@ class OfficialShortsTest {
 				.youtubeChannelId(youtubeChannelId)
 				.channelName(youtubeChannelId)
 				.channelType(type)
+				.build());
+	}
+
+	private Channel channelWithTeam(String youtubeChannelId, String teamCode) {
+		return channelRepository.save(Channel.builder()
+				.youtubeChannelId(youtubeChannelId)
+				.channelName(youtubeChannelId)
+				.channelType(ChannelType.PRO_TEAMS)
+				.teamCode(teamCode)
 				.build());
 	}
 

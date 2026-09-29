@@ -68,6 +68,16 @@ CREATE TABLE video (
     published_at DATETIME
 );
 
+-- V91 이 channel 에 컬럼을 추가한다. baseline(30) 이전(V2)에 만들어진 테이블이라 여기 있어야 한다.
+CREATE TABLE channel (
+    channel_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    youtube_channel_id VARCHAR(255) NOT NULL UNIQUE,
+    channel_name VARCHAR(255) NOT NULL,
+    profile_image_url VARCHAR(255),
+    upload_playlist_id VARCHAR(255),
+    channel_type VARCHAR(50)
+);
+
 -- 외부 커뮤니티 크롤링 게시글. pre-V31 시절 ddl-auto 로 생긴 테이블이라 마이그레이션엔 없는데,
 -- V79 가 이 테이블을 crawled_community_post 로 RENAME 하므로 baseline 에 있어야 한다.
 CREATE TABLE community_post (
