@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -133,8 +134,15 @@ public class YoutubeSyncService {
 		syncVideosByPeriod(30);
 	}
 
+	// 유튜버 쇼츠 채널은 더 동기화하지 않는다(노출 중단). 행은 남겨 둬 되돌릴 수 있다.
+	private List<Channel> syncTargetChannels() {
+		return channelRepository.findAll().stream()
+				.filter(c -> c.getChannelType() != ChannelType.SHORTS)
+				.toList();
+	}
+
 	private void syncVideosByPeriod(int daysAgo) {
-		List<Channel> channels = channelRepository.findAll();
+		List<Channel> channels = syncTargetChannels();
 
 		if (channels.isEmpty()) {
 			log.warn("### 동기화할 채널이 DB에 없습니다. 채널 초기화를 먼저 진행하세요. ###");
@@ -273,6 +281,31 @@ public class YoutubeSyncService {
 
 			log.info("[PubSub] 실시간 신규 영상 저장 완료: {} - {}", channel.getChannelName(), video.getTitle());
 		}
+	}
+
+	/**
+	 * 쇼츠 판별 대기열(is_short IS NULL)을 최신순으로 limit 건 처리한다. 트랜잭션 밖에서 돈다 —
+	 * 건별 HTTP 호출 동안 DB 트랜잭션을 잡고 있지 않으려고. 신규 영상도, 마이그레이션 직후의
+	 * 과거 영상 백필도 같은 경로다(10분마다 limit 건씩 소진).
+	 * 판별 불가(null)가 나오면 차단 가능성이 있어 그 자리에서 멈추고 다음 주기로 미룬다.
+	 *
+	 * @return 판별을 마친 건수
+	 */
+	public int classifyPendingShorts(int limit) {
+		int done = 0;
+		for (Video video : videoRepository.findUnclassified(ChannelType.SHORTS, PageRequest.of(0, limit))) {
+			Boolean isShort = youtubeService.isShort(video.getYoutubeVideoId());
+			if (isShort == null) {
+				break;
+			}
+			String videoUrl = isShort ? YOUTUBE_SHORTS_URL + video.getYoutubeVideoId() : video.getVideoUrl();
+			videoRepository.updateShort(video.getId(), isShort, videoUrl);
+			done++;
+		}
+		if (done > 0) {
+			log.info("[쇼츠 판별] {}건 처리", done);
+		}
+		return done;
 	}
 
 	@Transactional
@@ -463,7 +496,7 @@ public class YoutubeSyncService {
 	}
 
 	public void subscribeAllChannels(String callbackBaseUrl) {
-		List<Channel> channels = channelRepository.findAll();
+		List<Channel> channels = syncTargetChannels();
 		String callbackUrl = callbackBaseUrl + "/api/youtube/webhook";
 
 		int failed = 0;

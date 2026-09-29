@@ -39,7 +39,7 @@ public class YoutubeController {
 	@Operation(summary = "최신 영상 목록 조회", description = "카테고리, 정렬, 기간별로 영상을 조회합니다.")
 	@GetMapping("/api/story/videos")
 	public ResponseEntity<Page<VideoListResponse>> getVideos(
-		@Parameter(description = "카테고리 (all: 전체, pro: 프로팀, shorts: 쇼츠 채널)", example = "all")
+		@Parameter(description = "카테고리 (all: 전체, pro: 프로팀, shorts: LCK·팀 공식 쇼츠)", example = "all")
 		@RequestParam(defaultValue = "all") String category,
 
 		@Parameter(description = "정렬 기준 (latest: 최신순, views: 조회수순, likes: 좋아요순)", example = "latest")

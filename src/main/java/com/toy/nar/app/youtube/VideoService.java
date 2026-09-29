@@ -28,7 +28,7 @@ public class VideoService {
 	/**
 	 * 비디오 목록 조회 (카테고리, 정렬, 기간 필터링 지원)
 	 *
-	 * @param category : "all", "pro", "shorts"
+	 * @param category : "all", "pro", "shorts"(LCK·팀 공식 채널의 쇼츠)
 	 * @param sort     : "latest" (최신순), "popular" (조회수순)
 	 * @param period   : "all", "week", "month"
 	 * @param pageable : 페이징 정보
@@ -54,7 +54,8 @@ public class VideoService {
 
 	private Specification<Video> createSpecification(String category, String period) {
 		return (root, query, criteriaBuilder) -> {
-			Predicate predicate = criteriaBuilder.conjunction();
+			// 유튜버 쇼츠 채널(SHORTS)은 더 노출하지 않는다. 데이터는 남겨 둔다 — 되돌리려면 이 줄만 지우면 된다.
+			Predicate predicate = criteriaBuilder.notEqual(root.get("channel").get("channelType"), ChannelType.SHORTS);
 
 			// 카테고리 필터
 			if (category != null && !category.equalsIgnoreCase("all")) {
@@ -62,8 +63,8 @@ public class VideoService {
 					predicate = criteriaBuilder.and(predicate,
 						criteriaBuilder.equal(root.get("channel").get("channelType"), ChannelType.PRO_TEAMS));
 				} else if (category.equalsIgnoreCase("shorts")) {
-					predicate = criteriaBuilder.and(predicate,
-						criteriaBuilder.equal(root.get("channel").get("channelType"), ChannelType.SHORTS));
+					// 공식 쇼츠: LCK·팀 공식 채널이 올린 쇼츠.
+					predicate = criteriaBuilder.and(predicate, criteriaBuilder.isTrue(root.get("isShort")));
 				}
 			}
 
