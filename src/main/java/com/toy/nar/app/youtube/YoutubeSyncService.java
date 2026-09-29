@@ -134,8 +134,15 @@ public class YoutubeSyncService {
 		syncVideosByPeriod(30);
 	}
 
+	// 유튜버 쇼츠 채널은 더 동기화하지 않는다(노출 중단). 행은 남겨 둬 되돌릴 수 있다.
+	private List<Channel> syncTargetChannels() {
+		return channelRepository.findAll().stream()
+				.filter(c -> c.getChannelType() != ChannelType.SHORTS)
+				.toList();
+	}
+
 	private void syncVideosByPeriod(int daysAgo) {
-		List<Channel> channels = channelRepository.findAll();
+		List<Channel> channels = syncTargetChannels();
 
 		if (channels.isEmpty()) {
 			log.warn("### 동기화할 채널이 DB에 없습니다. 채널 초기화를 먼저 진행하세요. ###");
@@ -489,7 +496,7 @@ public class YoutubeSyncService {
 	}
 
 	public void subscribeAllChannels(String callbackBaseUrl) {
-		List<Channel> channels = channelRepository.findAll();
+		List<Channel> channels = syncTargetChannels();
 		String callbackUrl = callbackBaseUrl + "/api/youtube/webhook";
 
 		int failed = 0;

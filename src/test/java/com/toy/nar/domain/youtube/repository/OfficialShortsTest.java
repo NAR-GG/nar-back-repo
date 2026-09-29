@@ -45,7 +45,7 @@ class OfficialShortsTest {
 	private EntityManager entityManager;
 
 	@Test
-	@DisplayName("category=shorts 는 팀·LCK 채널의 쇼츠만 준다 — 유튜버 채널·일반 영상·미판별은 뺀다")
+	@DisplayName("category=shorts 는 팀·LCK 채널의 쇼츠만 주고, 유튜버 채널은 all 에서도 뺀다")
 	void shortsCategory_returnsOnlyOfficialShorts() {
 		Channel team = channel("UC_team", ChannelType.PRO_TEAMS);
 		Channel youtuber = channel("UC_youtuber", ChannelType.SHORTS);
@@ -62,6 +62,14 @@ class OfficialShortsTest {
 				.getContent();
 
 		assertThat(ids).containsExactly("official-short");
+
+		List<String> all = new VideoService(videoRepository)
+				.getVideos("all", "latest", "all", PageRequest.of(0, 20))
+				.map(VideoListResponse::youtubeVideoId)
+				.getContent();
+
+		assertThat(all).as("유튜버 채널은 all 에서도 빠진다")
+				.containsExactlyInAnyOrder("official-short", "long-form", "unclassified");
 	}
 
 	@Test
