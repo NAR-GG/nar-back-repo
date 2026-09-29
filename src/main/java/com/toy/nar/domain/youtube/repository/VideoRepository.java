@@ -6,10 +6,12 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -41,6 +43,16 @@ public interface VideoRepository extends JpaRepository<Video, Long>, JpaSpecific
 
 	@Query("SELECT MAX(v.publishedAt) FROM Video v WHERE v.channel = :channel")
 	LocalDateTime findLatestPublishedAtByChannel(@Param("channel") Channel channel);
+
+	// 쇼츠 판별 대기열: 최신 영상부터. 유튜버 쇼츠 채널은 마이그레이션이 이미 채웠다.
+	@Query("SELECT v FROM Video v WHERE v.isShort IS NULL AND v.channel.channelType <> :excluded ORDER BY v.publishedAt DESC")
+	List<Video> findUnclassified(@Param("excluded") ChannelType excluded, Pageable pageable);
+
+	// 두 컬럼만 갱신한다 — 통계 동기화가 동시에 쓰는 조회수 등을 엔티티 merge 로 덮지 않으려고.
+	@Modifying
+	@Transactional
+	@Query("UPDATE Video v SET v.isShort = :isShort, v.videoUrl = :videoUrl WHERE v.id = :id")
+	int updateShort(@Param("id") Long id, @Param("isShort") boolean isShort, @Param("videoUrl") String videoUrl);
 
 	List<Video> findByPublishedAtAfterOrderByPublishedAtAscIdAsc(LocalDateTime publishedAt);
 

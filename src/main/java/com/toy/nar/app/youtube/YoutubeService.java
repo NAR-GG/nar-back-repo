@@ -1,5 +1,10 @@
 package com.toy.nar.app.youtube;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +31,13 @@ public class YoutubeService {
 	private static final String PART_COMMENT_SNIPPET = "snippet";
 	private static final String TYPE_VIDEO = "video";
 	private static final String ORDER_DATE = "date";
+
+	private static final String SHORTS_URL = "https://www.youtube.com/shorts/";
+
+	// 리다이렉트를 따라가지 않는다(기본값 NEVER) — 303 그 자체가 판별 신호다.
+	private static final HttpClient SHORTS_PROBE = HttpClient.newBuilder()
+		.connectTimeout(Duration.ofSeconds(5))
+		.build();
 
 	private final WebClient youtubeWebClient;
 	private final YoutubeApiProperties properties;
@@ -220,5 +232,34 @@ public class YoutubeService {
 			.retrieve()
 			.bodyToMono(com.toy.nar.app.youtube.dto.YoutubeCommentResponse.class)
 			.block();
+	}
+
+	/**
+	 * 쇼츠 여부. Data API 에는 쇼츠 표식이 없어, /shorts/{id} 를 HEAD 로 찔러 본다.
+	 * 쇼츠면 200, 일반 영상이면 /watch 로 303 이다 (2026-09-30 실측).
+	 * 차단·타임아웃·예상 밖 응답은 null(판별 불가) — 호출부가 다음 주기에 다시 시도한다.
+	 * 리다이렉트가 /watch 가 아니면(동의 페이지 등) 일반 영상으로 단정하지 않는다.
+	 */
+	public Boolean isShort(String videoId) {
+		try {
+			var request = HttpRequest.newBuilder(URI.create(SHORTS_URL + videoId))
+				.method("HEAD", HttpRequest.BodyPublishers.noBody())
+				.timeout(Duration.ofSeconds(10))
+				.build();
+			var response = SHORTS_PROBE.send(request, HttpResponse.BodyHandlers.discarding());
+			if (response.statusCode() == 200) {
+				return true;
+			}
+			if (response.statusCode() / 100 == 3
+				&& response.headers().firstValue("location").orElse("").contains("/watch")) {
+				return false;
+			}
+			log.warn("쇼츠 판별 불가 — 예상 밖 응답 {} ({})", response.statusCode(), videoId);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		} catch (Exception e) {
+			log.warn("쇼츠 판별 실패 ({}): {}", videoId, e.toString());
+		}
+		return null;
 	}
 }

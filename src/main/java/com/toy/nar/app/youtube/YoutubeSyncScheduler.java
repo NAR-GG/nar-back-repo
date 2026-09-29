@@ -104,4 +104,25 @@ public class YoutubeSyncScheduler {
 					"주간 영상 데이터 동기화 실패");
 		}
 	}
+
+	/**
+	 * 매 10분(2분 오프셋)마다 쇼츠 판별 대기열을 200건씩 소진한다.
+	 * 새 영상은 다음 주기에, 과거 영상 백필은 200건/10분으로 자동 진행된다.
+	 */
+	@Scheduled(cron = "0 2/10 * * * *")
+	public void scheduleShortsClassification() {
+		long startTime = System.currentTimeMillis();
+		try {
+			youtubeSyncService.classifyPendingShorts(200);
+			long elapsed = System.currentTimeMillis() - startTime;
+			schedulerAlertService.recordSuccess("YOUTUBE_SHORTS_CLASSIFY", "유튜브 쇼츠 판별", elapsed);
+		} catch (Exception e) {
+			log.error("### [Scheduler] 쇼츠 판별 중 오류 발생 ###", e);
+			schedulerAlertService.recordFailure(
+					"YOUTUBE_SHORTS_CLASSIFY",
+					"유튜브 쇼츠 판별",
+					e,
+					"쇼츠 판별 실패");
+		}
+	}
 }

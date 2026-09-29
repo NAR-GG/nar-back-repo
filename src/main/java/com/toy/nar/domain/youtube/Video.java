@@ -63,6 +63,10 @@ public class Video {
 	@Builder.Default
 	private Long commentCount = 0L;
 
+	// null = 판별 전. 판별은 YoutubeSyncService.classifyPendingShorts 가 채운다.
+	@Column(name = "is_short")
+	private Boolean isShort;
+
 	public void updateStatistics(Long viewCount, Long likeCount, Long commentCount) {
 		this.viewCount = viewCount;
 		this.likeCount = likeCount;
