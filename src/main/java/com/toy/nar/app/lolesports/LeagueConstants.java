@@ -19,14 +19,14 @@ public final class LeagueConstants {
      */
     public static final List<String> TARGET_LEAGUES = List.of(
             "LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA",
-            "ASIAN_GAMES");
+            "ASIAN_GAMES", "DEMACIA_CUP");
 
     /**
      * 일정 조회 시 허용되는 리그 목록 (TARGET_LEAGUES + 추가 리그)
      */
     public static final Set<String> ALLOWED_LEAGUES = Set.of(
             "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA",
-            "ASIAN_GAMES");
+            "ASIAN_GAMES", "DEMACIA_CUP");
 
     /**
      * lolesports API의 리그 ID 매핑
@@ -43,7 +43,8 @@ public final class LeagueConstants {
             Map.entry("MSI", "98767991325878492"),
             Map.entry("EWC", "116838530616006090"),
             Map.entry("KESPA", "116929044967296666"),
-            Map.entry("ASIAN_GAMES", "117228885404001005"));
+            Map.entry("ASIAN_GAMES", "117228885404001005"),
+            Map.entry("DEMACIA_CUP", "117126995932274206"));
 
     /**
      * 리그별 기본 라이브 스트림 URL
@@ -70,8 +71,9 @@ public final class LeagueConstants {
      * KeSPA Cup 은 Disney+ 글로벌 독점이라 앱에서 링크를 노출할 대체 채널이 없다.
      * 아시안게임은 주최가 OCA 라 Riot 계열 중계 채널이 없다 — 국내 중계처가 확정되면
      * LIVE_STREAM_URLS 에 넣고 여기서 빼면 된다. 그때까지 SOOP 폴백은 틀린 링크다.
+     * 데마시아 컵(중국 텐센트 주최 2026-10-02~17)도 국내 중계처를 확인하지 못해 같은 이유로 막는다.
      */
-    private static final Set<String> NO_STREAM_LEAGUES = Set.of("KESPA", "ASIAN_GAMES");
+    private static final Set<String> NO_STREAM_LEAGUES = Set.of("KESPA", "ASIAN_GAMES", "DEMACIA_CUP");
 
     /**
      * 아시안게임 국가팀 로고 교체본.
