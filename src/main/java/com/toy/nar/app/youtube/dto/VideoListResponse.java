@@ -18,7 +18,9 @@ public record VideoListResponse(
 	// 채널 정보
 	Long channelId,
 	String channelName,
-	String channelProfileUrl
+	String channelProfileUrl,
+	// 팀 공식 채널이면 팀 코드. LCK 공식 채널은 null
+	String teamCode
 ) {
 	public static VideoListResponse from(Video video) {
 		return new VideoListResponse(
@@ -34,7 +36,8 @@ public record VideoListResponse(
 			video.getCommentCount(),
 			video.getChannel().getId(),
 			video.getChannel().getChannelName(),
-			video.getChannel().getProfileImageUrl()
+			video.getChannel().getProfileImageUrl(),
+			video.getChannel().getTeamCode()
 		);
 	}
 }
