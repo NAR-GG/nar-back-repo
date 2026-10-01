@@ -8,10 +8,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
+import com.toy.nar.app.lolesports.LeagueConstants;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
 import com.toy.nar.app.standings.NaverStandingsClient.NaverRankRow;
@@ -39,19 +41,33 @@ public class StandingsService {
 	/**
 	 * 리그별 집계 스코프.
 	 *
-	 * <p>v1 은 LCK 만 연다. LCK 는 네이버가 시즌 통산으로 세는데 Split 1 은 빼고 Split 2 부터
+	 * <p>LCK 는 네이버가 시즌 통산으로 세는데 Split 1 은 빼고 Split 2 부터
 	 * 센다 — Split 1(1~3주차, 5경기 조별)은 포맷이 다르고, 지금 레전드/라이즈를 가른 근거가
 	 * Split 2 정규이기 때문이다. 우리 DB 로 Split 2+3 정규만 합산해 네이버 10팀 × (승/패/득실)
 	 * 30개 값이 전부 일치하는 것을 확인했다.
 	 *
 	 * <p>다른 리그는 네이버 leagueId 가 스플릿 단위(lec_2026_summer)라 스코프가 자동으로 맞는다.
 	 * 열 때 splits 를 "현재 스플릿"으로 잡으면 된다.
+	 *
+	 * <p>{@code fallbackLeagueId} 는 네이버 시즌 목록(meta/leagues)에서 시즌이 빠졌을 때 쓰는 마지막
+	 * 방어선이다. 목록에서 사라져도 ranking 엔드포인트는 살아 있는 경우가 있었다(LCK 2026-09).
+	 *
+	 * <p>아시안게임·데마시아 컵은 {@code splits} 가 비어 있다 — 우리 DB 파생 지표(세트 득실·연속·잔여)를
+	 * 계산하지 않고 네이버 순위만 내려준다. 둘 다 정규 주차가 없는 단기 대회라 파생할 대상이 없다.
 	 */
-	private record Scope(String naverTopLeagueId, List<String> splits, String scopeLabel) {
+	private record Scope(String naverTopLeagueId, List<String> splits, String scopeLabel, String fallbackLeagueId) {
 	}
 
+	/**
+	 * 네이버 팀 코드 → 우리 코드. lolesports 와 코드가 다른 팀만 적는다(아시안게임 베트남: VNM → VIE).
+	 * 앱이 일정의 팀 코드로 로고를 찾으므로 순위표도 같은 코드여야 한다.
+	 */
+	private static final Map<String, String> NAVER_CODE_ALIAS = Map.of("VNM", "VIE");
+
 	private static final Map<String, Scope> SCOPES = Map.of(
-			"LCK", new Scope("lck", List.of("Split 2", "Split 3"), "정규시즌 통산"));
+			"LCK", new Scope("lck", List.of("Split 2", "Split 3"), "정규시즌 통산", "lck_2026"),
+			"ASIAN_GAMES", new Scope("ag_lol", List.of(), "그룹 스테이지", "ag_lol_2026"),
+			"DEMACIA_CUP", new Scope("dcgi", List.of(), "스위스 스테이지", "dcgi_2026"));
 
 	private final NaverStandingsClient naverClient;
 	private final LeagueMatchRepository leagueMatchRepository;
@@ -64,14 +80,14 @@ public class StandingsService {
 			return unsupported(normalized, "BRACKET_ONLY");
 		}
 
-		List<NaverRankRow> ranking = naverClient.resolveLeagueId(scope.naverTopLeagueId())
-				.map(naverClient::fetchRanking)
-				.orElse(List.of());
+		String leagueId = naverClient.resolveLeagueId(scope.naverTopLeagueId()).orElse(scope.fallbackLeagueId());
+		List<NaverRankRow> ranking = naverClient.fetchRanking(leagueId);
 		if (ranking.isEmpty()) {
 			return unsupported(normalized, "UNAVAILABLE");
 		}
 
-		return assemble(normalized, scope, ranking, derive(normalized, scope));
+		Derived derived = scope.splits().isEmpty() ? Derived.empty() : derive(normalized, scope);
+		return assemble(normalized, scope, ranking, derived);
 	}
 
 	/** 우리 DB 로 계산하는 부분. 조회 실패·시즌 미상이면 비어 있는 채로 넘어간다(순위는 그대로 나간다). */
@@ -116,7 +132,8 @@ public class StandingsService {
 		int remainingTotal = 0;
 		int ourPlayed = 0;
 		for (NaverRankRow r : ranking) {
-			TeamMetrics m = metrics.get(r.teamCode());
+			String code = NAVER_CODE_ALIAS.getOrDefault(r.teamCode(), r.teamCode());
+			TeamMetrics m = metrics.get(code);
 			if (m != null) {
 				remainingTotal += m.remaining();
 				ourPlayed += m.wins() + m.losses();
@@ -124,9 +141,9 @@ public class StandingsService {
 			grouped.computeIfAbsent(r.groupName(), k -> new ArrayList<>())
 					.add(StandingsResponse.Row.builder()
 							.rank(r.rank())
-							.teamCode(r.teamCode())
+							.teamCode(code)
 							.teamName(r.teamName())
-							.imageUrl(r.imageUrl())
+							.imageUrl(Optional.ofNullable(LeagueConstants.nationalTeamImage(code)).orElse(r.imageUrl()))
 							.wins(r.wins())
 							.losses(r.losses())
 							.setDiff(r.setDiff())
