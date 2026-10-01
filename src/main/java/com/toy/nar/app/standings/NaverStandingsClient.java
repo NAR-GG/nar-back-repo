@@ -73,7 +73,9 @@ public class NaverStandingsClient {
 		}
 		Optional<String> resolved = fetchLeagueId(topLeagueId);
 		resolved.ifPresent(id -> leagueIdCache.put(topLeagueId, new CachedLeagueId(Instant.now(), id)));
-		return resolved;
+		// 목록 조회가 실패했거나 시즌이 목록에서 사라졌으면(2026-09 LCK: lck_2026 이 meta 에서 빠졌는데
+		// ranking/lck_2026 은 계속 살아 있었다) TTL 이 지난 값이라도 마지막 성공값을 쓴다.
+		return resolved.or(() -> Optional.ofNullable(cached).map(CachedLeagueId::leagueId));
 	}
 
 	private Optional<String> fetchLeagueId(String topLeagueId) {

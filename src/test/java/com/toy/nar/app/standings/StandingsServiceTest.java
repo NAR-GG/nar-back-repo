@@ -77,6 +77,52 @@ class StandingsServiceTest {
 		assertThat(res.reason()).isEqualTo("UNAVAILABLE");
 	}
 
+	@DisplayName("네이버 시즌 목록에서 시즌이 빠져도 폴백 id 로 순위를 준다 — 2026-09 LCK 실사고")
+	@Test
+	void usesFallbackLeagueIdWhenSeasonMissingFromList() {
+		when(naver.resolveLeagueId("lck")).thenReturn(Optional.empty());
+		when(naver.fetchRanking("lck_2026")).thenReturn(List.of(rank(1, "GEN", "LEGEND", 19, 7, 22)));
+		givenMatches(List.of());
+
+		StandingsResponse res = service.getStandings("LCK");
+
+		assertThat(res.supported()).isTrue();
+		assertThat(res.groups().get(0).rows().get(0).teamCode()).isEqualTo("GEN");
+	}
+
+	@DisplayName("아시안게임은 네이버 그룹 순위를 주고 네이버 코드를 우리 코드로, 로고를 국기로 바꾼다")
+	@Test
+	void asianGamesGroupsUseOurCodesAndFlags() {
+		when(naver.resolveLeagueId("ag_lol")).thenReturn(Optional.of("ag_lol_2026"));
+		when(naver.fetchRanking("ag_lol_2026")).thenReturn(List.of(
+				new NaverRankRow("VNM", "베트남", "https://naver/vnm.png", "A", 1, 3, 0, 3),
+				new NaverRankRow("KSA", "사우디아라비아", "https://naver/ksa.png", "A", 2, 2, 1, 1),
+				new NaverRankRow("KOR", "대한민국", "https://naver/kor.png", "B", 1, 3, 0, 3)));
+
+		StandingsResponse res = service.getStandings("ASIAN_GAMES");
+
+		assertThat(res.supported()).isTrue();
+		assertThat(res.scopeLabel()).isEqualTo("그룹 스테이지");
+		assertThat(res.groups()).extracting(StandingsResponse.Group::name).containsExactly("A", "B");
+		StandingsResponse.Row first = res.groups().get(0).rows().get(0);
+		assertThat(first.teamCode()).isEqualTo("VIE");
+		assertThat(first.imageUrl()).isEqualTo("https://api.nar.kr/images/flags/vie.png");
+		assertThat(first.teamName()).isEqualTo("베트남");
+		assertThat(first.setWins()).isNull();
+	}
+
+	@DisplayName("데마시아 컵은 네이버가 비어 있으면(시작 전) UNAVAILABLE 이다")
+	@Test
+	void demaciaCupBeforeStartIsUnavailable() {
+		when(naver.resolveLeagueId("dcgi")).thenReturn(Optional.of("dcgi_2026"));
+		when(naver.fetchRanking("dcgi_2026")).thenReturn(List.of());
+
+		StandingsResponse res = service.getStandings("DEMACIA_CUP");
+
+		assertThat(res.supported()).isFalse();
+		assertThat(res.reason()).isEqualTo("UNAVAILABLE");
+	}
+
 	@DisplayName("그룹별로 나누고 네이버 rank 를 그대로 쓴다")
 	@Test
 	void groupsRowsAndKeepsNaverRank() {
