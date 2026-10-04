@@ -905,6 +905,16 @@ class MobileScheduleServiceTest {
 				.extracting(MobileScheduleFilterResponse.LeagueOption::code,
 						MobileScheduleFilterResponse.LeagueOption::name)
 				.containsExactly("ALL", "전체");
+		assertThat(response.leagues()).filteredOn(l -> l.code().equals("LCK")).singleElement()
+				.satisfies(l -> {
+					assertThat(l.standings()).isTrue();
+					assertThat(l.alarm()).isTrue();
+				});
+		assertThat(response.leagues()).filteredOn(l -> l.code().equals("LPL")).singleElement()
+				.satisfies(l -> {
+					assertThat(l.standings()).isNull();
+					assertThat(l.alarm()).isFalse();
+				});
 		// 이름순: Bilibili Gaming, Gen.G, T1
 		assertThat(response.teams()).extracting(MobileScheduleFilterResponse.TeamOption::teamCode)
 				.containsExactly("BLG", "GEN", "T1");

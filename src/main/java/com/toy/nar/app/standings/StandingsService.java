@@ -69,6 +69,11 @@ public class StandingsService {
 			"ASIAN_GAMES", new Scope("ag_lol", List.of(), "그룹 스테이지", "ag_lol_2026"),
 			"DEMACIA_CUP", new Scope("dcgi", List.of(), "스위스 스테이지", "dcgi_2026"));
 
+	/** 순위표를 등록한 리그인가. 모바일 필터의 순위표 칩 활성 여부가 이걸 따른다. */
+	public static boolean hasScope(String league) {
+		return SCOPES.containsKey(league);
+	}
+
 	private final NaverStandingsClient naverClient;
 	private final LeagueMatchRepository leagueMatchRepository;
 

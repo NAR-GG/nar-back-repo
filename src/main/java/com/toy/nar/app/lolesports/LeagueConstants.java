@@ -28,6 +28,16 @@ public final class LeagueConstants {
             "LCK", "LPL", "LCP", "LEC", "LCS", "CBLOL", "MSI", "WORLDS", "FIRST_STAND", "EWC", "KESPA",
             "ASIAN_GAMES", "DEMACIA_CUP");
 
+    /** 경기 카드에 알림 벨을 띄우는 리그. */
+    public static final Set<String> ALARM_LEAGUES = Set.of(
+            "LCK", "MSI", "EWC", "KESPA", "ASIAN_GAMES", "DEMACIA_CUP");
+
+    /**
+     * 리그 아이콘 PNG URL. 비어 있으면 앱 번들 아이콘으로 폴백한다 — 번들에 없는 새 리그부터 채운다.
+     * 호스팅은 {@link #nationalTeamImage 국기}와 같다: {@code static/images/leagues/} + {@code /images/**}.
+     */
+    public static final Map<String, String> LEAGUE_ICON_URLS = Map.of();
+
     /**
      * lolesports API의 리그 ID 매핑
      */
