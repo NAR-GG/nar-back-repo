@@ -1,6 +1,7 @@
 package com.toy.nar.common.filter;
 
 import java.io.IOException;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,19 @@ public class UserActivityFilter extends OncePerRequestFilter {
 	private static final String ACTIVITY_FORMAT = "user_activity uid={}";
 
 	/**
+	 * 화면 조회 계측. 앱에 화면 이벤트가 없어서, 그 화면을 열 때만 부르는 API 를 화면으로 센다.
+	 * 줄 형식 {@code screen_view screen=<이름> uid=<식별자>} — {@code user_activity} 줄과 달리
+	 * 화면별 고유 사용자를 LogQL 로 바로 뽑는다. 화면을 늘리려면 여기에 경로를 한 줄 더한다.
+	 *
+	 * <p>홈은 {@code /ratings/recent} 로 센다. 홈 진입마다 부르고 다른 화면은 부르지 않는다
+	 * (뉴스 API 는 웹도 쓰고, 솔랭 API 는 주기 갱신이라 쓸 수 없다).
+	 */
+	private static final Map<String, String> SCREEN_BY_PATH = Map.of(
+		"/api/mobile/ratings/recent", "home");
+
+	private static final String SCREEN_VIEW_FORMAT = "screen_view screen={} uid={}";
+
+	/**
 	 * 전용 로거. 요청 1건당 1줄이라 볼륨이 크다. 로그가 부담되면 재배포 없이
 	 * {@code logging.level.user-activity=OFF} 로 끈다 — 대신 지표도 같이 멈춘다.
 	 */
@@ -50,7 +64,12 @@ public class UserActivityFilter extends OncePerRequestFilter {
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
 		throws ServletException, IOException {
 
-		ACTIVITY_LOG.info(ACTIVITY_FORMAT, identify(request));
+		String uid = identify(request);
+		ACTIVITY_LOG.info(ACTIVITY_FORMAT, uid);
+		String screen = SCREEN_BY_PATH.get(request.getRequestURI());
+		if (screen != null) {
+			ACTIVITY_LOG.info(SCREEN_VIEW_FORMAT, screen, uid);
+		}
 		filterChain.doFilter(request, response);
 	}
 

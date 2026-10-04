@@ -87,6 +87,17 @@ class UserActivityFilterTest {
 		assertThat(captured.list).isEmpty();
 	}
 
+	@Test
+	void 홈_진입_API_는_screen_view_줄을_더_남긴다() throws Exception {
+		SecurityContextHolder.getContext().setAuthentication(
+			new UsernamePasswordAuthenticationToken(12L, null, List.of()));
+
+		filter.doFilter(request("/api/mobile/ratings/recent"), new MockHttpServletResponse(), new MockFilterChain());
+
+		assertThat(captured.list).extracting(ILoggingEvent::getFormattedMessage)
+			.containsExactly("user_activity uid=m:12", "screen_view screen=home uid=m:12");
+	}
+
 	private MockHttpServletRequest request(String uri) {
 		MockHttpServletRequest request = new MockHttpServletRequest("GET", uri);
 		request.setRemoteAddr("10.42.0.1");
