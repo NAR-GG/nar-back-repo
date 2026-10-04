@@ -95,7 +95,26 @@ class UserActivityFilterTest {
 		filter.doFilter(request("/api/mobile/ratings/recent"), new MockHttpServletResponse(), new MockFilterChain());
 
 		assertThat(captured.list).extracting(ILoggingEvent::getFormattedMessage)
-			.containsExactly("user_activity uid=m:12", "screen_view screen=home uid=m:12");
+			.containsExactly("user_activity uid=m:12 v=-", "screen_view screen=home uid=m:12 v=-");
+	}
+
+	@Test
+	void 앱_버전_헤더를_남기고_이상한_값은_걸러낸다() throws Exception {
+		MockHttpServletRequest request = request("/api/v3/schedule");
+		request.addHeader("X-App-Version", "1.0.31+69");
+		assertThat(uidAndVersion(request)).isEqualTo("v=1.0.31+69");
+
+		MockHttpServletRequest evil = request("/api/v3/schedule");
+		evil.addHeader("X-App-Version", "1.0 uid=m:1");
+		// 공백·=·: 가 지워져 uid= 가 새 필드로 갈라지지 않는다
+		assertThat(uidAndVersion(evil)).isEqualTo("v=1.0uidm1");
+	}
+
+	private String uidAndVersion(MockHttpServletRequest request) throws Exception {
+		captured.list.clear();
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+		String line = captured.list.get(0).getFormattedMessage();
+		return line.substring(line.indexOf("v="));
 	}
 
 	private MockHttpServletRequest request(String uri) {
