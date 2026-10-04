@@ -42,7 +42,7 @@ class MobileScheduleControllerTest {
 	void getFiltersReturnsMobileFilterShape() throws Exception {
 		when(mobileScheduleCacheableService.getFilters("LCK")).thenReturn(new MobileScheduleFilterResponse(
 				"LCK",
-				List.of(new MobileScheduleFilterResponse.LeagueOption("LCK", "LCK")),
+				List.of(new MobileScheduleFilterResponse.LeagueOption("LCK", "LCK", true, true, null)),
 				List.of(new MobileScheduleFilterResponse.TeamOption(1L, "T1", "T1", "https://example.com/t1.png")),
 				List.of(new MobileScheduleFilterResponse.SeasonOption(2026, "Spring", "2026 Spring"))));
 

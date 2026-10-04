@@ -2,6 +2,7 @@ package com.toy.nar.app.mobile.schedule;
 
 import com.toy.nar.app.lolesports.MatchDateWindow;
 import com.toy.nar.app.lolesports.LeagueConstants;
+import com.toy.nar.app.standings.StandingsService;
 import com.toy.nar.app.lolesports.live.ActiveLiveGame;
 import com.toy.nar.app.lolesports.live.LiveStateStore;
 import com.toy.nar.app.lolesports.live.repository.LiveGameMinuteSnapshotRepository;
@@ -85,10 +86,16 @@ public class MobileScheduleService {
 	public MobileScheduleFilterResponse getFilters(String league) {
 		String normalizedLeague = normalizeLeague(league);
 		List<MobileScheduleFilterResponse.LeagueOption> leagues = new ArrayList<>();
-		leagues.add(new MobileScheduleFilterResponse.LeagueOption(ALL_LEAGUES, "전체"));
+		leagues.add(new MobileScheduleFilterResponse.LeagueOption(ALL_LEAGUES, "전체", null, false, null));
 		LeagueConstants.ALLOWED_LEAGUES.stream()
 				.sorted()
-				.forEach(code -> leagues.add(new MobileScheduleFilterResponse.LeagueOption(code, code)));
+				.forEach(code -> leagues.add(new MobileScheduleFilterResponse.LeagueOption(
+						code,
+						code,
+						// 칩은 순위표를 등록한 리그만 내보낸다. 그 외는 null(칩 없음)
+						StandingsService.hasScope(code) ? Boolean.TRUE : null,
+						LeagueConstants.ALARM_LEAGUES.contains(code),
+						LeagueConstants.LEAGUE_ICON_URLS.get(code))));
 		// 전체 리그 선택 시 팀 필터는 모든 리그 팀의 합집합을 노출한다.
 		List<MobileScheduleFilterResponse.TeamOption> teams = findFilterTeams(normalizedLeague).stream()
 				.map(this::toTeamOption)
