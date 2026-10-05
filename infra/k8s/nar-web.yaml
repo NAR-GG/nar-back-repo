@@ -87,10 +87,8 @@ spec:
             # JAVA_TOOL_OPTIONS 는 시크릿 값을 쓰면 안 된다. 시크릿에는 docker 시절
             # 값(-Dwhatap.oname=nar-gg-green 등)이 박혀 있어 여기서 덮는다.
             #
-            # ── WhaTap: 이번 달까지만 ──
-            # 월말 해지 때 이 값에서 -javaagent 와 -Dwhatap.oname 을 지우고,
-            # 아래 whatap 볼륨(volumeMounts·volumes)도 함께 걷어낸다.
-            # 에이전트 jar 는 hostPath(~/nar/whatap)에 있고 oname 만 파드용으로 바꿨다.
+            # WhaTap 에이전트는 2026-10-05 에 걷었다(해지). 트랜잭션·SQL 추적은 아래 OTel + Tempo 가 맡는다.
+            # 서버의 ~/nar/whatap 은 롤백용으로 남아 있다 — 필요하면 -javaagent 와 whatap 볼륨을 되살린다.
             #
             # ── Xmx 는 2g 였다 (2026-08-23 롤아웃 OOMKilled 2건) ──
             # 근거 없는 숫자였다. Prometheus 7일 실측:
@@ -103,10 +101,10 @@ spec:
             # ⚠️ 1.5g·1.7g 로 낮추는 건 무의미하다. 관측 최대 커밋 1424 MiB 가 그 아래라
             #    캡이 안 걸린다. 죽던 순간 anon-rss 1777 MiB(=힙 커밋 약 1235)도 마찬가지다.
             - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx1024m -javaagent:/whatap/whatap.agent-2.2.77.jar -Dwhatap.oname=nar-web -javaagent:/otel/opentelemetry-javaagent.jar --add-opens=java.base/java.lang=ALL-UNNAMED"
+              value: "-Xmx1024m -javaagent:/otel/opentelemetry-javaagent.jar --add-opens=java.base/java.lang=ALL-UNNAMED"
 
             # ── OpenTelemetry agent: 요청 하나의 경로(컨트롤러→SQL→외부 호출)를 Tempo 로 보낸다 ──
-            # jar 는 WhaTap 처럼 hostPath(~/nar/otel, v2.32.0)다. 이미지는 그대로다.
+            # jar 는 hostPath(~/nar/otel, v2.32.0)다. 이미지는 그대로다.
             # 트레이스만 보낸다 — 메트릭은 Prometheus, 로그는 Loki 가 이미 맡는다.
             # 끄는 법: OTEL_SDK_DISABLED=true (agent 는 로드되나 아무것도 안 보낸다).
             #   jar 가 없으면 JVM 이 기동에 실패하므로(hostPath 가 비면 CrashLoop) 파일 삭제로 끄지 말 것.
@@ -228,10 +226,6 @@ spec:
             - name: files
               mountPath: /run/secrets
               readOnly: true
-            # WhaTap 에이전트 (이번 달까지 — JAVA_TOOL_OPTIONS 주석 참고).
-            # 에이전트가 logs/ 에 쓰므로 readOnly 로 걸면 기동은 되는데 조용히 로그만 못 쓴다.
-            - name: whatap
-              mountPath: /whatap
             # OTel agent. 읽기만 하므로 readOnly.
             - name: otel
               mountPath: /otel
@@ -243,11 +237,7 @@ spec:
             secretName: nar-files
             defaultMode: 0400
         # k3s 노드는 Colima VM 이다. VM 이 /Users/changha 를 마운트하고 있어
-        # 이 hostPath 가 맥 호스트의 ~/nar/whatap 으로 닿는다(실측 확인).
-        - name: whatap
-          hostPath:
-            path: /Users/changha/nar/whatap
-            type: Directory
+        # 이 hostPath 가 맥 호스트의 ~/nar/otel 로 닿는다(WhaTap 때 실측 확인).
         - name: otel
           hostPath:
             path: /Users/changha/nar/otel
