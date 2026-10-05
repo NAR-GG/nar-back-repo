@@ -74,21 +74,29 @@ nar-web 파드 ─ OTel Java agent ──OTLP push──> Tempo :4318 ──> Gr
 방향은 Loki 와 같다(push). 파드 → `172.17.0.1:4318` (Prometheus 가 파드를 긁는 그 docker 브리지).
 **서버 컨테이너(`tempo`)만 올려 두면 아무 영향이 없다** — 앱이 agent 를 붙이기 전까지 아무도 안 보낸다.
 
-### 켜는 순서 (앱 쪽)
+### 앱 쪽 (적용됨 — #552, 2026-10-05)
 
 agent jar 는 WhaTap 과 같은 방식으로 hostPath 에 둔다(이미지 재빌드 불필요).
 
-1. 서버에서 jar 를 받는다: `~/nar/otel/opentelemetry-javaagent.jar`
-   (`https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases` — 2026-10 기준 v2.32.0)
-2. `nar-web.yaml` 에 `/otel` hostPath 마운트를 추가하고 `JAVA_TOOL_OPTIONS` 에
-   `-javaagent:/otel/opentelemetry-javaagent.jar` 를 더한다. 환경변수:
-   - `OTEL_SERVICE_NAME=nar-web`
-   - `OTEL_EXPORTER_OTLP_ENDPOINT=http://172.17.0.1:4318`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`
-   - `OTEL_TRACES_SAMPLER=parentbased_traceidratio`, `OTEL_TRACES_SAMPLER_ARG=0.1` (경기 시작 버스트 대비 10%)
-   - `OTEL_METRICS_EXPORTER=none`, `OTEL_LOGS_EXPORTER=none` (메트릭·로그는 이미 Prometheus·Loki 가 맡는다)
-3. 파드 메모리: agent 가 +50~100MiB. nar-web 은 limit 2Gi 에 Xmx 1024m 이라 들어간다.
-4. **스케줄러 파드는 처음엔 붙이지 않는다.** 폴링 span 이 너무 많고, 리더 리스·FCM 발송 구간을
-   보고 싶을 때 샘플링을 낮춰 따로 붙인다.
+1. 서버의 `~/nar/otel/opentelemetry-javaagent.jar` (v2.32.0,
+   `https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases`)
+2. `nar-web.yaml` — `/otel` hostPath 마운트, `JAVA_TOOL_OPTIONS` 의 `-javaagent`, `OTEL_*` 환경변수.
+   샘플링 10%(경기 시작 버스트 대비), 트레이스만 export(메트릭·로그는 Prometheus·Loki 가 맡는다).
+   **끄기: `OTEL_SDK_DISABLED=true`.** jar 를 지우면 JVM 이 기동에 실패한다(CrashLoop).
+3. 메모리: 붙인 직후 nar-web 이 1.1GiB → 1.37GiB 로 올랐다(limit 2Gi, Xmx 1024m). 워밍업이 섞인 값이라 안정값은 따로 본다.
+4. **스케줄러 파드는 안 붙인다.** 폴링 span 이 너무 많다. 리더 리스·FCM 발송 구간을 보고 싶을 때
+   샘플링을 낮춰 따로 붙인다.
+
+> ⚠️ **`infra/**` 만 바뀐 머지는 자동 배포가 안 돈다**(`paths-ignore`). 매니페스트를 클러스터에 반영하려면
+> `gh workflow run deploy-macmini.yml --ref main` 으로 직접 돌린다. 자세한 건 `infra/argocd/README.md`.
+
+### 로그 ↔ 트레이스 연결
+
+- 앱 로그가 `ERROR [<trace_id>,<span_id>] 1 --- ...` 로 찍힌다(`application-prod.yml` `logging.pattern.level`).
+  OTel agent 가 MDC 에 `trace_id`·`span_id` 를 넣어 준다. 트레이스 밖에서는 `[,]` 로 빈다.
+- Loki → Tempo: 로그 줄 옆에 **"Tempo 에서 보기"** 링크가 생긴다(derivedFields).
+- Tempo → 로그: 트레이스 화면의 span 에서 로그 버튼(tracesToLogsV2, `|= "<traceId>"` 본문 검색).
+- 샘플링 10% 라 **모든 로그에 연결되는 트레이스가 있는 건 아니다.** 느린 요청이 샘플에서 빠지면 로그에 id 는 있어도 Tempo 에 없다.
 
 ### 서버 쪽 처음 올릴 때
 
