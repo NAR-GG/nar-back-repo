@@ -76,7 +76,7 @@ nar-web 파드 ─ OTel Java agent ──OTLP push──> Tempo :4318 ──> Gr
 
 ### 앱 쪽 (적용됨 — #552, 2026-10-05)
 
-agent jar 는 WhaTap 과 같은 방식으로 hostPath 에 둔다(이미지 재빌드 불필요).
+agent jar 는 hostPath 에 둔다(이미지 재빌드 불필요).
 
 1. 서버의 `~/nar/otel/opentelemetry-javaagent.jar` (v2.32.0,
    `https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases`)

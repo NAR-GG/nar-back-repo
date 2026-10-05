@@ -75,8 +75,7 @@ spec:
             - name: APP_SCHEDULING_LEASE_ENABLED
               value: "true"
 
-            # WhaTap 을 안 붙인다. 이번 달 해지 예정이라 새 파드에 새 oname 을 등록할
-            # 이유가 없고, 에이전트 하나만큼 메모리를 아낀다. 웹 파드에는 아직 남아 있다.
+            # 에이전트를 안 붙인다(WhaTap 은 해지, OTel 은 폴링 span 이 너무 많아 웹에만 붙였다).
             - name: JAVA_TOOL_OPTIONS
               value: "-Xmx1200m --add-opens=java.base/java.lang=ALL-UNNAMED"
 
