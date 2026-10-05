@@ -103,7 +103,30 @@ spec:
             # ⚠️ 1.5g·1.7g 로 낮추는 건 무의미하다. 관측 최대 커밋 1424 MiB 가 그 아래라
             #    캡이 안 걸린다. 죽던 순간 anon-rss 1777 MiB(=힙 커밋 약 1235)도 마찬가지다.
             - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx1024m -javaagent:/whatap/whatap.agent-2.2.77.jar -Dwhatap.oname=nar-web --add-opens=java.base/java.lang=ALL-UNNAMED"
+              value: "-Xmx1024m -javaagent:/whatap/whatap.agent-2.2.77.jar -Dwhatap.oname=nar-web -javaagent:/otel/opentelemetry-javaagent.jar --add-opens=java.base/java.lang=ALL-UNNAMED"
+
+            # ── OpenTelemetry agent: 요청 하나의 경로(컨트롤러→SQL→외부 호출)를 Tempo 로 보낸다 ──
+            # jar 는 WhaTap 처럼 hostPath(~/nar/otel, v2.32.0)다. 이미지는 그대로다.
+            # 트레이스만 보낸다 — 메트릭은 Prometheus, 로그는 Loki 가 이미 맡는다.
+            # 끄는 법: OTEL_SDK_DISABLED=true (agent 는 로드되나 아무것도 안 보낸다).
+            #   jar 가 없으면 JVM 이 기동에 실패하므로(hostPath 가 비면 CrashLoop) 파일 삭제로 끄지 말 것.
+            # 샘플링 10%: 경기 시작 버스트에서 span 폭주를 막는다. 느린 요청을 놓칠 수 있다(꼬리 샘플링은 안 쓴다).
+            - name: OTEL_SDK_DISABLED
+              value: "false"
+            - name: OTEL_SERVICE_NAME
+              value: "nar-web"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://172.17.0.1:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_TRACES_SAMPLER
+              value: "parentbased_traceidratio"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "0.1"
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
 
             # 롤링 교체에서 옛 파드가 SIGTERM 을 받는 순간 Tomcat 이 처리 중이던
             # 커넥션을 끊어 502 가 난다(#422 검증 배포에서 실제로 관측).
@@ -209,6 +232,10 @@ spec:
             # 에이전트가 logs/ 에 쓰므로 readOnly 로 걸면 기동은 되는데 조용히 로그만 못 쓴다.
             - name: whatap
               mountPath: /whatap
+            # OTel agent. 읽기만 하므로 readOnly.
+            - name: otel
+              mountPath: /otel
+              readOnly: true
 
       volumes:
         - name: files
@@ -220,4 +247,8 @@ spec:
         - name: whatap
           hostPath:
             path: /Users/changha/nar/whatap
+            type: Directory
+        - name: otel
+          hostPath:
+            path: /Users/changha/nar/otel
             type: Directory
