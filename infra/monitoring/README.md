@@ -92,11 +92,13 @@ agent jar 는 WhaTap 과 같은 방식으로 hostPath 에 둔다(이미지 재�
 
 ### 로그 ↔ 트레이스 연결
 
-- 앱 로그가 `ERROR [<trace_id>,<span_id>] 1 --- ...` 로 찍힌다(`application-prod.yml` `logging.pattern.level`).
-  OTel agent 가 MDC 에 `trace_id`·`span_id` 를 넣어 준다. 트레이스 밖에서는 `[,]` 로 빈다.
+- 앱 로그가 `ERROR [<trace_id>,<span_id>,<flags>] 1 --- ...` 로 찍힌다(`application-prod.yml` `logging.pattern.level`).
+  OTel agent 가 MDC 에 `trace_id`·`span_id`·`trace_flags` 를 넣어 준다. 트레이스 밖에서는 `[,,]` 로 빈다.
 - Loki → Tempo: 로그 줄 옆에 **"Tempo 에서 보기"** 링크가 생긴다(derivedFields).
+  **샘플된 요청(`flags=01`)에만** 생긴다. agent 는 샘플링에서 빠진 요청에도 trace_id 를 찍는데, 그 id 는
+  Tempo 에 없다(실측: 로그 trace_id 20개 중 1개만 Tempo 에 존재). flags 없이 id 만 보고 링크를 걸면 90% 가 빈 화면이다.
 - Tempo → 로그: 트레이스 화면의 span 에서 로그 버튼(tracesToLogsV2, `|= "<traceId>"` 본문 검색).
-- 샘플링 10% 라 **모든 로그에 연결되는 트레이스가 있는 건 아니다.** 느린 요청이 샘플에서 빠지면 로그에 id 는 있어도 Tempo 에 없다.
+- 샘플링 10% 라 **링크가 없는 로그가 대부분이다.** 느린 요청이 샘플에서 빠지면 그 요청은 트레이스로 못 본다.
 
 ### 서버 쪽 처음 올릴 때
 
