@@ -29,10 +29,12 @@ datasources:
     jsonData:
       # 로그 → 트레이스. 앱 로그 `ERROR [<32자 trace_id>,<span_id>,<flags>]` 에서 trace_id 를 뽑아
       # Tempo 로 점프하는 링크를 건다. (application-prod.yml logging.pattern.level)
-      # flags 가 `01`(샘플됨)일 때만 건다 — 샘플링 10% 라 나머지 id 는 Tempo 에 없어 빈 화면이 된다.
+      # flags 의 최하위 비트(sampled)가 켜진 줄에만 건다 — 샘플링 10% 라 나머지 id 는 Tempo 에 없어 빈 화면이 된다.
+      # 실측(2026-10-05): 샘플됨=`03`, 샘플 제외=`02`. `02` 의 비트1 은 W3C 의 random-trace-id 플래그라 `01` 이 아니다.
+      # 그래서 `01` 로 못박으면 아무 줄에도 안 걸린다(#554 가 그랬다). 최하위 비트로 판정한다.
       derivedFields:
         - name: trace_id
-          matcherRegex: '\[([0-9a-f]{32}),[0-9a-f]{16},01\]'
+          matcherRegex: '\[([0-9a-f]{32}),[0-9a-f]{16},[0-9a-f][13579bdf]\]'
           url: '$${__value.raw}'
           datasourceUid: tempo
           urlDisplayLabel: Tempo 에서 보기
