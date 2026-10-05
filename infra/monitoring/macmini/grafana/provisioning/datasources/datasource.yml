@@ -26,11 +26,28 @@ datasources:
     access: proxy
     url: http://loki:3100
     editable: false
+    jsonData:
+      # 로그 → 트레이스. 앱 로그 `ERROR [<32자 trace_id>,<span_id>]` 에서 trace_id 를 뽑아
+      # Tempo 로 점프하는 링크를 건다. (application-prod.yml logging.pattern.level)
+      derivedFields:
+        - name: trace_id
+          matcherRegex: '\[([0-9a-f]{32}),'
+          url: '$${__value.raw}'
+          datasourceUid: tempo
+          urlDisplayLabel: Tempo 에서 보기
 
-  # 트레이스. 로그→트레이스 연결(derivedFields)은 앱 로그에 trace_id 가 찍힌 뒤에 붙인다.
+  # 트레이스. 로그 ↔ 트레이스 연결은 위 Loki derivedFields 와 아래 tracesToLogsV2 가 짝이다.
   - name: Tempo
     type: tempo
     uid: tempo
     access: proxy
     url: http://tempo:3200
     editable: false
+    jsonData:
+      # 트레이스 → 로그. 로그에 trace_id 라벨은 없으므로 본문 검색으로 건다.
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-1m'
+        spanEndTimeShift: '1m'
+        customQuery: true
+        query: '{namespace="nar"} |= "$${__trace.traceId}"'
