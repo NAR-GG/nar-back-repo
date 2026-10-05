@@ -818,7 +818,7 @@ public class LivePollingScheduler {
 					continue;
 				}
 				liveStateStore.getActiveGames().put(failed.gameId(), failed);
-				log.warn("Live polling failed for game {}: {}", failed.gameId(), e.getMessage());
+				log.warn("Live polling failed for game {}: {}", failed.gameId(), describeFailure(e));
 			}
 		}
 
@@ -887,6 +887,22 @@ public class LivePollingScheduler {
 
 		long flooredSeconds = (candidate.getEpochSecond() / 10) * 10;
 		return LocalDateTime.ofInstant(Instant.ofEpochSecond(flooredSeconds), ZoneOffset.UTC).format(START_TIME_FORMATTER);
+	}
+
+	/**
+	 * 피드 에러는 본문에 원인이 있다. 404 가 "게임이 피드에 아직 없다"(RESOURCE_NOT_FOUND)인지
+	 * 다른 사유인지 상태줄만으로는 가를 수 없어, 2026-10-05 데마시아컵 1세트가 경기 내내 404 인
+	 * 이유를 사후에 못 찾았다.
+	 */
+	private static String describeFailure(Exception e) {
+		if (e instanceof org.springframework.web.reactive.function.client.WebClientResponseException we) {
+			String body = we.getResponseBodyAsString();
+			if (body != null && body.length() > 200) {
+				body = body.substring(0, 200);
+			}
+			return e.getMessage() + " body=" + body;
+		}
+		return e.getMessage();
 	}
 
 	/** 알림 대상 리그인지 (백오피스 리그 설정 notification_enabled). 그 외 리그는 데이터 수집만 하고 알림은 보내지 않는다. */
