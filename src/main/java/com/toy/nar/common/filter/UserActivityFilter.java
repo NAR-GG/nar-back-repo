@@ -1,6 +1,7 @@
 package com.toy.nar.common.filter;
 
 import java.io.IOException;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +39,20 @@ public class UserActivityFilter extends OncePerRequestFilter {
 	 * 대시보드가 이 문자열로 로그를 고른다(LogQL {@code |= "user_activity"}).
 	 * {@code uid=} 뒤 토큰도 정규식으로 뽑아 쓰므로 형식을 바꾸면 패널이 빈다.
 	 */
-	private static final String ACTIVITY_FORMAT = "user_activity uid={}";
+	private static final String ACTIVITY_FORMAT = "user_activity uid={} v={}";
+
+	/**
+	 * 화면 조회 계측. 앱에 화면 이벤트가 없어서, 그 화면을 열 때만 부르는 API 를 화면으로 센다.
+	 * 줄 형식 {@code screen_view screen=<이름> uid=<식별자>} — {@code user_activity} 줄과 달리
+	 * 화면별 고유 사용자를 LogQL 로 바로 뽑는다. 화면을 늘리려면 여기에 경로를 한 줄 더한다.
+	 *
+	 * <p>홈은 {@code /ratings/recent} 로 센다. 홈 진입마다 부르고 다른 화면은 부르지 않는다
+	 * (뉴스 API 는 웹도 쓰고, 솔랭 API 는 주기 갱신이라 쓸 수 없다).
+	 */
+	private static final Map<String, String> SCREEN_BY_PATH = Map.of(
+		"/api/mobile/ratings/recent", "home");
+
+	private static final String SCREEN_VIEW_FORMAT = "screen_view screen={} uid={} v={}";
 
 	/**
 	 * 전용 로거. 요청 1건당 1줄이라 볼륨이 크다. 로그가 부담되면 재배포 없이
@@ -50,7 +64,13 @@ public class UserActivityFilter extends OncePerRequestFilter {
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
 		throws ServletException, IOException {
 
-		ACTIVITY_LOG.info(ACTIVITY_FORMAT, identify(request));
+		String uid = identify(request);
+		String version = appVersion(request);
+		ACTIVITY_LOG.info(ACTIVITY_FORMAT, uid, version);
+		String screen = SCREEN_BY_PATH.get(request.getRequestURI());
+		if (screen != null) {
+			ACTIVITY_LOG.info(SCREEN_VIEW_FORMAT, screen, uid, version);
+		}
 		filterChain.doFilter(request, response);
 	}
 
@@ -59,6 +79,19 @@ public class UserActivityFilter extends OncePerRequestFilter {
 	protected boolean shouldNotFilter(HttpServletRequest request) {
 		String uri = request.getRequestURI();
 		return uri.startsWith("/actuator");
+	}
+
+	/**
+	 * 앱이 보내는 {@code X-App-Version}(예: 1.0.31+69). 웹·옛 앱은 헤더가 없어 {@code -}.
+	 * 로그 줄을 깨지 않게 공백·개행을 지우고 길이를 자른다 — 헤더는 클라이언트가 정하는 값이다.
+	 */
+	static String appVersion(HttpServletRequest request) {
+		String v = request.getHeader("X-App-Version");
+		if (v == null || v.isBlank()) {
+			return "-";
+		}
+		String clean = v.replaceAll("[^0-9A-Za-z.+_-]", "");
+		return clean.isEmpty() ? "-" : clean.substring(0, Math.min(clean.length(), 20));
 	}
 
 	String identify(HttpServletRequest request) {
