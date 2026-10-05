@@ -117,6 +117,13 @@ sentry:
   send-default-pii: true
 
 logging:
+  pattern:
+    # OTel agent 가 MDC 에 넣는 trace_id·span_id·trace_flags 를 로그 레벨 뒤에 찍는다 — Grafana 에서
+    # 로그 한 줄로 트레이스(Tempo)로 넘어가는 연결고리다. 트레이스 밖(스케줄러 등)은 `[,,]` 로 빈다.
+    # trace_flags 가 필요한 이유: agent 는 샘플링에서 빠진 요청(90%)에도 trace_id 를 찍는다. 그 id 는
+    # Tempo 에 없어서 링크가 빈 화면이 된다. sampled 비트가 켜진 것(실측 `03`, 제외는 `02`)만 Grafana 링크를 걸어 그걸 막는다.
+    # Loki 쿼리의 `|= " ERROR "` 는 레벨 뒤 공백이 그대로라 영향 없다.
+    level: "%5p [%X{trace_id:-},%X{span_id:-},%X{trace_flags:-}]"
   level:
     org.hibernate.SQL: info
     # 애플리케이션 레이어에서 이미 실패 로그를 남기므로 netty 커넥션 WARN 중복을 막는다

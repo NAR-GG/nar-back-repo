@@ -1,0 +1,27 @@
+# 트레이스 저장소. 앱의 OTel Java agent 가 OTLP 로 밀어넣고(push), Grafana 가 읽는다.
+# 단일 바이너리 + 로컬 디스크. 앱은 JVM 2개뿐이라 이걸로 충분하다.
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+# 보관 7일. 트레이스는 로그보다 부피가 크고, 쓰는 건 "방금 느렸던 그 요청"이라 짧아도 된다.
+compactor:
+  compaction:
+    block_retention: 168h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks

@@ -73,6 +73,6 @@ cloudflared 파드 ──> Traefik ──> nar-web 파드          ┐
 
 | 항목 | 상태 |
 |---|---|
-| WhaTap 에이전트 | `#459` 로 지표는 대체했지만 `nar-web.yaml` 에 javaagent·hostPath 볼륨이 아직 붙어 있다. 계약 해지 후 걷는다 |
+| WhaTap 에이전트 | 2026-10-05 에 `nar-web.yaml` 의 javaagent·hostPath 볼륨을 걷었다. 서버의 `~/nar/whatap` 은 롤백용으로 남겨 뒀다 |
 | 스케줄러 파드 분리 부작용 | `LiveActivityCatchUpService` 가 `#442` 이후 동작하지 않는다. 경기 상세의 세트 LIVE 판정도 같은 원인일 가능성. [ADR 0002](../docs/adr/0002-scheduler-pod-split.md) 참고 |
 | 로컬 벤치마크 관측 | 루트 `monitoring/` 이었다. `infra/monitoring/` 과 이름이 겹쳐 구분이 안 됐으므로 [`benchmark-observability/`](../benchmark-observability/README.md) 로 옮겼다. **여기(`infra/`)는 프로덕션 원본만 둔다** — 로컬 도구는 섞지 않는다 |

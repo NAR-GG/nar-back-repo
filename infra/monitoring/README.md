@@ -61,6 +61,54 @@ Prometheus·Loki 는 Tailscale 안에서만 닿는다. Grafana·Kuma 는 Cloudfl
 
 **앞단이 없는 환경으로 앱을 옮기면 이 전제가 깨진다.** 그때는 접근 제어를 앱으로 가져와야 한다.
 
+## 트레이스 (Tempo) — 요청 하나의 경로를 본다
+
+메트릭(Prometheus)은 "느려졌다"를, 로그(Loki)는 "무슨 일이 있었다"를 알려준다. 트레이스는
+**"이 요청이 어디서 몇 ms 를 썼나"** 를 보여준다 — 컨트롤러 → 서비스 → SQL N번 → 외부 API 가
+한 줄 워터폴이다. WhaTap 해지 후 빠지는 트랜잭션·SQL 분석 자리를 메운다.
+
+```
+nar-web 파드 ─ OTel Java agent ──OTLP push──> Tempo :4318 ──> Grafana (Explore > Tempo)
+```
+
+방향은 Loki 와 같다(push). 파드 → `172.17.0.1:4318` (Prometheus 가 파드를 긁는 그 docker 브리지).
+**서버 컨테이너(`tempo`)만 올려 두면 아무 영향이 없다** — 앱이 agent 를 붙이기 전까지 아무도 안 보낸다.
+
+### 앱 쪽 (적용됨 — #552, 2026-10-05)
+
+agent jar 는 hostPath 에 둔다(이미지 재빌드 불필요).
+
+1. 서버의 `~/nar/otel/opentelemetry-javaagent.jar` (v2.32.0,
+   `https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases`)
+2. `nar-web.yaml` — `/otel` hostPath 마운트, `JAVA_TOOL_OPTIONS` 의 `-javaagent`, `OTEL_*` 환경변수.
+   샘플링 10%(경기 시작 버스트 대비), 트레이스만 export(메트릭·로그는 Prometheus·Loki 가 맡는다).
+   **끄기: `OTEL_SDK_DISABLED=true`.** jar 를 지우면 JVM 이 기동에 실패한다(CrashLoop).
+3. 메모리: 붙인 직후 nar-web 이 1.1GiB → 1.37GiB 로 올랐다(limit 2Gi, Xmx 1024m). 워밍업이 섞인 값이라 안정값은 따로 본다.
+4. **스케줄러 파드는 안 붙인다.** 폴링 span 이 너무 많다. 리더 리스·FCM 발송 구간을 보고 싶을 때
+   샘플링을 낮춰 따로 붙인다.
+
+> ⚠️ **`infra/**` 만 바뀐 머지는 자동 배포가 안 돈다**(`paths-ignore`). 매니페스트를 클러스터에 반영하려면
+> `gh workflow run deploy-macmini.yml --ref main` 으로 직접 돌린다. 자세한 건 `infra/argocd/README.md`.
+
+### 로그 ↔ 트레이스 연결
+
+- 앱 로그가 `ERROR [<trace_id>,<span_id>,<flags>] 1 --- ...` 로 찍힌다(`application-prod.yml` `logging.pattern.level`).
+  OTel agent 가 MDC 에 `trace_id`·`span_id`·`trace_flags` 를 넣어 준다. 트레이스 밖에서는 `[,,]` 로 빈다.
+- Loki → Tempo: 로그 줄 옆에 **"Tempo 에서 보기"** 링크가 생긴다(derivedFields).
+  **샘플된 요청(flags 최하위 비트 on — 실측 `03`, 제외는 `02`)에만** 생긴다. agent 는 샘플링에서 빠진 요청에도 trace_id 를 찍는데, 그 id 는
+  Tempo 에 없다(실측: 로그 trace_id 20개 중 1개만 Tempo 에 존재). flags 없이 id 만 보고 링크를 걸면 90% 가 빈 화면이다.
+- Tempo → 로그: 트레이스 화면의 span 에서 로그 버튼(tracesToLogsV2, `|= "<traceId>"` 본문 검색).
+- 샘플링 10% 라 **링크가 없는 로그가 대부분이다.** 느린 요청이 샘플에서 빠지면 그 요청은 트레이스로 못 본다.
+
+### 서버 쪽 처음 올릴 때
+
+`docker compose up -d tempo` 한 줄이다. 새 볼륨에 쓰기 권한이 없으면 `permission denied` 로 죽는다
+(컨테이너 uid 10001). 그때는 `docker run --rm -v monitoring_tempo-data:/v alpine chown -R 10001:10001 /v`.
+볼륨 이름은 `docker volume ls` 로 확인한다.
+
+**DB·시크릿·재부팅이 아니라 기존 컨테이너를 건드리지 않는 추가 하나다.** 그래도 Grafana 를 재시작해
+데이터소스를 읽히므로(provisioning) 경기 창은 피한다.
+
 ## 대시보드
 
 `macmini/grafana/provisioning/dashboards/` 아래 JSON 이 진실의 원천이다. `allowUiUpdates: false`
