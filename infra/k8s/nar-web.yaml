@@ -108,7 +108,10 @@ spec:
             # 트레이스만 보낸다 — 메트릭은 Prometheus, 로그는 Loki 가 이미 맡는다.
             # 끄는 법: OTEL_SDK_DISABLED=true (agent 는 로드되나 아무것도 안 보낸다).
             #   jar 가 없으면 JVM 이 기동에 실패하므로(hostPath 가 비면 CrashLoop) 파일 삭제로 끄지 말 것.
-            # 샘플링 10%: 경기 시작 버스트에서 span 폭주를 막는다. 느린 요청을 놓칠 수 있다(꼬리 샘플링은 안 쓴다).
+            # 샘플링 100% (2026-10-05 ~): 하루 몇 건뿐인 "정확히 2초 멈춤" 요청을 10% 로는 못 잡아서 올렸다.
+            #   실측 근거: 평균 0.49req/s·피크 29req/s, 요청당 span 11.6개·416B → 피크 약 340span/s·140KB/s.
+            #   원인을 찾으면 0.1 로 되돌린다. 비동기 export 라 큐(2048)가 넘쳐도 span 만 버려지고 요청은 안 막힌다.
+            #   이상하면 값만 0.1 로 낮춘다(롤링 배포 1회).
             - name: OTEL_SDK_DISABLED
               value: "false"
             - name: OTEL_SERVICE_NAME
@@ -120,7 +123,7 @@ spec:
             - name: OTEL_TRACES_SAMPLER
               value: "parentbased_traceidratio"
             - name: OTEL_TRACES_SAMPLER_ARG
-              value: "0.1"
+              value: "1.0"
             - name: OTEL_METRICS_EXPORTER
               value: "none"
             - name: OTEL_LOGS_EXPORTER
