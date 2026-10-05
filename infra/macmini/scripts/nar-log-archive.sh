@@ -48,7 +48,7 @@ log "시작 $DAY → $FILE"
 
 # Loki 는 한 번에 5000줄까지만 준다. 5분 창으로 긁고, 5000줄에 닿은 창은 반으로 쪼갠다.
 # 정렬된 "시각 파드 본문" 텍스트로 낸다. 줄 수는 stderr 마지막 줄로 알린다.
-LINES=$(DAY="$DAY" LOKI="$LOKI" python3 - 2> "$TMP.err" <<'PY' | gzip -6 > "$TMP"
+( DAY="$DAY" LOKI="$LOKI" python3 - 2> "$TMP.err" <<'PY' | gzip -6 > "$TMP"
 import os, sys, json, urllib.request, urllib.parse
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -81,7 +81,7 @@ while s < end_ns:
     s = e
 sys.stderr.write(f"LINES={total}\n")
 PY
-) || { rm -f "$TMP" "$TMP.err"; fail "Loki 조회 오류"; }
+) || { log "파이썬 오류: $(tail -c 400 "$TMP.err" 2>/dev/null)"; rm -f "$TMP" "$TMP.err"; fail "Loki 조회 오류"; }
 N=$(grep -o 'LINES=[0-9]*' "$TMP.err" | tail -1 | cut -d= -f2); rm -f "$TMP.err"
 [ "${N:-0}" -ge "$MIN_LINES" ] || { rm -f "$TMP"; fail "$DAY 로그가 너무 적다(${N:-0}줄)"; }
 gzip -t "$TMP" || { rm -f "$TMP"; fail "gzip 검증 실패"; }
