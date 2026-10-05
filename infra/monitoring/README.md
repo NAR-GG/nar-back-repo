@@ -81,7 +81,7 @@ agent jar 는 hostPath 에 둔다(이미지 재빌드 불필요).
 1. 서버의 `~/nar/otel/opentelemetry-javaagent.jar` (v2.32.0,
    `https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases`)
 2. `nar-web.yaml` — `/otel` hostPath 마운트, `JAVA_TOOL_OPTIONS` 의 `-javaagent`, `OTEL_*` 환경변수.
-   샘플링 10%(경기 시작 버스트 대비), 트레이스만 export(메트릭·로그는 Prometheus·Loki 가 맡는다).
+   샘플링 100%(2초 멈춤 추적용 임시, 원인 확인 후 0.1 로 복귀), 트레이스만 export(메트릭·로그는 Prometheus·Loki 가 맡는다).
    **끄기: `OTEL_SDK_DISABLED=true`.** jar 를 지우면 JVM 이 기동에 실패한다(CrashLoop).
 3. 메모리: 붙인 직후 nar-web 이 1.1GiB → 1.37GiB 로 올랐다(limit 2Gi, Xmx 1024m). 워밍업이 섞인 값이라 안정값은 따로 본다.
 4. **스케줄러 파드는 안 붙인다.** 폴링 span 이 너무 많다. 리더 리스·FCM 발송 구간을 보고 싶을 때
