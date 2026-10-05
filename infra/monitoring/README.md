@@ -61,6 +61,44 @@ Prometheus·Loki 는 Tailscale 안에서만 닿는다. Grafana·Kuma 는 Cloudfl
 
 **앞단이 없는 환경으로 앱을 옮기면 이 전제가 깨진다.** 그때는 접근 제어를 앱으로 가져와야 한다.
 
+## 트레이스 (Tempo) — 요청 하나의 경로를 본다
+
+메트릭(Prometheus)은 "느려졌다"를, 로그(Loki)는 "무슨 일이 있었다"를 알려준다. 트레이스는
+**"이 요청이 어디서 몇 ms 를 썼나"** 를 보여준다 — 컨트롤러 → 서비스 → SQL N번 → 외부 API 가
+한 줄 워터폴이다. WhaTap 해지 후 빠지는 트랜잭션·SQL 분석 자리를 메운다.
+
+```
+nar-web 파드 ─ OTel Java agent ──OTLP push──> Tempo :4318 ──> Grafana (Explore > Tempo)
+```
+
+방향은 Loki 와 같다(push). 파드 → `172.17.0.1:4318` (Prometheus 가 파드를 긁는 그 docker 브리지).
+**서버 컨테이너(`tempo`)만 올려 두면 아무 영향이 없다** — 앱이 agent 를 붙이기 전까지 아무도 안 보낸다.
+
+### 켜는 순서 (앱 쪽)
+
+agent jar 는 WhaTap 과 같은 방식으로 hostPath 에 둔다(이미지 재빌드 불필요).
+
+1. 서버에서 jar 를 받는다: `~/nar/otel/opentelemetry-javaagent.jar`
+   (`https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases` — 2026-10 기준 v2.32.0)
+2. `nar-web.yaml` 에 `/otel` hostPath 마운트를 추가하고 `JAVA_TOOL_OPTIONS` 에
+   `-javaagent:/otel/opentelemetry-javaagent.jar` 를 더한다. 환경변수:
+   - `OTEL_SERVICE_NAME=nar-web`
+   - `OTEL_EXPORTER_OTLP_ENDPOINT=http://172.17.0.1:4318`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`
+   - `OTEL_TRACES_SAMPLER=parentbased_traceidratio`, `OTEL_TRACES_SAMPLER_ARG=0.1` (경기 시작 버스트 대비 10%)
+   - `OTEL_METRICS_EXPORTER=none`, `OTEL_LOGS_EXPORTER=none` (메트릭·로그는 이미 Prometheus·Loki 가 맡는다)
+3. 파드 메모리: agent 가 +50~100MiB. nar-web 은 limit 2Gi 에 Xmx 1024m 이라 들어간다.
+4. **스케줄러 파드는 처음엔 붙이지 않는다.** 폴링 span 이 너무 많고, 리더 리스·FCM 발송 구간을
+   보고 싶을 때 샘플링을 낮춰 따로 붙인다.
+
+### 서버 쪽 처음 올릴 때
+
+`docker compose up -d tempo` 한 줄이다. 새 볼륨에 쓰기 권한이 없으면 `permission denied` 로 죽는다
+(컨테이너 uid 10001). 그때는 `docker run --rm -v monitoring_tempo-data:/v alpine chown -R 10001:10001 /v`.
+볼륨 이름은 `docker volume ls` 로 확인한다.
+
+**DB·시크릿·재부팅이 아니라 기존 컨테이너를 건드리지 않는 추가 하나다.** 그래도 Grafana 를 재시작해
+데이터소스를 읽히므로(provisioning) 경기 창은 피한다.
+
 ## 대시보드
 
 `macmini/grafana/provisioning/dashboards/` 아래 JSON 이 진실의 원천이다. `allowUiUpdates: false`

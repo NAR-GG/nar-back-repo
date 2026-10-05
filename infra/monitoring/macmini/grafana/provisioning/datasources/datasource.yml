@@ -8,6 +8,8 @@ deleteDatasources:
     orgId: 1
   - name: Loki
     orgId: 1
+  - name: Tempo
+    orgId: 1
 
 datasources:
   - name: Prometheus
@@ -23,4 +25,12 @@ datasources:
     uid: loki
     access: proxy
     url: http://loki:3100
+    editable: false
+
+  # 트레이스. 로그→트레이스 연결(derivedFields)은 앱 로그에 trace_id 가 찍힌 뒤에 붙인다.
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200
     editable: false

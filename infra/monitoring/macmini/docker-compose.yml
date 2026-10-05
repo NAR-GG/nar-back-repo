@@ -28,6 +28,23 @@ services:
     ports:
       - "3100:3100"
 
+  # 분산 트레이스 저장소. 앱 파드의 OTel agent 가 OTLP(4317 gRPC / 4318 HTTP)로 밀어넣는다.
+  # 파드 → 172.17.0.1:4318 (Prometheus 가 파드를 긁는 것과 같은 docker 브리지, 방향만 반대).
+  # 앱에 agent 를 붙이기 전까지는 아무도 안 보내므로 떠 있어도 무해하다.
+  tempo:
+    image: grafana/tempo:2.10.8
+    container_name: tempo
+    restart: unless-stopped
+    command: -config.file=/etc/tempo/tempo-config.yml
+    # 컨테이너는 uid 10001 로 돈다. 처음 볼륨을 만들 때 /var/tempo 쓰기 권한이 없으면
+    # 시작이 permission denied 로 죽는다 — 그때는 README 의 Tempo 절을 본다.
+    volumes:
+      - ./tempo-config.yml:/etc/tempo/tempo-config.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -86,4 +103,5 @@ services:
 volumes:
   prom-data:
   loki-data:
+  tempo-data:
   grafana-data:
