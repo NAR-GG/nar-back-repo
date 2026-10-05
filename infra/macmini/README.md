@@ -43,10 +43,12 @@ EC2 비용을 없애려고 앱을 집 맥미니(M1 16GB)로 옮겼고, **2026-08
 | `cloudflared/config.yml` | `/opt/homebrew/etc/cloudflared/config.yml` — **롤백용.** 실운영은 `infra/k8s/cloudflared.yaml` |
 | `launchd/com.nar.cloudflared.plist` | `~/Library/LaunchAgents/` — **unload 된 상태.** 지우지 말 것, 롤백이 `load` 한 줄이다 |
 | `launchd/com.nar.dbbackup.plist` | `~/Library/LaunchAgents/` |
+| `launchd/com.nar.logarchive.plist` | `~/Library/LaunchAgents/` — 04:40 어제 로그 → `logs/` 버킷 + `~/nar/logs` |
 | `launchd/com.nar.forwardguard.plist` | `~/Library/LaunchAgents/` |
 | `launchd/com.nar.vmmemory.plist` | `~/Library/LaunchAgents/` — Colima VM 여유 메모리 감시, 5분 |
 | `launchd/homebrew.mxcl.colima.plist` | `~/Library/LaunchAgents/` — **brew 가 덮어쓴다**, colima 업그레이드 후 다시 복사 |
-| `scripts/nar-db-backup.sh` | `~/nar/nar-db-backup.sh` |
+| `scripts/nar-db-backup.sh` | `~/nar/nar-db-backup.sh` — 매월 1일은 `monthly/` 에도 올린다 |
+| `scripts/nar-log-archive.sh` | `~/nar/nar-log-archive.sh` — Loki 보존(14일) 밖의 로그를 파일로 남긴다. 인자로 날짜를 주면 백필 |
 | `scripts/nar-forward-guard.sh` | `~/nar/nar-forward-guard.sh` |
 | `scripts/nar-vm-memory-guard.sh` | `~/nar/nar-vm-memory-guard.sh` |
 | `scripts/cutover-reverse-repl.sh` | 노트북에서 실행 (양쪽 SSH 필요) |
@@ -258,3 +260,14 @@ Tailscale 기기 이름은 바뀔 수 있다. 실제로 `macmini` 가 `macmini-1
 2. `cloudflared/config.yml` 의 ingress 에 `api.nar.kr` 을 추가한다.
 3. 저장소 변수 `APP_SCHEDULING_ENABLED` / `SPRING_FLYWAY_ENABLED` 를 `true` 로.
 4. `scripts/cutover-reverse-repl.sh --apply` 로 역방향 복제를 건다(롤백 안전망).
+
+## 버킷 보관 규칙 (`nar-backups`, OCI 콘솔 수명주기 — 코드가 아니라 콘솔 설정이다)
+
+무료 한도 20GiB. 규칙이 빠지면 일일 덤프(약 150MB)만으로 약 4개월에 찬다 — 2026-10-05 에 14.08GiB 까지
+찬 것을 발견했다(춘천·맥미니 백업이 둘 다 올리고 있었다. 춘천 cron 은 끔).
+
+| 접두사 | 보관 | 내용 |
+|---|---|---|
+| `nar-macmini-` | 45일 | 일일 덤프 |
+| `monthly/` | 365일 | 매월 1일자 덤프 |
+| `logs/` | 90일 | 일일 로그 아카이브 |
