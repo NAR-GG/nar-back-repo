@@ -32,15 +32,15 @@ public class LolesportsStageClient {
 	@Value("${lolesports.riot-api.key}")
 	private String riotApiKey;
 
-	/** 가장 최근 토너먼트의 {@code stageName} 스테이지 경기 id. 조회 실패·스테이지 없음이면 비어 있다. */
-	public Optional<Set<String>> stageMatchIds(String leagueId, String stageName) {
+	/** 가장 최근 토너먼트의 getStandings 원문. 조회 실패면 비어 있다(스테이지 필터·대진 없이 계산한다). */
+	public Optional<JsonNode> standings(String leagueId) {
 		try {
 			JsonNode tournaments = get("/persisted/gw/getTournamentsForLeague", "leagueId", leagueId);
 			String tournamentId = latestTournamentId(tournaments);
 			if (tournamentId == null) {
 				return Optional.empty();
 			}
-			return parseStageMatchIds(get("/persisted/gw/getStandings", "tournamentId", tournamentId), stageName);
+			return Optional.ofNullable(get("/persisted/gw/getStandings", "tournamentId", tournamentId));
 		} catch (Exception e) {
 			log.warn("lolesports 스테이지 조회 실패 — 전체 경기로 계산한다: leagueId={} err={}", leagueId, e.getMessage());
 			return Optional.empty();
@@ -73,7 +73,7 @@ public class LolesportsStageClient {
 		return id;
 	}
 
-	static Optional<Set<String>> parseStageMatchIds(JsonNode root, String stageName) {
+	public static Optional<Set<String>> parseStageMatchIds(JsonNode root, String stageName) {
 		for (JsonNode standing : root.path("data").path("standings")) {
 			for (JsonNode stage : standing.path("stages")) {
 				if (!stageName.equalsIgnoreCase(stage.path("name").asText())) {

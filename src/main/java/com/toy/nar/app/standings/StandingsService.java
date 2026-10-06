@@ -13,6 +13,7 @@ import java.util.Optional;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.toy.nar.app.lolesports.LeagueConstants;
 import com.toy.nar.app.lolesports.repository.LeagueMatch;
 import com.toy.nar.app.lolesports.repository.LeagueMatchRepository;
@@ -210,7 +211,8 @@ public class StandingsService {
 				.toList();
 		// 제목 블록명이 같은 Round 4(0-2 팀 풀리그)가 섞이지 않게 lolesports 의 Swiss 스테이지만 센다.
 		// 조회가 실패하면 전체로 계산한다 — 순위가 아예 없는 것보다 낫다.
-		Optional<java.util.Set<String>> swissIds = stageClient.stageMatchIds(LeagueConstants.LEAGUE_IDS.get(league), "Swiss");
+		Optional<JsonNode> lol = stageClient.standings(LeagueConstants.LEAGUE_IDS.get(league));
+		Optional<java.util.Set<String>> swissIds = lol.flatMap(j -> LolesportsStageClient.parseStageMatchIds(j, "Swiss"));
 		if (swissIds.isPresent()) {
 			scoped = scoped.stream().filter(m -> swissIds.get().contains(m.getId())).toList();
 		}
@@ -271,11 +273,27 @@ public class StandingsService {
 				.league(league)
 				.supported(true)
 				.scopeLabel(scope.scopeLabel())
-				.regularFinished(metrics.values().stream().allMatch(m -> m.remaining() == 0))
+				// 스위스 3라운드가 끝나도 0-2 풀리그·4라운드가 남아 8강 진출 8팀이 안 정해진다 — 그 전엔 "종료"를 띄우지 않는다.
+				.regularFinished(lol.map(StandingsBracketBuilder::groupStagesFinished)
+						.orElseGet(() -> metrics.values().stream().allMatch(m -> m.remaining() == 0)))
 				.dataThrough(through)
 				.inSync(true)
-				.groups(List.of(StandingsResponse.Group.builder().name(null).rows(rows).build()))
+				.groups(List.of(StandingsResponse.Group.builder().name(scope.scopeLabel()).rows(rows).build()))
+				.bracket(lol.flatMap(j -> StandingsBracketBuilder.build(j, metrics, scheduledTimes(j))).orElse(null))
 				.build());
+	}
+
+	/** 대진 카드 시각용. lolesports getStandings 는 경기 시각을 안 줘서 우리 DB 에서 id 로 찾는다. */
+	private Map<String, OffsetDateTime> scheduledTimes(JsonNode lolStandings) {
+		List<String> ids = new ArrayList<>();
+		lolStandings.findValues("matches").forEach(ms -> ms.forEach(m -> ids.add(m.path("id").asText())));
+		Map<String, OffsetDateTime> times = new java.util.HashMap<>();
+		for (LeagueMatch m : leagueMatchRepository.findAllById(ids)) {
+			if (m.getMatchDate() != null) {
+				times.put(m.getId(), m.getMatchDate().atOffset(ZoneOffset.UTC));
+			}
+		}
+		return times;
 	}
 
 	private StandingsResponse unsupported(String league, String reason) {

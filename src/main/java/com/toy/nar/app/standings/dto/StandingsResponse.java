@@ -47,7 +47,13 @@ public record StandingsResponse(
 		 */
 		boolean inSync,
 
-		List<Group> groups) {
+		List<Group> groups,
+
+		/**
+		 * 스위스 전적 버킷 + 토너먼트 대진. 대진으로 그려야 하는 리그만 채운다(없으면 null).
+		 * 앱은 이 필드가 실려 오면 표 대신 대진 UI 를 그린다 — 리그 코드로 분기하지 않는다.
+		 */
+		Bracket bracket) {
 
 	@Builder
 	public record Group(String name, List<Row> rows) {
@@ -81,5 +87,33 @@ public record StandingsResponse(
 
 			/** 남은 정규 경기 수. */
 			Integer remaining) {
+	}
+
+	@Builder
+	public record Bracket(List<SwissRow> swiss, List<Round> rounds) {
+	}
+
+	/** 같은 전적("2-1")으로 묶인 팀들. {@code advanced} 는 진출 확정. */
+	@Builder
+	public record SwissRow(String record, List<String> teamCodes, boolean advanced) {
+	}
+
+	@Builder
+	public record Round(String name, List<BracketMatch> matches) {
+	}
+
+	/** {@code status}: done / live / upcoming. 팀이 미정이면 teamCode 가 null. */
+	@Builder
+	public record BracketMatch(
+			BracketTeam teamA,
+			BracketTeam teamB,
+			String status,
+			String matchId,
+			OffsetDateTime scheduledTime,
+			boolean isFinal) {
+	}
+
+	@Builder
+	public record BracketTeam(String teamCode, String teamName, String imageUrl, Integer gameWins, Boolean won) {
 	}
 }
