@@ -34,7 +34,7 @@ class StandingsServiceTest {
 		naver = mock(NaverStandingsClient.class);
 		repository = mock(LeagueMatchRepository.class);
 		stageClient = mock(LolesportsStageClient.class);
-		when(stageClient.stageMatchIds(any(), anyString())).thenReturn(Optional.empty());
+		when(stageClient.standings(any())).thenReturn(Optional.empty());
 		service = new StandingsService(naver, repository, stageClient);
 		when(naver.resolveLeagueId("lck")).thenReturn(Optional.of("lck_2026"));
 	}
@@ -126,6 +126,14 @@ class StandingsServiceTest {
 		assertThat(res.reason()).isEqualTo("UNAVAILABLE");
 	}
 
+	private static com.fasterxml.jackson.databind.JsonNode lol(String json) {
+		try {
+			return new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
 	private static LeagueMatch swiss(String date, String blue, int bs, int rs, String red, int bestOf) {
 		return LeagueMatch.builder()
 				.id(date + blue).leagueName("DEMACIA_CUP").matchTitle("스위스 | " + blue + " vs " + red)
@@ -175,7 +183,8 @@ class StandingsServiceTest {
 		List<LeagueMatch> matches = List.of(swissMatch, round4);
 		when(repository.findTopByLeagueNameOrderByMatchDateDesc("DEMACIA_CUP")).thenReturn(round4);
 		when(repository.findForStandings("DEMACIA_CUP", 2026, List.of("Cup"))).thenReturn(matches);
-		when(stageClient.stageMatchIds(any(), anyString())).thenReturn(Optional.of(java.util.Set.of(swissMatch.getId())));
+		when(stageClient.standings(any())).thenReturn(Optional.of(lol(
+				"{\"data\":{\"standings\":[{\"stages\":[{\"name\":\"Swiss\",\"sections\":[{\"matches\":[{\"id\":\"" + swissMatch.getId() + "\",\"state\":\"completed\",\"teams\":[]}]}]}]}]}}")));
 
 		List<StandingsResponse.Row> rows = service.getStandings("DEMACIA_CUP").groups().get(0).rows();
 
