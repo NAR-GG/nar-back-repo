@@ -123,6 +123,60 @@ class StandingsServiceTest {
 		assertThat(res.reason()).isEqualTo("UNAVAILABLE");
 	}
 
+	private static LeagueMatch swiss(String date, String blue, int bs, int rs, String red, int bestOf) {
+		return LeagueMatch.builder()
+				.id(date + blue).leagueName("DEMACIA_CUP").matchTitle("스위스 | " + blue + " vs " + red)
+				.matchDate(LocalDateTime.parse(date)).state("completed")
+				.blueTeamCode(blue).blueTeamName(blue + " name").blueScore(bs)
+				.redTeamCode(red).redTeamName(red + " name").redScore(rs)
+				.seasonYear(2026).seasonSplit("Cup").bestOf(bestOf).build();
+	}
+
+	@DisplayName("데마시아 컵은 네이버가 비어도 우리 DB 결과로 스위스 순위를 만든다 — 승 → 패 → 세트 득실, 같으면 공동")
+	@Test
+	void demaciaCupFallsBackToDbWhenNaverEmpty() {
+		when(naver.resolveLeagueId("dcgi")).thenReturn(Optional.of("dcgi_2026"));
+		when(naver.fetchRanking("dcgi_2026")).thenReturn(List.of());
+		List<LeagueMatch> matches = List.of(
+				swiss("2026-10-03T08:00", "RED", 1, 0, "NAVI", 1),
+				swiss("2026-10-03T09:00", "FLY", 0, 1, "LGD", 1),
+				swiss("2026-10-04T07:00", "BFX", 2, 1, "LGD", 3),
+				swiss("2026-10-04T09:00", "KT", 2, 0, "RED", 3),
+				swiss("2026-10-05T09:00", "FLY", 0, 2, "NAVI", 3));
+		when(repository.findTopByLeagueNameOrderByMatchDateDesc("DEMACIA_CUP")).thenReturn(matches.get(4));
+		when(repository.findForStandings("DEMACIA_CUP", 2026, List.of("Cup"))).thenReturn(matches);
+
+		StandingsResponse res = service.getStandings("DEMACIA_CUP");
+
+		assertThat(res.supported()).isTrue();
+		assertThat(res.scopeLabel()).isEqualTo("스위스 스테이지");
+		assertThat(res.groups()).hasSize(1);
+		List<StandingsResponse.Row> rows = res.groups().get(0).rows();
+		// 1-0: KT(+2) BFX(+1) / 1-1: NAVI(+1) LGD(0) RED(-1) / 0-2: FLY. 승 → 패 → 세트 득실 순.
+		assertThat(rows).extracting(StandingsResponse.Row::teamCode)
+				.containsExactly("KT", "BFX", "NAVI", "LGD", "RED", "FLY");
+		assertThat(rows).extracting(StandingsResponse.Row::rank).containsExactly(1, 2, 3, 4, 5, 6);
+		assertThat(rows.get(0).wins()).isEqualTo(1);
+		assertThat(rows.get(0).teamName()).isEqualTo("KT name");
+		assertThat(res.inSync()).isTrue();
+	}
+
+	@DisplayName("스위스 DB 순위는 승·패·세트 득실이 모두 같으면 공동 순위다")
+	@Test
+	void demaciaCupDbRankSharesTies() {
+		when(naver.resolveLeagueId("dcgi")).thenReturn(Optional.of("dcgi_2026"));
+		when(naver.fetchRanking("dcgi_2026")).thenReturn(List.of());
+		List<LeagueMatch> matches = List.of(
+				swiss("2026-10-03T08:00", "RED", 1, 0, "NAVI", 1),
+				swiss("2026-10-03T09:00", "KT", 1, 0, "SR", 1));
+		when(repository.findTopByLeagueNameOrderByMatchDateDesc("DEMACIA_CUP")).thenReturn(matches.get(1));
+		when(repository.findForStandings("DEMACIA_CUP", 2026, List.of("Cup"))).thenReturn(matches);
+
+		List<StandingsResponse.Row> rows = service.getStandings("DEMACIA_CUP").groups().get(0).rows();
+
+		assertThat(rows).extracting(StandingsResponse.Row::rank).containsExactly(1, 1, 3, 3);
+	}
+
 	@DisplayName("그룹별로 나누고 네이버 rank 를 그대로 쓴다")
 	@Test
 	void groupsRowsAndKeepsNaverRank() {

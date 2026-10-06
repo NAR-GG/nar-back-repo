@@ -69,6 +69,12 @@ public class StandingsService {
 			"ASIAN_GAMES", new Scope("ag_lol", List.of(), "그룹 스테이지", "ag_lol_2026"),
 			"DEMACIA_CUP", new Scope("dcgi", List.of(), "스위스 스테이지", "dcgi_2026"));
 
+	/**
+	 * 네이버 순위가 비면 우리 DB 경기 결과로 순위를 만드는 리그. 스위스 스테이지라 네이버가 집계를 안 준다.
+	 * 네이버가 채우기 시작하면 위 분기가 먼저 타서 네이버 값이 우선한다.
+	 */
+	private static final java.util.Set<String> DB_STANDINGS_LEAGUES = java.util.Set.of("DEMACIA_CUP");
+
 	/** 순위표를 등록한 리그인가. 모바일 필터의 순위표 칩 활성 여부가 이걸 따른다. */
 	public static boolean hasScope(String league) {
 		return SCOPES.containsKey(league);
@@ -88,6 +94,10 @@ public class StandingsService {
 		String leagueId = naverClient.resolveLeagueId(scope.naverTopLeagueId()).orElse(scope.fallbackLeagueId());
 		List<NaverRankRow> ranking = naverClient.fetchRanking(leagueId);
 		if (ranking.isEmpty()) {
+			// 네이버가 스위스 순위를 비워 둔다(데마시아 컵 2026-10 실측: content=[]). 우리 DB 로 대신 센다.
+			if (DB_STANDINGS_LEAGUES.contains(normalized)) {
+				return fromDb(normalized, scope).orElseGet(() -> unsupported(normalized, "UNAVAILABLE"));
+			}
 			return unsupported(normalized, "UNAVAILABLE");
 		}
 
@@ -179,6 +189,86 @@ public class StandingsService {
 				.inSync(inSync)
 				.groups(groups)
 				.build();
+	}
+
+	/**
+	 * 우리 DB 결과로 만든 순위. 완료된 정규(스위스) 경기가 하나도 없으면 비어 있다 — 시작 전과 구분된다.
+	 *
+	 * <p>정렬은 승 → 패 → 세트 득실차 순이고, 셋이 같으면 공동 순위다. 스위스 공식 타이브레이크
+	 * (Buchholz 등)는 반영하지 않는다 — 동률 팀의 순서가 대회 공식 순위와 다를 수 있다.
+	 */
+	private Optional<StandingsResponse> fromDb(String league, Scope scope) {
+		LeagueMatch latest = leagueMatchRepository.findTopByLeagueNameOrderByMatchDateDesc(league);
+		if (latest == null || latest.getSeasonYear() == null || latest.getSeasonSplit() == null) {
+			return Optional.empty();
+		}
+		List<LeagueMatch> scoped = leagueMatchRepository
+				.findForStandings(league, latest.getSeasonYear(), List.of(latest.getSeasonSplit()))
+				.stream()
+				.filter(m -> StandingsBlocks.isRegular(m.getMatchTitle()))
+				.toList();
+		Map<String, TeamMetrics> metrics = StandingsCalculator.compute(scoped);
+		if (metrics.values().stream().noneMatch(m -> m.wins() + m.losses() > 0)) {
+			return Optional.empty();
+		}
+
+		Map<String, String[]> nameAndImage = new LinkedHashMap<>();
+		for (LeagueMatch m : scoped) {
+			nameAndImage.putIfAbsent(m.getBlueTeamCode(), new String[] { m.getBlueTeamName(), m.getBlueTeamImageUrl() });
+			nameAndImage.putIfAbsent(m.getRedTeamCode(), new String[] { m.getRedTeamName(), m.getRedTeamImageUrl() });
+		}
+
+		List<Map.Entry<String, TeamMetrics>> sorted = new ArrayList<>(metrics.entrySet());
+		sorted.sort(java.util.Comparator
+				.comparingInt((Map.Entry<String, TeamMetrics> e) -> -e.getValue().wins())
+				.thenComparingInt(e -> e.getValue().losses())
+				.thenComparingInt(e -> -e.getValue().setDiff()));
+
+		List<StandingsResponse.Row> rows = new ArrayList<>();
+		TeamMetrics prev = null;
+		int rank = 0;
+		for (int i = 0; i < sorted.size(); i++) {
+			TeamMetrics m = sorted.get(i).getValue();
+			boolean tied = prev != null && prev.wins() == m.wins() && prev.losses() == m.losses()
+					&& prev.setDiff() == m.setDiff();
+			if (!tied) {
+				rank = i + 1;
+			}
+			prev = m;
+			String code = sorted.get(i).getKey();
+			String[] info = nameAndImage.getOrDefault(code, new String[] { code, null });
+			rows.add(StandingsResponse.Row.builder()
+					.rank(rank)
+					.teamCode(code)
+					.teamName(info[0] != null ? info[0] : code)
+					.imageUrl(info[1])
+					.wins(m.wins())
+					.losses(m.losses())
+					.setDiff(m.setDiff())
+					.setWins(m.setWins())
+					.setLosses(m.setLosses())
+					.streak(m.streak())
+					.remaining(m.remaining())
+					.build());
+		}
+
+		OffsetDateTime through = scoped.stream()
+				.filter(m -> "completed".equalsIgnoreCase(m.getState()))
+				.map(LeagueMatch::getMatchDate)
+				.filter(Objects::nonNull)
+				.max(LocalDateTime::compareTo)
+				.map(d -> d.atOffset(ZoneOffset.UTC))
+				.orElse(null);
+
+		return Optional.of(StandingsResponse.builder()
+				.league(league)
+				.supported(true)
+				.scopeLabel(scope.scopeLabel())
+				.regularFinished(metrics.values().stream().allMatch(m -> m.remaining() == 0))
+				.dataThrough(through)
+				.inSync(true)
+				.groups(List.of(StandingsResponse.Group.builder().name(null).rows(rows).build()))
+				.build());
 	}
 
 	private StandingsResponse unsupported(String league, String reason) {
