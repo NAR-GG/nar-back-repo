@@ -154,6 +154,7 @@ class StandingsServiceTest {
 		assertThat(res.supported()).isTrue();
 		assertThat(res.scopeLabel()).isEqualTo("스위스 스테이지");
 		assertThat(res.groups()).hasSize(1);
+		assertThat(res.groups().get(0).name()).isEqualTo("스위스 스테이지");
 		List<StandingsResponse.Row> rows = res.groups().get(0).rows();
 		// 1-0: KT(+2) BFX(+1) / 1-1: NAVI(+1) LGD(0) RED(-1) / 0-2: FLY. 승 → 패 → 세트 득실 순.
 		assertThat(rows).extracting(StandingsResponse.Row::teamCode)

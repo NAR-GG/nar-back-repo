@@ -274,7 +274,7 @@ public class StandingsService {
 				.regularFinished(metrics.values().stream().allMatch(m -> m.remaining() == 0))
 				.dataThrough(through)
 				.inSync(true)
-				.groups(List.of(StandingsResponse.Group.builder().name(null).rows(rows).build()))
+				.groups(List.of(StandingsResponse.Group.builder().name(scope.scopeLabel()).rows(rows).build()))
 				.build());
 	}
 
