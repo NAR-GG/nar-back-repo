@@ -26,13 +26,16 @@ class StandingsServiceTest {
 
 	private NaverStandingsClient naver;
 	private LeagueMatchRepository repository;
+	private LolesportsStageClient stageClient;
 	private StandingsService service;
 
 	@BeforeEach
 	void setUp() {
 		naver = mock(NaverStandingsClient.class);
 		repository = mock(LeagueMatchRepository.class);
-		service = new StandingsService(naver, repository);
+		stageClient = mock(LolesportsStageClient.class);
+		when(stageClient.stageMatchIds(any(), anyString())).thenReturn(Optional.empty());
+		service = new StandingsService(naver, repository, stageClient);
 		when(naver.resolveLeagueId("lck")).thenReturn(Optional.of("lck_2026"));
 	}
 
@@ -159,6 +162,25 @@ class StandingsServiceTest {
 		assertThat(rows.get(0).wins()).isEqualTo(1);
 		assertThat(rows.get(0).teamName()).isEqualTo("KT name");
 		assertThat(res.inSync()).isTrue();
+	}
+
+	@DisplayName("Round 4 같은 다른 스테이지 경기는 스위스 순위에서 뺀다 — 제목 블록명이 같아도 lolesports Swiss 스테이지만 센다")
+	@Test
+	void demaciaCupCountsOnlySwissStageMatches() {
+		when(naver.resolveLeagueId("dcgi")).thenReturn(Optional.of("dcgi_2026"));
+		when(naver.fetchRanking("dcgi_2026")).thenReturn(List.of());
+		LeagueMatch swissMatch = swiss("2026-10-05T09:00", "FLY", 0, 2, "NAVI", 3);
+		LeagueMatch round4 = swiss("2026-10-07T07:00", "GAM", 2, 0, "FLY", 3);
+		List<LeagueMatch> matches = List.of(swissMatch, round4);
+		when(repository.findTopByLeagueNameOrderByMatchDateDesc("DEMACIA_CUP")).thenReturn(round4);
+		when(repository.findForStandings("DEMACIA_CUP", 2026, List.of("Cup"))).thenReturn(matches);
+		when(stageClient.stageMatchIds(any(), anyString())).thenReturn(Optional.of(java.util.Set.of(swissMatch.getId())));
+
+		List<StandingsResponse.Row> rows = service.getStandings("DEMACIA_CUP").groups().get(0).rows();
+
+		assertThat(rows).extracting(StandingsResponse.Row::teamCode).containsExactlyInAnyOrder("NAVI", "FLY");
+		assertThat(rows).filteredOn(r -> r.teamCode().equals("FLY")).singleElement()
+				.satisfies(r -> assertThat(r.losses()).isEqualTo(1));
 	}
 
 	@DisplayName("스위스 DB 순위는 승·패·세트 득실이 모두 같으면 공동 순위다")
