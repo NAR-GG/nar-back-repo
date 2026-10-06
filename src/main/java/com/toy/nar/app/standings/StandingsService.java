@@ -82,6 +82,7 @@ public class StandingsService {
 
 	private final NaverStandingsClient naverClient;
 	private final LeagueMatchRepository leagueMatchRepository;
+	private final LolesportsStageClient stageClient;
 
 	@Cacheable(cacheNames = "leagueStandings", key = "#league")
 	public StandingsResponse getStandings(String league) {
@@ -207,6 +208,12 @@ public class StandingsService {
 				.stream()
 				.filter(m -> StandingsBlocks.isRegular(m.getMatchTitle()))
 				.toList();
+		// 제목 블록명이 같은 Round 4(0-2 팀 풀리그)가 섞이지 않게 lolesports 의 Swiss 스테이지만 센다.
+		// 조회가 실패하면 전체로 계산한다 — 순위가 아예 없는 것보다 낫다.
+		Optional<java.util.Set<String>> swissIds = stageClient.stageMatchIds(LeagueConstants.LEAGUE_IDS.get(league), "Swiss");
+		if (swissIds.isPresent()) {
+			scoped = scoped.stream().filter(m -> swissIds.get().contains(m.getId())).toList();
+		}
 		Map<String, TeamMetrics> metrics = StandingsCalculator.compute(scoped);
 		if (metrics.values().stream().noneMatch(m -> m.wins() + m.losses() > 0)) {
 			return Optional.empty();
