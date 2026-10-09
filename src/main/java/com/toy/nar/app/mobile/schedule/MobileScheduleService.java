@@ -46,6 +46,8 @@ import java.util.stream.Collectors;
 public class MobileScheduleService {
 
 	private static final String DEFAULT_LEAGUE = "LCK";
+	/** 앱이 처음 선택하는 리그. 진행 중인 대회로 옮긴다(2026-10 데마시아 컵). DEFAULT_LEAGUE 는 파라미터 폴백이라 별개다. */
+	private static final String APP_DEFAULT_LEAGUE = "DEMACIA_CUP";
 	private static final String ALL_LEAGUES = "ALL";
 	private static final int DEFAULT_TEAM_YEAR = 2026;
 	private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -108,7 +110,7 @@ public class MobileScheduleService {
 						row.getSeasonYear() + " " + row.getSeasonSplit()))
 				.toList();
 
-		return new MobileScheduleFilterResponse(DEFAULT_LEAGUE, leagues, teams, seasons);
+		return new MobileScheduleFilterResponse(APP_DEFAULT_LEAGUE, leagues, teams, seasons);
 	}
 
 	public MobileScheduleCalendarResponse getCalendar(YearMonth month, List<String> league, List<Long> teamId) {

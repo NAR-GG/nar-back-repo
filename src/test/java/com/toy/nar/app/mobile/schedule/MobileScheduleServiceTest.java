@@ -66,7 +66,7 @@ class MobileScheduleServiceTest {
 
 		MobileScheduleFilterResponse response = service.getFilters(null);
 
-		assertThat(response.defaultLeague()).isEqualTo("LCK");
+		assertThat(response.defaultLeague()).isEqualTo("DEMACIA_CUP");
 		assertThat(response.leagues()).extracting(MobileScheduleFilterResponse.LeagueOption::code)
 				.contains("LCK", "LPL");
 		assertThat(response.teams()).singleElement()
