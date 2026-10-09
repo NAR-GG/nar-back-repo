@@ -93,9 +93,12 @@ public record StandingsResponse(
 	public record Bracket(List<SwissRow> swiss, List<Round> rounds) {
 	}
 
-	/** 같은 전적("2-1")으로 묶인 팀들. {@code advanced} 는 진출 확정. */
+	/** 같은 전적("2-1")으로 묶인 팀들. {@code advanced} 는 진출 확정. {@code teams} 는 {@code teamCodes} 와 같은 순서. */
 	@Builder
-	public record SwissRow(String record, List<String> teamCodes, boolean advanced) {
+	public record SwissRow(String record, List<String> teamCodes, List<SwissTeam> teams, boolean advanced) {
+	}
+
+	public record SwissTeam(String teamCode, String teamName, String imageUrl) {
 	}
 
 	@Builder
