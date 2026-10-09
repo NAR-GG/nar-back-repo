@@ -43,6 +43,7 @@ public class MobileSoloRankStatusService {
 	private final MobilePlayerSubscriptionService subscriptionService;
 	private final PlayerSoloRankGameRepository gameRepository;
 	private final PlayerSoloRankCheerRepository cheerRepository;
+	private final SoloRankCheerTotals cheerTotals;
 
 	public SoloRankStatusResponse getStatus(Long memberId) {
 		Map<Long, PlayerSubscriptionResponse> players = subscriptionService.getSubscriptions(memberId).stream()
@@ -56,7 +57,7 @@ public class MobileSoloRankStatusService {
 		List<PlayerSoloRankGame> liveGames = gameRepository
 				.findLive(players.keySet(), PlayerRiotAccountLiveStatus.IN_RANKED_SOLO, now.minus(LIVE_FRESHNESS));
 		Map<GameKey, Long> liveMine = cheerRepository.mine(memberId, ids(liveGames), gameIds(liveGames));
-		Map<GameKey, Long> liveTotals = cheerRepository.totals(ids(liveGames), gameIds(liveGames));
+		Map<GameKey, Long> liveTotals = cheerTotals.live(keys(liveGames));
 		List<SoloRankStatusResponse.LivePlayer> live = liveGames.stream()
 				.map(game -> toLive(game, players.get(game.getPlayer().getId()),
 						liveTotals.getOrDefault(key(game), 0L), liveMine.getOrDefault(key(game), 0L)))
@@ -70,7 +71,7 @@ public class MobileSoloRankStatusService {
 		gameRepository.findFinishedSince(players.keySet(), endedSince.minus(DETECTION_SLACK), endedSince)
 				.forEach(game -> latestFinished.putIfAbsent(game.getPlayer().getId(), game));
 		List<PlayerSoloRankGame> finishedGames = List.copyOf(latestFinished.values());
-		Map<GameKey, Long> finishedTotals = cheerRepository.totals(ids(finishedGames), gameIds(finishedGames));
+		Map<GameKey, Long> finishedTotals = cheerTotals.finished(keys(finishedGames));
 		List<SoloRankStatusResponse.FinishedPlayer> finished = finishedGames.stream()
 				.map(game -> toFinished(game, players.get(game.getPlayer().getId()),
 						finishedTotals.getOrDefault(key(game), 0L)))
@@ -116,6 +117,10 @@ public class MobileSoloRankStatusService {
 
 	private static GameKey key(PlayerSoloRankGame game) {
 		return new GameKey(game.getPlayer().getId(), game.getGameId());
+	}
+
+	private static List<GameKey> keys(List<PlayerSoloRankGame> games) {
+		return games.stream().map(MobileSoloRankStatusService::key).toList();
 	}
 
 	private static List<Long> ids(List<PlayerSoloRankGame> games) {

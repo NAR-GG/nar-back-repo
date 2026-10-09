@@ -28,6 +28,7 @@ class MobileSoloRankStatusServiceTest {
 	private MobilePlayerSubscriptionService subscriptionService;
 	private PlayerSoloRankGameRepository gameRepository;
 	private PlayerSoloRankCheerRepository cheerRepository;
+	private SoloRankCheerTotals cheerTotals;
 	private MobileSoloRankStatusService service;
 
 	@BeforeEach
@@ -35,7 +36,8 @@ class MobileSoloRankStatusServiceTest {
 		subscriptionService = mock(MobilePlayerSubscriptionService.class);
 		gameRepository = mock(PlayerSoloRankGameRepository.class);
 		cheerRepository = mock(PlayerSoloRankCheerRepository.class);
-		service = new MobileSoloRankStatusService(subscriptionService, gameRepository, cheerRepository);
+		cheerTotals = mock(SoloRankCheerTotals.class);
+		service = new MobileSoloRankStatusService(subscriptionService, gameRepository, cheerRepository, cheerTotals);
 	}
 
 	private static PlayerSubscriptionResponse sub(long id, String name, String team) {
@@ -92,12 +94,10 @@ class MobileSoloRankStatusServiceTest {
 				.thenReturn(List.of(game(1, "a", now.minusMinutes(30), now.minusMinutes(28), null)));
 		when(gameRepository.findFinishedSince(anyCollection(), any(), any()))
 				.thenReturn(List.of(game(2, "c1", now.minusHours(2), null, now.minusMinutes(40))));
-		when(cheerRepository.totals(anyCollection(), anyCollection())).thenAnswer(invocation -> {
-			java.util.Collection<Long> players = invocation.getArgument(0);
-			return players.contains(1L)
-					? java.util.Map.of(new PlayerSoloRankCheerRepository.GameKey(1L, "a"), 500L)
-					: java.util.Map.of(new PlayerSoloRankCheerRepository.GameKey(2L, "c1"), 90L);
-		});
+		when(cheerTotals.live(anyCollection()))
+				.thenReturn(java.util.Map.of(new PlayerSoloRankCheerRepository.GameKey(1L, "a"), 500L));
+		when(cheerTotals.finished(anyCollection()))
+				.thenReturn(java.util.Map.of(new PlayerSoloRankCheerRepository.GameKey(2L, "c1"), 90L));
 		when(cheerRepository.mine(any(), anyCollection(), anyCollection()))
 				.thenReturn(java.util.Map.of(new PlayerSoloRankCheerRepository.GameKey(1L, "a"), 12L));
 

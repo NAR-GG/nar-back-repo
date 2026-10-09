@@ -39,6 +39,7 @@ public enum ErrorCode {
 
 	/* 솔랭 응원 */
 	SOLO_RANK_NOT_LIVE(HttpStatus.CONFLICT, "지금 솔로 랭크 중이 아닌 선수입니다."),
+	SOLO_RANK_CHEER_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "응원을 너무 빠르게 보내고 있습니다."),
 
 	/* 500 INTERNAL_SERVER_ERROR : 서버 내부 오류 */
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),

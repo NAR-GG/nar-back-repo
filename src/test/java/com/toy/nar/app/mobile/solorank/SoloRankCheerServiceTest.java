@@ -32,13 +32,18 @@ class SoloRankCheerServiceTest {
 
 	private PlayerSoloRankGameRepository gameRepository;
 	private PlayerSoloRankCheerRepository cheerRepository;
+	private SoloRankCheerTotals cheerTotals;
+	private SoloRankCheerRateLimiter rateLimiter;
 	private SoloRankCheerService service;
 
 	@BeforeEach
 	void setUp() {
 		gameRepository = mock(PlayerSoloRankGameRepository.class);
 		cheerRepository = mock(PlayerSoloRankCheerRepository.class);
-		service = new SoloRankCheerService(gameRepository, cheerRepository);
+		cheerTotals = mock(SoloRankCheerTotals.class);
+		rateLimiter = mock(SoloRankCheerRateLimiter.class);
+		when(rateLimiter.tryConsume(anyLong(), anyInt())).thenReturn(true);
+		service = new SoloRankCheerService(gameRepository, cheerRepository, cheerTotals, rateLimiter);
 	}
 
 	private static PlayerSoloRankGame liveGame(long playerId, String gameId) {
@@ -51,7 +56,7 @@ class SoloRankCheerServiceTest {
 	void 솔랭_중이면_판에_누적하고_합계를_돌려준다() {
 		when(gameRepository.findLive(any(), any(), any())).thenReturn(List.of(liveGame(5L, "KR_1")));
 		GameKey key = new GameKey(5L, "KR_1");
-		when(cheerRepository.totals(any(), any())).thenReturn(Map.of(key, 120L));
+		when(cheerTotals.live(any())).thenReturn(Map.of(key, 120L));
 		when(cheerRepository.mine(anyLong(), any(), any())).thenReturn(Map.of(key, 7L));
 
 		SoloRankCheerResponse response = service.cheer(9L, 5L, 3);
@@ -79,5 +84,25 @@ class SoloRankCheerServiceTest {
 							e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
 		}
 		verify(cheerRepository, never()).add(anyLong(), anyString(), anyLong(), anyInt());
+	}
+
+	@Test
+	void 속도_제한을_넘으면_429로_거절하고_쓰지_않는다() {
+		when(rateLimiter.tryConsume(9L, 5)).thenReturn(false);
+
+		assertThatThrownBy(() -> service.cheer(9L, 5L, 5))
+				.isInstanceOfSatisfying(CustomException.class,
+						e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.SOLO_RANK_CHEER_RATE_LIMIT));
+		verify(cheerRepository, never()).add(anyLong(), anyString(), anyLong(), anyInt());
+	}
+
+	@Test
+	void 같은_선수의_진행_판은_짧게_재사용해_조인_쿼리를_반복하지_않는다() {
+		when(gameRepository.findLive(any(), any(), any())).thenReturn(List.of(liveGame(5L, "KR_1")));
+
+		service.cheer(9L, 5L, 1);
+		service.cheer(10L, 5L, 1);
+
+		verify(gameRepository, org.mockito.Mockito.times(1)).findLive(any(), any(), any());
 	}
 }
