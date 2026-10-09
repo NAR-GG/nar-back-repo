@@ -279,7 +279,7 @@ public class StandingsService {
 				.dataThrough(through)
 				.inSync(true)
 				.groups(List.of(StandingsResponse.Group.builder().name(scope.scopeLabel()).rows(rows).build()))
-				.bracket(lol.flatMap(j -> StandingsBracketBuilder.build(j, metrics, scheduledTimes(j))).orElse(null))
+				.bracket(lol.flatMap(j -> StandingsBracketBuilder.build(j, metrics, nameAndImage, scheduledTimes(j))).orElse(null))
 				.build());
 	}
 

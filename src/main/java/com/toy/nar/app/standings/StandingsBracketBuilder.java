@@ -15,6 +15,7 @@ import com.toy.nar.app.standings.dto.StandingsResponse.BracketMatch;
 import com.toy.nar.app.standings.dto.StandingsResponse.BracketTeam;
 import com.toy.nar.app.standings.dto.StandingsResponse.Round;
 import com.toy.nar.app.standings.dto.StandingsResponse.SwissRow;
+import com.toy.nar.app.standings.dto.StandingsResponse.SwissTeam;
 
 /**
  * 데마시아 컵 대진 응답. 스위스 전적 버킷은 우리 DB 집계로, 토너먼트는 lolesports
@@ -54,7 +55,7 @@ final class StandingsBracketBuilder {
 	 * 대진 UI 는 월즈 기준이라 전부 TBD 인 카드 7장을 먼저 보여줄 이유가 없다.
 	 */
 	static Optional<Bracket> build(JsonNode root, Map<String, TeamMetrics> swissMetrics,
-			Map<String, OffsetDateTime> scheduledTimes) {
+			Map<String, String[]> teamInfo, Map<String, OffsetDateTime> scheduledTimes) {
 		List<JsonNode> matches = new ArrayList<>();
 		for (JsonNode stage : stages(root)) {
 			if (!PLAYOFFS.equalsIgnoreCase(stage.path("name").asText())) {
@@ -76,12 +77,12 @@ final class StandingsBracketBuilder {
 			return Optional.empty();
 		}
 		return Optional.of(Bracket.builder()
-				.swiss(swissRows(swissMetrics))
+				.swiss(swissRows(swissMetrics, teamInfo))
 				.rounds(rounds(matches, scheduledTimes))
 				.build());
 	}
 
-	static List<SwissRow> swissRows(Map<String, TeamMetrics> metrics) {
+	static List<SwissRow> swissRows(Map<String, TeamMetrics> metrics, Map<String, String[]> teamInfo) {
 		// 승 많은 순 → 패 적은 순. 같은 전적은 한 줄로 묶는다.
 		Map<String, List<String>> byRecord = new TreeMap<>(Comparator
 				.comparingInt((String r) -> -Integer.parseInt(r.split("-")[0]))
@@ -96,9 +97,15 @@ final class StandingsBracketBuilder {
 			codes.sort(Comparator.naturalOrder());
 			// ponytail: 2승 = 진출 확정. 1-2·0-2 는 풀리그·4라운드가 남아 "진행 중"이지만 앱 필드는 bool 하나뿐이라 false.
 			rows.add(SwissRow.builder().record(record).teamCodes(codes)
+					.teams(codes.stream().map(c -> swissTeam(c, teamInfo.get(c))).toList())
 					.advanced(Integer.parseInt(record.split("-")[0]) >= 2).build());
 		});
 		return rows;
+	}
+
+	/** 앱이 팀 코드로 로고를 못 찾는 해외팀도 그릴 수 있게 이름·로고를 같이 준다. info = {이름, 로고 URL}. */
+	private static SwissTeam swissTeam(String code, String[] info) {
+		return new SwissTeam(code, info != null && info[0] != null ? info[0] : code, info != null ? info[1] : null);
 	}
 
 	/** 7경기면 8강 4·4강 2·결승 1. lolesports 가 라운드를 안 줘서 경기 순서로 나눈다(id 오름차순 = 대진 순). */

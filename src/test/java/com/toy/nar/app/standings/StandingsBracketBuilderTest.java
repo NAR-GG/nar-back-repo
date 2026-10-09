@@ -40,7 +40,7 @@ class StandingsBracketBuilderTest {
 	@DisplayName("8강에 팀이 한 곳도 없으면 대진을 내리지 않는다 — 앱이 계속 순위표를 그린다")
 	@Test
 	void noBracketWhileAllTbd() throws Exception {
-		assertThat(StandingsBracketBuilder.build(lol("completed", "unstarted", poMatches(TBD)), Map.of(), Map.of()))
+		assertThat(StandingsBracketBuilder.build(lol("completed", "unstarted", poMatches(TBD)), Map.of(), Map.of(), Map.of()))
 				.isEmpty();
 	}
 
@@ -49,7 +49,7 @@ class StandingsBracketBuilderTest {
 	void splitsSevenMatchesIntoRounds() throws Exception {
 		String kt = "{\"code\":\"KT\",\"name\":\"kt\",\"image\":\"i\",\"result\":{\"outcome\":\"win\",\"gameWins\":3}}";
 		Map<String, OffsetDateTime> times = Map.of("p1", OffsetDateTime.parse("2026-10-12T03:00:00Z"));
-		Bracket b = StandingsBracketBuilder.build(lol("completed", "completed", poMatches(kt)), Map.of(), times)
+		Bracket b = StandingsBracketBuilder.build(lol("completed", "completed", poMatches(kt)), Map.of(), Map.of(), times)
 				.orElseThrow();
 
 		assertThat(b.rounds()).extracting(r -> r.name()).containsExactly("8강", "4강", "결승");
@@ -74,10 +74,14 @@ class StandingsBracketBuilderTest {
 		m.put("BFX", new TeamMetrics(2, 0, 0, 0, 0, 0));
 		m.put("FLY", new TeamMetrics(0, 2, 0, 0, 0, 0));
 
-		var rows = StandingsBracketBuilder.swissRows(m);
+		var rows = StandingsBracketBuilder.swissRows(m, Map.of("KT", new String[] { "kt Rolster", "http://kt.png" }));
 
 		assertThat(rows).extracting(r -> r.record()).containsExactly("2-0", "1-2", "0-2");
 		assertThat(rows.get(0).teamCodes()).containsExactly("BFX", "KT");
+		// 정보 있는 팀은 이름·로고, 없는 팀은 코드로 폴백
+		assertThat(rows.get(0).teams()).extracting(t -> t.teamName(), t -> t.imageUrl())
+				.containsExactly(org.assertj.core.groups.Tuple.tuple("BFX", null),
+						org.assertj.core.groups.Tuple.tuple("kt Rolster", "http://kt.png"));
 		assertThat(rows).extracting(r -> r.advanced()).containsExactly(true, false, false);
 	}
 
