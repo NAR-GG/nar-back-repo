@@ -37,6 +37,10 @@ public enum ErrorCode {
 	COMMUNITY_ALREADY_VOTED(HttpStatus.CONFLICT, "이미 투표했습니다."),
 	COMMUNITY_POLL_CLOSED(HttpStatus.CONFLICT, "마감된 투표입니다."),
 
+	/* 솔랭 응원 */
+	SOLO_RANK_NOT_LIVE(HttpStatus.CONFLICT, "지금 솔로 랭크 중이 아닌 선수입니다."),
+	SOLO_RANK_CHEER_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "응원을 너무 빠르게 보내고 있습니다."),
+
 	/* 500 INTERNAL_SERVER_ERROR : 서버 내부 오류 */
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),
 	DATA_INTEGRITY_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "게임 데이터의 무결성이 훼손되었습니다. (팀/선수 정보 누락)");

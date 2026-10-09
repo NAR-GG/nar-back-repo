@@ -48,6 +48,10 @@ public class SecurityConfig {
                                 "/api/mobile/me/solo-rank"
                         ).authenticated()
                         .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/mobile/solo-rank/players/*/cheers"
+                        ).authenticated()
+                        .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/mobile/live/games/*/participants/*/my-rating"
                         ).authenticated()

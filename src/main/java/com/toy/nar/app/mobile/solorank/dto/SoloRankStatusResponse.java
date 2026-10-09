@@ -20,7 +20,11 @@ public record SoloRankStatusResponse(
 			String championName,
 			String championImageUrl,
 			@Schema(description = "게임 시작 시각. 로딩 화면에 감지돼 실제 시작을 아직 모르면 감지 시각", example = "2026-09-25T21:03:12+09:00")
-			OffsetDateTime startedAt) {
+			OffsetDateTime startedAt,
+			@Schema(description = "이 판의 전체 응원 수(화력)")
+			long cheerTotal,
+			@Schema(description = "이 판에 내가 보낸 응원 수")
+			long cheerMine) {
 	}
 
 	public record FinishedPlayer(
@@ -37,6 +41,8 @@ public record SoloRankStatusResponse(
 			@Schema(description = "경기 길이(초)", example = "1920")
 			Integer durationSeconds,
 			@Schema(example = "2026-09-25T21:35:12+09:00")
-			OffsetDateTime endedAt) {
+			OffsetDateTime endedAt,
+			@Schema(description = "그 판의 전체 응원 수")
+			long cheerTotal) {
 	}
 }

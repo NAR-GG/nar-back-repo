@@ -6,6 +6,8 @@ import com.toy.nar.app.mobile.subscription.dto.PlayerSubscriptionResponse;
 import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
 import com.toy.nar.domain.participant.entity.PlayerSoloRankGame;
+import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository;
+import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository.GameKey;
 import com.toy.nar.domain.participant.repository.PlayerSoloRankGameRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -40,6 +42,8 @@ public class MobileSoloRankStatusService {
 
 	private final MobilePlayerSubscriptionService subscriptionService;
 	private final PlayerSoloRankGameRepository gameRepository;
+	private final PlayerSoloRankCheerRepository cheerRepository;
+	private final SoloRankCheerTotals cheerTotals;
 
 	public SoloRankStatusResponse getStatus(Long memberId) {
 		Map<Long, PlayerSubscriptionResponse> players = subscriptionService.getSubscriptions(memberId).stream()
@@ -50,10 +54,13 @@ public class MobileSoloRankStatusService {
 		}
 		LocalDateTime now = LocalDateTime.now();
 
-		List<SoloRankStatusResponse.LivePlayer> live = gameRepository
-				.findLive(players.keySet(), PlayerRiotAccountLiveStatus.IN_RANKED_SOLO, now.minus(LIVE_FRESHNESS))
-				.stream()
-				.map(game -> toLive(game, players.get(game.getPlayer().getId())))
+		List<PlayerSoloRankGame> liveGames = gameRepository
+				.findLive(players.keySet(), PlayerRiotAccountLiveStatus.IN_RANKED_SOLO, now.minus(LIVE_FRESHNESS));
+		Map<GameKey, Long> liveMine = cheerRepository.mine(memberId, ids(liveGames), gameIds(liveGames));
+		Map<GameKey, Long> liveTotals = cheerTotals.live(keys(liveGames));
+		List<SoloRankStatusResponse.LivePlayer> live = liveGames.stream()
+				.map(game -> toLive(game, players.get(game.getPlayer().getId()),
+						liveTotals.getOrDefault(key(game), 0L), liveMine.getOrDefault(key(game), 0L)))
 				.sorted(Comparator.comparing(SoloRankStatusResponse.LivePlayer::startedAt,
 						Comparator.nullsLast(Comparator.reverseOrder())))
 				.toList();
@@ -63,14 +70,18 @@ public class MobileSoloRankStatusService {
 		// 최근 종료순이라 선수마다 처음 만나는 게 마지막 판이다.
 		gameRepository.findFinishedSince(players.keySet(), endedSince.minus(DETECTION_SLACK), endedSince)
 				.forEach(game -> latestFinished.putIfAbsent(game.getPlayer().getId(), game));
-		List<SoloRankStatusResponse.FinishedPlayer> finished = latestFinished.values().stream()
-				.map(game -> toFinished(game, players.get(game.getPlayer().getId())))
+		List<PlayerSoloRankGame> finishedGames = List.copyOf(latestFinished.values());
+		Map<GameKey, Long> finishedTotals = cheerTotals.finished(keys(finishedGames));
+		List<SoloRankStatusResponse.FinishedPlayer> finished = finishedGames.stream()
+				.map(game -> toFinished(game, players.get(game.getPlayer().getId()),
+						finishedTotals.getOrDefault(key(game), 0L)))
 				.toList();
 
 		return new SoloRankStatusResponse(live, finished);
 	}
 
-	private static SoloRankStatusResponse.LivePlayer toLive(PlayerSoloRankGame game, PlayerSubscriptionResponse player) {
+	private static SoloRankStatusResponse.LivePlayer toLive(PlayerSoloRankGame game, PlayerSubscriptionResponse player,
+			long cheerTotal, long cheerMine) {
 		Champion champion = game.getChampion();
 		LocalDateTime startedAt = game.getGameStartedAt() != null ? game.getGameStartedAt() : game.getDetectedAt();
 		return new SoloRankStatusResponse.LivePlayer(
@@ -80,11 +91,13 @@ public class MobileSoloRankStatusService {
 				player.teamCode(),
 				champion == null ? null : champion.getChampionNameKr(),
 				champion == null ? null : champion.getImageUrl(),
-				offset(startedAt));
+				offset(startedAt),
+				cheerTotal,
+				cheerMine);
 	}
 
 	private static SoloRankStatusResponse.FinishedPlayer toFinished(PlayerSoloRankGame game,
-			PlayerSubscriptionResponse player) {
+			PlayerSubscriptionResponse player, long cheerTotal) {
 		Champion champion = game.getChampion();
 		return new SoloRankStatusResponse.FinishedPlayer(
 				player.playerId(),
@@ -98,7 +111,24 @@ public class MobileSoloRankStatusService {
 				game.getDeaths(),
 				game.getAssists(),
 				game.getDurationSeconds(),
-				offset(game.getGameEndedAt()));
+				offset(game.getGameEndedAt()),
+				cheerTotal);
+	}
+
+	private static GameKey key(PlayerSoloRankGame game) {
+		return new GameKey(game.getPlayer().getId(), game.getGameId());
+	}
+
+	private static List<GameKey> keys(List<PlayerSoloRankGame> games) {
+		return games.stream().map(MobileSoloRankStatusService::key).toList();
+	}
+
+	private static List<Long> ids(List<PlayerSoloRankGame> games) {
+		return games.stream().map(game -> game.getPlayer().getId()).distinct().toList();
+	}
+
+	private static List<String> gameIds(List<PlayerSoloRankGame> games) {
+		return games.stream().map(PlayerSoloRankGame::getGameId).distinct().toList();
 	}
 
 	/** 이 테이블의 시각은 JVM 시간대 벽시계다. 오프셋을 붙여 내보내야 앱이 로컬 시각으로 오해하지 않는다. */
