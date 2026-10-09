@@ -20,19 +20,22 @@ import com.toy.nar.app.mobile.subscription.MobilePlayerSubscriptionService;
 import com.toy.nar.app.mobile.subscription.dto.PlayerSubscriptionResponse;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.PlayerSoloRankGame;
+import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository;
 import com.toy.nar.domain.participant.repository.PlayerSoloRankGameRepository;
 
 class MobileSoloRankStatusServiceTest {
 
 	private MobilePlayerSubscriptionService subscriptionService;
 	private PlayerSoloRankGameRepository gameRepository;
+	private PlayerSoloRankCheerRepository cheerRepository;
 	private MobileSoloRankStatusService service;
 
 	@BeforeEach
 	void setUp() {
 		subscriptionService = mock(MobilePlayerSubscriptionService.class);
 		gameRepository = mock(PlayerSoloRankGameRepository.class);
-		service = new MobileSoloRankStatusService(subscriptionService, gameRepository);
+		cheerRepository = mock(PlayerSoloRankCheerRepository.class);
+		service = new MobileSoloRankStatusService(subscriptionService, gameRepository, cheerRepository);
 	}
 
 	private static PlayerSubscriptionResponse sub(long id, String name, String team) {
@@ -78,6 +81,31 @@ class MobileSoloRankStatusServiceTest {
 				.containsExactly("Chovy", "Faker");
 		assertThat(response.live().get(0).startedAt().toLocalDateTime()).isEqualTo(now.minusMinutes(5));
 		assertThat(response.live().get(1).teamCode()).isEqualTo("T1");
+	}
+
+	@Test
+	void 라이브와_끝난_게임에_판_응원_합계를_싣고_라이브엔_내_응원도_싣는다() {
+		LocalDateTime now = LocalDateTime.now();
+		when(subscriptionService.getSubscriptions(7L))
+				.thenReturn(List.of(sub(1, "Faker", "T1"), sub(2, "Chovy", "GEN")));
+		when(gameRepository.findLive(anyCollection(), any(), any()))
+				.thenReturn(List.of(game(1, "a", now.minusMinutes(30), now.minusMinutes(28), null)));
+		when(gameRepository.findFinishedSince(anyCollection(), any(), any()))
+				.thenReturn(List.of(game(2, "c1", now.minusHours(2), null, now.minusMinutes(40))));
+		when(cheerRepository.totals(anyCollection(), anyCollection())).thenAnswer(invocation -> {
+			java.util.Collection<Long> players = invocation.getArgument(0);
+			return players.contains(1L)
+					? java.util.Map.of(new PlayerSoloRankCheerRepository.GameKey(1L, "a"), 500L)
+					: java.util.Map.of(new PlayerSoloRankCheerRepository.GameKey(2L, "c1"), 90L);
+		});
+		when(cheerRepository.mine(any(), anyCollection(), anyCollection()))
+				.thenReturn(java.util.Map.of(new PlayerSoloRankCheerRepository.GameKey(1L, "a"), 12L));
+
+		SoloRankStatusResponse response = service.getStatus(7L);
+
+		assertThat(response.live().get(0).cheerTotal()).isEqualTo(500L);
+		assertThat(response.live().get(0).cheerMine()).isEqualTo(12L);
+		assertThat(response.finished().get(0).cheerTotal()).isEqualTo(90L);
 	}
 
 	@Test
