@@ -51,6 +51,14 @@ public class MobileNoticeController {
         noticeService.increaseViewCount(id);
     }
 
+    @Operation(summary = "전용 페이지 조회",
+            description = "앱이 전용 화면으로 여는 고정 페이지(예: slug=ad-guide 광고 안내). 공지 목록·띠배너에는 나오지 않는다. "
+                    + "발행분만, 없거나 임시저장이면 404. actionUrl 이 있으면 앱이 하단 고정 버튼으로 외부 브라우저를 연다.")
+    @GetMapping("/by-slug/{slug}")
+    public NoticeResponse bySlug(@PathVariable String slug) {
+        return NoticeResponse.from(noticeService.findPublishedBySlug(slug));
+    }
+
     @Operation(summary = "띠배너 공지 목록",
             description = "캘린더 상단 띠배너 대상 공지 (최신 발행순, 최대 5건). 앱은 닫지 않은 첫 건을 띄운다. 없으면 빈 배열.")
     @GetMapping("/promoted")

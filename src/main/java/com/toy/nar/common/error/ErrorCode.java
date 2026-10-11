@@ -20,6 +20,9 @@ public enum ErrorCode {
 	COMBINATION_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 조건의 조합 데이터를 찾을 수 없습니다."),
 	DATA_NOT_FOUND(HttpStatus.NOT_FOUND, "데이터가 존재하지 않습니다."),
 	NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지사항을 찾을 수 없습니다."),
+	NOTICE_INVALID_SLUG(HttpStatus.BAD_REQUEST, "전용 페이지 식별자는 영문 소문자·숫자·하이픈 40자 이내여야 하며 중복될 수 없습니다."),
+	NOTICE_INVALID_ACTION_URL(HttpStatus.BAD_REQUEST, "버튼 주소는 https:// 로 시작해야 합니다."),
+	NOTICE_PAGE_NOT_DELETABLE(HttpStatus.CONFLICT, "앱 전용 페이지는 삭제할 수 없습니다. 임시저장으로 내려 주세요."),
 
 	/* 커뮤니티 */
 	COMMUNITY_LOGIN_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
