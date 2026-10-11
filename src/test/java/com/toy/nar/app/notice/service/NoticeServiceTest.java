@@ -83,11 +83,58 @@ class NoticeServiceTest {
     @DisplayName("없는 공지 수정/삭제는 NOTICE_NOT_FOUND")
     void notFound() {
         when(noticeRepository.findById(99L)).thenReturn(Optional.empty());
-        when(noticeRepository.existsById(99L)).thenReturn(false);
 
         assertThatThrownBy(() -> noticeService.update(99L, "t", "c", false, null, true))
                 .isInstanceOf(CustomException.class);
         assertThatThrownBy(() -> noticeService.delete(99L))
                 .isInstanceOf(CustomException.class);
+    }
+
+    @Test
+    @DisplayName("전용 페이지 생성: slug·https 버튼 주소 저장, 중복 slug 거부")
+    void createPage() {
+        when(noticeRepository.existsBySlug("ad-guide")).thenReturn(false, true);
+        when(noticeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Notice page = noticeService.create("광고 안내", "본문", false, null, true,
+                "ad-guide", "https://forms.gle/abc");
+
+        assertThat(page.getSlug()).isEqualTo("ad-guide");
+        assertThat(page.getActionUrl()).isEqualTo("https://forms.gle/abc");
+        assertThatThrownBy(() -> noticeService.create("광고 안내", "본문", false, null, true,
+                "ad-guide", null)).isInstanceOf(CustomException.class);
+    }
+
+    @Test
+    @DisplayName("slug 형식·버튼 주소 스킴 검증: 대문자/공백 slug, http·javascript 주소는 거부")
+    void rejectInvalidInput() {
+        assertThatThrownBy(() -> noticeService.create("t", "c", false, null, true, "Ad Guide", null))
+                .isInstanceOf(CustomException.class);
+        assertThatThrownBy(() -> noticeService.create("t", "c", false, null, true, null, "http://x.com"))
+                .isInstanceOf(CustomException.class);
+        assertThatThrownBy(() -> noticeService.create("t", "c", false, null, true, null, "javascript:alert(1)"))
+                .isInstanceOf(CustomException.class);
+    }
+
+    @Test
+    @DisplayName("수정 시 actionUrl: null 은 유지, 빈 문자열은 제거")
+    void updateActionUrl() {
+        Notice page = new Notice("t", "c", false, null, "ad-guide", "https://forms.gle/abc");
+        when(noticeRepository.findById(1L)).thenReturn(Optional.of(page));
+
+        noticeService.update(1L, "t", "c", false, null, true);
+        assertThat(page.getActionUrl()).isEqualTo("https://forms.gle/abc");
+
+        noticeService.update(1L, "t", "c", false, null, true, "");
+        assertThat(page.getActionUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("전용 페이지는 삭제 불가")
+    void pageNotDeletable() {
+        Notice page = new Notice("t", "c", false, null, "ad-guide", null);
+        when(noticeRepository.findById(1L)).thenReturn(Optional.of(page));
+
+        assertThatThrownBy(() -> noticeService.delete(1L)).isInstanceOf(CustomException.class);
     }
 }

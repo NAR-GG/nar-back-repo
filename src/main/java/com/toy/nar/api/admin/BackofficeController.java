@@ -355,14 +355,14 @@ public class BackofficeController {
     public NoticeRow createNotice(@RequestBody NoticeSaveRequest request) {
         return NoticeRow.from(noticeService.create(
                 request.title(), request.content(), request.pinned(),
-                request.promoteUntil(), request.published()));
+                request.promoteUntil(), request.published(), request.slug(), request.actionUrl()));
     }
 
     @PutMapping("/notices/{id}")
     public NoticeRow updateNotice(@PathVariable Long id, @RequestBody NoticeSaveRequest request) {
         return NoticeRow.from(noticeService.update(
                 id, request.title(), request.content(), request.pinned(),
-                request.promoteUntil(), request.published()));
+                request.promoteUntil(), request.published(), request.actionUrl()));
     }
 
     @DeleteMapping("/notices/{id}")
@@ -586,16 +586,22 @@ public class BackofficeController {
     /** 공지 행. promoteUntil/publishedAt 은 FE 가 날짜만 잘라 표시한다. */
     public record NoticeRow(Long id, String title, String content, boolean pinned,
                             LocalDateTime promoteUntil, LocalDateTime publishedAt,
-                            LocalDateTime createdAt, long viewCount) {
+                            LocalDateTime createdAt, long viewCount, String slug, String actionUrl) {
         static NoticeRow from(Notice n) {
             return new NoticeRow(n.getId(), n.getTitle(), n.getContent(), n.isPinned(),
-                    n.getPromoteUntil(), n.getPublishedAt(), n.getCreatedAt(), n.getViewCount());
+                    n.getPromoteUntil(), n.getPublishedAt(), n.getCreatedAt(), n.getViewCount(),
+                    n.getSlug(), n.getActionUrl());
         }
     }
 
-    /** 공지 저장 요청. published=false 는 임시저장, promoteUntil 은 배너 노출 종료일(null = 배너 없음). */
+    /**
+     * 공지 저장 요청. published=false 는 임시저장, promoteUntil 은 배너 노출 종료일(null = 배너 없음).
+     * slug 는 생성 때만 쓴다(앱 전용 페이지 식별자, 수정 요청의 slug 는 무시). actionUrl 은 수정에서
+     * null = 유지, 빈 문자열 = 버튼 제거.
+     */
     public record NoticeSaveRequest(String title, String content, boolean pinned,
-                                    LocalDate promoteUntil, boolean published) {}
+                                    LocalDate promoteUntil, boolean published,
+                                    String slug, String actionUrl) {}
 
     // 실행 성공/실패 이력까지 필요해지면 SchedulerAlertService 저장소 연결, 존재/스케줄 자동추적이 필요하면 ScheduledTaskHolder 도입.
     private static final List<CronJob> CRON_CATALOG = List.of(

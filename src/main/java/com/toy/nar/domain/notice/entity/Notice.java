@@ -17,10 +17,14 @@ import lombok.NoArgsConstructor;
 /**
  * 공지사항. 백오피스에서 관리자 1인이 작성하고 앱에는 항상 "관리자" 명의로 노출한다.
  * 카테고리 컬럼 없음 — 구분이 필요한 공지는 제목 말머리([업데이트] 등)로 표현한다.
+ * 단, 앱이 전용 화면으로 따로 여는 고정 페이지(예: 광고 안내)는 {@code slug} 를 가진다 —
+ * 공지 목록·띠배너에는 나가지 않고 {@code /api/notices/by-slug/{slug}} 로만 조회된다.
  *
  * <ul>
  *   <li>{@code publishedAt} null = 임시저장. 앱 목록·배너에 나가지 않는다.</li>
  *   <li>{@code promoteUntil} = 앱 캘린더 상단 띠배너 노출 종료 시각. null 이면 배너 미노출.</li>
+ *   <li>{@code slug} null = 일반 공지. 생성 때만 정하고 이후 바꾸지 않는다(앱이 이 값으로 페이지를 찾는다).</li>
+ *   <li>{@code actionUrl} = 앱 하단 고정 버튼이 외부 브라우저로 여는 주소(https). 일반 공지는 null.</li>
  *   <li>본문은 마크다운({@code #}, {@code ##}, {@code -}, 이미지) — 앱 렌더러와 계약.</li>
  * </ul>
  */
@@ -49,6 +53,12 @@ public class Notice {
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 
+    @Column(name = "slug", length = 40, updatable = false)
+    private String slug;
+
+    @Column(name = "action_url", length = 500)
+    private String actionUrl;
+
     /** 조회수. 증가는 NoticeRepository 의 UPDATE 쿼리로만 한다(updatedAt 을 건드리지 않도록). */
     @Column(name = "view_count", nullable = false)
     private long viewCount;
@@ -60,10 +70,21 @@ public class Notice {
     private LocalDateTime updatedAt;
 
     public Notice(String title, String content, boolean pinned, LocalDateTime promoteUntil) {
+        this(title, content, pinned, promoteUntil, null, null);
+    }
+
+    public Notice(String title, String content, boolean pinned, LocalDateTime promoteUntil,
+                  String slug, String actionUrl) {
         this.title = Objects.requireNonNull(title);
         this.content = Objects.requireNonNull(content);
         this.pinned = pinned;
         this.promoteUntil = promoteUntil;
+        this.slug = slug;
+        this.actionUrl = actionUrl;
+    }
+
+    public void changeActionUrl(String actionUrl) {
+        this.actionUrl = actionUrl;
     }
 
     /** 백오피스 저장 — 제목·본문·고정·배너 종료일을 한 번에 갱신한다. */
