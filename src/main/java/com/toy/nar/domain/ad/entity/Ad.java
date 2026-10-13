@@ -25,7 +25,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Ad {
 
-    public static final Set<String> PLACEMENTS = Set.of("home", "match_list", "match_detail");
+    public static final Set<String> PLACEMENTS = Set.of("home", "match_list", "match_detail", "splash", "popup");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

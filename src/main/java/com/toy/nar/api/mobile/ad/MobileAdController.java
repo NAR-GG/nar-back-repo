@@ -27,7 +27,7 @@ public class MobileAdController {
     }
 
     @Operation(summary = "노출 중인 광고",
-            description = "active 이고 기간 안인 광고 전부(순서 = sortOrder). placement(home|match_list|match_detail)별로 앱이 첫 건을 쓴다.")
+            description = "active 이고 기간 안인 광고 전부(순서 = sortOrder). placement(home|match_list|match_detail|splash|popup)별로 앱이 첫 건을 쓴다.")
     @GetMapping
     public List<AdResponse> ads() {
         return adRepository.findLive(LocalDateTime.now()).stream().map(AdResponse::from).toList();

@@ -17,6 +17,8 @@ class AdTest {
     void 정상값은_저장되고_빈_링크는_null() {
         assertThat(ad("home", " ", null, null).getLinkUrl()).isNull();
         assertThat(ad("match_detail", "https://a.b", null, null).getLinkUrl()).isEqualTo("https://a.b");
+        assertThat(ad("splash", null, null, null).getPlacement()).isEqualTo("splash");
+        assertThat(ad("popup", null, null, null).getPlacement()).isEqualTo("popup");
     }
 
     @Test
