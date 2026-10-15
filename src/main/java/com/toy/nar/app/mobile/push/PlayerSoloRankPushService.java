@@ -7,6 +7,7 @@ import com.toy.nar.domain.member.entity.MemberNotificationType;
 import com.toy.nar.domain.member.repository.MemberDeviceRepository;
 import com.toy.nar.domain.member.repository.PlayerSoloRankPushDeliveryRepository;
 import com.toy.nar.domain.participant.entity.Player;
+import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,7 @@ public class PlayerSoloRankPushService {
 	private final MobilePushGateway pushGateway;
 	private final MemberNotificationService notificationService;
 	private final QuietAwarePushSender quietAwarePushSender;
+	private final PlayerSoloRankCheerRepository cheerRepository;
 
 	public void notifySubscribers(
 			Player player,
@@ -53,7 +55,7 @@ public class PlayerSoloRankPushService {
 				player, gameId, championName, championImageUrl, queueDisplayName, opggUrl,
 				player.getName() + " 선수가 솔랭을 시작했어요",
 				normalizedChampion + KoreanParticle.ro(normalizedChampion) + " "
-						+ normalizeQueue(queueDisplayName) + " 플레이 중",
+						+ normalizeQueue(queueDisplayName) + " 플레이 중 · 응원을 보내 주세요!",
 				Map.of("eventType", EVENT_START));
 		dispatch(player, gameId, EVENT_START, message);
 	}
@@ -92,12 +94,27 @@ public class PlayerSoloRankPushService {
 		if (gameDurationSeconds != null && gameDurationSeconds > 0) {
 			endData.put("gameDurationSeconds", String.valueOf(gameDurationSeconds));
 		}
+		long cheerTotal = cheerTotal(player.getId(), gameId);
+		if (cheerTotal > 0) {
+			endData.put("cheerTotal", String.valueOf(cheerTotal));
+		}
 		MobilePushMessage message = buildMessage(
 				player, gameId, championName, championImageUrl, "솔로 랭크", opggUrl,
 				player.getName() + " 선수가 솔랭을 끝냈어요",
-				resultLine,
+				cheerTotal > 0 ? resultLine + " · 응원 " + String.format("%,d", cheerTotal) + "개" : resultLine,
 				endData);
 		dispatch(player, gameId, EVENT_END, message);
+	}
+
+	/** 판 응원 합계. 조회가 실패해도 종료 알림은 나가야 하므로 0 으로 넘긴다. */
+	private long cheerTotal(Long playerId, String gameId) {
+		try {
+			return cheerRepository.totals(List.of(playerId), List.of(gameId))
+					.getOrDefault(new PlayerSoloRankCheerRepository.GameKey(playerId, gameId), 0L);
+		} catch (Exception e) {
+			log.warn("Failed to load solo rank cheer total playerId={} gameId={}", playerId, gameId, e);
+			return 0L;
+		}
 	}
 
 	private void dispatch(Player player, String gameId, String eventType, MobilePushMessage message) {

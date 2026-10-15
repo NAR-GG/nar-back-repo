@@ -7,6 +7,7 @@ import com.toy.nar.domain.member.entity.MobileDevicePlatform;
 import com.toy.nar.domain.member.repository.MemberDeviceRepository;
 import com.toy.nar.domain.member.repository.PlayerSoloRankPushDeliveryRepository;
 import com.toy.nar.domain.participant.entity.Player;
+import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,12 +45,16 @@ class PlayerSoloRankPushServiceTest {
 	@Mock
 	private QuietAwarePushSender quietAwarePushSender;
 
+	@Mock
+	private PlayerSoloRankCheerRepository cheerRepository;
+
 	private PlayerSoloRankPushService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new PlayerSoloRankPushService(
-				deviceRepository, deliveryRepository, pushGateway, notificationService, quietAwarePushSender);
+				deviceRepository, deliveryRepository, pushGateway, notificationService, quietAwarePushSender,
+				cheerRepository);
 		when(pushGateway.isAvailable()).thenReturn(true);
 	}
 
@@ -90,7 +95,7 @@ class PlayerSoloRankPushServiceTest {
 				Map.of(7L, List.of("token-1"), 8L, List.of("token-2")),
 				new MobilePushMessage(
 						"Faker 선수가 솔랭을 시작했어요",
-						"아리로 솔로 랭크 플레이 중",
+						"아리로 솔로 랭크 플레이 중 · 응원을 보내 주세요!",
 						Map.of(
 								"type", "PLAYER_SOLO_RANK_STARTED",
 								"eventType", "START",
@@ -135,6 +140,27 @@ class PlayerSoloRankPushServiceTest {
 				.containsEntry("playerName", "Faker")
 				.containsEntry("championName", "아리")
 				.containsEntry("gameId", "game-1");
+	}
+
+	@Test
+	void 종료_알림은_판_응원_합계를_문구와_data_에_싣는다() {
+		Player player = player(10L, "Faker");
+		when(deviceRepository.findActiveDevicesBySubscribedPlayerId(10L, "END"))
+				.thenReturn(List.of(device(1L, member(7L), "token-1")));
+		when(deliveryRepository.reserveAll(any(), eq(10L), eq("game-1"), eq("END"))).thenReturn(List.of(7L));
+		when(quietAwarePushSender.send(any(), any()))
+				.thenReturn(new QuietAwarePushSender.Outcome(
+						new MobilePushResult(1, 0, List.of(), List.of("token-1")), List.of()));
+		when(cheerRepository.totals(List.of(10L), List.of("game-1")))
+				.thenReturn(Map.of(new PlayerSoloRankCheerRepository.GameKey(10L, "game-1"), 1234L));
+
+		service.notifySubscribersPostGame(
+				player, "game-1", "아리", "ahri.png", "아리로 승리 · 18/1/11", true, "18/1/11", 1694, null);
+
+		ArgumentCaptor<MobilePushMessage> captor = ArgumentCaptor.forClass(MobilePushMessage.class);
+		verify(quietAwarePushSender).send(any(), captor.capture());
+		assertThat(captor.getValue().body()).isEqualTo("아리로 승리 · 18/1/11 · 응원 1,234개");
+		assertThat(captor.getValue().data()).containsEntry("cheerTotal", "1234");
 	}
 
 	@Test
