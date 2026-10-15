@@ -7,6 +7,7 @@ import com.toy.nar.domain.member.entity.MobileDevicePlatform;
 import com.toy.nar.domain.member.repository.MemberDeviceRepository;
 import com.toy.nar.domain.member.repository.PlayerSoloRankPushDeliveryRepository;
 import com.toy.nar.domain.participant.entity.Player;
+import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -52,13 +53,15 @@ class PlayerSoloRankPushFanOutBatchTest {
 	private final MobilePushGateway pushGateway = mock(MobilePushGateway.class);
 	private final MemberNotificationService notificationService = mock(MemberNotificationService.class);
 	private final QuietAwarePushSender quietAwarePushSender = mock(QuietAwarePushSender.class);
+	private final PlayerSoloRankCheerRepository cheerRepository = mock(PlayerSoloRankCheerRepository.class);
 
 	private PlayerSoloRankPushService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new PlayerSoloRankPushService(
-				deviceRepository, deliveryRepository, pushGateway, notificationService, quietAwarePushSender);
+				deviceRepository, deliveryRepository, pushGateway, notificationService, quietAwarePushSender,
+				cheerRepository);
 		when(pushGateway.isAvailable()).thenReturn(true);
 	}
 
@@ -185,7 +188,8 @@ class PlayerSoloRankPushFanOutBatchTest {
 
 		// 발송 뒤에 기록하면 푸시를 받고 바로 마이구독을 열었을 때 그 알림이 없다.
 		// 실측 2026-08-11(Zeus 구독 1,440명): 기기 수신 → 피드 INSERT 까지 약 29초.
-		InOrder order = inOrder(notificationService, quietAwarePushSender);
+		InOrder order = inOrder(notificationService, quietAwarePushSender,
+				cheerRepository);
 		order.verify(notificationService).recordAll(any(), any(), anyString(), any(), any());
 		order.verify(quietAwarePushSender).send(any(), any());
 	}
