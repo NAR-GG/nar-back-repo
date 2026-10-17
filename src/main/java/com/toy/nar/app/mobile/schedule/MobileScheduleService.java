@@ -90,7 +90,8 @@ public class MobileScheduleService {
 		List<MobileScheduleFilterResponse.LeagueOption> leagues = new ArrayList<>();
 		leagues.add(new MobileScheduleFilterResponse.LeagueOption(ALL_LEAGUES, "전체", null, false, null));
 		LeagueConstants.ALLOWED_LEAGUES.stream()
-				.sorted()
+				// 진행 중인 대회를 칩 맨 앞으로(2026-10 월즈). 나머지는 코드순. 대회가 끝나면 이 줄을 지운다.
+				.sorted(java.util.Comparator.comparing((String c) -> !"WORLDS".equals(c)).thenComparing(c -> c))
 				.forEach(code -> leagues.add(new MobileScheduleFilterResponse.LeagueOption(
 						code,
 						code,

@@ -68,7 +68,12 @@ public class StandingsService {
 	private static final Map<String, Scope> SCOPES = Map.of(
 			"LCK", new Scope("lck", List.of("Split 2", "Split 3"), "정규시즌 통산", "lck_2026"),
 			"ASIAN_GAMES", new Scope("ag_lol", List.of(), "그룹 스테이지", "ag_lol_2026"),
-			"DEMACIA_CUP", new Scope("dcgi", List.of(), "스위스 스테이지", "dcgi_2026"));
+			"DEMACIA_CUP", new Scope("dcgi", List.of(), "스위스 스테이지", "dcgi_2026"),
+			// 월즈는 네이버를 안 본다 — 플레이-인(더블일리미네이션)·스위스·녹아웃이라 순위 집계가 없다.
+			"WORLDS", new Scope("worlds", List.of(), "플레이-인", ""));
+
+	/** lolesports getStandings 만으로 순위·대진을 만드는 리그. 스테이지가 진행되면 응답 모양이 스스로 바뀐다. */
+	private static final java.util.Set<String> LOLESPORTS_STANDINGS_LEAGUES = java.util.Set.of("WORLDS");
 
 	/**
 	 * 네이버 순위가 비면 우리 DB 경기 결과로 순위를 만드는 리그. 스위스 스테이지라 네이버가 집계를 안 준다.
@@ -91,6 +96,10 @@ public class StandingsService {
 		Scope scope = SCOPES.get(normalized);
 		if (scope == null) {
 			return unsupported(normalized, "BRACKET_ONLY");
+		}
+
+		if (LOLESPORTS_STANDINGS_LEAGUES.contains(normalized)) {
+			return fromLolesports(normalized).orElseGet(() -> unsupported(normalized, "UNAVAILABLE"));
 		}
 
 		String leagueId = naverClient.resolveLeagueId(scope.naverTopLeagueId()).orElse(scope.fallbackLeagueId());
@@ -227,6 +236,33 @@ public class StandingsService {
 			nameAndImage.putIfAbsent(m.getRedTeamCode(), new String[] { m.getRedTeamName(), m.getRedTeamImageUrl() });
 		}
 
+		List<StandingsResponse.Row> rows = rows(metrics, nameAndImage);
+
+		OffsetDateTime through = scoped.stream()
+				.filter(m -> "completed".equalsIgnoreCase(m.getState()))
+				.map(LeagueMatch::getMatchDate)
+				.filter(Objects::nonNull)
+				.max(LocalDateTime::compareTo)
+				.map(d -> d.atOffset(ZoneOffset.UTC))
+				.orElse(null);
+
+		return Optional.of(StandingsResponse.builder()
+				.league(league)
+				.supported(true)
+				.scopeLabel(scope.scopeLabel())
+				// 스위스 3라운드가 끝나도 0-2 풀리그·4라운드가 남아 8강 진출 8팀이 안 정해진다 — 그 전엔 "종료"를 띄우지 않는다.
+				.regularFinished(lol.map(StandingsBracketBuilder::groupStagesFinished)
+						.orElseGet(() -> metrics.values().stream().allMatch(m -> m.remaining() == 0)))
+				.dataThrough(through)
+				.inSync(true)
+				.groups(List.of(StandingsResponse.Group.builder().name(scope.scopeLabel()).rows(rows).build()))
+				.bracket(lol.flatMap(j -> StandingsBracketBuilder.build(j, metrics, nameAndImage, scheduledTimes(j))).orElse(null))
+				.build());
+	}
+
+	/** 승 → 패 → 세트 득실차 순으로 정렬하고, 셋이 같으면 공동 순위로 행을 만든다. */
+	private static List<StandingsResponse.Row> rows(Map<String, TeamMetrics> metrics,
+			Map<String, String[]> nameAndImage) {
 		List<Map.Entry<String, TeamMetrics>> sorted = new ArrayList<>(metrics.entrySet());
 		sorted.sort(java.util.Comparator
 				.comparingInt((Map.Entry<String, TeamMetrics> e) -> -e.getValue().wins())
@@ -260,26 +296,37 @@ public class StandingsService {
 					.remaining(m.remaining())
 					.build());
 		}
+		return rows;
+	}
 
-		OffsetDateTime through = scoped.stream()
-				.filter(m -> "completed".equalsIgnoreCase(m.getState()))
-				.map(LeagueMatch::getMatchDate)
-				.filter(Objects::nonNull)
-				.max(LocalDateTime::compareTo)
-				.map(d -> d.atOffset(ZoneOffset.UTC))
-				.orElse(null);
-
+	/**
+	 * lolesports 스테이지 데이터로 만든 순위(월즈). 진행 중인 스테이지가 표·대진을 정한다 —
+	 * 플레이-인이면 승패표만, 스위스가 시작되면 스위스 전적 카드(+녹아웃에 팀이 차면 대진)까지.
+	 */
+	private Optional<StandingsResponse> fromLolesports(String league) {
+		Optional<JsonNode> lol = stageClient.standings(LeagueConstants.LEAGUE_IDS.get(league));
+		if (lol.isEmpty()) {
+			return Optional.empty();
+		}
+		JsonNode root = lol.get();
+		Optional<WorldsStandingsBuilder.Pick> pick = WorldsStandingsBuilder.activeStage(root);
+		if (pick.isEmpty()) {
+			return Optional.empty();
+		}
+		Map<String, String[]> info = new LinkedHashMap<>();
+		Map<String, TeamMetrics> metrics = WorldsStandingsBuilder.metrics(
+				WorldsStandingsBuilder.stage(root, pick.get().stage()), info);
+		boolean swiss = WorldsStandingsBuilder.SWISS.equals(pick.get().stage());
 		return Optional.of(StandingsResponse.builder()
 				.league(league)
 				.supported(true)
-				.scopeLabel(scope.scopeLabel())
-				// 스위스 3라운드가 끝나도 0-2 풀리그·4라운드가 남아 8강 진출 8팀이 안 정해진다 — 그 전엔 "종료"를 띄우지 않는다.
-				.regularFinished(lol.map(StandingsBracketBuilder::groupStagesFinished)
-						.orElseGet(() -> metrics.values().stream().allMatch(m -> m.remaining() == 0)))
-				.dataThrough(through)
+				.scopeLabel(pick.get().label())
+				.regularFinished(StandingsBracketBuilder.groupStagesFinished(root, WorldsStandingsBuilder.KNOCKOUTS))
 				.inSync(true)
-				.groups(List.of(StandingsResponse.Group.builder().name(scope.scopeLabel()).rows(rows).build()))
-				.bracket(lol.flatMap(j -> StandingsBracketBuilder.build(j, metrics, nameAndImage, scheduledTimes(j))).orElse(null))
+				.groups(List.of(StandingsResponse.Group.builder()
+						.name(pick.get().label()).rows(rows(metrics, info)).build()))
+				.bracket(swiss ? StandingsBracketBuilder.buildWorlds(root, metrics, info, scheduledTimes(root)).orElse(null)
+						: null)
 				.build());
 	}
 

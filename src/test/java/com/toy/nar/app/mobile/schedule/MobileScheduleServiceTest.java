@@ -68,7 +68,8 @@ class MobileScheduleServiceTest {
 
 		assertThat(response.defaultLeague()).isEqualTo("DEMACIA_CUP");
 		assertThat(response.leagues()).extracting(MobileScheduleFilterResponse.LeagueOption::code)
-				.contains("LCK", "LPL");
+				.contains("LCK", "LPL")
+				.startsWith("ALL", "WORLDS"); // 진행 중인 월즈가 칩 맨 앞
 		assertThat(response.teams()).singleElement()
 				.extracting(MobileScheduleFilterResponse.TeamOption::teamId,
 						MobileScheduleFilterResponse.TeamOption::teamName,
