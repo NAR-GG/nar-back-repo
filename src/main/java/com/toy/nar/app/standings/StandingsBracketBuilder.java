@@ -27,15 +27,22 @@ import com.toy.nar.app.standings.dto.StandingsResponse.SwissTeam;
 final class StandingsBracketBuilder {
 
 	private static final String PLAYOFFS = "Playoffs";
+	private static final int WORLDS_ADVANCE_WINS = 3;
+	private static final int WORLDS_ELIMINATE_LOSSES = 3;
 
 	private StandingsBracketBuilder() {
 	}
 
 	/** Playoffs 를 뺀 모든 스테이지 경기가 끝났는지. 8강 진출 8팀이 확정되는 시점이다. */
 	static boolean groupStagesFinished(JsonNode root) {
+		return groupStagesFinished(root, PLAYOFFS);
+	}
+
+	/** 토너먼트 스테이지 이름이 다른 대회(월즈: Knockouts)용. */
+	static boolean groupStagesFinished(JsonNode root, String playoffsStage) {
 		boolean any = false;
 		for (JsonNode stage : stages(root)) {
-			if (PLAYOFFS.equalsIgnoreCase(stage.path("name").asText())) {
+			if (playoffsStage.equalsIgnoreCase(stage.path("name").asText())) {
 				continue;
 			}
 			for (JsonNode section : stage.path("sections")) {
@@ -56,24 +63,8 @@ final class StandingsBracketBuilder {
 	 */
 	static Optional<Bracket> build(JsonNode root, Map<String, TeamMetrics> swissMetrics,
 			Map<String, String[]> teamInfo, Map<String, OffsetDateTime> scheduledTimes) {
-		List<JsonNode> matches = new ArrayList<>();
-		for (JsonNode stage : stages(root)) {
-			if (!PLAYOFFS.equalsIgnoreCase(stage.path("name").asText())) {
-				continue;
-			}
-			for (JsonNode section : stage.path("sections")) {
-				section.path("matches").forEach(matches::add);
-			}
-		}
-		boolean anyTeam = matches.stream().anyMatch(m -> {
-			for (JsonNode t : m.path("teams")) {
-				if (!isTbd(t)) {
-					return true;
-				}
-			}
-			return false;
-		});
-		if (!anyTeam) {
+		List<JsonNode> matches = stageMatches(root, PLAYOFFS);
+		if (!anyTeam(matches)) {
 			return Optional.empty();
 		}
 		return Optional.of(Bracket.builder()
@@ -82,25 +73,93 @@ final class StandingsBracketBuilder {
 				.build());
 	}
 
+	/**
+	 * 월즈 대진. 스위스는 3승 진출·3패 탈락이고, 시작하자마자(0-0 포함 16팀) 전적 카드를 내린다.
+	 * 녹아웃은 팀이 한 곳이라도 차야 나온다 — 그 전엔 rounds 가 비어 앱이 스위스만 그린다.
+	 */
+	static Optional<Bracket> buildWorlds(JsonNode root, Map<String, TeamMetrics> swissMetrics,
+			Map<String, String[]> teamInfo, Map<String, OffsetDateTime> scheduledTimes) {
+		List<JsonNode> matches = stageMatches(root, WorldsStandingsBuilder.KNOCKOUTS);
+		List<SwissRow> swiss = swissRows(swissMetrics, teamInfo, WORLDS_ADVANCE_WINS, WORLDS_ELIMINATE_LOSSES, true);
+		List<Round> rounds = anyTeam(matches) ? rounds(matches, scheduledTimes) : List.of();
+		if (swiss.isEmpty() && rounds.isEmpty()) {
+			return Optional.empty();
+		}
+		return Optional.of(Bracket.builder().swiss(swiss).rounds(rounds).build());
+	}
+
+	private static List<JsonNode> stageMatches(JsonNode root, String stageName) {
+		List<JsonNode> matches = new ArrayList<>();
+		for (JsonNode stage : stages(root)) {
+			if (!stageName.equalsIgnoreCase(stage.path("name").asText())) {
+				continue;
+			}
+			for (JsonNode section : stage.path("sections")) {
+				section.path("matches").forEach(matches::add);
+			}
+		}
+		return matches;
+	}
+
+	private static boolean anyTeam(List<JsonNode> matches) {
+		return matches.stream().anyMatch(m -> {
+			for (JsonNode t : m.path("teams")) {
+				if (!isTbd(t)) {
+					return true;
+				}
+			}
+			return false;
+		});
+	}
+
 	static List<SwissRow> swissRows(Map<String, TeamMetrics> metrics, Map<String, String[]> teamInfo) {
-		// 승 많은 순 → 패 적은 순. 같은 전적은 한 줄로 묶는다.
-		Map<String, List<String>> byRecord = new TreeMap<>(Comparator
-				.comparingInt((String r) -> -Integer.parseInt(r.split("-")[0]))
-				.thenComparingInt(r -> Integer.parseInt(r.split("-")[1])));
+		return swissRows(metrics, teamInfo, 2, 0, false);
+	}
+
+	/**
+	 * @param advanceWins     이 승수 이상이면 진출
+	 * @param eliminateLosses 이 패수 이상이면 탈락, 그 사이는 ACTIVE. 0 이면 옛 규칙(진출 아니면 전부 탈락 라벨)
+	 * @param includeUnplayed 0-0 팀도 "0-0" 버킷으로 담는다(스위스 시작 직후)
+	 */
+	static List<SwissRow> swissRows(Map<String, TeamMetrics> metrics, Map<String, String[]> teamInfo,
+			int advanceWins, int eliminateLosses, boolean includeUnplayed) {
+		// 진출 → 진행 → 탈락, 그 안에서는 승 많은 순 → 패 적은 순. 같은 전적은 한 줄로 묶는다.
+		Comparator<String> byRecord = Comparator
+				.comparingInt((String r) -> statusRank(statusOf(r, advanceWins, eliminateLosses)))
+				.thenComparingInt(r -> -Integer.parseInt(r.split("-")[0]))
+				.thenComparingInt(r -> Integer.parseInt(r.split("-")[1]));
+		Map<String, List<String>> byRecordMap = new TreeMap<>(byRecord);
 		metrics.forEach((code, m) -> {
-			if (m.wins() + m.losses() > 0) {
-				byRecord.computeIfAbsent(m.wins() + "-" + m.losses(), k -> new ArrayList<>()).add(code);
+			if (includeUnplayed || m.wins() + m.losses() > 0) {
+				byRecordMap.computeIfAbsent(m.wins() + "-" + m.losses(), k -> new ArrayList<>()).add(code);
 			}
 		});
 		List<SwissRow> rows = new ArrayList<>();
-		byRecord.forEach((record, codes) -> {
+		byRecordMap.forEach((record, codes) -> {
 			codes.sort(Comparator.naturalOrder());
-			// ponytail: 2승 = 진출 확정. 1-2·0-2 는 풀리그·4라운드가 남아 "진행 중"이지만 앱 필드는 bool 하나뿐이라 false.
+			// ponytail: 옛 규칙(데마시아 컵)은 2승 = 진출, 나머지는 bool 하나라 전부 탈락 라벨. 월즈는 status 로 진행을 구분한다.
+			String status = statusOf(record, advanceWins, eliminateLosses);
 			rows.add(SwissRow.builder().record(record).teamCodes(codes)
 					.teams(codes.stream().map(c -> swissTeam(c, teamInfo.get(c))).toList())
-					.advanced(Integer.parseInt(record.split("-")[0]) >= 2).build());
+					.advanced("ADVANCED".equals(status)).status(status).build());
 		});
 		return rows;
+	}
+
+	private static String statusOf(String record, int advanceWins, int eliminateLosses) {
+		String[] wl = record.split("-");
+		if (Integer.parseInt(wl[0]) >= advanceWins) {
+			return "ADVANCED";
+		}
+		return eliminateLosses == 0 || Integer.parseInt(wl[1]) >= eliminateLosses ? "ELIMINATED" : "ACTIVE";
+	}
+
+	private static int statusRank(String status) {
+		return switch (status) {
+			case "ADVANCED" -> 0;
+			case "ACTIVE" -> 1;
+			default -> 2;
+		};
 	}
 
 	/** 앱이 팀 코드로 로고를 못 찾는 해외팀도 그릴 수 있게 이름·로고를 같이 준다. info = {이름, 로고 URL}. */

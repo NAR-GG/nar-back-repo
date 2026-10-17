@@ -62,7 +62,7 @@ class StandingsServiceTest {
 	@DisplayName("모르는 리그는 supported=false 로 내려간다")
 	@Test
 	void unknownLeagueIsUnsupported() {
-		StandingsResponse res = service.getStandings("WORLDS");
+		StandingsResponse res = service.getStandings("LPL");
 
 		assertThat(res.supported()).isFalse();
 		assertThat(res.reason()).isEqualTo("BRACKET_ONLY");

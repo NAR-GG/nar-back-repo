@@ -95,7 +95,9 @@ public record StandingsResponse(
 
 	/** 같은 전적("2-1")으로 묶인 팀들. {@code advanced} 는 진출 확정. {@code teams} 는 {@code teamCodes} 와 같은 순서. */
 	@Builder
-	public record SwissRow(String record, List<String> teamCodes, List<SwissTeam> teams, boolean advanced) {
+	public record SwissRow(String record, List<String> teamCodes, List<SwissTeam> teams, boolean advanced,
+			/** ADVANCED(진출) / ACTIVE(진행 중) / ELIMINATED(탈락). 구앱은 advanced 만 읽는다. */
+			String status) {
 	}
 
 	public record SwissTeam(String teamCode, String teamName, String imageUrl) {
