@@ -252,6 +252,38 @@ class PlayerSoloRankMonitorServiceTest {
 	}
 
 	@Test
+	void pollsSecondaryAccountOnItsPlatformAndAlertsOnItsFirstGame() {
+		Player player = Player.builder().name("Faker").imageUrl(null).build();
+		PlayerRiotAccount primary = PlayerRiotAccount.builder()
+				.player(player).riotId("Hide on bush#KR1").gameName("Hide on bush").tagLine("KR1")
+				.platform("KR").puuid("puuid-kr").primaryAccount(true).enabled(true)
+				.liveStatus(PlayerRiotAccountLiveStatus.OFFLINE).lastCheckedMatchId("KR_111")
+				.build();
+		// 보조 계정은 lastCheckedMatchId "" 로 등록된다 — 기준선 잡기 없이 첫 게임부터 알린다.
+		PlayerRiotAccount bootcamp = PlayerRiotAccount.builder()
+				.player(player).riotId("Hide in bush#NYKR").gameName("Hide in bush").tagLine("NYKR")
+				.platform("NA1").puuid("puuid-na").primaryAccount(false).enabled(true)
+				.liveStatus(PlayerRiotAccountLiveStatus.OFFLINE).lastCheckedMatchId("")
+				.build();
+		when(playerRiotAccountRepository.findAllTrackedAccounts()).thenReturn(List.of(primary, bootcamp));
+		when(riotApiClient.getActiveGameByPuuid("puuid-kr", "KR")).thenReturn(Optional.empty());
+		when(riotApiClient.getActiveGameByPuuid("puuid-na", "NA1"))
+				.thenReturn(Optional.of(new RiotCurrentGameResponse(
+						444L,
+						420,
+						List.of(new RiotCurrentGameResponse.RiotCurrentGameParticipantResponse("puuid-na", 157, "Hide in bush#NYKR")))));
+
+		PlayerSoloRankMonitorResult result = playerSoloRankMonitorService.pollTrackedAccounts();
+
+		assertThat(result.checkedCount()).isEqualTo(2);
+		assertThat(result.alertsSentCount()).isEqualTo(1);
+		assertThat(bootcamp.getLastAlertedMatchId()).isEqualTo("444");
+		verify(playerSoloRankPushService).notifySubscribers(
+				eq(player), eq("444"), any(), any(), eq("솔로 랭크"),
+				eq("https://www.op.gg/summoners/na/Hide+in+bush-NYKR"));
+	}
+
+	@Test
 	void manualAlertCheckSendsDiscordNotificationForRankedSoloGame() {
 		when(championDataService.findChampionByRiotKey(777))
 				.thenReturn(Optional.of(Champion.builder()

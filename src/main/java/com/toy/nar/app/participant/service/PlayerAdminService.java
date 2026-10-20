@@ -11,6 +11,7 @@ import com.toy.nar.api.admin.BackofficeController;
 import com.toy.nar.app.riot.PlayerRiotAccountSyncService;
 import com.toy.nar.app.riot.RiotPlatform;
 import com.toy.nar.domain.participant.entity.Player;
+import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.entity.Team;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.participant.repository.TeamRepository;
@@ -109,6 +110,15 @@ public class PlayerAdminService {
 		playerRiotAccountSyncService.resolveAndSaveInCurrentTransaction(
 				player, riotId, RiotPlatform.toPlatform(resolvedRegion));
 		return player;
+	}
+
+	// 주계정은 그대로 두고 기간 한정 보조 계정(월즈 부트캠프 현지 계정 등)을 더한다. region 미지정 시 KR.
+	@Transactional
+	public PlayerRiotAccount addExtraRiotAccount(Long playerId, String riotId, String region) {
+		Player player = playerRepository.findById(playerId)
+				.orElseThrow(() -> new NoSuchElementException("선수를 찾을 수 없습니다: " + playerId));
+		String resolvedRegion = region == null || region.isBlank() ? "KR" : region.trim();
+		return playerRiotAccountSyncService.addSecondaryAccount(player, riotId, resolvedRegion);
 	}
 
 	// 크론 파서(RiotIdParser)가 읽는 형식 유지: [{"region","riotId","tier"}], riotId는 반드시 gameName#tagLine.

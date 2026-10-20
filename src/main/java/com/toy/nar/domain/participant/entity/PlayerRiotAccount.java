@@ -25,9 +25,9 @@ import java.util.Objects;
 
 @Entity
 @Table(name = "player_riot_account", uniqueConstraints = {
-		@UniqueConstraint(name = "uk_player_riot_account_player", columnNames = "player_id"),
 		@UniqueConstraint(name = "uk_player_riot_account_puuid", columnNames = "puuid")
 }, indexes = {
+		@Index(name = "idx_player_riot_account_player", columnList = "player_id"),
 		@Index(name = "idx_player_riot_account_platform_enabled", columnList = "platform, enabled, primary_account"),
 		@Index(name = "idx_player_riot_account_last_checked_match_id", columnList = "last_checked_match_id")
 })
