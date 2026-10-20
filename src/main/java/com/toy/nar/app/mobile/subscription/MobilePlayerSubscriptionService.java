@@ -48,16 +48,7 @@ public class MobilePlayerSubscriptionService {
 		Set<Long> playerIds = subscriptions.stream()
 				.map(subscription -> subscription.getPlayer().getId())
 				.collect(Collectors.toSet());
-		Map<Long, PlayerRepository.LckPlayerOption> playerOptions = playerRepository
-				.findLckPlayerOptionsByPlayerIds(LEAGUE_NAME, CURRENT_SEASON_YEAR, playerIds).stream()
-				.collect(Collectors.toMap(
-						PlayerRepository.LckPlayerOption::getPlayerId,
-						option -> option,
-						(existing, ignored) -> existing,
-						LinkedHashMap::new));
-		// LCK 옵션이 없는(은퇴/비출전) 구독 선수는 계정 기준 옵션으로 보완한다.
-		playerRepository.findSoloRankPlayerOptionsByPlayerIds(playerIds)
-				.forEach(option -> playerOptions.putIfAbsent(option.getPlayerId(), option));
+		Map<Long, PlayerRepository.LckPlayerOption> playerOptions = playerOptions(playerIds);
 
 		return subscriptions.stream()
 				.map(subscription -> {
@@ -67,10 +58,48 @@ public class MobilePlayerSubscriptionService {
 							option, true, subscription.isStartEnabled(), subscription.isEndEnabled());
 				})
 				.filter(response -> response != null)
-				.sorted(Comparator
-						.comparingInt((PlayerSubscriptionResponse response) -> PlayerRoleOrder.of(response.role()))
-						.thenComparing(PlayerSubscriptionResponse::playerName, String.CASE_INSENSITIVE_ORDER))
+				.sorted(ROLE_THEN_NAME)
 				.toList();
+	}
+
+	/** 주어진 선수들을 내 구독 여부·알림 토글과 함께 돌려준다(월즈 솔랭 명단 등). 역할·이름순. */
+	public List<PlayerSubscriptionResponse> getPlayers(Long memberId, Set<Long> playerIds) {
+		requireMember(memberId);
+		if (playerIds.isEmpty()) {
+			return List.of();
+		}
+		Map<Long, MemberFavoritePlayer> subscriptions = subscriptionRepository.findAllByMember_Id(memberId).stream()
+				.collect(Collectors.toMap(subscription -> subscription.getPlayer().getId(), subscription -> subscription,
+						(existing, ignored) -> existing));
+
+		return playerOptions(playerIds).values().stream()
+				.map(option -> {
+					MemberFavoritePlayer subscription = subscriptions.get(option.getPlayerId());
+					return subscription == null
+							? PlayerSubscriptionResponse.from(option, false)
+							: PlayerSubscriptionResponse.from(
+									option, true, subscription.isStartEnabled(), subscription.isEndEnabled());
+				})
+				.sorted(ROLE_THEN_NAME)
+				.toList();
+	}
+
+	private static final Comparator<PlayerSubscriptionResponse> ROLE_THEN_NAME = Comparator
+			.comparingInt((PlayerSubscriptionResponse response) -> PlayerRoleOrder.of(response.role()))
+			.thenComparing(PlayerSubscriptionResponse::playerName, String.CASE_INSENSITIVE_ORDER);
+
+	private Map<Long, PlayerRepository.LckPlayerOption> playerOptions(Set<Long> playerIds) {
+		Map<Long, PlayerRepository.LckPlayerOption> playerOptions = playerRepository
+				.findLckPlayerOptionsByPlayerIds(LEAGUE_NAME, CURRENT_SEASON_YEAR, playerIds).stream()
+				.collect(Collectors.toMap(
+						PlayerRepository.LckPlayerOption::getPlayerId,
+						option -> option,
+						(existing, ignored) -> existing,
+						LinkedHashMap::new));
+		// LCK 옵션이 없는(은퇴/비출전) 선수는 계정 기준 옵션으로 보완한다.
+		playerRepository.findSoloRankPlayerOptionsByPlayerIds(playerIds)
+				.forEach(option -> playerOptions.putIfAbsent(option.getPlayerId(), option));
+		return playerOptions;
 	}
 
 	public PlayerSubscriptionPageResponse getAvailablePlayers(
