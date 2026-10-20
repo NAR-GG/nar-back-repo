@@ -25,6 +25,7 @@ import com.toy.nar.domain.member.repository.MemberTeamNotificationSubscriptionRe
 import com.toy.nar.domain.notice.entity.Notice;
 import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
+import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
 import com.toy.nar.domain.participant.repository.TeamRepository;
 import com.toy.nar.domain.rating.entity.LivePlayerRating;
@@ -414,6 +415,13 @@ public class BackofficeController {
                 id, request.riotId(), request.region(), request.imageUrl()));
     }
 
+    // 기간 한정 보조 계정 추가(월즈 부트캠프 NA1 계정 등). 주계정은 그대로 두고 라이브 폴링만 함께 돈다.
+    // 같은 계정을 다시 넣으면 다시 켠다. 기간이 끝나면 player_riot_account.enabled = false 로 끈다.
+    @PostMapping("/players/{id}/extra-riot-accounts")
+    public RiotAccountRow addExtraRiotAccount(@PathVariable Long id, @RequestBody ExtraRiotAccountRequest request) {
+        return RiotAccountRow.from(playerAdminService.addExtraRiotAccount(id, request.riotId(), request.region()));
+    }
+
     @DeleteMapping("/members/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteMember(@PathVariable Long id) {
@@ -534,6 +542,17 @@ public class BackofficeController {
 
     // 기존 선수 id에 솔랭 계정 부착. region 미지정 시 KR. imageUrl 있으면 함께 세팅.
     public record SoloRankAccountRequest(String riotId, String region, String imageUrl) {}
+
+    // region 미지정 시 KR. 월즈 부트캠프 계정은 NA(또는 NA1).
+    public record ExtraRiotAccountRequest(String riotId, String region) {}
+
+    public record RiotAccountRow(Long id, Long playerId, String riotId, String platform,
+                                 boolean primaryAccount, boolean enabled) {
+        static RiotAccountRow from(PlayerRiotAccount a) {
+            return new RiotAccountRow(a.getId(), a.getPlayer().getId(), a.getRiotId(), a.getPlatform(),
+                    a.isPrimaryAccount(), a.isEnabled());
+        }
+    }
 
     public record TeamRow(Long id, String name, String code) {}
 

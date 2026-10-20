@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW;
@@ -95,7 +96,7 @@ public class PlayerRiotAccountSyncService {
 				parsedRiotId.gameName(),
 				parsedRiotId.tagLine());
 
-		PlayerRiotAccount playerRiotAccount = playerRiotAccountRepository.findByPlayerId(player.getId())
+		PlayerRiotAccount playerRiotAccount = playerRiotAccountRepository.findByPlayerIdAndPrimaryAccountTrue(player.getId())
 				.orElseGet(() -> PlayerRiotAccount.builder()
 						.player(player)
 						.riotId(parsedRiotId.normalizedRiotId())
@@ -118,6 +119,50 @@ public class PlayerRiotAccountSyncService {
 		playerRiotAccount.markPrimaryAccount(true);
 		playerRiotAccount.setEnabled(true);
 		playerRiotAccountRepository.saveAndFlush(playerRiotAccount);
+	}
+
+	// 기간 한정 보조 계정(월즈 부트캠프 현지 계정 등)을 주계정 옆에 추가한다. 현재 트랜잭션에 참여한다.
+	// primary=false 라 일일 sync·구독 쿼리(전부 primary_account = true 조건)는 이 행을 보지 않고, 라이브 폴링만 함께 돈다.
+	// 이미 등록된 계정(같은 puuid)이면 새 행 대신 그 행을 다시 켠다. 끝나면 enabled=false 로 끈다.
+	public PlayerRiotAccount addSecondaryAccount(Player player, String riotId, String platform) {
+		riotApiClient.assertConfigured();
+		String normalizedPlatform = RiotPlatform.toPlatform(platform);
+		RiotIdParser.ParsedRiotId parsedRiotId = RiotIdParser.parse(riotId)
+				.orElseThrow(() -> new IllegalArgumentException("Invalid Riot ID: " + riotId));
+
+		RiotAccountResolveResponse accountResponse = riotApiClient.resolveAccountByRiotId(
+				parsedRiotId.gameName(),
+				parsedRiotId.tagLine());
+
+		PlayerRiotAccount account = playerRiotAccountRepository.findByPuuid(accountResponse.puuid())
+				.orElseGet(() -> PlayerRiotAccount.builder()
+						.player(player)
+						.riotId(parsedRiotId.normalizedRiotId())
+						.gameName(accountResponse.gameName())
+						.tagLine(accountResponse.tagLine())
+						.platform(normalizedPlatform)
+						.puuid(accountResponse.puuid())
+						.summonerId("")
+						.primaryAccount(false)
+						.enabled(true)
+						.liveStatus(PlayerRiotAccountLiveStatus.OFFLINE)
+						// 모니터는 lastCheckedMatchId 가 null 인 계정의 첫 게임을 기준선으로만 잡고 알리지 않는다.
+						// 보조 계정은 등록 직후 첫 게임부터 알려야 하므로 빈 값으로 시작한다(어떤 gameId 와도 다르다).
+						.lastCheckedMatchId("")
+						.build());
+		if (!Objects.equals(account.getPlayer().getId(), player.getId())) {
+			throw new IllegalArgumentException(
+					"다른 선수에 등록된 계정입니다: " + riotId + " (player=" + account.getPlayer().getName() + ")");
+		}
+
+		account.updateResolvedAccount(
+				parsedRiotId.normalizedRiotId(),
+				accountResponse.gameName(),
+				accountResponse.tagLine(),
+				normalizedPlatform,
+				accountResponse.puuid());
+		account.setEnabled(true);
+		return playerRiotAccountRepository.saveAndFlush(account);
 	}
 
 	// 백오피스 수동 수정 직후 단일 선수 즉시 동기화(실존 검증 겸용).
