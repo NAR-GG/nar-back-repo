@@ -15,6 +15,19 @@ CREATE TABLE players (
     role VARCHAR(20)
 );
 
+-- 프로덕션에는 V26·V27(베이스라인 이전)부터 존재. V95 가 선수당 1계정 유니크를 푼다.
+-- FK(player_id)가 유니크 인덱스에 기대는 모양까지 프로덕션과 같아야 V95 의 순서(인덱스 먼저)가 검증된다.
+CREATE TABLE player_riot_account (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    player_id BIGINT NOT NULL,
+    puuid VARCHAR(128) NOT NULL,
+    primary_account BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT fk_player_riot_account_player FOREIGN KEY (player_id) REFERENCES players(player_id),
+    CONSTRAINT uk_player_riot_account_player UNIQUE (player_id),
+    CONSTRAINT uk_player_riot_account_puuid UNIQUE (puuid)
+);
+
 CREATE TABLE champions (
     champion_id BIGINT AUTO_INCREMENT PRIMARY KEY
 );
