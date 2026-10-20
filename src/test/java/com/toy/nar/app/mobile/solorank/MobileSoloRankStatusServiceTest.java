@@ -161,4 +161,27 @@ class MobileSoloRankStatusServiceTest {
 		assertThat(response.live().get(0).platform()).isEqualTo("NA1");
 		verify(subscriptionService, never()).getSubscriptions(any());
 	}
+
+	@Test
+	void 월즈_솔랭은_선수별_오늘_전적을_주고_판수에_지금_하는_판을_넣는다() {
+		LocalDateTime now = LocalDateTime.now();
+		when(accountRepository.findEventPlayerIds()).thenReturn(List.of(1L, 2L, 3L));
+		when(subscriptionService.getPlayers(7L, java.util.Set.of(1L, 2L, 3L)))
+				.thenReturn(List.of(sub(1, "Faker", "T1"), sub(2, "Chovy", "GEN"), sub(3, "Zeus", "HLE")));
+		when(gameRepository.findLive(anyCollection(), any(), any()))
+				.thenReturn(List.of(game(2, "c3", now.minusMinutes(10), now.minusMinutes(9), null)));
+		when(accountRepository.findByPlayerIdInAndLiveStatus(anyCollection(), any())).thenReturn(List.of());
+		PlayerSoloRankGame lost = game(2, "c2", now.minusHours(2), null, now.minusMinutes(70));
+		ReflectionTestUtils.setField(lost, "win", false);
+		when(gameRepository.findFinishedSince(anyCollection(), any(), any())).thenReturn(List.of(
+				game(1, "f1", now.minusHours(1), null, now.minusMinutes(20)),
+				lost,
+				game(2, "c1", now.minusHours(3), null, now.minusMinutes(120))));
+
+		WorldsSoloRankResponse response = service.getWorldsStatus(7L);
+
+		assertThat(response.today()).containsExactly(
+				new WorldsSoloRankResponse.TodayRecord(1L, 1, 1, 0),
+				new WorldsSoloRankResponse.TodayRecord(2L, 3, 1, 1));
+	}
 }
