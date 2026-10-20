@@ -12,5 +12,10 @@ public record WorldsSoloRankResponse(
 		@Schema(description = "지금 솔랭 중. 최근 시작순")
 		List<SoloRankStatusResponse.LivePlayer> live,
 		@Schema(description = "최근 24시간 안에 끝난 게임, 선수당 마지막 1판. 최근 종료순")
-		List<SoloRankStatusResponse.FinishedPlayer> finished) {
+		List<SoloRankStatusResponse.FinishedPlayer> finished,
+		@Schema(description = "선수별 오늘 전적(최근 24시간, finished 와 같은 창). 판수는 지금 하는 판을 포함한다. 한 판도 없는 선수는 빠진다")
+		List<TodayRecord> today) {
+
+	public record TodayRecord(Long playerId, int games, int wins, int losses) {
+	}
 }

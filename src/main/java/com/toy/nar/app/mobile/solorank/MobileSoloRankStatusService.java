@@ -62,7 +62,31 @@ public class MobileSoloRankStatusService {
 		List<PlayerSubscriptionResponse> roster =
 				subscriptionService.getPlayers(memberId, Set.copyOf(accountRepository.findEventPlayerIds()));
 		SoloRankStatusResponse status = status(memberId, byId(roster));
-		return new WorldsSoloRankResponse(roster, status.live(), status.finished());
+		return new WorldsSoloRankResponse(roster, status.live(), status.finished(), today(roster, status.live()));
+	}
+
+	/** 선수별 오늘 전적 — finished 와 같은 24시간 창의 끝난 판 + 지금 하는 판. */
+	private List<WorldsSoloRankResponse.TodayRecord> today(List<PlayerSubscriptionResponse> roster,
+			List<SoloRankStatusResponse.LivePlayer> live) {
+		if (roster.isEmpty()) {
+			return List.of();
+		}
+		LocalDateTime endedSince = LocalDateTime.now().minus(FINISHED_WINDOW);
+		Map<Long, List<PlayerSoloRankGame>> finished = gameRepository
+				.findFinishedSince(byId(roster).keySet(), endedSince.minus(DETECTION_SLACK), endedSince).stream()
+				.collect(Collectors.groupingBy(game -> game.getPlayer().getId()));
+		Set<Long> playing = live.stream().map(SoloRankStatusResponse.LivePlayer::playerId).collect(Collectors.toSet());
+		return roster.stream()
+				.map(PlayerSubscriptionResponse::playerId)
+				.filter(playerId -> finished.containsKey(playerId) || playing.contains(playerId))
+				.map(playerId -> {
+					List<PlayerSoloRankGame> games = finished.getOrDefault(playerId, List.of());
+					return new WorldsSoloRankResponse.TodayRecord(playerId,
+							games.size() + (playing.contains(playerId) ? 1 : 0),
+							(int) games.stream().filter(game -> Boolean.TRUE.equals(game.getWin())).count(),
+							(int) games.stream().filter(game -> Boolean.FALSE.equals(game.getWin())).count());
+				})
+				.toList();
 	}
 
 	private SoloRankStatusResponse status(Long memberId, Map<Long, PlayerSubscriptionResponse> players) {
