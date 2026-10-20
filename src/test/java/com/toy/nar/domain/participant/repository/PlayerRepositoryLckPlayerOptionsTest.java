@@ -186,6 +186,28 @@ class PlayerRepositoryLckPlayerOptionsTest {
 	}
 
 	@Test
+	@DisplayName("보조 계정만 있는 LCK 미출전 선수도 현재 소속 팀과 함께 나온다(월즈 명단)")
+	void soloRankOptionIncludesSecondaryOnlyPlayerWithCurrentTeam() {
+		exec(team(50, "Bilibili Gaming", "BLG"));
+		exec("INSERT INTO players (player_id, player_name, image_url, role, current_team_id)"
+				+ " VALUES (11, 'Bin', 'Bin.png', 'Top', 50)");
+		exec("INSERT INTO player_riot_account"
+				+ " (id, player_id, riot_id, game_name, tag_line, platform, puuid, primary_account, enabled,"
+				+ " live_status, created_at, updated_at)"
+				+ " VALUES (101, 11, 'bin#123', 'bin', '123', 'NA1', 'puuid-bin', false, true,"
+				+ " 'OFFLINE', '2026-01-01 00:00:00', '2026-01-01 00:00:00')");
+		em.flush();
+		em.clear();
+
+		assertThat(playerRepository.findSoloRankPlayerOptionsByPlayerIds(Set.of(11L)))
+				.singleElement()
+				.satisfies(o -> {
+					assertThat(o.getPlayerName()).isEqualTo("Bin");
+					assertThat(o.getTeamCode()).isEqualTo("BLG");
+				});
+	}
+
+	@Test
 	@DisplayName("teamId 필터가 있으면 팀 없는 솔랭 전용 선수는 제외된다")
 	void excludesSoloRankOnlyPlayerWhenTeamFilterSet() {
 		Page<LckPlayerOption> page = playerRepository.findLckPlayerOptions(
