@@ -21,6 +21,8 @@ public record SoloRankStatusResponse(
 			String championImageUrl,
 			@Schema(description = "게임 시작 시각. 로딩 화면에 감지돼 실제 시작을 아직 모르면 감지 시각", example = "2026-09-25T21:03:12+09:00")
 			OffsetDateTime startedAt,
+			@Schema(description = "이 판을 하는 계정의 플랫폼. KR 주계정이면 KR, 월즈 부트캠프 계정이면 NA1 등", example = "NA1")
+			String platform,
 			@Schema(description = "이 판의 전체 응원 수(화력)")
 			long cheerTotal,
 			@Schema(description = "이 판에 내가 보낸 응원 수")

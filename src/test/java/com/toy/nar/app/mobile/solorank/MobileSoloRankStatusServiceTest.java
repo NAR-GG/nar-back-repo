@@ -16,10 +16,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.toy.nar.app.mobile.solorank.dto.SoloRankStatusResponse;
+import com.toy.nar.app.mobile.solorank.dto.WorldsSoloRankResponse;
 import com.toy.nar.app.mobile.subscription.MobilePlayerSubscriptionService;
 import com.toy.nar.app.mobile.subscription.dto.PlayerSubscriptionResponse;
 import com.toy.nar.domain.participant.entity.Player;
+import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
+import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
 import com.toy.nar.domain.participant.entity.PlayerSoloRankGame;
+import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
 import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository;
 import com.toy.nar.domain.participant.repository.PlayerSoloRankGameRepository;
 
@@ -29,6 +33,7 @@ class MobileSoloRankStatusServiceTest {
 	private PlayerSoloRankGameRepository gameRepository;
 	private PlayerSoloRankCheerRepository cheerRepository;
 	private SoloRankCheerTotals cheerTotals;
+	private PlayerRiotAccountRepository accountRepository;
 	private MobileSoloRankStatusService service;
 
 	@BeforeEach
@@ -37,7 +42,9 @@ class MobileSoloRankStatusServiceTest {
 		gameRepository = mock(PlayerSoloRankGameRepository.class);
 		cheerRepository = mock(PlayerSoloRankCheerRepository.class);
 		cheerTotals = mock(SoloRankCheerTotals.class);
-		service = new MobileSoloRankStatusService(subscriptionService, gameRepository, cheerRepository, cheerTotals);
+		accountRepository = mock(PlayerRiotAccountRepository.class);
+		service = new MobileSoloRankStatusService(subscriptionService, gameRepository, cheerRepository, cheerTotals,
+				accountRepository);
 	}
 
 	private static PlayerSubscriptionResponse sub(long id, String name, String team) {
@@ -125,5 +132,33 @@ class MobileSoloRankStatusServiceTest {
 		assertThat(response.finished()).extracting(SoloRankStatusResponse.FinishedPlayer::playerName)
 				.containsExactly("Faker", "Chovy");
 		assertThat(response.finished().get(0).endedAt().toLocalDateTime()).isEqualTo(now.minusMinutes(10));
+	}
+
+	@Test
+	void 월즈_솔랭은_보조_계정_선수_전체를_구독_무관하게_주고_판의_플랫폼을_싣는다() {
+		LocalDateTime now = LocalDateTime.now();
+		when(accountRepository.findEventPlayerIds()).thenReturn(List.of(1L, 2L));
+		PlayerSubscriptionResponse notSubscribed = new PlayerSubscriptionResponse(2L, "Chovy", "Chovy.png", "MID", 1L,
+				"GEN", "GEN", "GEN.png", false, true, false);
+		when(subscriptionService.getPlayers(7L, java.util.Set.of(1L, 2L)))
+				.thenReturn(List.of(sub(1, "Faker", "T1"), notSubscribed));
+		when(gameRepository.findLive(anyCollection(), any(), any()))
+				.thenReturn(List.of(game(2, "na-1", now.minusMinutes(10), now.minusMinutes(9), null)));
+		when(gameRepository.findFinishedSince(anyCollection(), any(), any())).thenReturn(List.of());
+		Player chovy = Player.builder().name("Chovy").build();
+		ReflectionTestUtils.setField(chovy, "id", 2L);
+		PlayerRiotAccount bootcamp = PlayerRiotAccount.builder()
+				.player(chovy).riotId("calm down#can").gameName("calm down").tagLine("can")
+				.platform("NA1").puuid("puuid-na").primaryAccount(false).enabled(true)
+				.liveStatus(PlayerRiotAccountLiveStatus.IN_RANKED_SOLO).lastCheckedMatchId("na-1")
+				.build();
+		when(accountRepository.findByPlayerIdInAndLiveStatus(anyCollection(), any())).thenReturn(List.of(bootcamp));
+
+		WorldsSoloRankResponse response = service.getWorldsStatus(7L);
+
+		assertThat(response.players()).extracting(PlayerSubscriptionResponse::subscribed).containsExactly(true, false);
+		assertThat(response.live()).extracting(SoloRankStatusResponse.LivePlayer::playerName).containsExactly("Chovy");
+		assertThat(response.live().get(0).platform()).isEqualTo("NA1");
+		verify(subscriptionService, never()).getSubscriptions(any());
 	}
 }

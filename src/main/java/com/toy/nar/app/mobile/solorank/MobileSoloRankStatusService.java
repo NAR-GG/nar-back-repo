@@ -1,13 +1,16 @@
 package com.toy.nar.app.mobile.solorank;
 
 import com.toy.nar.app.mobile.solorank.dto.SoloRankStatusResponse;
+import com.toy.nar.app.mobile.solorank.dto.WorldsSoloRankResponse;
 import com.toy.nar.app.mobile.subscription.MobilePlayerSubscriptionService;
 import com.toy.nar.app.mobile.subscription.dto.PlayerSubscriptionResponse;
 import com.toy.nar.domain.participant.entity.Champion;
+import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
 import com.toy.nar.domain.participant.entity.PlayerSoloRankGame;
 import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository;
 import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository.GameKey;
+import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
 import com.toy.nar.domain.participant.repository.PlayerSoloRankGameRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,6 +24,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -44,11 +48,24 @@ public class MobileSoloRankStatusService {
 	private final PlayerSoloRankGameRepository gameRepository;
 	private final PlayerSoloRankCheerRepository cheerRepository;
 	private final SoloRankCheerTotals cheerTotals;
+	private final PlayerRiotAccountRepository accountRepository;
 
 	public SoloRankStatusResponse getStatus(Long memberId) {
-		Map<Long, PlayerSubscriptionResponse> players = subscriptionService.getSubscriptions(memberId).stream()
-				.collect(Collectors.toMap(PlayerSubscriptionResponse::playerId, Function.identity(),
-						(left, right) -> left, LinkedHashMap::new));
+		return status(memberId, byId(subscriptionService.getSubscriptions(memberId)));
+	}
+
+	/**
+	 * 월즈 솔랭 — 보조 계정(월즈 부트캠프 계정)이 켜진 선수 전체. 구독과 무관하게 보여주고,
+	 * 구독 여부·알림 토글은 {@code players} 에 싣는다. 명단은 보조 계정을 켜고 끄는 것으로 정해진다.
+	 */
+	public WorldsSoloRankResponse getWorldsStatus(Long memberId) {
+		List<PlayerSubscriptionResponse> roster =
+				subscriptionService.getPlayers(memberId, Set.copyOf(accountRepository.findEventPlayerIds()));
+		SoloRankStatusResponse status = status(memberId, byId(roster));
+		return new WorldsSoloRankResponse(roster, status.live(), status.finished());
+	}
+
+	private SoloRankStatusResponse status(Long memberId, Map<Long, PlayerSubscriptionResponse> players) {
 		if (players.isEmpty()) {
 			return new SoloRankStatusResponse(List.of(), List.of());
 		}
@@ -58,8 +75,15 @@ public class MobileSoloRankStatusService {
 				.findLive(players.keySet(), PlayerRiotAccountLiveStatus.IN_RANKED_SOLO, now.minus(LIVE_FRESHNESS));
 		Map<GameKey, Long> liveMine = cheerRepository.mine(memberId, ids(liveGames), gameIds(liveGames));
 		Map<GameKey, Long> liveTotals = cheerTotals.live(keys(liveGames));
+		// 어느 계정으로 하는 판인지(KR 주계정 / NA1 보조 계정) — 계정이 지금 보고 있는 게임으로 맞춘다.
+		Map<GameKey, String> livePlatforms = liveGames.isEmpty() ? Map.of() : accountRepository
+				.findByPlayerIdInAndLiveStatus(players.keySet(), PlayerRiotAccountLiveStatus.IN_RANKED_SOLO).stream()
+				.filter(account -> account.getLastCheckedMatchId() != null)
+				.collect(Collectors.toMap(
+						account -> new GameKey(account.getPlayer().getId(), account.getLastCheckedMatchId()),
+						PlayerRiotAccount::getPlatform, (left, right) -> left));
 		List<SoloRankStatusResponse.LivePlayer> live = liveGames.stream()
-				.map(game -> toLive(game, players.get(game.getPlayer().getId()),
+				.map(game -> toLive(game, players.get(game.getPlayer().getId()), livePlatforms.get(key(game)),
 						liveTotals.getOrDefault(key(game), 0L), liveMine.getOrDefault(key(game), 0L)))
 				.sorted(Comparator.comparing(SoloRankStatusResponse.LivePlayer::startedAt,
 						Comparator.nullsLast(Comparator.reverseOrder())))
@@ -80,8 +104,14 @@ public class MobileSoloRankStatusService {
 		return new SoloRankStatusResponse(live, finished);
 	}
 
+	private static Map<Long, PlayerSubscriptionResponse> byId(List<PlayerSubscriptionResponse> players) {
+		return players.stream()
+				.collect(Collectors.toMap(PlayerSubscriptionResponse::playerId, Function.identity(),
+						(left, right) -> left, LinkedHashMap::new));
+	}
+
 	private static SoloRankStatusResponse.LivePlayer toLive(PlayerSoloRankGame game, PlayerSubscriptionResponse player,
-			long cheerTotal, long cheerMine) {
+			String platform, long cheerTotal, long cheerMine) {
 		Champion champion = game.getChampion();
 		LocalDateTime startedAt = game.getGameStartedAt() != null ? game.getGameStartedAt() : game.getDetectedAt();
 		return new SoloRankStatusResponse.LivePlayer(
@@ -92,6 +122,7 @@ public class MobileSoloRankStatusService {
 				champion == null ? null : champion.getChampionNameKr(),
 				champion == null ? null : champion.getImageUrl(),
 				offset(startedAt),
+				platform,
 				cheerTotal,
 				cheerMine);
 	}

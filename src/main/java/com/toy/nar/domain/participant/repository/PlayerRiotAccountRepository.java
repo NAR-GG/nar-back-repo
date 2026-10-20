@@ -1,9 +1,11 @@
 package com.toy.nar.domain.participant.repository;
 
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
+import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -13,6 +15,13 @@ public interface PlayerRiotAccountRepository extends JpaRepository<PlayerRiotAcc
 	Optional<PlayerRiotAccount> findByPlayerIdAndPrimaryAccountTrue(Long playerId);
 
 	Optional<PlayerRiotAccount> findByPuuid(String puuid);
+
+	// 보조 계정(월즈 부트캠프 계정 등)이 켜져 있는 선수 = 월즈 솔랭 명단.
+	@Query("SELECT DISTINCT pra.player.id FROM PlayerRiotAccount pra " +
+			"WHERE pra.enabled = true AND pra.primaryAccount = false")
+	List<Long> findEventPlayerIds();
+
+	List<PlayerRiotAccount> findByPlayerIdInAndLiveStatus(Collection<Long> playerIds, PlayerRiotAccountLiveStatus liveStatus);
 
 	// 플랫폼 무관 추적 대상 전체(KR·EUW1·NA1 ...). 현재 게임 폴링은 계정별 platform으로 라우팅한다.
 	// 주계정과 보조 계정(월즈 부트캠프 계정 등)을 함께 돈다 — 선수 한 명이 여러 행일 수 있다.
