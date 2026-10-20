@@ -64,13 +64,17 @@ public class MobilePlayerSubscriptionService {
 
 	/** 주어진 선수들을 내 구독 여부·알림 토글과 함께 돌려준다(월즈 솔랭 명단 등). 역할·이름순. */
 	public List<PlayerSubscriptionResponse> getPlayers(Long memberId, Set<Long> playerIds) {
-		requireMember(memberId);
+		// 비회원(memberId null)은 전원 미구독으로 준다 — 월즈 솔랭은 로그인 없이도 보여준다.
+		if (memberId != null) {
+			requireMember(memberId);
+		}
 		if (playerIds.isEmpty()) {
 			return List.of();
 		}
-		Map<Long, MemberFavoritePlayer> subscriptions = subscriptionRepository.findAllByMember_Id(memberId).stream()
-				.collect(Collectors.toMap(subscription -> subscription.getPlayer().getId(), subscription -> subscription,
-						(existing, ignored) -> existing));
+		Map<Long, MemberFavoritePlayer> subscriptions = memberId == null ? Map.of()
+				: subscriptionRepository.findAllByMember_Id(memberId).stream()
+						.collect(Collectors.toMap(subscription -> subscription.getPlayer().getId(),
+								subscription -> subscription, (existing, ignored) -> existing));
 
 		return playerOptions(playerIds).values().stream()
 				.map(option -> {

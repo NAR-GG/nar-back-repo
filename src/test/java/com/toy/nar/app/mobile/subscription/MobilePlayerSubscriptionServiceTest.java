@@ -57,6 +57,21 @@ class MobilePlayerSubscriptionServiceTest {
 	}
 
 	@Test
+	void 비회원은_선수_목록을_전원_미구독으로_받는다() {
+		PlayerRepository.LckPlayerOption option = option(10L, "Faker", 1L, "T1", "T1");
+		when(playerRepository.findLckPlayerOptionsByPlayerIds("LCK", 2026, Set.of(10L)))
+				.thenReturn(List.of(option));
+
+		List<PlayerSubscriptionResponse> response = service.getPlayers(null, Set.of(10L));
+
+		assertThat(response).singleElement().satisfies(result -> {
+			assertThat(result.playerName()).isEqualTo("Faker");
+			assertThat(result.subscribed()).isFalse();
+		});
+		org.mockito.Mockito.verifyNoInteractions(memberRepository, subscriptionRepository);
+	}
+
+	@Test
 	void returnsOnboardingFavoritePlayersAsSubscriptions() {
 		Member member = member(7L);
 		Player faker = player(10L, "Faker");

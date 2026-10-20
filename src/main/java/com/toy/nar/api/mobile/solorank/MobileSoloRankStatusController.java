@@ -31,7 +31,7 @@ public class MobileSoloRankStatusController {
 
 	@Operation(summary = "월즈 솔랭 상태 조회",
 			description = "월즈 부트캠프 계정이 등록된 선수 전체(구독 무관)의 명단·지금 솔랭 중·최근 24시간 종료 판을 조회합니다. "
-					+ "명단에는 내 구독 여부가 실립니다.")
+					+ "명단에는 내 구독 여부가 실립니다. 비회원도 부를 수 있고, 이때는 전원 미구독으로 옵니다.")
 	@SecurityRequirement(name = "bearerAuth")
 	@GetMapping("/worlds")
 	public ResponseEntity<WorldsSoloRankResponse> getWorldsStatus(@AuthenticationPrincipal Long memberId) {
