@@ -159,6 +159,8 @@ class MobileSoloRankStatusServiceTest {
 		assertThat(response.players()).extracting(PlayerSubscriptionResponse::subscribed).containsExactly(true, false);
 		assertThat(response.live()).extracting(SoloRankStatusResponse.LivePlayer::playerName).containsExactly("Chovy");
 		assertThat(response.live().get(0).platform()).isEqualTo("NA1");
+		assertThat(response.leagues()).extracting(WorldsSoloRankResponse.League::code)
+				.containsExactly("LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL");
 		verify(subscriptionService, never()).getSubscriptions(any());
 	}
 

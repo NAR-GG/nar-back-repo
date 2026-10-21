@@ -62,8 +62,19 @@ public class MobileSoloRankStatusService {
 		List<PlayerSubscriptionResponse> roster =
 				subscriptionService.getPlayers(memberId, Set.copyOf(accountRepository.findEventPlayerIds()));
 		SoloRankStatusResponse status = status(memberId, byId(roster));
-		return new WorldsSoloRankResponse(roster, status.live(), status.finished(), today(roster, status.live()));
+		return new WorldsSoloRankResponse(
+				roster, status.live(), status.finished(), today(roster, status.live()), WORLDS_LEAGUES);
 	}
+
+	// 월즈 2026 출전 19팀의 리그와 시드. 팀 응답에 리그가 없고, DB 의 팀별 경기 리그는 국제전·컵이 섞여 못 쓴다.
+	// ponytail: 대회 한정 상수. 대회마다 바꾸는 게 번거로워지면 테이블로 옮긴다.
+	private static final List<WorldsSoloRankResponse.League> WORLDS_LEAGUES = List.of(
+			new WorldsSoloRankResponse.League("LCK", List.of("GEN", "HLE", "T1", "DK")),
+			new WorldsSoloRankResponse.League("LPL", List.of("AL", "BLG", "TES", "IG")),
+			new WorldsSoloRankResponse.League("LEC", List.of("G2", "MKOI", "KC")),
+			new WorldsSoloRankResponse.League("LCS", List.of("TLAW", "LYON", "C9")),
+			new WorldsSoloRankResponse.League("LCP", List.of("TSW", "CFO", "MVK")),
+			new WorldsSoloRankResponse.League("CBLOL", List.of("LOS")));
 
 	/** 선수별 오늘 전적 — finished 와 같은 24시간 창의 끝난 판 + 지금 하는 판. */
 	private List<WorldsSoloRankResponse.TodayRecord> today(List<PlayerSubscriptionResponse> roster,

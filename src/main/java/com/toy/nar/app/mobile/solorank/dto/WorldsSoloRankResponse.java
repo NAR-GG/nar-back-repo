@@ -14,8 +14,13 @@ public record WorldsSoloRankResponse(
 		@Schema(description = "최근 24시간 안에 끝난 게임, 선수당 마지막 1판. 최근 종료순")
 		List<SoloRankStatusResponse.FinishedPlayer> finished,
 		@Schema(description = "선수별 오늘 전적(최근 24시간, finished 와 같은 창). 판수는 지금 하는 판을 포함한다. 한 판도 없는 선수는 빠진다")
-		List<TodayRecord> today) {
+		List<TodayRecord> today,
+		@Schema(description = "리그 필터 칩 — 리그 순서(LCK → LPL → LEC → LCS → LCP → CBLOL), 리그 안 팀은 월즈 시드(리그 순위) 순. 명단에 없는 팀도 실린다")
+		List<League> leagues) {
 
 	public record TodayRecord(Long playerId, int games, int wins, int losses) {
+	}
+
+	public record League(String code, List<String> teamCodes) {
 	}
 }
