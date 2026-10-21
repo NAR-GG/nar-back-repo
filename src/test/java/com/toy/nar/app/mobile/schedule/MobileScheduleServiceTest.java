@@ -911,6 +911,8 @@ class MobileScheduleServiceTest {
 					assertThat(l.standings()).isTrue();
 					assertThat(l.alarm()).isTrue();
 				});
+		assertThat(response.leagues()).filteredOn(l -> l.code().equals("WORLDS")).singleElement()
+				.satisfies(l -> assertThat(l.alarm()).isTrue());
 		assertThat(response.leagues()).filteredOn(l -> l.code().equals("LPL")).singleElement()
 				.satisfies(l -> {
 					assertThat(l.standings()).isNull();
