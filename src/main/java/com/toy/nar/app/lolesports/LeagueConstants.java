@@ -30,7 +30,7 @@ public final class LeagueConstants {
 
     /** 경기 카드에 알림 벨을 띄우는 리그. */
     public static final Set<String> ALARM_LEAGUES = Set.of(
-            "LCK", "MSI", "EWC", "KESPA", "ASIAN_GAMES", "DEMACIA_CUP");
+            "LCK", "MSI", "EWC", "KESPA", "ASIAN_GAMES", "DEMACIA_CUP", "WORLDS");
 
     /**
      * 리그 아이콘 PNG URL. 비어 있으면 앱 번들 아이콘으로 폴백한다 — 번들에 없는 새 리그부터 채운다.
