@@ -5,17 +5,18 @@ import java.util.regex.Pattern;
 
 public final class RiotIdParser {
 
+	// 트래킹 사이트 장식(티어·Unranked)은 태그 뒤에만 붙는다. [^#] 로 막아 "From Iron#1123" 처럼 게임명 속 단어를 지우지 않는다.
 	private static final Pattern TRAILING_TIER_PATTERN = Pattern.compile(
 			"\\s+(Challenger|Grandmaster|Master|Diamond|Emerald|Platinum|Gold|Silver|Bronze|Iron)"
 					+ "(\\s+(I|II|III|IV|V))?"
 					+ "(\\s+\\d{1,3}(,\\d{3})*\\s*LP)?"
-					+ ".*$",
+					+ "[^#]*$",
 			Pattern.CASE_INSENSITIVE);
 	private static final Pattern TRAILING_UNRANKED_PATTERN = Pattern.compile(
-			"\\s+Unranked(?:\\s+Show\\s+Inactive)?(?:\\s*\\(\\d+\\))?.*$",
+			"\\s+Unranked(?:\\s+Show\\s+Inactive)?(?:\\s*\\(\\d+\\))?[^#]*$",
 			Pattern.CASE_INSENSITIVE);
 	private static final Pattern TRAILING_SHOW_INACTIVE_PATTERN = Pattern.compile(
-			"\\s+Show\\s+Inactive(?:\\s*\\(\\d+\\))?.*$",
+			"\\s+Show\\s+Inactive(?:\\s*\\(\\d+\\))?[^#]*$",
 			Pattern.CASE_INSENSITIVE);
 
 	private RiotIdParser() {

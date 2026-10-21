@@ -32,6 +32,16 @@ class RiotIdParserTest {
 	}
 
 	@Test
+	void keepsTierWordInsideGameName() {
+		assertThat(RiotIdParser.parse("From Iron#1123").orElseThrow().normalizedRiotId())
+				.isEqualTo("From Iron#1123");
+		assertThat(RiotIdParser.parse("Mr Unranked#NA1").orElseThrow().normalizedRiotId())
+				.isEqualTo("Mr Unranked#NA1");
+		assertThat(RiotIdParser.parse("Iron Man#KR1 Diamond IV").orElseThrow().normalizedRiotId())
+				.isEqualTo("Iron Man#KR1");
+	}
+
+	@Test
 	void stripsTrackingSiteUnrankedDecorationsBeforeParsing() {
 		RiotIdParser.ParsedRiotId parsed = RiotIdParser.parse("하이뿌#KR0 Unranked Show Inactive (1)")
 				.orElseThrow();
