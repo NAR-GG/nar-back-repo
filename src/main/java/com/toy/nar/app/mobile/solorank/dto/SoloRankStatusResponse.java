@@ -17,6 +17,8 @@ public record SoloRankStatusResponse(
 			String playerName,
 			String playerImageUrl,
 			String teamCode,
+			@Schema(description = "팀 로고. 해외 팀은 앱 로고 사전(LCK 팀만)에 없어 이 값으로 그린다")
+			String teamImageUrl,
 			String championName,
 			String championImageUrl,
 			@Schema(description = "게임 시작 시각. 로딩 화면에 감지돼 실제 시작을 아직 모르면 감지 시각", example = "2026-09-25T21:03:12+09:00")
@@ -34,6 +36,8 @@ public record SoloRankStatusResponse(
 			String playerName,
 			String playerImageUrl,
 			String teamCode,
+			@Schema(description = "팀 로고. 해외 팀은 앱 로고 사전(LCK 팀만)에 없어 이 값으로 그린다")
+			String teamImageUrl,
 			String championName,
 			String championImageUrl,
 			Boolean win,
