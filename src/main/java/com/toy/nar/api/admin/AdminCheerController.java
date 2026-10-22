@@ -40,6 +40,6 @@ public class AdminCheerController {
     /** 응원받은 선수 랭킹. sort=totalCount|memberCount|gameCount|lastCheeredAt. */
     @GetMapping("/players")
     public Page<CheerPlayerRow> players(@RequestParam(required = false) Integer days, Pageable pageable) {
-        return cheerRepository.players(days, pageable);
+        return cheerRepository.players(days, null, pageable);
     }
 }

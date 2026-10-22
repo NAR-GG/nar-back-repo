@@ -107,7 +107,7 @@ class PlayerSoloRankCheerBackofficeMySqlIntegrationTest {
 
 	@Test
 	void 선수_랭킹() {
-		var page = repository.players(null, PageRequest.of(0, 20));
+		var page = repository.players(null, null, PageRequest.of(0, 20));
 
 		assertThat(page.getContent()).extracting(CheerPlayerRow::playerName).containsExactly("Faker", "Chovy");
 		CheerPlayerRow chovy = page.getContent().get(1);
@@ -115,5 +115,15 @@ class PlayerSoloRankCheerBackofficeMySqlIntegrationTest {
 		assertThat(chovy.memberCount()).isEqualTo(2);
 		assertThat(chovy.gameCount()).isEqualTo(1);
 		assertThat(page.getContent().get(0).teamName()).isEqualTo("T1");
+	}
+
+	@Test
+	void 회원_한_명의_선수별_응원() {
+		var page = repository.players(null, 1L, PageRequest.of(0, 20));
+
+		assertThat(page.getContent()).extracting(CheerPlayerRow::playerName).containsExactly("Faker", "Chovy");
+		assertThat(page.getContent()).extracting(CheerPlayerRow::totalCount).containsExactly(150L, 10L);
+		assertThat(page.getContent()).extracting(CheerPlayerRow::gameCount).containsExactly(2L, 1L);
+		assertThat(repository.players(null, 3L, PageRequest.of(0, 20)).getContent()).isEmpty();
 	}
 }

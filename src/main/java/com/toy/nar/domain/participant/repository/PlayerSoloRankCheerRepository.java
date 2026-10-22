@@ -143,17 +143,18 @@ public class PlayerSoloRankCheerRepository {
 		return new PageImpl<>(rows, pageable, total);
 	}
 
-	/** 응원받은 선수 랭킹. */
-	public Page<CheerPlayerRow> players(Integer days, Pageable pageable) {
-		var params = new MapSqlParameterSource("days", days)
+	/** 응원받은 선수 랭킹. memberId 를 주면 그 회원이 보낸 응원만 센다(가입자 상세). */
+	public Page<CheerPlayerRow> players(Integer days, Long memberId, Pageable pageable) {
+		String where = " WHERE" + PERIOD + " AND (:memberId IS NULL OR c.member_id = :memberId)";
+		var params = new MapSqlParameterSource("days", days).addValue("memberId", memberId)
 				.addValue("limit", pageable.getPageSize()).addValue("offset", pageable.getOffset());
-		long total = jdbc.queryForObject("SELECT COUNT(DISTINCT c.player_id) FROM player_solo_rank_cheer c WHERE"
-				+ PERIOD, params, Long.class);
+		long total = jdbc.queryForObject("SELECT COUNT(DISTINCT c.player_id) FROM player_solo_rank_cheer c"
+				+ where, params, Long.class);
 		List<CheerPlayerRow> rows = jdbc.query("SELECT c.player_id, p.player_name, p.image_url, t.team_name,"
 						+ " SUM(c.cheer_count) total_count, COUNT(DISTINCT c.member_id) member_count,"
 						+ " COUNT(DISTINCT c.game_id) game_count, MAX(c.updated_at) last_at"
 						+ " FROM player_solo_rank_cheer c JOIN players p ON p.player_id = c.player_id"
-						+ " LEFT JOIN teams t ON t.team_id = p.current_team_id WHERE" + PERIOD
+						+ " LEFT JOIN teams t ON t.team_id = p.current_team_id" + where
 						+ " GROUP BY c.player_id, p.player_name, p.image_url, t.team_name"
 						+ orderBy(pageable.getSort(), PLAYER_SORTS, "c.player_id")
 						+ " LIMIT :limit OFFSET :offset",
