@@ -27,6 +27,8 @@ import com.toy.nar.domain.participant.LckTeamCatalog;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.repository.PlayerRepository;
+import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository;
+import com.toy.nar.domain.participant.repository.PlayerSoloRankCheerRepository.CheerPlayerRow;
 import com.toy.nar.domain.participant.repository.TeamRepository;
 import com.toy.nar.domain.rating.entity.LivePlayerRating;
 import com.toy.nar.domain.rating.repository.LivePlayerRatingRepository;
@@ -90,6 +92,7 @@ public class BackofficeController {
     private final AdminStatsService adminStatsService;
     private final NoticeService noticeService;
     private final NoticeImageStorageService noticeImageStorageService;
+    private final PlayerSoloRankCheerRepository cheerRepository;
 
     @GetMapping("/members")
     public Page<MemberRow> members(@RequestParam(required = false) String q, Pageable pageable) {
@@ -113,7 +116,7 @@ public class BackofficeController {
 
     /**
      * 회원 상세 — 구독(선수·팀)·작성 리뷰까지 한 번에. 목록 행 클릭으로 진입한다.
-     * 쿼리 5방(회원 + 선수구독 + 팀구독 + 리뷰 + 기기 수) + 리뷰 경기 정보 배치 조회 1방.
+     * 쿼리 6방(회원 + 선수구독 + 팀구독 + 리뷰 + 기기 수 + 선수별 응원) + 리뷰 경기 정보 배치 조회 1방.
      */
     @GetMapping("/members/{id}")
     public MemberDetail member(@PathVariable Long id) {
@@ -150,7 +153,9 @@ public class BackofficeController {
         return new MemberDetail(member.getId(), member.getNickname(), member.getEmail(),
                 member.getFavoriteLeagueName(), favoriteTeam != null ? favoriteTeam.getName() : null,
                 memberDeviceRepository.countByMember_IdAndActiveTrue(id), member.getCreatedAt(),
-                players, teams, comments);
+                players, teams, comments,
+                // 응원한 선수는 많아야 십여 명이라 캡이 사실상 안 걸린다.
+                cheerRepository.players(null, id, PageRequest.of(0, 100)).getContent());
     }
 
     @GetMapping("/players")
@@ -489,7 +494,7 @@ public class BackofficeController {
     public record MemberDetail(Long id, String name, String email, String favoriteLeagueName,
                                String favoriteTeamName, long deviceCount, LocalDateTime createdAt,
                                List<SubscribedPlayerRow> players, List<SubscribedTeamRow> teams,
-                               List<RatingRow> comments) {}
+                               List<RatingRow> comments, List<CheerPlayerRow> cheers) {}
 
     /** id = 선수 id (FE 가 구독 탭 선수 상세로 이동한다). */
     public record SubscribedPlayerRow(Long id, String playerName, String imageUrl, String teamName,
