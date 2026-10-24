@@ -53,18 +53,36 @@ public class PlayerPageQueryRepository {
 		return result;
 	}
 
-	public record ReviewRow(int rating, String comment, String teamSide, String matchTitle, String blueTeamCode,
-							String redTeamCode, LocalDateTime createdAt) {
+	public record ReviewRow(long id, String liveGameId, int liveParticipantId, int rating, String comment,
+							String teamSide, String matchId, String matchTitle, String blueTeamCode, String redTeamCode,
+							LocalDateTime createdAt) {
 	}
 
-	public List<ReviewRow> worldsReviews(Long playerId, int year, int limit) {
-		return jdbc.query("SELECT r.rating, r.comment, r.team_side, m.match_title, m.blue_team_code, m.red_team_code,"
-						+ " r.created_at" + WORLDS_RATINGS + " AND r.comment IS NOT NULL AND r.comment <> ''"
-						+ " ORDER BY r.created_at DESC LIMIT :limit",
-				params(playerId, year).addValue("limit", limit),
-				(rs, i) -> new ReviewRow(rs.getInt("rating"), rs.getString("comment"), rs.getString("team_side"),
-						rs.getString("match_title"), rs.getString("blue_team_code"), rs.getString("red_team_code"),
+	/** 이번 월즈 한줄평, 최신순. 탭하면 그 세트 평점 상세로 가도록 라이브 게임·참가자 id 를 같이 준다. */
+	public List<ReviewRow> worldsReviews(Long playerId, int year, int offset, int limit) {
+		return jdbc.query("SELECT r.id, r.live_game_id, r.live_participant_id, r.rating, r.comment, r.team_side,"
+						+ " m.id AS match_id, m.match_title, m.blue_team_code, m.red_team_code, r.created_at"
+						+ WORLDS_RATINGS + " AND r.comment IS NOT NULL AND r.comment <> ''"
+						+ " ORDER BY r.created_at DESC, r.id DESC LIMIT :limit OFFSET :offset",
+				params(playerId, year).addValue("limit", limit).addValue("offset", offset),
+				(rs, i) -> new ReviewRow(rs.getLong("id"), rs.getString("live_game_id"),
+						rs.getInt("live_participant_id"), rs.getInt("rating"), rs.getString("comment"),
+						rs.getString("team_side"), rs.getString("match_id"), rs.getString("match_title"),
+						rs.getString("blue_team_code"), rs.getString("red_team_code"),
 						rs.getTimestamp("created_at").toLocalDateTime()));
+	}
+
+	public record SwissMatch(String id, String blueTeamCode, String redTeamCode) {
+	}
+
+	/** 이번 월즈 스위스 경기, 날짜순. 팀별로 몇 번째 경기인지 세어 "N라운드"를 만든다. */
+	public List<SwissMatch> worldsSwissMatches(int year) {
+		return jdbc.query("SELECT id, blue_team_code, red_team_code FROM league_match"
+						+ " WHERE league_name = '" + SCHEDULE_WORLDS + "' AND season_year = :year"
+						+ " AND match_title LIKE '스위스 |%' ORDER BY match_date",
+				new MapSqlParameterSource("year", year),
+				(rs, i) -> new SwissMatch(rs.getString("id"), rs.getString("blue_team_code"),
+						rs.getString("red_team_code")));
 	}
 
 	public long worldsReviewCount(Long playerId, int year) {
@@ -72,20 +90,22 @@ public class PlayerPageQueryRepository {
 				params(playerId, year), Long.class);
 	}
 
-	public record GameRating(double average, long count, String stage) {
+	public record GameRating(double average, long count, String matchId, String matchTitle) {
 	}
 
 	/** CSV 게임 id → 그 세트의 팬 평점. 라이브 매핑(live_game_mapping)이 풀린 세트만. */
 	public Map<Long, GameRating> worldsRatingsByGame(Long playerId, int year) {
 		Map<Long, GameRating> result = new HashMap<>();
-		jdbc.query("SELECT gm.internal_game_id, AVG(r.rating) AS avg_rating, COUNT(*) AS cnt, MAX(m.match_title) AS title"
+		jdbc.query("SELECT gm.internal_game_id, AVG(r.rating) AS avg_rating, COUNT(*) AS cnt, MAX(m.match_title) AS title,"
+						+ " MAX(m.id) AS match_id"
 						+ " FROM live_player_rating r JOIN league_match m ON m.id = r.match_id"
 						+ " JOIN live_game_mapping gm ON gm.live_game_id = r.live_game_id"
 						+ " WHERE r.internal_player_id = :playerId AND m.league_name = '" + SCHEDULE_WORLDS + "'"
 						+ " AND m.season_year = :year AND gm.internal_game_id IS NOT NULL GROUP BY gm.internal_game_id",
 				params(playerId, year), rs -> {
 					result.put(rs.getLong("internal_game_id"),
-							new GameRating(rs.getDouble("avg_rating"), rs.getLong("cnt"), rs.getString("title")));
+							new GameRating(rs.getDouble("avg_rating"), rs.getLong("cnt"), rs.getString("match_id"),
+									rs.getString("title")));
 				});
 		return result;
 	}

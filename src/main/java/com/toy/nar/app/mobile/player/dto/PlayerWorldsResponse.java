@@ -35,7 +35,7 @@ public record PlayerWorldsResponse(
 			long gameId,
 			OffsetDateTime playedAt,
 			boolean win,
-			@Schema(description = "스테이지(블록명). 모르면 null", example = "스위스")
+			@Schema(description = "스테이지. 스위스면 이 선수 팀 기준 라운드. 평점 없는 세트는 모름(null)", example = "스위스 3라운드")
 			String stage,
 			@Schema(description = "해외 팀은 CSV 에 코드·로고가 없기도 하다. 그때는 팀 이름으로 그린다")
 			String opponentTeamCode,
@@ -73,6 +73,22 @@ public record PlayerWorldsResponse(
 	public record Bucket(int rating, long count, double percentage) {
 	}
 
-	public record Review(int rating, String comment, String opponentTeamCode, String stage, OffsetDateTime createdAt) {
+	public record Review(
+			long ratingId,
+			@Schema(description = "라이브 게임 id. 평점 상세(/api/mobile/live/games/{gameId}/participants/{participantId}/ratings)로 간다")
+			String gameId,
+			int participantId,
+			@Schema(description = "그 세트 진영", example = "Blue")
+			String teamSide,
+			int rating,
+			String comment,
+			String opponentTeamCode,
+			@Schema(example = "스위스 3라운드")
+			String stage,
+			OffsetDateTime createdAt) {
+	}
+
+	@Schema(description = "한줄평 전체 보기 — 최신순 페이지")
+	public record ReviewPage(List<Review> reviews, long totalCount, boolean hasNext) {
 	}
 }

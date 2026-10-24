@@ -59,10 +59,20 @@ class MobilePlayerPageServiceTest {
 	void 리뷰_상대팀은_세트_진영이_아니라_팀_코드로_고른다() {
 		// T1 이 매치에서 blue 로 등록됐지만 이 세트는 red 진영
 		PlayerPageQueryRepository.ReviewRow row = new PlayerPageQueryRepository.ReviewRow(
-				5, "굿", "Red", "스위스 | T1 vs DK", "T1", "DK", LocalDateTime.now());
+				1L, "g1", 3, 5, "굿", "Red", "m1", "스위스 | T1 vs DK", "T1", "DK", LocalDateTime.now());
 
 		assertThat(MobilePlayerPageService.opponent(row, "T1")).isEqualTo("DK");
 		assertThat(MobilePlayerPageService.opponent(row, null)).isEqualTo("T1");
+	}
+
+	@Test
+	void 스테이지는_스위스면_팀_기준_라운드를_붙인다() {
+		Map<String, Integer> rounds = Map.of("m3", 3);
+
+		assertThat(MobilePlayerPageService.stage("m3", "스위스 | T1 vs IG", rounds)).isEqualTo("스위스 3라운드");
+		assertThat(MobilePlayerPageService.stage("m9", "스위스 | T1 vs IG", rounds)).isEqualTo("스위스");
+		assertThat(MobilePlayerPageService.stage("k1", "8강 | T1 vs GEN", rounds)).isEqualTo("8강");
+		assertThat(MobilePlayerPageService.stage("k1", null, rounds)).isNull();
 	}
 
 	private static PlayerSoloRankGame game(boolean win, int kills, int deaths, int assists, int duration) {
