@@ -80,21 +80,13 @@ public interface PlayerSoloRankGameRepository extends JpaRepository<PlayerSoloRa
 			@Param("detectedSince") java.time.LocalDateTime detectedSince,
 			@Param("endedSince") java.time.LocalDateTime endedSince);
 
-	/** 선수의 최근 솔랭 게임(감지 최신순). 선수 카드 "최근 솔랭"용. */
-	List<PlayerSoloRankGame> findTop20ByPlayer_IdOrderByDetectedAtDesc(Long playerId);
+	/** 결과가 수집된 최근 솔랭(감지 최신순). 선수 페이지 솔랭 탭용. */
+	@Query("SELECT g FROM PlayerSoloRankGame g LEFT JOIN FETCH g.champion"
+			+ " WHERE g.player.id = :playerId AND g.win IS NOT NULL"
+			+ " ORDER BY g.detectedAt DESC")
+	List<PlayerSoloRankGame> findRecentFinished(@Param("playerId") Long playerId,
+			org.springframework.data.domain.Pageable pageable);
 
-	/** 선수의 챔피언별 솔랭 플레이 횟수(많은 순). 선수 카드 "챔프 폭"용. */
-	@Query("SELECT g.champion.id AS championId, COUNT(g) AS playCount "
-			+ "FROM PlayerSoloRankGame g "
-			+ "WHERE g.player.id = :playerId AND g.champion IS NOT NULL "
-			+ "GROUP BY g.champion.id "
-			+ "ORDER BY COUNT(g) DESC")
-	List<ChampionPlayCount> findChampionPlayCounts(@Param("playerId") Long playerId);
-
-	/** 챔프 폭 집계 projection. */
-	interface ChampionPlayCount {
-		Long getChampionId();
-
-		long getPlayCount();
-	}
+	/** {@code since} 이후 감지돼 결과까지 수집된 판 수. 하루 평균 판수용. */
+	long countByPlayer_IdAndWinIsNotNullAndDetectedAtGreaterThanEqual(Long playerId, java.time.LocalDateTime since);
 }

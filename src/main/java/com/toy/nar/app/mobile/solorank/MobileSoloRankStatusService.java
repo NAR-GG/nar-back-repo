@@ -39,7 +39,7 @@ import java.util.stream.Collectors;
 public class MobileSoloRankStatusService {
 
 	/** 모니터가 이보다 오래 계정을 못 봤으면 IN_RANKED_SOLO 가 굳은 것으로 보고 라이브에서 뺀다. */
-	static final Duration LIVE_FRESHNESS = Duration.ofMinutes(15);
+	public static final Duration LIVE_FRESHNESS = Duration.ofMinutes(15);
 	/** 끝난 게임을 돌려주는 범위. 앱이 이 안에서 노출 기간(spec 미결: 6시간 안)을 정한다. */
 	static final Duration FINISHED_WINDOW = Duration.ofHours(24);
 	/** 감지는 종료보다 앞선다(게임 길이 + 폴링 지연). 인덱스 범위용으로 넉넉히. */
@@ -53,6 +53,11 @@ public class MobileSoloRankStatusService {
 
 	public SoloRankStatusResponse getStatus(Long memberId) {
 		return status(memberId, byId(subscriptionService.getSubscriptions(memberId))).response();
+	}
+
+	/** 선수 한 명의 지금 판과 최근 24시간 마지막 판 — 선수 페이지 상단. */
+	public SoloRankStatusResponse playerStatus(Long memberId, PlayerSubscriptionResponse player) {
+		return status(memberId, Map.of(player.playerId(), player)).response();
 	}
 
 	/**
