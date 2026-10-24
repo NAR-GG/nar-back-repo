@@ -53,39 +53,67 @@ public class PlayerPageQueryRepository {
 		return result;
 	}
 
-	public record ReviewRow(int rating, String comment, String teamSide, String matchTitle, String blueTeamCode,
-							String redTeamCode, LocalDateTime createdAt) {
+	public record ReviewRow(long id, String liveGameId, int liveParticipantId, int rating, String comment,
+							String teamSide, String matchId, String matchTitle, String blueTeamCode, String redTeamCode,
+							LocalDateTime createdAt) {
 	}
 
-	public List<ReviewRow> worldsReviews(Long playerId, int year, int limit) {
-		return jdbc.query("SELECT r.rating, r.comment, r.team_side, m.match_title, m.blue_team_code, m.red_team_code,"
-						+ " r.created_at" + WORLDS_RATINGS + " AND r.comment IS NOT NULL AND r.comment <> ''"
-						+ " ORDER BY r.created_at DESC LIMIT :limit",
-				params(playerId, year).addValue("limit", limit),
-				(rs, i) -> new ReviewRow(rs.getInt("rating"), rs.getString("comment"), rs.getString("team_side"),
-						rs.getString("match_title"), rs.getString("blue_team_code"), rs.getString("red_team_code"),
+	/** 이번 월즈 한줄평, 최신순. 탭하면 그 세트 평점 상세로 가도록 라이브 게임·참가자 id 를 같이 준다. */
+	/** 한줄평 조건. {@code excluded} 는 보는 사람이 차단한 회원 — 빈 IN 을 피하려고 없으면 -1 하나를 넣는다. */
+	private static final String WITH_COMMENT = " AND r.comment IS NOT NULL AND r.comment <> ''"
+			+ " AND r.member_id NOT IN (:excluded)";
+
+	private static MapSqlParameterSource reviewParams(Long playerId, int year, List<Long> excluded) {
+		return params(playerId, year).addValue("excluded", excluded.isEmpty() ? List.of(-1L) : excluded);
+	}
+
+	public List<ReviewRow> worldsReviews(Long playerId, int year, List<Long> excluded, long offset, int limit) {
+		return jdbc.query("SELECT r.id, r.live_game_id, r.live_participant_id, r.rating, r.comment, r.team_side,"
+						+ " m.id AS match_id, m.match_title, m.blue_team_code, m.red_team_code, r.created_at"
+						+ WORLDS_RATINGS + WITH_COMMENT
+						+ " ORDER BY r.created_at DESC, r.id DESC LIMIT :limit OFFSET :offset",
+				reviewParams(playerId, year, excluded).addValue("limit", limit).addValue("offset", offset),
+				(rs, i) -> new ReviewRow(rs.getLong("id"), rs.getString("live_game_id"),
+						rs.getInt("live_participant_id"), rs.getInt("rating"), rs.getString("comment"),
+						rs.getString("team_side"), rs.getString("match_id"), rs.getString("match_title"),
+						rs.getString("blue_team_code"), rs.getString("red_team_code"),
 						rs.getTimestamp("created_at").toLocalDateTime()));
 	}
 
-	public long worldsReviewCount(Long playerId, int year) {
-		return jdbc.queryForObject("SELECT COUNT(*)" + WORLDS_RATINGS + " AND r.comment IS NOT NULL AND r.comment <> ''",
-				params(playerId, year), Long.class);
+	public record SwissMatch(String id, String blueTeamCode, String redTeamCode) {
 	}
 
-	public record GameRating(double average, long count, String stage) {
+	/** 이번 월즈 스위스 경기, 날짜순. 팀별로 몇 번째 경기인지 세어 "N라운드"를 만든다. */
+	public List<SwissMatch> worldsSwissMatches(int year) {
+		return jdbc.query("SELECT id, blue_team_code, red_team_code FROM league_match"
+						+ " WHERE league_name = '" + SCHEDULE_WORLDS + "' AND season_year = :year"
+						+ " AND match_title LIKE '스위스 |%' ORDER BY match_date, id",
+				new MapSqlParameterSource("year", year),
+				(rs, i) -> new SwissMatch(rs.getString("id"), rs.getString("blue_team_code"),
+						rs.getString("red_team_code")));
+	}
+
+	public long worldsReviewCount(Long playerId, int year, List<Long> excluded) {
+		return jdbc.queryForObject("SELECT COUNT(*)" + WORLDS_RATINGS + WITH_COMMENT,
+				reviewParams(playerId, year, excluded), Long.class);
+	}
+
+	public record GameRating(double average, long count, String matchId, String matchTitle) {
 	}
 
 	/** CSV 게임 id → 그 세트의 팬 평점. 라이브 매핑(live_game_mapping)이 풀린 세트만. */
 	public Map<Long, GameRating> worldsRatingsByGame(Long playerId, int year) {
 		Map<Long, GameRating> result = new HashMap<>();
-		jdbc.query("SELECT gm.internal_game_id, AVG(r.rating) AS avg_rating, COUNT(*) AS cnt, MAX(m.match_title) AS title"
+		jdbc.query("SELECT gm.internal_game_id, AVG(r.rating) AS avg_rating, COUNT(*) AS cnt, MAX(m.match_title) AS title,"
+						+ " MAX(m.id) AS match_id"
 						+ " FROM live_player_rating r JOIN league_match m ON m.id = r.match_id"
 						+ " JOIN live_game_mapping gm ON gm.live_game_id = r.live_game_id"
 						+ " WHERE r.internal_player_id = :playerId AND m.league_name = '" + SCHEDULE_WORLDS + "'"
 						+ " AND m.season_year = :year AND gm.internal_game_id IS NOT NULL GROUP BY gm.internal_game_id",
 				params(playerId, year), rs -> {
 					result.put(rs.getLong("internal_game_id"),
-							new GameRating(rs.getDouble("avg_rating"), rs.getLong("cnt"), rs.getString("title")));
+							new GameRating(rs.getDouble("avg_rating"), rs.getLong("cnt"), rs.getString("match_id"),
+									rs.getString("title")));
 				});
 		return result;
 	}

@@ -13,6 +13,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Mobile. 선수 페이지", description = "홈 솔랭 카드에서 들어가는 선수 페이지 API. 비회원도 부를 수 있다")
@@ -35,8 +36,18 @@ public class MobilePlayerPageController {
 
 	@Operation(summary = "선수 페이지 월즈 탭", description = "이번 월즈 지표(포지션 비교)·세트별 기록·챔피언·팬 평점.")
 	@GetMapping("/worlds")
-	public ResponseEntity<PlayerWorldsResponse> getWorlds(@PathVariable Long playerId) {
-		return ResponseEntity.ok(playerPageService.worlds(playerId));
+	public ResponseEntity<PlayerWorldsResponse> getWorlds(@PathVariable Long playerId,
+			@AuthenticationPrincipal Long memberId) {
+		return ResponseEntity.ok(playerPageService.worlds(playerId, memberId));
+	}
+
+	@Operation(summary = "선수 페이지 한줄평 전체", description = "이번 월즈 한줄평 최신순 페이지. size 는 1~50.")
+	@GetMapping("/worlds/reviews")
+	public ResponseEntity<PlayerWorldsResponse.ReviewPage> getReviews(@PathVariable Long playerId,
+			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+			@AuthenticationPrincipal Long memberId) {
+		return ResponseEntity.ok(playerPageService.reviews(playerId, memberId, Math.min(Math.max(page, 0), 10_000),
+				Math.min(Math.max(size, 1), 50)));
 	}
 
 	@Operation(summary = "선수 페이지 솔랭 탭", description = "추적 계정, 최근 20판 요약·모스트·판별 기록(응원 수 포함).")

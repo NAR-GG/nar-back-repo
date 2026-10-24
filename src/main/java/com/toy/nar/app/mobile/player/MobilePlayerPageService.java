@@ -14,6 +14,7 @@ import com.toy.nar.app.standings.StandingsBlocks;
 import com.toy.nar.app.standings.StandingsService;
 import com.toy.nar.app.standings.dto.StandingsResponse;
 import com.toy.nar.common.error.ErrorCode;
+import com.toy.nar.domain.community.repository.CommunityInteractionRepository;
 import com.toy.nar.common.error.exception.CustomException;
 import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
@@ -74,6 +75,7 @@ public class MobilePlayerPageService {
 	private final PlayerPageQueryRepository queryRepository;
 	private final StandingsService standingsService;
 	private final ObjectMapper objectMapper;
+	private final CommunityInteractionRepository interactionRepository;
 
 	public PlayerPageResponse page(Long playerId, Long memberId) {
 		PlayerSubscriptionResponse player = player(playerId, memberId);
@@ -102,18 +104,19 @@ public class MobilePlayerPageService {
 				player.startEnabled(), player.endEnabled(), live, lastGame, nextMatch, stats);
 	}
 
-	public PlayerWorldsResponse worlds(Long playerId) {
+	public PlayerWorldsResponse worlds(Long playerId, Long viewerId) {
 		PlayerSubscriptionResponse player = player(playerId, null);
 		List<WorldsGameRow> rows = queryRepository.worldsGames(playerId, WORLDS_SEASON_YEAR);
 		int wins = (int) rows.stream().filter(WorldsGameRow::win).count();
 
 		Map<Long, PlayerPageQueryRepository.GameRating> ratings =
 				queryRepository.worldsRatingsByGame(playerId, WORLDS_SEASON_YEAR);
+		Map<String, Integer> rounds = swissRounds(player.teamCode());
 		List<PlayerWorldsResponse.Game> games = rows.stream()
 				.map(row -> {
 					PlayerPageQueryRepository.GameRating rating = ratings.get(row.gameId());
 					return new PlayerWorldsResponse.Game(row.gameId(), row.playedAt().atOffset(ZoneOffset.UTC), row.win(),
-							rating == null ? null : StandingsBlocks.blockNameOf(rating.stage()),
+							rating == null ? null : stage(rating.matchId(), rating.matchTitle(), rounds),
 							row.opponentTeamCode(), row.opponentTeamName(), row.opponentTeamImageUrl(), row.championName(),
 							row.championImageUrl(), row.kills(), row.deaths(), row.assists(), row.cs(), row.damage(),
 							rating == null ? null
@@ -126,7 +129,7 @@ public class MobilePlayerPageService {
 				rows.isEmpty() ? List.of() : stats(playerId, rows.get(0).position()),
 				games,
 				champions(gameRepository.findRecentFinished(playerId, PageRequest.of(0, RECENT_GAMES)), rows),
-				worldsRating(playerId, player.teamCode()));
+				worldsRating(playerId, player.teamCode(), rounds, blocked(viewerId)));
 	}
 
 	public PlayerSoloRankResponse soloRank(Long playerId) {
@@ -290,7 +293,54 @@ public class MobilePlayerPageService {
 				.toList();
 	}
 
-	private PlayerWorldsResponse.Rating worldsRating(Long playerId, String teamCode) {
+	/** 한줄평 전체 보기. */
+	public PlayerWorldsResponse.ReviewPage reviews(Long playerId, Long viewerId, int page, int size) {
+		PlayerSubscriptionResponse player = player(playerId, null);
+		List<Long> blocked = blocked(viewerId);
+		long total = queryRepository.worldsReviewCount(playerId, WORLDS_SEASON_YEAR, blocked);
+		List<PlayerWorldsResponse.Review> reviews = reviews(playerId, player.teamCode(),
+				swissRounds(player.teamCode()), blocked, (long) page * size, size);
+		return new PlayerWorldsResponse.ReviewPage(reviews, total, (long) (page + 1) * size < total);
+	}
+
+	/** 내가 차단한 회원의 한줄평은 홈·평점 상세처럼 여기서도 숨긴다. */
+	private List<Long> blocked(Long viewerId) {
+		return viewerId == null ? List.of() : interactionRepository.findBlockedMemberIds(viewerId);
+	}
+
+	private List<PlayerWorldsResponse.Review> reviews(Long playerId, String teamCode, Map<String, Integer> rounds,
+			List<Long> blocked, long offset, int limit) {
+		return queryRepository.worldsReviews(playerId, WORLDS_SEASON_YEAR, blocked, offset, limit).stream()
+				.map(row -> new PlayerWorldsResponse.Review(row.id(), row.liveGameId(), row.liveParticipantId(),
+						row.teamSide(), row.rating(), row.comment(), opponent(row, teamCode),
+						stage(row.matchId(), row.matchTitle(), rounds), offset(row.createdAt())))
+				.toList();
+	}
+
+	/** 팀의 스위스 경기 id → 몇 라운드. 스위스는 한 라운드에 팀당 한 경기라 날짜순 번째가 곧 라운드다. */
+	private Map<String, Integer> swissRounds(String teamCode) {
+		if (teamCode == null) {
+			return Map.of();
+		}
+		Map<String, Integer> rounds = new HashMap<>();
+		queryRepository.worldsSwissMatches(WORLDS_SEASON_YEAR).stream()
+				.filter(match -> teamCode.equals(match.blueTeamCode()) || teamCode.equals(match.redTeamCode()))
+				.forEach(match -> rounds.put(match.id(), rounds.size() + 1));
+		return rounds;
+	}
+
+	/** 스위스면 "스위스 N라운드", 아니면 블록명("8강"). 블록명이 비면 null. */
+	static String stage(String matchId, String matchTitle, Map<String, Integer> rounds) {
+		String block = StandingsBlocks.blockNameOf(matchTitle);
+		if (block.isEmpty()) {
+			return null;
+		}
+		Integer round = rounds.get(matchId);
+		return SWISS.equals(block) && round != null ? block + " " + round + "라운드" : block;
+	}
+
+	private PlayerWorldsResponse.Rating worldsRating(Long playerId, String teamCode, Map<String, Integer> rounds,
+			List<Long> blocked) {
 		Map<Integer, Long> distribution = queryRepository.worldsRatingDistribution(playerId, WORLDS_SEASON_YEAR);
 		if (distribution.isEmpty()) {
 			return null;
@@ -302,14 +352,9 @@ public class MobilePlayerPageService {
 					return new PlayerWorldsResponse.Bucket(rating, bucket, round1(100.0 * bucket / count));
 				})
 				.toList();
-		List<PlayerWorldsResponse.Review> reviews = queryRepository
-				.worldsReviews(playerId, WORLDS_SEASON_YEAR, REVIEW_PREVIEW).stream()
-				.map(row -> new PlayerWorldsResponse.Review(row.rating(), row.comment(),
-						opponent(row, teamCode),
-						StandingsBlocks.blockNameOf(row.matchTitle()), offset(row.createdAt())))
-				.toList();
-		return new PlayerWorldsResponse.Rating(average(distribution), count, buckets, reviews,
-				queryRepository.worldsReviewCount(playerId, WORLDS_SEASON_YEAR));
+		return new PlayerWorldsResponse.Rating(average(distribution), count, buckets,
+				reviews(playerId, teamCode, rounds, blocked, 0, REVIEW_PREVIEW),
+				queryRepository.worldsReviewCount(playerId, WORLDS_SEASON_YEAR, blocked));
 	}
 
 	/**
