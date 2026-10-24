@@ -21,21 +21,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 에이전트는 사용자가 작업을 맡기면("진행하자" 등) PR → 머지 → 롤아웃 확인까지 끝까지 간다.
 단 **아래 게이트를 모두 통과한 PR만** 머지한다. main 머지는 곧 prod 배포다(CI/CD 절).
+**작업 위임 + 게이트 통과가 "서비스 가용성 수칙"의 사용자 승인을 대신한다.** 단 3번 항목과
+그 절의 인프라 작업(DB·시크릿·재부팅·의존 인프라)은 여전히 사용자 승인이 먼저다.
 
-1. **기계 검증**: 로컬 `./gradlew test` 통과 + CI 초록 + `gh pr view --json mergeStateStatus` 가 `CLEAN`.
+1. **기계 검증**
+   - `src/`·gradle 파일이 바뀐 PR 은 로컬 `./gradlew test` 통과(리뷰 반영 커밋 뒤에도 다시).
+   - `gh pr view --json mergeStateStatus` 가 `CLEAN`(main 보호가 strict + required check 라 CLEAN = 최신 커밋 CI 초록).
+     `UNKNOWN` 이면 재조회, `BEHIND` 면 `gh pr update-branch` 후 `gh pr checks --watch`. CI 실패면 고치고 1번부터.
 2. **독립 리뷰**: 작성한 세션이 아닌, 작업 맥락이 없는 별도 Claude 서브에이전트가 리뷰한다.
-   리뷰어에게는 PR diff·PR 본문·사용자의 원래 요청 문장만 넘긴다(작성자의 설명·가정은 넘기지 않는다).
+   - 넘기는 것: PR 번호(diff·본문), 사용자의 원래 요청 문장, 워크트리 경로(읽기 전용). 작성자의 대화 맥락은 넘기지 않는다.
    - 보는 것: 버그, 요청 대비 누락·과잉, 그리고 이 레포의 함정 —
      evict 캐시 TTL(Caching 절), 웹·스케줄러 두 파드 간 인메모리 상태(Scheduling 절),
      마이그레이션 후방호환(CI/CD 절), DDL 의 `CHARSET` 만 쓰고 `COLLATE` 누락, N+1.
-   - 지적은 `blocker` / `nit` 로 등급을 매긴다. **blocker 0건이면 통과.**
-   - blocker 가 있으면 고치고 새 리뷰어로 다시 리뷰한다(이전 지적·대응을 함께 넘긴다). **최대 2라운드**, 그래도 남으면 멈추고 사용자에게 묻는다.
-   - 리뷰 결과 요약(라운드별 지적·대응)을 PR 코멘트로 남긴다.
+   - 지적은 `blocker` / `nit` 로 등급을 매긴다. **blocker 0건이면 통과.** nit 은 반영 여부를 작성자가 판단한다.
+   - blocker 가 있으면 고치고 **새 리뷰어**로 재리뷰한다(이전 지적과 대응을 함께 넘긴다).
+     **리뷰는 총 2회까지** — 2회차에도 blocker 가 남으면 멈추고 사용자에게 묻는다.
+   - 라운드별 지적·대응 요약을 `gh pr comment` 단일 코멘트로 남긴다
+     (인라인 리뷰 스레드는 `required_conversation_resolution` 때문에 머지를 막는다).
 3. **자동 머지 금지 — 해당하면 PR 까지만 올리고 사용자에게 묻는다** (리뷰 통과와 무관):
    - 후방호환이 깨지는 마이그레이션(`DROP`·`RENAME`·`MODIFY`, 데이터 삭제·백필)
    - 인증·토큰·권한 코드(`auth`, JWT, 세션, 관리자 권한 판정)
-   - 시크릿·환경변수 추가/변경, `infra/k8s` 의 strategy·리더 리스·리소스 외 구조 변경
-4. **머지 후**: squash 머지 → 배포 워크플로 완료 → ArgoCD sync·파드 Ready 확인까지 보고한다.
+   - 시크릿·환경변수 추가/변경
+   - `infra/` 변경 전부(strategy·리더 리스 포함). **예외는 `infra/k8s` 리소스 수치(requests/limits·JVM 힙) 조정만**
+   - `.github/workflows` 변경
+4. **머지**: `gh pr merge --squash`. **`--admin` 우회 금지.** 머지는 경기 중에도 안전하므로 일정 확인을 면제한다.
+5. **머지 후**: 배포 워크플로 완료 → ArgoCD sync·파드 Ready 확인까지 보고한다.
+   실패하면 즉시 보고하고, 롤백(`infra/argocd/README.md`, Git revert PR)은 사용자에게 묻는다.
 
 ## 서비스 가용성 수칙 — 경기 시간 보호 (필수)
 
