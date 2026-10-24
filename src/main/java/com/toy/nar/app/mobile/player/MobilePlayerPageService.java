@@ -60,6 +60,7 @@ public class MobilePlayerPageService {
 	static final int RECENT_GAMES = 20;
 	static final int REVIEW_PREVIEW = 3;
 	static final int CHEER_DAYS = 7;
+	static final int MET_PLAYERS = 10;
 	private static final String SWISS = "스위스";
 	/** 토너먼트 블록 → 이기면 어디로 가나. */
 	private static final Map<String, String> KNOCKOUT_STAKES = Map.of(
@@ -146,7 +147,29 @@ public class MobilePlayerPageService {
 								nz(game.getDeaths()), nz(game.getAssists()), game.getDurationSeconds(),
 								offset(game.getGameEndedAt()),
 								cheers.getOrDefault(new GameKey(playerId, game.getGameId()), 0L)))
-						.toList());
+						.toList(),
+				metPlayers(playerId));
+	}
+
+	private List<PlayerSoloRankResponse.MetPlayer> metPlayers(Long playerId) {
+		List<PlayerPageQueryRepository.MetRow> rows = queryRepository.metPlayers(playerId, CHEER_DAYS, MET_PLAYERS);
+		if (rows.isEmpty()) {
+			return List.of();
+		}
+		Map<Long, PlayerSubscriptionResponse> players = new HashMap<>();
+		subscriptionService.getPlayers(null, rows.stream().map(PlayerPageQueryRepository.MetRow::playerId)
+						.collect(java.util.stream.Collectors.toSet()))
+				.forEach(player -> players.put(player.playerId(), player));
+		return rows.stream()
+				.filter(row -> players.containsKey(row.playerId()))
+				.map(row -> {
+					PlayerSubscriptionResponse met = players.get(row.playerId());
+					return new PlayerSoloRankResponse.MetPlayer(met.playerId(), met.playerName(),
+							met.playerImageUrl(), met.teamCode(), met.teamImageUrl(), row.sameTeamGames(),
+							row.sameTeamWins(), row.opponentGames(), row.opponentWins(),
+							row.opponentGames() - row.opponentWins(), offset(row.lastMetAt()));
+				})
+				.toList();
 	}
 
 	private PlayerSubscriptionResponse player(Long playerId, Long memberId) {

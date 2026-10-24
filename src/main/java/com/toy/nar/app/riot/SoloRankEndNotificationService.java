@@ -174,7 +174,9 @@ public class SoloRankEndNotificationService {
 					tracked == null ? null : tracked.win(),
 					tracked == null ? null : tracked.kills(),
 					tracked == null ? null : tracked.deaths(),
-					tracked == null ? null : tracked.assists());
+					tracked == null ? null : tracked.assists(),
+					tracked == null ? null : tracked.teamId(),
+					account.getPlatform());
 		} catch (Exception e) {
 			log.warn("[solo-rank-end] 결과 저장 실패 player={} gameId={}", player.getName(), target.gameId, e);
 		}

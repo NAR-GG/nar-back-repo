@@ -98,10 +98,10 @@ class PlayerSoloRankGameQueryTest {
 		game(chovy, "c1", now.minusHours(2));
 		game(chovy, "running", now.minusMinutes(10)); // 아직 결과 없음
 		em.flush();
-		repository.recordResult(faker.getId(), "old", now.minusHours(30), now.minusHours(29), 1800, true, 1, 1, 1);
-		repository.recordResult(faker.getId(), "g1", now.minusHours(3), now.minusMinutes(150), 1800, false, 2, 5, 3);
-		repository.recordResult(faker.getId(), "g2", now.minusHours(1), now.minusMinutes(30), 1800, true, 12, 1, 9);
-		repository.recordResult(chovy.getId(), "c1", null, now.minusMinutes(90), 1500, true, 7, 0, 4);
+		repository.recordResult(faker.getId(), "old", now.minusHours(30), now.minusHours(29), 1800, true, 1, 1, 1, 100, "KR");
+		repository.recordResult(faker.getId(), "g1", now.minusHours(3), now.minusMinutes(150), 1800, false, 2, 5, 3, 100, "KR");
+		repository.recordResult(faker.getId(), "g2", now.minusHours(1), now.minusMinutes(30), 1800, true, 12, 1, 9, 100, "KR");
+		repository.recordResult(chovy.getId(), "c1", null, now.minusMinutes(90), 1500, true, 7, 0, 4, 100, "KR");
 
 		LocalDateTime endedSince = now.minusHours(24);
 		List<PlayerSoloRankGame> finished = repository.findFinishedSince(

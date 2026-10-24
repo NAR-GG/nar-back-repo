@@ -40,6 +40,7 @@ public record RiotMatchResponse(
 			Boolean win,
 			Integer kills,
 			Integer deaths,
-			Integer assists) {
+			Integer assists,
+			Integer teamId) {
 	}
 }

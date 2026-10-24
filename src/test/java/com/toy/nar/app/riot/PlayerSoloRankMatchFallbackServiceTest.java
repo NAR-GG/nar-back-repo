@@ -102,7 +102,7 @@ class PlayerSoloRankMatchFallbackServiceTest {
 		when(soloRankGameHistoryRecorder.exists(any(), eq("100"))).thenReturn(false);
 		when(riotApiClient.getMatch(eq("KR_100"), eq("KR"))).thenReturn(match(
 				420, System.currentTimeMillis() - 60_000,
-				new RiotMatchResponse.Participant("puuid-supking", 902, true, 4, 2, 8)));
+				new RiotMatchResponse.Participant("puuid-supking", 902, true, 4, 2, 8, 100)));
 		when(championDataService.findChampionByRiotKey(902)).thenReturn(Optional.empty());
 		when(soloRankGameHistoryRecorder.record(any(), eq("100"), any(), any())).thenReturn(true);
 
@@ -127,7 +127,7 @@ class PlayerSoloRankMatchFallbackServiceTest {
 		// 25시간 전 종료 — 신선도(기본 60분) 초과. 첫 가동 백필 시나리오.
 		when(riotApiClient.getMatch(eq("KR_100"), anyString())).thenReturn(match(
 				420, System.currentTimeMillis() - 25L * 60 * 60 * 1000,
-				new RiotMatchResponse.Participant("puuid-supking", 902, false, 1, 5, 9)));
+				new RiotMatchResponse.Participant("puuid-supking", 902, false, 1, 5, 9, 100)));
 		when(soloRankGameHistoryRecorder.record(any(), eq("100"), any(), any())).thenReturn(true);
 
 		PlayerSoloRankMatchFallbackResult result = service.pollTrackedAccounts();
@@ -161,7 +161,7 @@ class PlayerSoloRankMatchFallbackServiceTest {
 		when(soloRankGameHistoryRecorder.exists(any(), eq("100"))).thenReturn(false);
 		when(riotApiClient.getMatch(eq("KR_100"), anyString())).thenReturn(match(
 				420, System.currentTimeMillis(),
-				new RiotMatchResponse.Participant("puuid-supking", 902, true, 4, 2, 8)));
+				new RiotMatchResponse.Participant("puuid-supking", 902, true, 4, 2, 8, 100)));
 		// exists 통과 후 record 시점에 경쟁 폴링이 먼저 적재 — 알림 중복 방지.
 		when(soloRankGameHistoryRecorder.record(any(), eq("100"), any(), any())).thenReturn(false);
 

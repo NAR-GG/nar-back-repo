@@ -12,7 +12,25 @@ public record PlayerSoloRankResponse(
 		@Schema(description = "최근 20판 모스트 상위 5")
 		List<Champion> champions,
 		@Schema(description = "최근 20판, 최신순. 결과 미수집 판은 뺀다")
-		List<Game> games) {
+		List<Game> games,
+		@Schema(description = "최근 7일 솔랭에서 같은 판에 들어온 추적 선수. 함께한 판수 많은 순, 최대 10명")
+		List<MetPlayer> metPlayers) {
+
+	public record MetPlayer(
+			Long playerId,
+			String playerName,
+			String playerImageUrl,
+			String teamCode,
+			String teamImageUrl,
+			@Schema(description = "같은 편으로 한 판수·그중 이긴 판수")
+			int sameTeamGames,
+			int sameTeamWins,
+			@Schema(description = "상대로 만난 판수와 이 선수 기준 승·패")
+			int opponentGames,
+			int opponentWins,
+			int opponentLosses,
+			OffsetDateTime lastMetAt) {
+	}
 
 	public record Account(
 			@Schema(example = "NA1")
