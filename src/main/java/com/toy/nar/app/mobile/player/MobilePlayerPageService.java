@@ -29,7 +29,6 @@ import com.toy.nar.domain.participant.repository.PlayerSoloRankGameRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -50,9 +49,10 @@ import java.util.stream.IntStream;
  * 모바일 선수 페이지 — 홈 솔랭 카드를 누르면 열린다. 상단(프로필·지금 판·다음 경기·지표)과
  * 월즈 탭·솔랭 탭을 따로 준다. 탭은 눌렀을 때만 부르므로 상단을 가볍게 유지한다.
  */
+// 클래스 트랜잭션을 두지 않는다 — 다음 경기의 스위스 전적이 캐시 미스면 lolesports 를 부르는데,
+// 그동안 커넥션을 쥐고 있으면 경기 시작 버스트에 Hikari 를 말린다. 조회는 서로 독립이다.
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class MobilePlayerPageService {
 
 	// ponytail: 대회 한정 상수. 월즈가 끝나 다른 대회를 보여 줘야 하면 대회 선택을 파라미터로 뺀다.
@@ -102,7 +102,7 @@ public class MobilePlayerPageService {
 	}
 
 	public PlayerWorldsResponse worlds(Long playerId) {
-		player(playerId, null);
+		PlayerSubscriptionResponse player = player(playerId, null);
 		List<WorldsGameRow> rows = queryRepository.worldsGames(playerId, WORLDS_SEASON_YEAR);
 		int wins = (int) rows.stream().filter(WorldsGameRow::win).count();
 
@@ -125,7 +125,7 @@ public class MobilePlayerPageService {
 				rows.isEmpty() ? List.of() : stats(playerId, rows.get(0).position()),
 				games,
 				champions(gameRepository.findRecentFinished(playerId, PageRequest.of(0, RECENT_GAMES)), rows),
-				worldsRating(playerId));
+				worldsRating(playerId, player.teamCode()));
 	}
 
 	public PlayerSoloRankResponse soloRank(Long playerId) {
@@ -160,11 +160,11 @@ public class MobilePlayerPageService {
 		boolean blue = teamCode.equals(match.blueTeamCode());
 		String block = StandingsBlocks.blockNameOf(match.matchTitle());
 		Map<String, int[]> records = SWISS.equals(block) ? swissRecords(match.leagueName()) : Map.of();
-		int[] mine = records.get(teamCode);
+		int[] mine = SWISS.equals(block) ? records.getOrDefault(teamCode, ZERO) : null;
 		PlayerPageResponse.MatchTeam blueTeam = matchTeam(match.blueTeamCode(), match.blueTeamName(),
-				match.blueTeamImageUrl(), records.get(match.blueTeamCode()));
+				match.blueTeamImageUrl(), swissRecord(records, block, match.blueTeamCode()));
 		PlayerPageResponse.MatchTeam redTeam = matchTeam(match.redTeamCode(), match.redTeamName(),
-				match.redTeamImageUrl(), records.get(match.redTeamCode()));
+				match.redTeamImageUrl(), swissRecord(records, block, match.redTeamCode()));
 		return new PlayerPageResponse.NextMatch(match.id(), match.leagueName(),
 				mine == null ? block : block + " " + (mine[0] + mine[1] + 1) + "라운드",
 				match.matchDateUtc().atOffset(ZoneOffset.UTC),
@@ -172,6 +172,13 @@ public class MobilePlayerPageService {
 				blue ? blueTeam : redTeam,
 				blue ? redTeam : blueTeam,
 				stake(block, mine));
+	}
+
+	/** 스위스 버킷에 아직 없는 팀은 첫 경기 전(0-0)이다. */
+	private static final int[] ZERO = {0, 0};
+
+	private static int[] swissRecord(Map<String, int[]> records, String block, String code) {
+		return SWISS.equals(block) ? records.getOrDefault(code, ZERO) : null;
 	}
 
 	/** 스위스는 3승 진출·3패 탈락. 2승이면 이기는 쪽이 진출, 2패면 지는 쪽이 탈락이다. */
@@ -260,7 +267,7 @@ public class MobilePlayerPageService {
 				.toList();
 	}
 
-	private PlayerWorldsResponse.Rating worldsRating(Long playerId) {
+	private PlayerWorldsResponse.Rating worldsRating(Long playerId, String teamCode) {
 		Map<Integer, Long> distribution = queryRepository.worldsRatingDistribution(playerId, WORLDS_SEASON_YEAR);
 		if (distribution.isEmpty()) {
 			return null;
@@ -275,11 +282,25 @@ public class MobilePlayerPageService {
 		List<PlayerWorldsResponse.Review> reviews = queryRepository
 				.worldsReviews(playerId, WORLDS_SEASON_YEAR, REVIEW_PREVIEW).stream()
 				.map(row -> new PlayerWorldsResponse.Review(row.rating(), row.comment(),
-						"Blue".equalsIgnoreCase(row.teamSide()) ? row.redTeamCode() : row.blueTeamCode(),
+						opponent(row, teamCode),
 						StandingsBlocks.blockNameOf(row.matchTitle()), offset(row.createdAt())))
 				.toList();
 		return new PlayerWorldsResponse.Rating(average(distribution), count, buckets, reviews,
 				queryRepository.worldsReviewCount(playerId, WORLDS_SEASON_YEAR));
+	}
+
+	/**
+	 * 리뷰한 세트의 상대 팀. 진영은 세트마다 바뀌는데 league_match 의 blue/red 는 매치 단위로 고정이라
+	 * team_side 로는 못 고른다 — 팀 코드로 맞추고, 코드가 안 맞을 때만 진영으로 짐작한다.
+	 */
+	static String opponent(PlayerPageQueryRepository.ReviewRow row, String teamCode) {
+		if (teamCode != null && teamCode.equals(row.blueTeamCode())) {
+			return row.redTeamCode();
+		}
+		if (teamCode != null && teamCode.equals(row.redTeamCode())) {
+			return row.blueTeamCode();
+		}
+		return "Blue".equalsIgnoreCase(row.teamSide()) ? row.redTeamCode() : row.blueTeamCode();
 	}
 
 	// ── 솔랭 탭 ──────────────────────────────────────────────────────
