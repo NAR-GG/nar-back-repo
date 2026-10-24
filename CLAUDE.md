@@ -17,6 +17,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **메인 레포 디렉토리(`/Users/changha/Documents/25-3-quarter/nar`)는 직접 수정하지 않는다.** 작업은 워크트리에서 진행한다.
 - Claude가 작업할 때는 항상 워크트리를 사용하고, 완료 후 `main`으로 PR을 올린다.
 
+## PR 머지 게이트
+
+에이전트는 사용자가 작업을 맡기면("진행하자" 등) PR → 머지 → 롤아웃 확인까지 끝까지 간다.
+단 **아래 게이트를 모두 통과한 PR만** 머지한다. main 머지는 곧 prod 배포다(CI/CD 절).
+
+1. **기계 검증**: 로컬 `./gradlew test` 통과 + CI 초록 + `gh pr view --json mergeStateStatus` 가 `CLEAN`.
+2. **독립 리뷰**: 작성한 세션이 아닌, 작업 맥락이 없는 별도 Claude 서브에이전트가 리뷰한다.
+   리뷰어에게는 PR diff·PR 본문·사용자의 원래 요청 문장만 넘긴다(작성자의 설명·가정은 넘기지 않는다).
+   - 보는 것: 버그, 요청 대비 누락·과잉, 그리고 이 레포의 함정 —
+     evict 캐시 TTL(Caching 절), 웹·스케줄러 두 파드 간 인메모리 상태(Scheduling 절),
+     마이그레이션 후방호환(CI/CD 절), DDL 의 `CHARSET` 만 쓰고 `COLLATE` 누락, N+1.
+   - 지적은 `blocker` / `nit` 로 등급을 매긴다. **blocker 0건이면 통과.**
+   - blocker 가 있으면 고치고 새 리뷰어로 다시 리뷰한다(이전 지적·대응을 함께 넘긴다). **최대 2라운드**, 그래도 남으면 멈추고 사용자에게 묻는다.
+   - 리뷰 결과 요약(라운드별 지적·대응)을 PR 코멘트로 남긴다.
+3. **자동 머지 금지 — 해당하면 PR 까지만 올리고 사용자에게 묻는다** (리뷰 통과와 무관):
+   - 후방호환이 깨지는 마이그레이션(`DROP`·`RENAME`·`MODIFY`, 데이터 삭제·백필)
+   - 인증·토큰·권한 코드(`auth`, JWT, 세션, 관리자 권한 판정)
+   - 시크릿·환경변수 추가/변경, `infra/k8s` 의 strategy·리더 리스·리소스 외 구조 변경
+4. **머지 후**: squash 머지 → 배포 워크플로 완료 → ArgoCD sync·파드 Ready 확인까지 보고한다.
+
 ## 서비스 가용성 수칙 — 경기 시간 보호 (필수)
 
 **인프라·배포 작업 전에 반드시 오늘 경기 일정부터 확인한다:**
