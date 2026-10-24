@@ -3,6 +3,7 @@ package com.toy.nar.app.mobile.player;
 import com.toy.nar.app.mobile.player.dto.PlayerSoloRankResponse;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.PlayerSoloRankGame;
+import com.toy.nar.domain.participant.repository.PlayerPageQueryRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -52,6 +53,16 @@ class MobilePlayerPageServiceTest {
 		assertThat(recent.kda()).isEqualTo(2.7); // (10+6)/6
 		assertThat(recent.gamesPerDay()).isEqualTo(2.0);
 		assertThat(recent.avgDurationSeconds()).isEqualTo(1500);
+	}
+
+	@Test
+	void 리뷰_상대팀은_세트_진영이_아니라_팀_코드로_고른다() {
+		// T1 이 매치에서 blue 로 등록됐지만 이 세트는 red 진영
+		PlayerPageQueryRepository.ReviewRow row = new PlayerPageQueryRepository.ReviewRow(
+				5, "굿", "Red", "스위스 | T1 vs DK", "T1", "DK", LocalDateTime.now());
+
+		assertThat(MobilePlayerPageService.opponent(row, "T1")).isEqualTo("DK");
+		assertThat(MobilePlayerPageService.opponent(row, null)).isEqualTo("T1");
 	}
 
 	private static PlayerSoloRankGame game(boolean win, int kills, int deaths, int assists, int duration) {
