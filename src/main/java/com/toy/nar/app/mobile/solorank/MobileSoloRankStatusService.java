@@ -4,6 +4,7 @@ import com.toy.nar.app.mobile.solorank.dto.SoloRankStatusResponse;
 import com.toy.nar.app.mobile.solorank.dto.WorldsSoloRankResponse;
 import com.toy.nar.app.mobile.subscription.MobilePlayerSubscriptionService;
 import com.toy.nar.app.mobile.subscription.dto.PlayerSubscriptionResponse;
+import com.toy.nar.domain.member.entity.MemberFavoritePlayer;
 import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
@@ -51,19 +52,57 @@ public class MobileSoloRankStatusService {
 	private final PlayerRiotAccountRepository accountRepository;
 
 	public SoloRankStatusResponse getStatus(Long memberId) {
-		return status(memberId, byId(subscriptionService.getSubscriptions(memberId)));
+		return status(memberId, byId(subscriptionService.getSubscriptions(memberId))).response();
 	}
 
 	/**
-	 * 월즈 솔랭 — 보조 계정(월즈 부트캠프 계정)이 켜진 선수 전체. 구독과 무관하게 보여주고,
-	 * 구독 여부·알림 토글은 {@code players} 에 싣는다. 명단은 보조 계정을 켜고 끄는 것으로 정해진다.
+	 * 월즈 솔랭 공용판 — 보조 계정(월즈 부트캠프 계정)이 켜진 선수 전체를 전원 미구독으로 담는다.
+	 * 회원과 무관해 {@link MobileSoloRankCacheableService} 가 한 벌만 세서 나눠 준다.
+	 * 명단은 보조 계정을 켜고 끄는 것으로 정해진다.
 	 */
-	public WorldsSoloRankResponse getWorldsStatus(Long memberId) {
+	public WorldsBoard worldsBoard() {
 		List<PlayerSubscriptionResponse> roster =
-				subscriptionService.getPlayers(memberId, Set.copyOf(accountRepository.findEventPlayerIds()));
-		SoloRankStatusResponse status = status(memberId, byId(roster));
-		return new WorldsSoloRankResponse(
-				roster, status.live(), status.finished(), today(roster, status.live()), WORLDS_LEAGUES);
+				subscriptionService.getPlayers(null, Set.copyOf(accountRepository.findEventPlayerIds()));
+		Status status = status(null, byId(roster));
+		List<SoloRankStatusResponse.LivePlayer> live = status.response().live();
+		return new WorldsBoard(
+				new WorldsSoloRankResponse(roster, live, status.response().finished(),
+						today(roster, live, status.finishedGames()), WORLDS_LEAGUES),
+				status.liveGames().stream().collect(Collectors.toMap(
+						game -> game.getPlayer().getId(), PlayerSoloRankGame::getGameId, (left, right) -> left)));
+	}
+
+	/** 공용판에 내 구독 여부·알림 토글과 내 응원 수를 덧입힌다. 비회원은 공용판 그대로. */
+	public WorldsSoloRankResponse personalize(WorldsBoard board, Long memberId) {
+		WorldsSoloRankResponse common = board.response();
+		if (memberId == null) {
+			return common;
+		}
+		Map<Long, MemberFavoritePlayer> mine = subscriptionService.subscriptionsByPlayer(memberId);
+		List<PlayerSubscriptionResponse> players = common.players().stream()
+				.map(player -> {
+					MemberFavoritePlayer subscription = mine.get(player.playerId());
+					return subscription == null ? player
+							: player.subscribed(subscription.isStartEnabled(), subscription.isEndEnabled());
+				})
+				.toList();
+		Map<Long, String> liveGameIds = board.liveGameIds();
+		Map<GameKey, Long> cheers = liveGameIds.isEmpty() ? Map.of()
+				: cheerRepository.mine(memberId, liveGameIds.keySet(), liveGameIds.values());
+		List<SoloRankStatusResponse.LivePlayer> live = common.live().stream()
+				.map(player -> player.withCheerMine(
+						cheers.getOrDefault(new GameKey(player.playerId(), liveGameIds.get(player.playerId())), 0L)))
+				.toList();
+		return new WorldsSoloRankResponse(players, live, common.finished(), common.today(), common.leagues());
+	}
+
+	/** 회원 무관 월즈 솔랭 응답과, 내 응원 수를 덧입힐 라이브 판 id(선수 id → 게임 id). */
+	public record WorldsBoard(WorldsSoloRankResponse response, Map<Long, String> liveGameIds) {
+	}
+
+	/** 응답과, 그걸 만든 라이브 판·24시간 창의 끝난 판 전체(오늘 전적용). */
+	private record Status(SoloRankStatusResponse response, List<PlayerSoloRankGame> liveGames,
+			List<PlayerSoloRankGame> finishedGames) {
 	}
 
 	// 월즈 2026 출전 19팀의 리그와 시드. 팀 응답에 리그가 없고, DB 의 팀별 경기 리그는 국제전·컵이 섞여 못 쓴다.
@@ -78,13 +117,8 @@ public class MobileSoloRankStatusService {
 
 	/** 선수별 오늘 전적 — finished 와 같은 24시간 창의 끝난 판 + 지금 하는 판. */
 	private List<WorldsSoloRankResponse.TodayRecord> today(List<PlayerSubscriptionResponse> roster,
-			List<SoloRankStatusResponse.LivePlayer> live) {
-		if (roster.isEmpty()) {
-			return List.of();
-		}
-		LocalDateTime endedSince = LocalDateTime.now().minus(FINISHED_WINDOW);
-		Map<Long, List<PlayerSoloRankGame>> finished = gameRepository
-				.findFinishedSince(byId(roster).keySet(), endedSince.minus(DETECTION_SLACK), endedSince).stream()
+			List<SoloRankStatusResponse.LivePlayer> live, List<PlayerSoloRankGame> finishedGames) {
+		Map<Long, List<PlayerSoloRankGame>> finished = finishedGames.stream()
 				.collect(Collectors.groupingBy(game -> game.getPlayer().getId()));
 		Set<Long> playing = live.stream().map(SoloRankStatusResponse.LivePlayer::playerId).collect(Collectors.toSet());
 		return roster.stream()
@@ -100,15 +134,16 @@ public class MobileSoloRankStatusService {
 				.toList();
 	}
 
-	private SoloRankStatusResponse status(Long memberId, Map<Long, PlayerSubscriptionResponse> players) {
+	private Status status(Long memberId, Map<Long, PlayerSubscriptionResponse> players) {
 		if (players.isEmpty()) {
-			return new SoloRankStatusResponse(List.of(), List.of());
+			return new Status(new SoloRankStatusResponse(List.of(), List.of()), List.of(), List.of());
 		}
 		LocalDateTime now = LocalDateTime.now();
 
 		List<PlayerSoloRankGame> liveGames = gameRepository
 				.findLive(players.keySet(), PlayerRiotAccountLiveStatus.IN_RANKED_SOLO, now.minus(LIVE_FRESHNESS));
-		Map<GameKey, Long> liveMine = cheerRepository.mine(memberId, ids(liveGames), gameIds(liveGames));
+		Map<GameKey, Long> liveMine = memberId == null ? Map.of()
+				: cheerRepository.mine(memberId, ids(liveGames), gameIds(liveGames));
 		Map<GameKey, Long> liveTotals = cheerTotals.live(keys(liveGames));
 		// 어느 계정으로 하는 판인지(KR 주계정 / NA1 보조 계정) — 계정이 지금 보고 있는 게임으로 맞춘다.
 		Map<GameKey, String> livePlatforms = liveGames.isEmpty() ? Map.of() : accountRepository
@@ -127,8 +162,9 @@ public class MobileSoloRankStatusService {
 		LocalDateTime endedSince = now.minus(FINISHED_WINDOW);
 		Map<Long, PlayerSoloRankGame> latestFinished = new LinkedHashMap<>();
 		// 최근 종료순이라 선수마다 처음 만나는 게 마지막 판이다.
-		gameRepository.findFinishedSince(players.keySet(), endedSince.minus(DETECTION_SLACK), endedSince)
-				.forEach(game -> latestFinished.putIfAbsent(game.getPlayer().getId(), game));
+		List<PlayerSoloRankGame> finishedSince =
+				gameRepository.findFinishedSince(players.keySet(), endedSince.minus(DETECTION_SLACK), endedSince);
+		finishedSince.forEach(game -> latestFinished.putIfAbsent(game.getPlayer().getId(), game));
 		List<PlayerSoloRankGame> finishedGames = List.copyOf(latestFinished.values());
 		Map<GameKey, Long> finishedTotals = cheerTotals.finished(keys(finishedGames));
 		List<SoloRankStatusResponse.FinishedPlayer> finished = finishedGames.stream()
@@ -136,7 +172,7 @@ public class MobileSoloRankStatusService {
 						finishedTotals.getOrDefault(key(game), 0L)))
 				.toList();
 
-		return new SoloRankStatusResponse(live, finished);
+		return new Status(new SoloRankStatusResponse(live, finished), liveGames, finishedSince);
 	}
 
 	private static Map<Long, PlayerSubscriptionResponse> byId(List<PlayerSubscriptionResponse> players) {

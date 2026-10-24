@@ -40,4 +40,10 @@ public record PlayerSubscriptionResponse(
 				startEnabled,
 				endEnabled);
 	}
+
+	/** 공용 명단(전원 미구독)에 내 구독을 덧입힌다. */
+	public PlayerSubscriptionResponse subscribed(boolean startEnabled, boolean endEnabled) {
+		return new PlayerSubscriptionResponse(playerId, playerName, playerImageUrl, role, teamId, teamCode, teamName,
+				teamImageUrl, true, startEnabled, endEnabled);
+	}
 }

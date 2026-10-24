@@ -65,16 +65,10 @@ public class MobilePlayerSubscriptionService {
 	/** 주어진 선수들을 내 구독 여부·알림 토글과 함께 돌려준다(월즈 솔랭 명단 등). 역할·이름순. */
 	public List<PlayerSubscriptionResponse> getPlayers(Long memberId, Set<Long> playerIds) {
 		// 비회원(memberId null)은 전원 미구독으로 준다 — 월즈 솔랭은 로그인 없이도 보여준다.
-		if (memberId != null) {
-			requireMember(memberId);
-		}
+		Map<Long, MemberFavoritePlayer> subscriptions = memberId == null ? Map.of() : subscriptionsByPlayer(memberId);
 		if (playerIds.isEmpty()) {
 			return List.of();
 		}
-		Map<Long, MemberFavoritePlayer> subscriptions = memberId == null ? Map.of()
-				: subscriptionRepository.findAllByMember_Id(memberId).stream()
-						.collect(Collectors.toMap(subscription -> subscription.getPlayer().getId(),
-								subscription -> subscription, (existing, ignored) -> existing));
 
 		return playerOptions(playerIds).values().stream()
 				.map(option -> {
@@ -86,6 +80,14 @@ public class MobilePlayerSubscriptionService {
 				})
 				.sorted(ROLE_THEN_NAME)
 				.toList();
+	}
+
+	/** 내 구독 — 선수 id → 구독(알림 토글 포함). */
+	public Map<Long, MemberFavoritePlayer> subscriptionsByPlayer(Long memberId) {
+		requireMember(memberId);
+		return subscriptionRepository.findAllByMember_Id(memberId).stream()
+				.collect(Collectors.toMap(subscription -> subscription.getPlayer().getId(),
+						subscription -> subscription, (existing, ignored) -> existing));
 	}
 
 	private static final Comparator<PlayerSubscriptionResponse> ROLE_THEN_NAME = Comparator

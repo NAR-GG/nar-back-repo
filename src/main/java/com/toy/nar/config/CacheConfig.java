@@ -28,6 +28,7 @@ public class CacheConfig {
 
 	private static final long STANDINGS_MAX_SIZE = 16;     // 리그 수만큼
 	private static final long LINK_PREVIEW_MAX_SIZE = 2000; // URL 하나 ~1KB 수준
+	private static final long SINGLE_KEY_MAX_SIZE = 1;      // 키가 'all' 하나뿐
 
 	@Bean
 	public CacheManager cacheManager() {
@@ -70,6 +71,13 @@ public class CacheConfig {
 			// TTL 은 컨트롤러가 클라이언트에 내리는 Cache-Control 값과 맞췄다.
 			createCacheWithTTL("mobileScheduleFilters", 1, TimeUnit.HOURS, MOBILE_SCHEDULE_FILTER_MAX_SIZE),
 			createCacheWithTTL("mobileScheduleCalendar", 30, TimeUnit.SECONDS, MOBILE_SCHEDULE_CALENDAR_MAX_SIZE),
+
+			// 같은 이유로 경기 시작 버스트에 몰리는 응답 셋(2026-10-24 LOS vs T1 실측, 앱 오픈 530 req/s).
+			// 띠배너 공지·광고는 백오피스 수정이 1분 늦게 보여도 무해하다. 월즈 솔랭은 회원 무관 공용판만
+			// 담고 내 구독·응원 수는 요청마다 덧입힌다(MobileSoloRankCacheableService).
+			createCacheWithTTL("promotedNotices", 60, TimeUnit.SECONDS, SINGLE_KEY_MAX_SIZE),
+			createCacheWithTTL("mobileAds", 60, TimeUnit.SECONDS, SINGLE_KEY_MAX_SIZE),
+			createCacheWithTTL("worldsSoloRankBoard", 10, TimeUnit.SECONDS, SINGLE_KEY_MAX_SIZE),
 
 			// 커뮤니티 링크 프리뷰(OG 크롤 스냅샷). 같은 URL 을 여러 사용자가 붙여넣을 때
 			// 재크롤을 막는다. 키가 임의 URL 이라 상한으로 힙을 지킨다.

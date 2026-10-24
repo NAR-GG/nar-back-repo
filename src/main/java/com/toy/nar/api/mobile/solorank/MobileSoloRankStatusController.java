@@ -1,5 +1,6 @@
 package com.toy.nar.api.mobile.solorank;
 
+import com.toy.nar.app.mobile.solorank.MobileSoloRankCacheableService;
 import com.toy.nar.app.mobile.solorank.MobileSoloRankStatusService;
 import com.toy.nar.app.mobile.solorank.dto.SoloRankStatusResponse;
 import com.toy.nar.app.mobile.solorank.dto.WorldsSoloRankResponse;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MobileSoloRankStatusController {
 
 	private final MobileSoloRankStatusService soloRankStatusService;
+	private final MobileSoloRankCacheableService soloRankCache;
 
 	@Operation(summary = "구독 선수 솔랭 상태 조회",
 			description = "지금 솔랭 중인 구독 선수와, 최근 24시간 안에 끝낸 선수(선수당 마지막 1판)를 조회합니다.")
@@ -35,6 +37,6 @@ public class MobileSoloRankStatusController {
 	@SecurityRequirement(name = "bearerAuth")
 	@GetMapping("/worlds")
 	public ResponseEntity<WorldsSoloRankResponse> getWorldsStatus(@AuthenticationPrincipal Long memberId) {
-		return ResponseEntity.ok(soloRankStatusService.getWorldsStatus(memberId));
+		return ResponseEntity.ok(soloRankStatusService.personalize(soloRankCache.worldsBoard(), memberId));
 	}
 }

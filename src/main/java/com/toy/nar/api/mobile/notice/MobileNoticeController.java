@@ -3,6 +3,7 @@ package com.toy.nar.api.mobile.notice;
 import com.toy.nar.app.notice.dto.NoticeResponse;
 import com.toy.nar.app.notice.service.NoticeService;
 import com.toy.nar.domain.notice.entity.Notice;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.core.Authentication;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -61,6 +62,8 @@ public class MobileNoticeController {
 
     @Operation(summary = "띠배너 공지 목록",
             description = "캘린더 상단 띠배너 대상 공지 (최신 발행순, 최대 5건). 앱은 닫지 않은 첫 건을 띄운다. 없으면 빈 배열.")
+    // 앱 첫 화면이 진입 즉시 부른다. 경기 시작 버스트에 요청마다 커넥션을 잡지 않게 60초 재사용한다.
+    @Cacheable(value = "promotedNotices", key = "'all'", sync = true)
     @GetMapping("/promoted")
     public List<NoticeResponse> promoted() {
         return noticeService.promoted().stream().map(NoticeResponse::from).toList();

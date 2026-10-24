@@ -143,8 +143,9 @@ spec:
             # SIGKILL 을 맞는다 — 경고도 graceful shutdown 도 없다.
             # 이걸 주면 근처에서 GC 가 공격적으로 돌아 **"죽는다"가 "느려진다"로 바뀐다.**
             # limit 의 80% — GC 가 즉발이 아니라 목표와 천장 사이에 완충이 필요하다.
+            # (10-24 에 200MiB 로는 못 막았다 — anon-rss 239MB 에서 SIGKILL. 여유분을 대체 못 한다.)
             - name: GOMEMLIMIT
-              value: "200MiB"
+              value: "800MiB"
 
           resources:
             requests:
@@ -164,7 +165,13 @@ spec:
               #
               # 가장 먼저 죽으면 남은 한 파드에 부하가 두 배로 몰려 캐스케이드의
               # 방아쇠가 된다. 09-06 에는 둘 다 죽어 커넥터 0 구간이 생겼다.
-              memory: "256Mi"
+              #
+              # 256Mi → 1Gi. 2026-10-24 08:24 (월즈 LOS vs T1 세트 시작, 5초에 2,650건 ≈ 530 req/s)
+              # 에 **두 파드가 또 동시에** OOMKilled(CONSTRAINT_MEMCG, anon-rss 239MB). VM 여유는 4.5GiB 였다.
+              # 앞단이 아니라 뒤가 느려서 터진다 — 웹 Hikari 30 이 포화돼 응답이 수 초 늦어지면
+              # 그동안 받은 요청을 여기서 전부 쥐고 있어야 한다. traefik 은 같은 순간 1Gi 천장 아래
+              # 294Mi 로 살아남았다. limit 은 예약이 아니라 천장이라 올려도 평시 실소비(35~50Mi)는 그대로다.
+              memory: "1Gi"
 
           # /ready 는 등록된 커넥터가 하나 이상일 때만 200 이다.
           # maxUnavailable: 0 과 짝이라, 이게 200 이 되기 전엔 옛 파드가 안 죽는다.
