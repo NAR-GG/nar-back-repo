@@ -16,6 +16,9 @@ public interface PlayerRiotAccountRepository extends JpaRepository<PlayerRiotAcc
 
 	Optional<PlayerRiotAccount> findByPuuid(String puuid);
 
+	// 선수 페이지 계정 칩 — 주계정 먼저.
+	List<PlayerRiotAccount> findByPlayerIdAndEnabledTrueOrderByPrimaryAccountDesc(Long playerId);
+
 	// 보조 계정(월즈 부트캠프 계정 등)이 켜져 있는 선수 = 월즈 솔랭 명단.
 	@Query("SELECT DISTINCT pra.player.id FROM PlayerRiotAccount pra " +
 			"WHERE pra.enabled = true AND pra.primaryAccount = false")
