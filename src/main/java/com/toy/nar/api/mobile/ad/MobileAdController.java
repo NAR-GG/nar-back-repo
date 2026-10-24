@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,6 +29,8 @@ public class MobileAdController {
 
     @Operation(summary = "노출 중인 광고",
             description = "active 이고 기간 안인 광고 전부(순서 = sortOrder). placement(home|match_list|match_detail|splash|popup)별로 앱이 첫 건을 쓴다.")
+    // 앱 첫 화면이 진입 즉시 부른다. 경기 시작 버스트에 요청마다 커넥션을 잡지 않게 60초 재사용한다.
+    @Cacheable(value = "mobileAds", key = "'all'", sync = true)
     @GetMapping
     public List<AdResponse> ads() {
         return adRepository.findLive(LocalDateTime.now()).stream().map(AdResponse::from).toList();

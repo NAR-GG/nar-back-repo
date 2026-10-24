@@ -19,6 +19,7 @@ import com.toy.nar.app.mobile.solorank.dto.SoloRankStatusResponse;
 import com.toy.nar.app.mobile.solorank.dto.WorldsSoloRankResponse;
 import com.toy.nar.app.mobile.subscription.MobilePlayerSubscriptionService;
 import com.toy.nar.app.mobile.subscription.dto.PlayerSubscriptionResponse;
+import com.toy.nar.domain.member.entity.MemberFavoritePlayer;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
@@ -50,6 +51,11 @@ class MobileSoloRankStatusServiceTest {
 	private static PlayerSubscriptionResponse sub(long id, String name, String team) {
 		return new PlayerSubscriptionResponse(id, name, name + ".png", "MID", 1L, team, team, team + ".png",
 				true, true, false);
+	}
+
+	private static PlayerSubscriptionResponse unsubscribed(long id, String name, String team) {
+		return new PlayerSubscriptionResponse(id, name, name + ".png", "MID", 1L, team, team, team + ".png",
+				false, true, false);
 	}
 
 	private static PlayerSoloRankGame game(long playerId, String gameId, LocalDateTime detectedAt,
@@ -138,10 +144,15 @@ class MobileSoloRankStatusServiceTest {
 	void 월즈_솔랭은_보조_계정_선수_전체를_구독_무관하게_주고_판의_플랫폼을_싣는다() {
 		LocalDateTime now = LocalDateTime.now();
 		when(accountRepository.findEventPlayerIds()).thenReturn(List.of(1L, 2L));
-		PlayerSubscriptionResponse notSubscribed = new PlayerSubscriptionResponse(2L, "Chovy", "Chovy.png", "MID", 1L,
-				"GEN", "GEN", "GEN.png", false, true, false);
-		when(subscriptionService.getPlayers(7L, java.util.Set.of(1L, 2L)))
-				.thenReturn(List.of(sub(1, "Faker", "T1"), notSubscribed));
+		when(subscriptionService.getPlayers(null, java.util.Set.of(1L, 2L)))
+				.thenReturn(List.of(unsubscribed(1, "Faker", "T1"), unsubscribed(2, "Chovy", "GEN")));
+		Player faker = Player.builder().name("Faker").build();
+		ReflectionTestUtils.setField(faker, "id", 1L);
+		MemberFavoritePlayer fakerSubscription = MemberFavoritePlayer.builder().player(faker).build();
+		fakerSubscription.updateToggles(false, true);
+		when(subscriptionService.subscriptionsByPlayer(7L)).thenReturn(java.util.Map.of(1L, fakerSubscription));
+		when(cheerRepository.mine(any(), anyCollection(), anyCollection()))
+				.thenReturn(java.util.Map.of(new PlayerSoloRankCheerRepository.GameKey(2L, "na-1"), 4L));
 		when(gameRepository.findLive(anyCollection(), any(), any()))
 				.thenReturn(List.of(game(2, "na-1", now.minusMinutes(10), now.minusMinutes(9), null)));
 		when(gameRepository.findFinishedSince(anyCollection(), any(), any())).thenReturn(List.of());
@@ -154,11 +165,20 @@ class MobileSoloRankStatusServiceTest {
 				.build();
 		when(accountRepository.findByPlayerIdInAndLiveStatus(anyCollection(), any())).thenReturn(List.of(bootcamp));
 
-		WorldsSoloRankResponse response = service.getWorldsStatus(7L);
+		MobileSoloRankStatusService.WorldsBoard board = service.worldsBoard();
+		WorldsSoloRankResponse response = service.personalize(board, 7L);
 
+		// 공용판은 전원 미구독·내 응원 0 이고, 내 구독·토글·응원 수는 덧입힐 때만 실린다.
+		assertThat(board.response().players()).extracting(PlayerSubscriptionResponse::subscribed)
+				.containsExactly(false, false);
+		assertThat(board.response().live().get(0).cheerMine()).isZero();
 		assertThat(response.players()).extracting(PlayerSubscriptionResponse::subscribed).containsExactly(true, false);
+		assertThat(response.players().get(0).startEnabled()).isFalse();
+		assertThat(response.players().get(0).endEnabled()).isTrue();
 		assertThat(response.live()).extracting(SoloRankStatusResponse.LivePlayer::playerName).containsExactly("Chovy");
 		assertThat(response.live().get(0).platform()).isEqualTo("NA1");
+		assertThat(response.live().get(0).cheerMine()).isEqualTo(4L);
+		assertThat(service.personalize(board, null)).isSameAs(board.response());
 		assertThat(response.leagues()).extracting(WorldsSoloRankResponse.League::code)
 				.containsExactly("LCK", "LPL", "LEC", "LCS", "LCP", "CBLOL");
 		verify(subscriptionService, never()).getSubscriptions(any());
@@ -168,7 +188,7 @@ class MobileSoloRankStatusServiceTest {
 	void 월즈_솔랭은_선수별_오늘_전적을_주고_판수에_지금_하는_판을_넣는다() {
 		LocalDateTime now = LocalDateTime.now();
 		when(accountRepository.findEventPlayerIds()).thenReturn(List.of(1L, 2L, 3L));
-		when(subscriptionService.getPlayers(7L, java.util.Set.of(1L, 2L, 3L)))
+		when(subscriptionService.getPlayers(null, java.util.Set.of(1L, 2L, 3L)))
 				.thenReturn(List.of(sub(1, "Faker", "T1"), sub(2, "Chovy", "GEN"), sub(3, "Zeus", "HLE")));
 		when(gameRepository.findLive(anyCollection(), any(), any()))
 				.thenReturn(List.of(game(2, "c3", now.minusMinutes(10), now.minusMinutes(9), null)));
@@ -180,10 +200,12 @@ class MobileSoloRankStatusServiceTest {
 				lost,
 				game(2, "c1", now.minusHours(3), null, now.minusMinutes(120))));
 
-		WorldsSoloRankResponse response = service.getWorldsStatus(7L);
+		WorldsSoloRankResponse response = service.personalize(service.worldsBoard(), 7L);
 
 		assertThat(response.today()).containsExactly(
 				new WorldsSoloRankResponse.TodayRecord(1L, 1, 1, 0),
 				new WorldsSoloRankResponse.TodayRecord(2L, 3, 1, 1));
+		// 끝난 판은 finished 와 today 가 같은 창이라 한 번만 읽는다.
+		verify(gameRepository, org.mockito.Mockito.times(1)).findFinishedSince(anyCollection(), any(), any());
 	}
 }

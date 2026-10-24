@@ -29,6 +29,11 @@ public record SoloRankStatusResponse(
 			long cheerTotal,
 			@Schema(description = "이 판에 내가 보낸 응원 수")
 			long cheerMine) {
+
+		public LivePlayer withCheerMine(long mine) {
+			return new LivePlayer(playerId, playerName, playerImageUrl, teamCode, teamImageUrl, championName,
+					championImageUrl, startedAt, platform, cheerTotal, mine);
+		}
 	}
 
 	public record FinishedPlayer(
