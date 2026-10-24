@@ -60,7 +60,7 @@ public class SoloRankGameHistoryRecorder {
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void recordResult(Player player, String gameId,
 			com.toy.nar.app.riot.dto.RiotMatchResponse.Info info,
-			com.toy.nar.app.riot.dto.RiotMatchResponse.Participant tracked) {
+			com.toy.nar.app.riot.dto.RiotMatchResponse.Participant tracked, String platform) {
 		if (player == null || player.getId() == null || gameId == null || info == null) {
 			return;
 		}
@@ -70,7 +70,9 @@ public class SoloRankGameHistoryRecorder {
 					tracked == null ? null : tracked.win(),
 					tracked == null ? null : tracked.kills(),
 					tracked == null ? null : tracked.deaths(),
-					tracked == null ? null : tracked.assists());
+					tracked == null ? null : tracked.assists(),
+					tracked == null ? null : tracked.teamId(),
+					platform);
 		} catch (Exception e) {
 			log.warn("Failed to record solo rank result playerId={} gameId={}", player.getId(), gameId, e);
 		}

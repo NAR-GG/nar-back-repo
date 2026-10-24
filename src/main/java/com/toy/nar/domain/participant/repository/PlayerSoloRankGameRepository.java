@@ -38,7 +38,8 @@ public interface PlayerSoloRankGameRepository extends JpaRepository<PlayerSoloRa
 	@org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
 	@Query("UPDATE PlayerSoloRankGame g SET g.gameStartedAt = COALESCE(:startedAt, g.gameStartedAt),"
 			+ " g.gameEndedAt = :endedAt, g.durationSeconds = :durationSeconds, g.win = :win,"
-			+ " g.kills = :kills, g.deaths = :deaths, g.assists = :assists"
+			+ " g.kills = :kills, g.deaths = :deaths, g.assists = :assists,"
+			+ " g.teamId = :teamId, g.platform = :platform"
 			+ " WHERE g.player.id = :playerId AND g.gameId = :gameId")
 	int recordResult(
 			@Param("playerId") Long playerId,
@@ -49,7 +50,9 @@ public interface PlayerSoloRankGameRepository extends JpaRepository<PlayerSoloRa
 			@Param("win") Boolean win,
 			@Param("kills") Integer kills,
 			@Param("deaths") Integer deaths,
-			@Param("assists") Integer assists);
+			@Param("assists") Integer assists,
+			@Param("teamId") Integer teamId,
+			@Param("platform") String platform);
 
 	/**
 	 * 지금 솔랭 중인 게임. 계정 상태가 IN_RANKED_SOLO 이고 그 계정이 보고 있는 게임과 이력 행이

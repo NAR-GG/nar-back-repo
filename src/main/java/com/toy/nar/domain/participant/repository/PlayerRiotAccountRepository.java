@@ -16,6 +16,9 @@ public interface PlayerRiotAccountRepository extends JpaRepository<PlayerRiotAcc
 
 	Optional<PlayerRiotAccount> findByPuuid(String puuid);
 
+	// 솔랭 팀 백필 — 판에 들어온 선수들의 계정(puuid·플랫폼). 꺼진 계정도 옛 판을 했을 수 있어 다 본다.
+	List<PlayerRiotAccount> findByPlayerIdIn(Collection<Long> playerIds);
+
 	// 선수 페이지 계정 칩 — 주계정 먼저.
 	List<PlayerRiotAccount> findByPlayerIdAndEnabledTrueOrderByPrimaryAccountDesc(Long playerId);
 

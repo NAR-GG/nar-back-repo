@@ -82,6 +82,14 @@ public class PlayerSoloRankGame {
 	@Column(name = "assists")
 	private Integer assists;
 
+	/** match-v5 팀(100 블루 / 200 레드). 같은 판 다른 선수와 같은 편인지 가르는 용도. */
+	@Column(name = "team_id")
+	private Integer teamId;
+
+	/** 이 판을 한 계정의 플랫폼(KR·NA1…). 판 id 는 플랫폼마다 따로 매겨진다. */
+	@Column(name = "platform", length = 8)
+	private String platform;
+
 	public PlayerSoloRankGame(Player player, String gameId, Champion champion, LocalDateTime detectedAt) {
 		this.player = player;
 		this.gameId = gameId;

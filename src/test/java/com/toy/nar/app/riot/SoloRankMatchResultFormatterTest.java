@@ -58,6 +58,6 @@ class SoloRankMatchResultFormatterTest {
 	}
 
 	private RiotMatchResponse.Participant participant(Boolean win, int k, int d, int a) {
-		return new RiotMatchResponse.Participant("puuid", 1, win, k, d, a);
+		return new RiotMatchResponse.Participant("puuid", 1, win, k, d, a, 100);
 	}
 }

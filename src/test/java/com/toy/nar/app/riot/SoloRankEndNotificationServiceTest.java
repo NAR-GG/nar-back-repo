@@ -140,7 +140,7 @@ class SoloRankEndNotificationServiceTest {
 
 	private RiotMatchResponse match(int queueId, Long gameEndTimestamp) {
 		RiotMatchResponse.Participant participant = new RiotMatchResponse.Participant(
-				"puuid-1", 1, true, 4, 2, 8);
+				"puuid-1", 1, true, 4, 2, 8, 100);
 		// 경기 길이 25분(1,500초). 타임스탬프 차이로만 계산되므로 절대값은 상관없다.
 		RiotMatchResponse.Info info = new RiotMatchResponse.Info(
 				queueId,

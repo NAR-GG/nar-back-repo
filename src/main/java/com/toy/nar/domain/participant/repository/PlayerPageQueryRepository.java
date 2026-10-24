@@ -171,6 +171,34 @@ public class PlayerPageQueryRepository {
 				.stream().findFirst();
 	}
 
+	public record MetRow(long playerId, int sameTeamGames, int sameTeamWins, int opponentGames, int opponentWins,
+						 LocalDateTime lastMetAt) {
+	}
+
+	/**
+	 * 최근 {@code days}일 솔랭에서 같은 판에 들어온 다른 추적 선수. 승패는 이 선수 기준.
+	 * 팀이 기록된 판만 센다(V96 이전 판은 백필 전까지 빠진다). 판 id 는 플랫폼마다 따로라 플랫폼도 맞춘다.
+	 */
+	public List<MetRow> metPlayers(Long playerId, int days, int limit) {
+		return jdbc.query("SELECT b.player_id,"
+						+ " SUM(a.team_id = b.team_id) AS same_games,"
+						+ " SUM(a.team_id = b.team_id AND a.win = 1) AS same_wins,"
+						+ " SUM(a.team_id <> b.team_id) AS opp_games,"
+						+ " SUM(a.team_id <> b.team_id AND a.win = 1) AS opp_wins,"
+						+ " MAX(COALESCE(a.game_ended_at, a.detected_at)) AS last_met"
+						+ " FROM player_solo_rank_game a"
+						+ " JOIN player_solo_rank_game b ON b.game_id = a.game_id AND b.platform = a.platform"
+						+ " AND b.player_id <> a.player_id"
+						+ " WHERE a.player_id = :playerId AND a.detected_at >= NOW() - INTERVAL :days DAY"
+						+ " AND a.win IS NOT NULL AND a.team_id IS NOT NULL AND b.team_id IS NOT NULL"
+						+ " GROUP BY b.player_id"
+						+ " ORDER BY COUNT(*) DESC, last_met DESC LIMIT :limit",
+				new MapSqlParameterSource().addValue("playerId", playerId).addValue("days", days)
+						.addValue("limit", limit),
+				(rs, i) -> new MetRow(rs.getLong("player_id"), rs.getInt("same_games"), rs.getInt("same_wins"),
+						rs.getInt("opp_games"), rs.getInt("opp_wins"), rs.getTimestamp("last_met").toLocalDateTime()));
+	}
+
 	public Optional<String> gameAccountsJson(Long playerId) {
 		return jdbc.queryForList("SELECT game_accounts FROM players WHERE player_id = :playerId",
 				new MapSqlParameterSource("playerId", playerId), String.class).stream().findFirst();
