@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminSoloRankController {
 
     /** 동기 요청이라 Cloudflare 100초 안에 끝나게 한 번에 도는 판 수를 묶는다. 남으면 다시 부른다. */
-    private static final int MAX_LIMIT = 200;
+    private static final int MAX_LIMIT = 100;
 
     private final SoloRankTeamBackfillService teamBackfillService;
 

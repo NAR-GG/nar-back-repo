@@ -74,7 +74,8 @@ public class SoloRankTeamBackfillService {
 		int updated = 0;
 		int calls = 0;
 		for (Map.Entry<String, List<Long>> game : games.entrySet()) {
-			Set<String> platforms = new LinkedHashSet<>();
+			// 거의 KR 판이다 — KR 부터 찔러 빗나간 호출을 줄인다.
+			Set<String> platforms = new LinkedHashSet<>(List.of("KR"));
 			game.getValue().forEach(playerId -> platforms.addAll(platformsByPlayer.getOrDefault(playerId, Set.of())));
 			for (String platform : platforms) {
 				RiotMatchResponse match;
@@ -86,6 +87,11 @@ public class SoloRankTeamBackfillService {
 					Thread.currentThread().interrupt();
 					return new Result(games.size(), matched, updated, calls);
 				} catch (RiotApiException e) {
+					if (e.isRateLimited()) {
+						// 키 한도는 라이브 모니터·종료 알림과 나눠 쓴다. 밀어붙이지 않고 멈춘다 — 남은 판은 다시 부르면 된다.
+						log.warn("[solo-rank-team-backfill] 429 로 중단 games={} matched={}", games.size(), matched);
+						return new Result(games.size(), matched, updated, calls);
+					}
 					continue; // 다른 플랫폼 판이다(404) — 다음 플랫폼으로
 				}
 				if (match.info() == null || match.info().participants() == null) {
