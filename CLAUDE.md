@@ -42,10 +42,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 후방호환이 깨지는 마이그레이션(`DROP`·`RENAME`·`MODIFY`, 데이터 삭제·백필)
    - 인증·토큰·권한 코드(`auth`, JWT, 세션, 관리자 권한 판정)
    - 시크릿·환경변수 추가/변경
-   - `infra/` 변경 전부(strategy·리더 리스 포함). **예외는 `infra/k8s` 리소스 수치(requests/limits·JVM 힙) 조정만**
+   - `infra/` 변경 전부(strategy·리더 리스·리소스 수치·피처 플래그 env 포함 — 예외 없음)
    - `.github/workflows` 변경
 4. **머지**: `gh pr merge --squash`. **`--admin` 우회 금지.** 머지는 경기 중에도 안전하므로 일정 확인을 면제한다.
 5. **머지 후**: 배포 워크플로 완료 → ArgoCD sync·파드 Ready 확인까지 보고한다.
+   문서·`infra/` 만 바뀐 머지는 `paths-ignore` 로 배포 워크플로가 돌지 않는다 — 그때는 확인할 롤아웃이 없다고 보고한다.
    실패하면 즉시 보고하고, 롤백(`infra/argocd/README.md`, Git revert PR)은 사용자에게 묻는다.
 
 ## 서비스 가용성 수칙 — 경기 시간 보호 (필수)
