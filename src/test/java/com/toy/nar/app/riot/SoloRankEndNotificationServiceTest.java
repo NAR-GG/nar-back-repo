@@ -7,6 +7,7 @@ import com.toy.nar.app.mobile.push.PlayerSoloRankPushService;
 import com.toy.nar.app.riot.dto.RiotMatchResponse;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
+import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
 import com.toy.nar.domain.participant.repository.PlayerSoloRankGameRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +33,7 @@ class SoloRankEndNotificationServiceTest {
 	private final PlayerSoloRankPushService pushService = mock(PlayerSoloRankPushService.class);
 	private final PlayerSoloRankGameRepository gameRepository = mock(PlayerSoloRankGameRepository.class);
 	private final SoloRankEndNotificationProperties properties = new SoloRankEndNotificationProperties();
+	private final PlayerRiotAccountRepository accountRepository = mock(PlayerRiotAccountRepository.class);
 
 	private SoloRankEndNotificationService service;
 
@@ -39,7 +41,7 @@ class SoloRankEndNotificationServiceTest {
 	void setUp() {
 		properties.setEnabled(true);
 		service = new SoloRankEndNotificationService(
-				riotApiClient, championDataService, pushService, gameRepository, properties);
+				riotApiClient, championDataService, pushService, gameRepository, properties, accountRepository);
 		when(championDataService.findChampionByRiotKey(any())).thenReturn(java.util.Optional.empty());
 	}
 
@@ -134,8 +136,49 @@ class SoloRankEndNotificationServiceTest {
 				any(), any(), any(), any(), any(), any(), any(), any(), any());
 	}
 
+	@Test
+	@DisplayName("대기열을 잃은 판은 DB 에서 되살려 알림을 보낸다")
+	void DB_에서_되살린_판을_보낸다() {
+		givenFinishedMatch();
+		Object[] row = {account(), "8292488921"};
+		when(accountRepository.findUnresolvedGames(any(), any())).thenReturn(java.util.Collections.singletonList(row));
+
+		assertThat(service.sweep()).isEqualTo(1);
+		verify(gameRepository).markEndNotified(eq(1L), eq("8292488921"), any());
+	}
+
+	@Test
+	@DisplayName("이미 대기열에 있는 판은 DB 에서 또 넣지 않는다")
+	void 대기열과_DB_가_겹쳐도_한_번만_보낸다() {
+		givenFinishedMatch();
+		Object[] row = {account(), "8292488921"};
+		when(accountRepository.findUnresolvedGames(any(), any())).thenReturn(java.util.Collections.singletonList(row));
+		service.onGameEnded(account(), "8292488921");
+
+		assertThat(service.sweep()).isEqualTo(1);
+		verify(riotApiClient, org.mockito.Mockito.times(1)).getMatch(anyString(), anyString());
+	}
+
+	@Test
+	@DisplayName("끝난 지 오래된 판은 결과만 적고 알림은 보내지 않는다")
+	void 오래된_판은_알림_없이_결과만_적는다() {
+		long endedAt = System.currentTimeMillis() - SoloRankEndNotificationService.PUSH_FRESHNESS.toMillis() - 60_000;
+		when(riotApiClient.getMatch(anyString(), anyString())).thenReturn(match(RANKED_SOLO, endedAt));
+
+		service.onGameEnded(account(), "8292488921");
+
+		assertThat(service.sweep()).isZero();
+		verify(pushService, never()).notifySubscribersPostGame(
+				any(), any(), any(), any(), any(), any(), any(), any(), any());
+		verify(gameRepository, never()).markEndNotified(any(), any(), any());
+		verify(gameRepository).recordResult(eq(1L), eq("8292488921"), any(), any(), any(), any(), any(), any(), any(), any(), any());
+		// 대기열에서도 빠진다.
+		assertThat(service.sweep()).isZero();
+		verify(riotApiClient, org.mockito.Mockito.times(1)).getMatch(anyString(), anyString());
+	}
+
 	private void givenFinishedMatch() {
-		when(riotApiClient.getMatch(anyString(), anyString())).thenReturn(match(RANKED_SOLO, 1L));
+		when(riotApiClient.getMatch(anyString(), anyString())).thenReturn(match(RANKED_SOLO, System.currentTimeMillis()));
 	}
 
 	private RiotMatchResponse match(int queueId, Long gameEndTimestamp) {
