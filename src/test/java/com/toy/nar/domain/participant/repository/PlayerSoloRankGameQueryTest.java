@@ -142,9 +142,14 @@ class PlayerSoloRankGameQueryTest {
 
 	@Test
 	void 결과도_종료_알림도_없고_지금_하고_있지_않은_판만_되살린다() {
-			// faker: 마지막으로 본 판 "1" 이 끝났는데 결과 없음 → 대상. "0" 은 이 계정이 마지막으로 본 판이 아님 → 제외.
+		// faker: 마지막으로 본 판 "1" 이 끝났는데 결과 없음 → 대상. "0" 은 이 계정이 마지막으로 본 판이 아님 → 제외.
 		// chovy: 아직 그 판을 하는 중 → 제외. zeus: 결과 있음 → 제외.
+		// faker 의 같은 플랫폼 두 번째 계정(OFFLINE, 다른 판을 봄)은 "1" 에 붙으면 안 된다 — 결과가 빈 값으로 굳는다.
 		account(faker, PlayerRiotAccountLiveStatus.OFFLINE, "1", now);
+		em.persist(PlayerRiotAccount.builder()
+				.player(faker).riotId("Faker2#KR1").gameName("Faker2").tagLine("KR1").platform("kr").puuid("puuid-faker-2")
+				.enabled(true).primaryAccount(false).liveStatus(PlayerRiotAccountLiveStatus.OFFLINE).lastCheckedMatchId("9")
+				.build());
 		account(chovy, PlayerRiotAccountLiveStatus.IN_RANKED_SOLO, "2", now);
 		account(zeus, PlayerRiotAccountLiveStatus.OFFLINE, "3", now);
 		game(faker, "1", now.minusMinutes(40));
@@ -158,5 +163,6 @@ class PlayerSoloRankGameQueryTest {
 
 		assertThat(rows).extracting(r -> ((PlayerRiotAccount) r[0]).getPlayer().getName() + "#" + r[1])
 				.containsExactly("Faker#1");
+		assertThat(((PlayerRiotAccount) rows.get(0)[0]).getPuuid()).isEqualTo("puuid-Faker");
 	}
 }
