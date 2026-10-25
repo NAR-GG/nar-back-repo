@@ -38,7 +38,7 @@ public record PlayerSoloRankResponse(
 			@Schema(example = "NA")
 			String region,
 			String riotId,
-			@Schema(description = "크롤링 티어 문자열. 모르면 null", example = "Ch 2,256LP")
+			@Schema(description = "솔랭 티어 문자열(Riot league-v4, 아직 못 받았으면 크롤링 값). 언랭·모르면 null", example = "Ch 2,256LP")
 			String tier,
 			@Schema(description = "이 계정으로 지금 솔랭 중")
 			boolean live) {

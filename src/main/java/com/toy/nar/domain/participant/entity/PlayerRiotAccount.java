@@ -80,6 +80,19 @@ public class PlayerRiotAccount {
 	@Column(name = "last_match_checked_at")
 	private LocalDateTime lastMatchCheckedAt;
 
+	// 솔랭 티어(Riot league-v4). checked_at 이 null 이면 아직 안 받아온 것, tier 가 null 이면 언랭이다.
+	@Column(name = "solo_tier", length = 20)
+	private String soloTier;
+
+	@Column(name = "solo_division", length = 4)
+	private String soloDivision;
+
+	@Column(name = "solo_lp")
+	private Integer soloLp;
+
+	@Column(name = "solo_tier_checked_at")
+	private LocalDateTime soloTierCheckedAt;
+
 	@Column(name = "created_at", nullable = false)
 	private LocalDateTime createdAt;
 

@@ -27,6 +27,15 @@ class MobilePlayerPageServiceTest {
 	}
 
 	@Test
+	void Riot_티어는_크롤링과_같은_모양으로_적는다() {
+		assertThat(MobilePlayerPageService.tierLabel("CHALLENGER", "I", 1968)).isEqualTo("Ch 1,968LP");
+		assertThat(MobilePlayerPageService.tierLabel("GRANDMASTER", "I", 812)).isEqualTo("GM 812LP");
+		assertThat(MobilePlayerPageService.tierLabel("MASTER", "I", 0)).isEqualTo("Master 0LP");
+		assertThat(MobilePlayerPageService.tierLabel("DIAMOND", "II", 40)).isEqualTo("Diamond II");
+		assertThat(MobilePlayerPageService.tierLabel(null, null, null)).isNull();
+	}
+
+	@Test
 	void 크롤링_티어는_riotId_접두로_맞춘다() {
 		List<Map<String, Object>> crawled = List.of(
 				Map.of("riotId", "Hide on bush#KR1", "tier", "Ch 2,256LP"),

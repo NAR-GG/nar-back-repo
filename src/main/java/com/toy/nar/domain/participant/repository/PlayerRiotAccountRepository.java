@@ -3,8 +3,12 @@ package com.toy.nar.domain.participant.repository;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -35,4 +39,12 @@ public interface PlayerRiotAccountRepository extends JpaRepository<PlayerRiotAcc
 			"JOIN FETCH pra.player p " +
 			"WHERE pra.enabled = true")
 	List<PlayerRiotAccount> findAllTrackedAccounts();
+
+	// 티어 컬럼만 고친다. 엔티티를 save(merge)하면 그 사이 모니터가 바꾼 라이브 상태 컬럼을 되돌린다(copyLiveStateFrom 참고).
+	@Modifying
+	@Transactional
+	@Query("UPDATE PlayerRiotAccount pra SET pra.soloTier = :tier, pra.soloDivision = :division, pra.soloLp = :lp, " +
+			"pra.soloTierCheckedAt = :checkedAt WHERE pra.id = :id")
+	int updateSoloTier(@Param("id") Long id, @Param("tier") String tier, @Param("division") String division,
+			@Param("lp") Integer lp, @Param("checkedAt") LocalDateTime checkedAt);
 }
