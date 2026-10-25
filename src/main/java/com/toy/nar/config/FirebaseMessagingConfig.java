@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.IOException;
+import java.util.List;
 
 @Configuration
 public class FirebaseMessagingConfig {
@@ -27,13 +28,16 @@ public class FirebaseMessagingConfig {
 			name = "enabled",
 			havingValue = "true")
 	public FirebaseApp firebaseApp() throws IOException {
+		List<FirebaseApp> apps = FirebaseApp.getApps();
+		if (!apps.isEmpty()) {
+			return apps.get(0);
+		}
+		// transport 는 만드는 순간 IO 스레드를 띄우므로 앱을 새로 만들 때만 만든다.
 		FirebaseOptions options = FirebaseOptions.builder()
 				.setCredentials(GoogleCredentials.getApplicationDefault())
 				.setHttpTransport(fcmHttpTransport())
 				.build();
-		return FirebaseApp.getApps().stream()
-				.findFirst()
-				.orElseGet(() -> FirebaseApp.initializeApp(options));
+		return FirebaseApp.initializeApp(options);
 	}
 
 	/**
