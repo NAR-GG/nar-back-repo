@@ -166,6 +166,21 @@ class MobileScheduleServiceTest {
 	}
 
 	@Test
+	void getMatchFormatsInUtcOffsetAndDefaultsToKst() {
+		// KST 10-26 04:00 = UTC 10-25 19:00
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(match(
+				"match-1", "LCK", LocalDateTime.of(2026, 10, 25, 19, 0), "T1", "GEN", "unstarted")));
+
+		MobileScheduleListResponse.MobileMatchSummary kst = service.getMatch("match-1");
+		assertThat(kst.date()).isEqualTo("2026-10-26");
+		assertThat(kst.scheduledTime()).isEqualTo("04:00");
+
+		MobileScheduleListResponse.MobileMatchSummary pdt = service.getMatch("match-1", PDT);
+		assertThat(pdt.date()).isEqualTo("2026-10-25");
+		assertThat(pdt.scheduledTime()).isEqualTo("12:00");
+	}
+
+	@Test
 	void resolveOffsetDefaultsToKstAndRejectsOutOfRange() {
 		assertThat(MobileScheduleService.resolveOffset(null)).isEqualTo(ZoneOffset.ofHours(9));
 		assertThat(MobileScheduleService.resolveOffset(-720)).isEqualTo(ZoneOffset.ofHours(-12));

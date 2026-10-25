@@ -5,6 +5,8 @@ import com.toy.nar.app.mobile.schedule.MobileScheduleService;
 import com.toy.nar.app.mobile.schedule.dto.MobileMatchGamesResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileMatchPageResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
+import com.toy.nar.app.data.source.NotificationService;
+import com.toy.nar.common.error.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -18,6 +20,7 @@ import java.util.List;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -33,13 +36,14 @@ class MobileMatchControllerTest {
 		mobileScheduleService = mock(MobileScheduleService.class);
 		mockMvc = MockMvcBuilders
 				.standaloneSetup(new MobileMatchController(mobileScheduleService))
-				.setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper()))
+				.setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper().findAndRegisterModules()))
+				.setControllerAdvice(new GlobalExceptionHandler(mock(NotificationService.class)))
 				.build();
 	}
 
 	@Test
 	void getMatchReturnsSingleMatchSummary() throws Exception {
-		when(mobileScheduleService.getMatch("match-1"))
+		when(mobileScheduleService.getMatch("match-1", MobileScheduleService.DEFAULT_OFFSET))
 				.thenReturn(new MobileScheduleListResponse.MobileMatchSummary(
 						"match-1",
 						"2026-07-06",
@@ -184,5 +188,19 @@ class MobileMatchControllerTest {
 						.param("from", "2026-10-25")
 						.param("utcOffset", "-420"))
 				.andExpect(status().isOk());
+	}
+
+	@Test
+	void getMatchPassesUtcOffset() throws Exception {
+		mockMvc.perform(get("/api/mobile/matches/match-1").param("utcOffset", "-420"))
+				.andExpect(status().isOk());
+		verify(mobileScheduleService).getMatch("match-1", ZoneOffset.ofHours(-7));
+	}
+
+	@Test
+	void getMatchUtcOffsetOutOfRangeIsBadRequest() throws Exception {
+		mockMvc.perform(get("/api/mobile/matches/match-1").param("utcOffset", "841"))
+				.andExpect(status().isBadRequest());
+		verifyNoInteractions(mobileScheduleService);
 	}
 }

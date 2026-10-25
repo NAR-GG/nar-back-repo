@@ -442,9 +442,13 @@ public class MobileScheduleService {
 	 * 리스트 응답과 동일한 형태(MobileMatchSummary)로 경기 정보를 채울 때 쓴다.
 	 */
 	public MobileScheduleListResponse.MobileMatchSummary getMatch(String matchId) {
+		return getMatch(matchId, DEFAULT_OFFSET);
+	}
+
+	public MobileScheduleListResponse.MobileMatchSummary getMatch(String matchId, ZoneOffset offset) {
 		LeagueMatch match = leagueMatchRepository.findById(matchId)
 				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
-		return toMatchSummary(match, loadGames(List.of(match)), DEFAULT_OFFSET);
+		return toMatchSummary(match, loadGames(List.of(match)), offset);
 	}
 
 	public MobileMatchGamesResponse getMatchGames(String matchId) {

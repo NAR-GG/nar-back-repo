@@ -77,8 +77,10 @@ public class MobileMatchController {
 	@GetMapping("/{matchId}")
 	public ResponseEntity<MobileScheduleListResponse.MobileMatchSummary> getMatch(
 			@Parameter(description = "매치 ID", example = "113990000000000001")
-			@PathVariable String matchId) {
-		return ResponseEntity.ok(mobileScheduleService.getMatch(matchId));
+			@PathVariable String matchId,
+			@Parameter(description = "UTC 기준 오프셋(분, 동쪽 +). date·scheduledTime을 이 기준으로 표시. 생략하면 540(KST). 범위 -720~840", example = "540")
+			@RequestParam(required = false) Integer utcOffset) {
+		return ResponseEntity.ok(mobileScheduleService.getMatch(matchId, MobileScheduleService.resolveOffset(utcOffset)));
 	}
 
 	@Operation(
