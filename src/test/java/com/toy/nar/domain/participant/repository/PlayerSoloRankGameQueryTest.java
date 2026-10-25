@@ -139,4 +139,23 @@ class PlayerSoloRankGameQueryTest {
 		assertThat(ended.get(0).endedAt()).isEqualTo(now.minusMinutes(5));
 		assertThat(accountRepository.findEndedGames(now.minusMinutes(4), now)).isEmpty();
 	}
+
+	@Test
+	void 결과도_종료_알림도_없고_지금_하고_있지_않은_판만_되살린다() {
+		// faker: 끝났는데 결과 없음 → 대상. chovy: 아직 그 판을 하는 중 → 제외. zeus: 결과 있음 → 제외.
+		account(faker, PlayerRiotAccountLiveStatus.OFFLINE, "1", now);
+		account(chovy, PlayerRiotAccountLiveStatus.IN_RANKED_SOLO, "2", now);
+		account(zeus, PlayerRiotAccountLiveStatus.OFFLINE, "3", now);
+		em.persist(new PlayerSoloRankGame(faker, "1", ahri, now.minusMinutes(40), "kr"));
+		em.persist(new PlayerSoloRankGame(faker, "0", ahri, now.minusHours(3), "kr")); // 너무 오래됨
+		em.persist(new PlayerSoloRankGame(chovy, "2", ahri, now.minusMinutes(20), "kr"));
+		em.persist(new PlayerSoloRankGame(zeus, "3", ahri, now.minusMinutes(40), "kr"));
+		em.flush();
+		repository.recordResult(zeus.getId(), "3", null, now.minusMinutes(5), 1500, true, 1, 1, 1, 100, "kr");
+
+		List<Object[]> rows = accountRepository.findUnresolvedGames(now.minusHours(2), PlayerRiotAccountLiveStatus.IN_RANKED_SOLO);
+
+		assertThat(rows).extracting(r -> ((PlayerRiotAccount) r[0]).getPlayer().getName() + "#" + r[1])
+				.containsExactly("Faker#1");
+	}
 }

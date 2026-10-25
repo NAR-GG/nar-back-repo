@@ -1,5 +1,7 @@
 package com.toy.nar.app.riot;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,6 +15,8 @@ import com.toy.nar.app.riot.dto.RiotMatchResponse;
 import com.toy.nar.domain.participant.entity.Champion;
 import com.toy.nar.domain.participant.entity.Player;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
+import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
+import com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository;
 import com.toy.nar.domain.participant.repository.PlayerSoloRankGameRepository;
 
 
@@ -45,11 +49,18 @@ public class SoloRankEndNotificationService {
 
 	private static final int RANKED_SOLO_QUEUE_ID = 420;
 
+	/** 이만큼 지난 판은 DB 에서 되살리지 않는다. 솔랭 한 판(~50분)에 여유를 더했다. */
+	static final Duration RECOVERY_LOOKBACK = Duration.ofHours(2);
+
+	/** 끝난 지 이보다 오래된 판은 결과만 적고 종료 알림은 보내지 않는다 — 되살린 판이 뒤늦게 울리지 않게. */
+	static final Duration PUSH_FRESHNESS = Duration.ofMinutes(15);
+
 	private final RiotApiClient riotApiClient;
 	private final ChampionDataService championDataService;
 	private final PlayerSoloRankPushService playerSoloRankPushService;
 	private final PlayerSoloRankGameRepository soloRankGameRepository;
 	private final SoloRankEndNotificationProperties properties;
+	private final PlayerRiotAccountRepository accountRepository;
 
 	/**
 	 * 결과를 기다리는 게임들. 재기동하면 비는데, 그때는 그 게임의 종료 알림만 못 나간다 —
@@ -76,7 +87,11 @@ public class SoloRankEndNotificationService {
 	 * @return 이번 스윕에서 발송한 건수
 	 */
 	public int sweep() {
-		if (!properties.isEnabled() || pending.isEmpty()) {
+		if (!properties.isEnabled()) {
+			return 0;
+		}
+		recoverUnresolved();
+		if (pending.isEmpty()) {
 			return 0;
 		}
 		int sent = 0;
@@ -149,21 +164,26 @@ public class SoloRankEndNotificationService {
 				? null
 				: championDataService.findChampionByRiotKey(tracked.championId()).orElse(null);
 
-		playerSoloRankPushService.notifySubscribersPostGame(
-				player,
-				target.gameId,
-				champion == null ? null : champion.getChampionNameKr(),
-				champion == null ? null : champion.getImageUrl(),
-				SoloRankMatchResultFormatter.resultLine(
-						champion == null ? null : champion.getChampionNameKr(),
-						tracked,
-						match.info().durationSeconds()),
-				tracked == null ? null : tracked.win(),
-				SoloRankMatchResultFormatter.kda(tracked),
-				match.info().durationSeconds(),
-				RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
+		// 되살린 판이 한참 지나 끝난 거면 알림은 늦어서 의미가 없다 — 결과만 적는다.
+		boolean fresh = Duration.between(Instant.ofEpochMilli(match.info().gameEndTimestamp()), Instant.now())
+				.compareTo(PUSH_FRESHNESS) <= 0;
+		if (fresh) {
+			playerSoloRankPushService.notifySubscribersPostGame(
+					player,
+					target.gameId,
+					champion == null ? null : champion.getChampionNameKr(),
+					champion == null ? null : champion.getImageUrl(),
+					SoloRankMatchResultFormatter.resultLine(
+							champion == null ? null : champion.getChampionNameKr(),
+							tracked,
+							match.info().durationSeconds()),
+					tracked == null ? null : tracked.win(),
+					SoloRankMatchResultFormatter.kda(tracked),
+					match.info().durationSeconds(),
+					RiotPlatform.opggUrl(account.getGameName(), account.getTagLine(), account.getPlatform()));
 
-		soloRankGameRepository.markEndNotified(player.getId(), target.gameId, LocalDateTime.now());
+			soloRankGameRepository.markEndNotified(player.getId(), target.gameId, LocalDateTime.now());
+		}
 		// 홈 "오늘 끝난 경기"용 결과 저장. 알림은 이미 나갔으니 여기서 실패해도 흐름을 깨지 않는다.
 		try {
 			RiotMatchResponse.Info info = match.info();
@@ -180,8 +200,32 @@ public class SoloRankEndNotificationService {
 		} catch (Exception e) {
 			log.warn("[solo-rank-end] 결과 저장 실패 player={} gameId={}", player.getName(), target.gameId, e);
 		}
+		if (!fresh) {
+			log.info("[solo-rank-end] 오래된 판이라 결과만 저장 player={} gameId={}", player.getName(), target.gameId);
+			return Outcome.DONE;
+		}
 		log.info("[solo-rank-end] 종료 알림 발송 player={} gameId={}", player.getName(), target.gameId);
 		return Outcome.SENT;
+	}
+
+	/**
+	 * 감지됐는데 결과도 종료 알림도 없는 판을 DB 에서 찾아 대기열에 다시 넣는다. 대기열은 인메모리라
+	 * 배포·리더 교체에 비는데, 그 사이 끝난 판은 폴백 폴러도 "이미 적힌 판"이라 건너뛰어 결과가 영구히 빠졌다
+	 * (2026-10-18~25 2,608판 중 12판). 같은 키는 putIfAbsent 라 중복으로 들어가지 않는다.
+	 */
+	void recoverUnresolved() {
+		try {
+			for (Object[] row : accountRepository.findUnresolvedGames(LocalDateTime.now().minus(RECOVERY_LOOKBACK),
+					PlayerRiotAccountLiveStatus.IN_RANKED_SOLO)) {
+				PlayerRiotAccount account = (PlayerRiotAccount) row[0];
+				String gameId = (String) row[1];
+				if (pending.putIfAbsent(account.getPlayer().getId() + "#" + gameId, new Pending(account, gameId)) == null) {
+					log.info("[solo-rank-end] DB 에서 복원 player={} gameId={}", account.getPlayer().getName(), gameId);
+				}
+			}
+		} catch (Exception e) {
+			log.warn("[solo-rank-end] 미해결 판 복원 실패", e);
+		}
 	}
 
 	/** spectator 게임 ID 는 플랫폼 접두사가 없다. match-v5 조회는 접두사가 필요하다. */

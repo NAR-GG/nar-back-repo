@@ -125,7 +125,7 @@ public class PlayerSoloRankMonitorService {
 					rankedSoloCount++;
 					// 구독 여부와 무관하게 솔랭 게임 이력 적재(선수 카드 최근 솔랭·챔프 폭).
 					soloRankGameHistoryRecorder.record(
-							account.getPlayer(), currentGameId, champion, checkedAt);
+							account.getPlayer(), currentGameId, champion, checkedAt, account.getPlatform());
 					fillStartedAt(account, currentGameId, currentGame);
 				} else {
 					account.markRecentOtherQueue(currentGameId, checkedAt);
