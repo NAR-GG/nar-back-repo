@@ -461,7 +461,8 @@ public class TeamLiveEventPushService {
 		// 잠자기로 건너뛴 구독자는 발송 없이 마감만 한다 — 알림함에는 위에서 이미 남겼다.
 		markSkippedQuietAll(outcome.skippedMemberIds(), matchId, setNumber, eventType, eventOrder);
 		markFailedAll(undelivered, matchId, setNumber, eventType, eventOrder, "FCM 전송 성공 기기가 없습니다.");
-		// 단계별 소요. FCM 자체 소요는 게이트웨이의 [fcm-send] 로그가 묶음별로 따로 남긴다.
+		// 단계별 소요. sendMs 는 잠자기 조회(DB) + FCM 이다 — FCM 몫은 게이트웨이 [fcm-send] totalMs 이고
+		// 차이가 잠자기 조회다. 발송 예외로 위에서 return 하면 이 줄은 안 남는다([fcm-send] 는 남는다).
 		log.info("[team-push] eventType={} matchId={} set={} order={} members={} reserveMs={} feedMs={} sendMs={} markMs={}",
 				eventType, matchId, setNumber, eventOrder, tokensByMember.size(),
 				millisBetween(startedAt, reservedAt), millisBetween(reservedAt, feedRecordedAt),

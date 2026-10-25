@@ -34,6 +34,8 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 	 * 발송 소요 진단용. 세트 알림의 첫 팬아웃만 규모와 무관하게 20~50초 걸리는데(2026-10-25 실측)
 	 * DB·CPU·DNS 는 결백했다. 남은 후보는 FCM HTTP 계층 — 오래 쉰 뒤 첫 발송인지(idleBeforeMs),
 	 * 다른 발송과 SDK 스레드풀(100)을 나눠 쓰는 중인지(concurrentSends)를 묶음별 소요와 함께 남긴다.
+	 * idleBeforeMs 는 "마지막으로 끝난 발송" 기준이라 concurrentSends > 0 이면 연결이 쓰이는 중인데도
+	 * 크게 나올 수 있다 — 두 값을 같이 읽는다. SDK 가 요청별 소요를 주지 않아 묶음 소요로 대신한다.
 	 */
 	private final AtomicInteger inFlightSends = new AtomicInteger();
 	private final AtomicLong lastSendFinishedAtMs = new AtomicLong();
