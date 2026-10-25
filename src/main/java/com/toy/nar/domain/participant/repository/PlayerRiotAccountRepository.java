@@ -54,12 +54,14 @@ public interface PlayerRiotAccountRepository extends JpaRepository<PlayerRiotAcc
 			"WHERE a.enabled = true AND g.gameEndedAt > :from AND g.gameEndedAt <= :until")
 	List<EndedGame> findEndedGames(@Param("from") LocalDateTime from, @Param("until") LocalDateTime until);
 
-	// 감지는 됐는데 결과(종료 시각)도 종료 알림도 없는 판과 그 계정 — [0]=계정, [1]=gameId.
-	// 계정이 아직 그 판을 하고 있으면 뺀다. 생성자식은 JOIN FETCH 와 못 써서 Object[] 로 받는다.
+	// 감지는 됐는데 결과(종료 시각)도 종료 알림도 없는 판과 그 판을 한 계정 — [0]=계정, [1]=gameId.
+	// 판을 마지막으로 본 계정(last_checked_match_id)으로 잇는다. 선수+플랫폼으로 이으면 같은 플랫폼 계정이
+	// 둘일 때 엉뚱한 계정이 집혀 결과가 빈 값으로 굳는다. 그 계정이 아직 그 판 중이면 뺀다.
+	// 계정(~175행)에서 출발해 game_id 인덱스로 판을 찾는다. 생성자식은 JOIN FETCH 와 못 써서 Object[].
 	@Query("SELECT a, g.gameId FROM PlayerRiotAccount a JOIN FETCH a.player p " +
-			"JOIN PlayerSoloRankGame g ON g.player = p AND g.platform = a.platform " +
-			"WHERE a.enabled = true AND g.gameEndedAt IS NULL AND g.endNotifiedAt IS NULL AND g.detectedAt > :since " +
-			"AND NOT (a.liveStatus = :live AND a.lastCheckedMatchId = g.gameId)")
+			"JOIN PlayerSoloRankGame g ON g.player = p AND g.gameId = a.lastCheckedMatchId " +
+			"WHERE a.enabled = true AND a.liveStatus <> :live " +
+			"AND g.gameEndedAt IS NULL AND g.endNotifiedAt IS NULL AND g.detectedAt > :since")
 	List<Object[]> findUnresolvedGames(@Param("since") LocalDateTime since, @Param("live") PlayerRiotAccountLiveStatus live);
 
 	record EndedGame(PlayerRiotAccount account, LocalDateTime endedAt) {

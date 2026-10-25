@@ -142,14 +142,15 @@ class PlayerSoloRankGameQueryTest {
 
 	@Test
 	void 결과도_종료_알림도_없고_지금_하고_있지_않은_판만_되살린다() {
-		// faker: 끝났는데 결과 없음 → 대상. chovy: 아직 그 판을 하는 중 → 제외. zeus: 결과 있음 → 제외.
+			// faker: 마지막으로 본 판 "1" 이 끝났는데 결과 없음 → 대상. "0" 은 이 계정이 마지막으로 본 판이 아님 → 제외.
+		// chovy: 아직 그 판을 하는 중 → 제외. zeus: 결과 있음 → 제외.
 		account(faker, PlayerRiotAccountLiveStatus.OFFLINE, "1", now);
 		account(chovy, PlayerRiotAccountLiveStatus.IN_RANKED_SOLO, "2", now);
 		account(zeus, PlayerRiotAccountLiveStatus.OFFLINE, "3", now);
-		em.persist(new PlayerSoloRankGame(faker, "1", ahri, now.minusMinutes(40), "kr"));
-		em.persist(new PlayerSoloRankGame(faker, "0", ahri, now.minusHours(3), "kr")); // 너무 오래됨
-		em.persist(new PlayerSoloRankGame(chovy, "2", ahri, now.minusMinutes(20), "kr"));
-		em.persist(new PlayerSoloRankGame(zeus, "3", ahri, now.minusMinutes(40), "kr"));
+		game(faker, "1", now.minusMinutes(40));
+		game(faker, "0", now.minusMinutes(90));
+		game(chovy, "2", now.minusMinutes(20));
+		game(zeus, "3", now.minusMinutes(40));
 		em.flush();
 		repository.recordResult(zeus.getId(), "3", null, now.minusMinutes(5), 1500, true, 1, 1, 1, 100, "kr");
 

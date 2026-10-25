@@ -141,7 +141,7 @@ class PlayerSoloRankMonitorServiceTest {
 				"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Yasuo.png",
 				"솔로 랭크",
 				"https://www.op.gg/summoners/kr/Hide+on+bush-KR1");
-		verify(soloRankGameHistoryRecorder).record(eq(player), eq("222"), any(), any(), any());
+		verify(soloRankGameHistoryRecorder).record(eq(player), eq("222"), any(), any());
 	}
 
 	@Test
@@ -400,7 +400,7 @@ class PlayerSoloRankMonitorServiceTest {
 				org.mockito.ArgumentMatchers.any(),
 				org.mockito.ArgumentMatchers.any(),
 				org.mockito.ArgumentMatchers.any());
-		verify(soloRankGameHistoryRecorder, never()).record(any(), anyString(), any(), any(), any());
+		verify(soloRankGameHistoryRecorder, never()).record(any(), anyString(), any(), any());
 	}
 
 	@Test

@@ -97,7 +97,7 @@ public class PlayerSoloRankMatchFallbackService {
 							: championDataService.findChampionByRiotKey(tracked.championId()).orElse(null);
 
 					boolean newlyRecorded = soloRankGameHistoryRecorder.record(
-							account.getPlayer(), gameId, champion, LocalDateTime.now(), account.getPlatform());
+							account.getPlayer(), gameId, champion, LocalDateTime.now());
 					if (!newlyRecorded) {
 						continue;
 					}

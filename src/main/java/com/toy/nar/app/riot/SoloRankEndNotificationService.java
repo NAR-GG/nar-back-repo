@@ -63,8 +63,8 @@ public class SoloRankEndNotificationService {
 	private final PlayerRiotAccountRepository accountRepository;
 
 	/**
-	 * 결과를 기다리는 게임들. 재기동하면 비는데, 그때는 그 게임의 종료 알림만 못 나간다 —
-	 * 테이블을 만들 값어치가 없다.
+	 * 결과를 기다리는 게임들. DB 의 캐시일 뿐이다 — 재기동으로 비어도 다음 스윕의
+	 * {@link #recoverUnresolved()} 가 판 행(결과·종료 알림 없음)에서 다시 채운다.
 	 *
 	 * <p>ponytail: 인메모리. 다중 인스턴스로 가면 인스턴스마다 자기가 감지한 것만 처리하므로
 	 * 중복 발송은 없다(멱등 키가 DB 에 있다).</p>

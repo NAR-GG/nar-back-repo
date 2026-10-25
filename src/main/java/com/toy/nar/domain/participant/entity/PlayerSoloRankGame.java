@@ -91,15 +91,9 @@ public class PlayerSoloRankGame {
 	private String platform;
 
 	public PlayerSoloRankGame(Player player, String gameId, Champion champion, LocalDateTime detectedAt) {
-		this(player, gameId, champion, detectedAt, null);
-	}
-
-	/** platform 은 감지 때부터 적는다 — 결과를 못 받은 판을 DB 에서 되살릴 때 어느 계정의 판인지 알아야 한다. */
-	public PlayerSoloRankGame(Player player, String gameId, Champion champion, LocalDateTime detectedAt, String platform) {
 		this.player = player;
 		this.gameId = gameId;
 		this.champion = champion;
 		this.detectedAt = detectedAt;
-		this.platform = platform;
 	}
 }

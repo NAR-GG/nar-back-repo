@@ -80,8 +80,7 @@ public class SoloRankGameHistoryRecorder {
 
 	/** @return 신규 적재 여부. 이미 존재·실패 시 false — 폴백 경로의 알림 중복 방지 게이트로 쓴다. */
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
-	public boolean record(Player player, String gameId, Champion champion, LocalDateTime detectedAt,
-			String platform) {
+	public boolean record(Player player, String gameId, Champion champion, LocalDateTime detectedAt) {
 		if (player == null || player.getId() == null || gameId == null || gameId.isBlank()) {
 			return false;
 		}
@@ -89,7 +88,7 @@ public class SoloRankGameHistoryRecorder {
 			if (repository.existsByPlayer_IdAndGameId(player.getId(), gameId)) {
 				return false;
 			}
-			repository.save(new PlayerSoloRankGame(player, gameId, champion, detectedAt, platform));
+			repository.save(new PlayerSoloRankGame(player, gameId, champion, detectedAt));
 			return true;
 		} catch (DataIntegrityViolationException e) {
 			// 동시 폴링으로 인한 (player, gameId) 중복 — 무시.

@@ -36,7 +36,7 @@ class SoloRankGameHistoryRecorderTest {
 	void savesNewGame() {
 		when(repository.existsByPlayer_IdAndGameId(7L, "222")).thenReturn(false);
 
-		recorder.record(player(7L), "222", null, LocalDateTime.now(), "KR");
+		recorder.record(player(7L), "222", null, LocalDateTime.now());
 
 		verify(repository).save(any(PlayerSoloRankGame.class));
 	}
@@ -45,15 +45,15 @@ class SoloRankGameHistoryRecorderTest {
 	void skipsDuplicate() {
 		when(repository.existsByPlayer_IdAndGameId(7L, "222")).thenReturn(true);
 
-		recorder.record(player(7L), "222", null, LocalDateTime.now(), "KR");
+		recorder.record(player(7L), "222", null, LocalDateTime.now());
 
 		verify(repository, never()).save(any());
 	}
 
 	@Test
 	void ignoresBlankInput() {
-		recorder.record(null, "222", null, LocalDateTime.now(), "KR");
-		recorder.record(player(7L), "", null, LocalDateTime.now(), "KR");
+		recorder.record(null, "222", null, LocalDateTime.now());
+		recorder.record(player(7L), "", null, LocalDateTime.now());
 
 		verify(repository, never()).save(any());
 	}
