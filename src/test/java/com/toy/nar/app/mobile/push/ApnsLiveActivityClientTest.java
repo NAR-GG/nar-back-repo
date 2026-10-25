@@ -98,7 +98,7 @@ class ApnsLiveActivityClientTest {
 		});
 
 		ApnsLiveActivityClient client = client(httpClient);
-		int total = MAX_IN_FLIGHT + 5;
+		int total = MAX_IN_FLIGHT + 6;
 		Thread sender = new Thread(() -> {
 			for (int i = 0; i < total; i++) {
 				client.sendUpdateAsync("tok-" + i, contentState());
@@ -106,11 +106,15 @@ class ApnsLiveActivityClientTest {
 		});
 		sender.start();
 
-		// 앞의 응답이 오기 전에는 상한까지만 나간다.
-		waitUntil(() -> dispatched.size() >= MAX_IN_FLIGHT);
+		// 콜드 상태라 첫 요청이 혼자 연결을 연다. 그 응답이 오면 나머지가 나간다.
+		waitUntil(() -> dispatched.size() >= 1);
+		dispatched.get(0).complete(response(200, ""));
+
+		// 앞의 응답이 오기 전에는 상한까지만 나간다(첫 요청은 이미 끝났다).
+		waitUntil(() -> dispatched.size() >= MAX_IN_FLIGHT + 1);
 		Thread.sleep(100);
-		assertThat(dispatched.size()).isEqualTo(MAX_IN_FLIGHT);
-		assertThat(sender.isAlive()).isTrue();
+		assertThat(dispatched.size()).isEqualTo(MAX_IN_FLIGHT + 1);
+		// 호출 스레드가 아니라 첫 요청 뒤에 선 가상 스레드들이 permit 을 기다린다(콜드 경로). 상한은 같다.
 
 		// 응답이 돌아오면 초과분도 빠짐없이 나간다 — 실패로 버려지지 않는다.
 		long deadline = System.currentTimeMillis() + 10_000;
@@ -121,6 +125,54 @@ class ApnsLiveActivityClientTest {
 		sender.join(5_000);
 		assertThat(dispatched.size()).isEqualTo(total);
 		assertThat(client.transientFailureCount()).isZero();
+	}
+
+	@Test
+	void 오래_쉬었으면_첫_요청으로_연결을_연_뒤_나머지를_보낸다() throws Exception {
+		List<CompletableFuture<HttpResponse<String>>> dispatched =
+				Collections.synchronizedList(new ArrayList<>());
+		HttpClient httpClient = mock(HttpClient.class);
+		when(httpClient.sendAsync(any(), any())).thenAnswer(invocation -> {
+			CompletableFuture<HttpResponse<String>> pending = new CompletableFuture<>();
+			dispatched.add(pending);
+			return pending;
+		});
+		ApnsLiveActivityClient client = client(httpClient);
+
+		List<CompletableFuture<Boolean>> results = new ArrayList<>();
+		for (int i = 0; i < 10; i++) {
+			results.add(client.sendUpdateAsync("tok-" + i, contentState()));
+		}
+
+		// 연결을 여는 첫 요청만 나가고, 나머지는 그 응답을 기다린다 — 연결 수백 개 동시 개통 방지.
+		Thread.sleep(100);
+		assertThat(dispatched).hasSize(1);
+
+		dispatched.get(0).complete(response(200, ""));
+		waitUntil(() -> dispatched.size() >= 10);
+		assertThat(dispatched).hasSize(10);
+		List.copyOf(dispatched).forEach(pending -> pending.complete(response(200, "")));
+		assertThat(results).allSatisfy(result -> assertThat(result.join()).isTrue());
+	}
+
+	@Test
+	void 최근에_응답을_받았으면_기다리지_않고_한꺼번에_보낸다() throws Exception {
+		List<CompletableFuture<HttpResponse<String>>> dispatched =
+				Collections.synchronizedList(new ArrayList<>());
+		HttpClient httpClient = mock(HttpClient.class);
+		when(httpClient.sendAsync(any(), any())).thenAnswer(invocation -> {
+			CompletableFuture<HttpResponse<String>> pending = new CompletableFuture<>();
+			dispatched.add(pending);
+			return pending;
+		});
+		ApnsLiveActivityClient client = client(httpClient);
+		ReflectionTestUtils.setField(client, "lastResponseAtMs", System.currentTimeMillis());
+
+		for (int i = 0; i < 10; i++) {
+			client.sendUpdateAsync("tok-" + i, contentState());
+		}
+
+		assertThat(dispatched).hasSize(10);
 	}
 
 	private void waitUntil(java.util.function.BooleanSupplier condition) throws InterruptedException {

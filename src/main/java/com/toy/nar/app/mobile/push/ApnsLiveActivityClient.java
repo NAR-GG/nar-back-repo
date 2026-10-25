@@ -60,6 +60,19 @@ public class ApnsLiveActivityClient {
 	 */
 	private static final int MAX_IN_FLIGHT = 500;
 
+	/**
+	 * 이만큼 응답이 없었으면 연결이 닫혔다고 보고 첫 요청 하나로 연결부터 연다.
+	 *
+	 * <p>JDK HttpClient 는 HTTP/2 연결을 30초 놀리면 닫고({@code jdk.httpclient.keepalive.timeout.h2}
+	 * 기본값), 연결이 없을 때 동시 요청이 오면 요청마다 새 연결을 연다. 팬아웃 첫 순간에 연결 수백 개가
+	 * 한꺼번에 열리면 Colima VM 네트워크(lima usernet)가 SYN 을 흘려 절반 넘게 연결 타임아웃(10초)에
+	 * 걸린다 — 2026-10-26 실측: 300건 동시 → 연결 148개, p50 10.1초. prod 세트 시작 카드 팬아웃이
+	 * 늘 11~12초였던 게 이 타임아웃 + 재시도였다(실패 0건으로 보인 건 재시도가 살렸기 때문).
+	 * 첫 요청이 연결을 열고 나면 나머지는 그 연결 하나에 다중화된다(2026-08-17 동시 스트림 1,000 한도
+	 * 실측이 그 증거).</p>
+	 */
+	private static final long CONNECTION_IDLE_CLOSE_MS = 25_000;
+
 	/** 일시 실패 로그는 팬아웃 크기만큼 도배되므로 이 간격에 한 줄로 묶는다. */
 	private static final long FAILURE_WARN_INTERVAL_MS = 30_000;
 
@@ -68,6 +81,10 @@ public class ApnsLiveActivityClient {
 	private final Semaphore inFlightGate = new Semaphore(MAX_IN_FLIGHT);
 	private final AtomicLong transientFailures = new AtomicLong();
 	private volatile long lastFailureWarnAt;
+	private volatile long lastResponseAtMs;
+	private final Object warmupLock = new Object();
+	/** 연결을 여는 첫 요청. 완료되기 전까지 다른 요청은 이 뒤에 선다. warmupLock 으로 지킨다. */
+	private CompletableFuture<?> warmup = CompletableFuture.completedFuture(null);
 
 	/**
 	 * 재시도의 게이트 대기용. HttpClient 완료 콜백 스레드에서 permit 을 기다리면 그 스레드가
@@ -227,14 +244,52 @@ public class ApnsLiveActivityClient {
 			return CompletableFuture.completedFuture(true);
 		}
 
-		return dispatch(request, pushToken, 1);
+		return dispatchAfterWarmup(request, pushToken);
+	}
+
+	/** 연결이 닫혔을 법하면 이 요청 하나만 먼저 보내 연결을 열고, 나머지는 그 응답 뒤에 보낸다. */
+	private CompletableFuture<Boolean> dispatchAfterWarmup(HttpRequest request, String pushToken) {
+		CompletableFuture<Boolean> opener = null;
+		CompletableFuture<?> gate;
+		synchronized (warmupLock) {
+			boolean cold = System.currentTimeMillis() - lastResponseAtMs > CONNECTION_IDLE_CLOSE_MS;
+			if (cold && warmup.isDone()) {
+				opener = new CompletableFuture<>();
+				warmup = opener;
+			}
+			gate = warmup;
+		}
+		if (opener != null) {
+			// 게이트 permit 대기가 락 안에서 일어나지 않게 락 밖에서 보낸다.
+			CompletableFuture<Boolean> first = opener;
+			dispatch(request, pushToken, 1).whenComplete((alive, error) -> {
+				if (error != null) {
+					first.completeExceptionally(error);
+				} else {
+					first.complete(alive);
+				}
+			});
+			return first;
+		}
+		if (gate.isDone()) {
+			return dispatch(request, pushToken, 1);
+		}
+		// ponytail: 첫 요청이 연결 타임아웃으로 실패하면 기다리던 요청이 한꺼번에 풀려 콜드 개통을 한다.
+		// 그 경우는 지금(매번 콜드)과 같아 손해가 없다.
+		return gate.handle((ignored, error) -> null)
+				.thenComposeAsync(ignored -> dispatch(request, pushToken, 1), retryExecutor);
 	}
 
 	/** 게이트 밖으로 새는 재시도가 없도록, 재시도도 이 메서드를 다시 타 permit 을 새로 받는다. */
 	private CompletableFuture<Boolean> dispatch(HttpRequest request, String pushToken, int retriesLeft) {
 		inFlightGate.acquireUninterruptibly();
 		return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-				.whenComplete((response, error) -> inFlightGate.release())
+				.whenComplete((response, error) -> {
+					inFlightGate.release();
+					if (response != null) {
+						lastResponseAtMs = System.currentTimeMillis();
+					}
+				})
 				.handle((response, error) -> classify(response, error, pushToken, retriesLeft))
 				.thenComposeAsync(outcome -> outcome == Outcome.RETRY
 						? dispatch(request, pushToken, retriesLeft - 1)
