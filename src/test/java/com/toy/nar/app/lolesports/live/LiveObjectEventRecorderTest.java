@@ -30,7 +30,8 @@ class LiveObjectEventRecorderTest {
 			mock(com.toy.nar.app.lolesports.LeagueConfigService.class);
 	private final LiveObjectEventRecorder recorder = new LiveObjectEventRecorder(
 			objectEventRepository, mock(NotificationService.class), mock(TeamLiveEventPushService.class),
-			leagueConfigService);
+			leagueConfigService,
+				org.springframework.transaction.support.TransactionOperations.withoutTransaction());
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Test
@@ -38,7 +39,8 @@ class LiveObjectEventRecorderTest {
 		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
 		when(pushService.isEnabled()).thenReturn(true);
 		LiveObjectEventRecorder swapRecorder = new LiveObjectEventRecorder(
-				objectEventRepository, mock(NotificationService.class), pushService, leagueConfigService);
+				objectEventRepository, mock(NotificationService.class), pushService, leagueConfigService,
+				org.springframework.transaction.support.TransactionOperations.withoutTransaction());
 		when(leagueConfigService.isNotificationEnabled("LCK")).thenReturn(true);
 		when(objectEventRepository.existsByGameIdAndTeamSideAndEventTypeAndEventOrder(any(), any(), any(), any()))
 				.thenReturn(false);
@@ -125,5 +127,64 @@ class LiveObjectEventRecorderTest {
 		recorder.record(game, window);
 
 		verify(objectEventRepository, times(2)).save(any(LiveGameObjectEvent.class));
+	}
+
+	@Test
+	void pushIsSentAfterTransactionCommits() throws Exception {
+		// FCM 왕복 동안 DB 커넥션을 쥐지 않도록, 발송은 저장 트랜잭션이 끝난 뒤에 나가야 한다.
+		java.util.concurrent.atomic.AtomicBoolean inTransaction = new java.util.concurrent.atomic.AtomicBoolean();
+		org.springframework.transaction.support.TransactionOperations tx =
+				new org.springframework.transaction.support.TransactionOperations() {
+					@Override
+					public <T> T execute(org.springframework.transaction.support.TransactionCallback<T> action) {
+						inTransaction.set(true);
+						try {
+							return action.doInTransaction(
+									new org.springframework.transaction.support.SimpleTransactionStatus());
+						} finally {
+							inTransaction.set(false);
+						}
+					}
+				};
+		java.util.List<Boolean> sentInTransaction = new java.util.ArrayList<>();
+		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
+		when(pushService.isEnabled()).thenReturn(true);
+		org.mockito.Mockito.doAnswer(invocation -> sentInTransaction.add(inTransaction.get()))
+				.when(pushService).notifyLiveEvent(any(), org.mockito.ArgumentMatchers.anyInt(), anyLong(),
+						any(), any(), any(), any());
+		LiveObjectEventRecorder txRecorder = new LiveObjectEventRecorder(
+				objectEventRepository, mock(NotificationService.class), pushService, leagueConfigService, tx);
+		when(leagueConfigService.isNotificationEnabled("LCK")).thenReturn(true);
+		when(objectEventRepository.save(any(LiveGameObjectEvent.class))).thenAnswer(invocation -> {
+			LiveGameObjectEvent saved = invocation.getArgument(0);
+			ReflectionTestUtils.setField(saved, "id", 7L);
+			return saved;
+		});
+		ActiveLiveGame game = new ActiveLiveGame("game-3", "match-3", "LCK", "KT", "HLE",
+				LocalDateTime.now(ZoneOffset.UTC), 0, 1, "team-kt", "team-hle");
+		JsonNode window = objectMapper.readTree("""
+				{
+				  "gameMetadata": {
+				    "blueTeamMetadata": { "esportsTeamId": "team-kt" },
+				    "redTeamMetadata": { "esportsTeamId": "team-hle" }
+				  },
+				  "frames": [
+				    {
+				      "rfc460Timestamp": "2026-07-09T11:20:00.000Z",
+				      "blueTeam": { "towers": 0, "dragons": [] },
+				      "redTeam": { "towers": 0, "dragons": [] }
+				    },
+				    {
+				      "rfc460Timestamp": "2026-07-09T11:20:10.000Z",
+				      "blueTeam": { "towers": 1, "dragons": [] },
+				      "redTeam": { "towers": 0, "dragons": [] }
+				    }
+				  ]
+				}
+				""");
+
+		txRecorder.record(game, window);
+
+		assertThat(sentInTransaction).containsExactly(false);
 	}
 }

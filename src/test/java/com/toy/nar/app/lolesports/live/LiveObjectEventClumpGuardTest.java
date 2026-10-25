@@ -41,7 +41,8 @@ class LiveObjectEventClumpGuardTest {
 	private final LeagueConfigService leagueConfigService = mock(LeagueConfigService.class);
 
 	private final LiveObjectEventRecorder recorder =
-			new LiveObjectEventRecorder(repository, notificationService, pushService, leagueConfigService);
+			new LiveObjectEventRecorder(repository, notificationService, pushService, leagueConfigService,
+				org.springframework.transaction.support.TransactionOperations.withoutTransaction());
 
 	@Test
 	@DisplayName("정상 간격 프레임은 이벤트를 유도한다")
