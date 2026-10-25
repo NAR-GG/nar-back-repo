@@ -76,7 +76,7 @@ GET /api/mobile/matches
 
 신규 리스트 API(위)와 **기존 일별 조회** `GET /api/mobile/schedules?date=` 양쪽 모두 경기 카드(`matches[]`)에 다음 필드가 추가됐다. 기존 필드는 그대로이므로 하위 호환.
 
-- `date`: 경기 일자 (KST, `yyyy-MM-dd`)
+- `date`: 경기 일자 (KST, `yyyy-MM-dd`. 2026-10-25 부터 `utcOffset` 기준 — `mobile-schedule-utc-offset-2026-10-25.md`)
 - `games[]`: 세트 목록 `{ gameOrder, gameId, recordGameId }`. 세트 미생성 매치는 빈 배열
 
 ### 2-2. 매치 → 세트 목록 단독 조회 (신규)

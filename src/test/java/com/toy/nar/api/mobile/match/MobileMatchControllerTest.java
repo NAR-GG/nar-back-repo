@@ -5,6 +5,8 @@ import com.toy.nar.app.mobile.schedule.MobileScheduleService;
 import com.toy.nar.app.mobile.schedule.dto.MobileMatchGamesResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileMatchPageResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
+import com.toy.nar.app.data.source.NotificationService;
+import com.toy.nar.common.error.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -12,11 +14,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -32,13 +36,14 @@ class MobileMatchControllerTest {
 		mobileScheduleService = mock(MobileScheduleService.class);
 		mockMvc = MockMvcBuilders
 				.standaloneSetup(new MobileMatchController(mobileScheduleService))
-				.setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper()))
+				.setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper().findAndRegisterModules()))
+				.setControllerAdvice(new GlobalExceptionHandler(mock(NotificationService.class)))
 				.build();
 	}
 
 	@Test
 	void getMatchReturnsSingleMatchSummary() throws Exception {
-		when(mobileScheduleService.getMatch("match-1"))
+		when(mobileScheduleService.getMatch("match-1", MobileScheduleService.DEFAULT_OFFSET))
 				.thenReturn(new MobileScheduleListResponse.MobileMatchSummary(
 						"match-1",
 						"2026-07-06",
@@ -65,7 +70,7 @@ class MobileMatchControllerTest {
 
 	@Test
 	void getMatchesReturnsCursorPageShape() throws Exception {
-		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20, null, null, null))
+		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20, null, null, null, MobileScheduleService.DEFAULT_OFFSET))
 				.thenReturn(MobileMatchPageResponse.forward(
 						"LCK",
 						null,
@@ -98,20 +103,20 @@ class MobileMatchControllerTest {
 
 	@Test
 	void getMatchesBindsFromAsLocalDate() throws Exception {
-		when(mobileScheduleService.getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9), null, null))
+		when(mobileScheduleService.getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9), null, null, MobileScheduleService.DEFAULT_OFFSET))
 				.thenReturn(MobileMatchPageResponse.forward("ALL", null, List.of(), null));
 
 		mockMvc.perform(get("/api/mobile/matches").param("league", "ALL").param("from", "2026-08-09"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.league").value("ALL"));
 
-		verify(mobileScheduleService).getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9), null, null);
+		verify(mobileScheduleService).getMatchPage("ALL", null, null, null, null, 20, LocalDate.of(2026, 8, 9), null, null, MobileScheduleService.DEFAULT_OFFSET);
 	}
 
 	@Test
 	void getMatchesBindsAroundAsLocalDateAndExposesPrevFields() throws Exception {
 		when(mobileScheduleService.getMatchPage(
-				"ALL", null, null, null, null, 50, null, LocalDate.of(2026, 8, 14), null))
+				"ALL", null, null, null, null, 50, null, LocalDate.of(2026, 8, 14), null, MobileScheduleService.DEFAULT_OFFSET))
 				.thenReturn(new MobileMatchPageResponse(
 						"ALL", null, List.of(), "next-token", true, "prev-token", true));
 
@@ -126,24 +131,24 @@ class MobileMatchControllerTest {
 				.andExpect(jsonPath("$.hasNext").value(true));
 
 		verify(mobileScheduleService).getMatchPage(
-				"ALL", null, null, null, null, 50, null, LocalDate.of(2026, 8, 14), null);
+				"ALL", null, null, null, null, 50, null, LocalDate.of(2026, 8, 14), null, MobileScheduleService.DEFAULT_OFFSET);
 	}
 
 	@Test
 	void getMatchesBindsBeforeCursor() throws Exception {
-		when(mobileScheduleService.getMatchPage("ALL", null, null, null, null, 20, null, null, "prev-token"))
+		when(mobileScheduleService.getMatchPage("ALL", null, null, null, null, 20, null, null, "prev-token", MobileScheduleService.DEFAULT_OFFSET))
 				.thenReturn(new MobileMatchPageResponse("ALL", null, List.of(), null, false, null, false));
 
 		mockMvc.perform(get("/api/mobile/matches").param("league", "ALL").param("before", "prev-token"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.hasPrev").value(false));
 
-		verify(mobileScheduleService).getMatchPage("ALL", null, null, null, null, 20, null, null, "prev-token");
+		verify(mobileScheduleService).getMatchPage("ALL", null, null, null, null, 20, null, null, "prev-token", MobileScheduleService.DEFAULT_OFFSET);
 	}
 
 	@Test
 	void getMatchesKeepsPrevFieldsFalseOnLegacyCall() throws Exception {
-		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20, null, null, null))
+		when(mobileScheduleService.getMatchPage("LCK", null, null, null, null, 20, null, null, null, MobileScheduleService.DEFAULT_OFFSET))
 				.thenReturn(MobileMatchPageResponse.forward("LCK", null, List.of(), null));
 
 		mockMvc.perform(get("/api/mobile/matches").param("league", "LCK"))
@@ -170,5 +175,32 @@ class MobileMatchControllerTest {
 				.andExpect(jsonPath("$.games[1].gameOrder").value(2))
 				.andExpect(jsonPath("$.games[1].recordGameId").doesNotExist())
 				.andExpect(jsonPath("$.games[1].vodUrl").doesNotExist());
+	}
+
+	@Test
+	void getMatchesPassesUtcOffset() throws Exception {
+		when(mobileScheduleService.getMatchPage(
+				"ALL", null, null, null, null, 20, LocalDate.of(2026, 10, 25), null, null, ZoneOffset.ofHours(-7)))
+				.thenReturn(MobileMatchPageResponse.forward("ALL", null, List.of(), null));
+
+		mockMvc.perform(get("/api/mobile/matches")
+						.param("league", "ALL")
+						.param("from", "2026-10-25")
+						.param("utcOffset", "-420"))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void getMatchPassesUtcOffset() throws Exception {
+		mockMvc.perform(get("/api/mobile/matches/match-1").param("utcOffset", "-420"))
+				.andExpect(status().isOk());
+		verify(mobileScheduleService).getMatch("match-1", ZoneOffset.ofHours(-7));
+	}
+
+	@Test
+	void getMatchUtcOffsetOutOfRangeIsBadRequest() throws Exception {
+		mockMvc.perform(get("/api/mobile/matches/match-1").param("utcOffset", "841"))
+				.andExpect(status().isBadRequest());
+		verifyNoInteractions(mobileScheduleService);
 	}
 }

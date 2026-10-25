@@ -23,6 +23,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -101,6 +102,95 @@ class MobileScheduleServiceTest {
 		assertThat(response.dates().getFirst().matches().getFirst().blueTeamCode()).isEqualTo("T1");
 		assertThat(response.dates().getFirst().matches().getFirst().redTeamCode()).isEqualTo("GEN");
 		assertThat(response.dates().getFirst().matches().getFirst().displayText()).isEqualTo("T1 vs GEN");
+	}
+
+	private static final ZoneOffset PDT = ZoneOffset.ofHours(-7);
+
+	@Test
+	void getDailySchedulesWithUtcOffsetGroupsAndFormatsInThatOffset() {
+		// LA(PDT, -420) 의 10-25 하루 = UTC 10-25 07:00 ~ 10-26 07:00.
+		// KST 10-26 04:00 경기(UTC 10-25 19:00)는 LA 로 10-25 12:00 이다.
+		when(leagueMatchRepository.findMobileMatchesInRange(
+				List.of("LCK"),
+				LocalDateTime.of(2026, 10, 25, 7, 0),
+				LocalDateTime.of(2026, 10, 26, 7, 0)))
+				.thenReturn(List.of(match(
+						"match-1", "LCK", LocalDateTime.of(2026, 10, 25, 19, 0), "T1", "GEN", "unstarted")));
+
+		MobileScheduleListResponse response = service.getDailySchedules(
+				LocalDate.of(2026, 10, 25), List.of("LCK"), null, MobileScheduleService.resolveOffset(-420));
+
+		assertThat(response.date()).isEqualTo("2026-10-25");
+		assertThat(response.matches()).singleElement()
+				.satisfies(match -> {
+					assertThat(match.date()).isEqualTo("2026-10-25");
+					assertThat(match.scheduledTime()).isEqualTo("12:00");
+				});
+	}
+
+	@Test
+	void getCalendarWithUtcOffsetGroupsAcrossMonthBoundary() {
+		// LA 11월 = UTC 11-01 07:00 ~ 12-01 07:00. KST 로는 11-01 17:00 경기가 11-01,
+		// KST 12-01 14:00 경기(UTC 12-01 05:00)가 LA 로는 11-30 22:00 이라 11월에 묶인다.
+		when(leagueMatchRepository.findMobileMatchesInRange(
+				List.of("LCK"),
+				LocalDateTime.of(2026, 11, 1, 7, 0),
+				LocalDateTime.of(2026, 12, 1, 7, 0)))
+				.thenReturn(List.of(
+						match("match-1", "LCK", LocalDateTime.of(2026, 11, 1, 8, 0), "T1", "GEN", "unstarted"),
+						match("match-2", "LCK", LocalDateTime.of(2026, 12, 1, 5, 0), "DK", "HLE", "unstarted")));
+
+		MobileScheduleCalendarResponse response = service.getCalendar(
+				YearMonth.of(2026, 11), List.of("LCK"), null, PDT);
+
+		assertThat(response.month()).isEqualTo("2026-11");
+		assertThat(response.dates()).extracting(MobileScheduleCalendarResponse.DateSummary::date)
+				.containsExactly("2026-11-01", "2026-11-30");
+	}
+
+	@Test
+	void getMatchPageFromUsesUtcOffsetMidnight() {
+		when(leagueMatchRepository.findMobileMatchPageAsc(
+				"LCK", null, null, LocalDateTime.of(2026, 10, 25, 7, 0), null, null, PageRequest.of(0, 21)))
+				.thenReturn(List.of(match(
+						"match-1", "LCK", LocalDateTime.of(2026, 10, 25, 19, 0), "T1", "GEN", "unstarted")));
+
+		MobileMatchPageResponse response = service.getMatchPage(
+				"LCK", null, null, null, null, null, LocalDate.of(2026, 10, 25), null, null, PDT);
+
+		assertThat(response.matches()).singleElement()
+				.satisfies(match -> {
+					assertThat(match.date()).isEqualTo("2026-10-25");
+					assertThat(match.scheduledTime()).isEqualTo("12:00");
+				});
+	}
+
+	@Test
+	void getMatchFormatsInUtcOffsetAndDefaultsToKst() {
+		// KST 10-26 04:00 = UTC 10-25 19:00
+		when(leagueMatchRepository.findById("match-1")).thenReturn(Optional.of(match(
+				"match-1", "LCK", LocalDateTime.of(2026, 10, 25, 19, 0), "T1", "GEN", "unstarted")));
+
+		MobileScheduleListResponse.MobileMatchSummary kst = service.getMatch("match-1");
+		assertThat(kst.date()).isEqualTo("2026-10-26");
+		assertThat(kst.scheduledTime()).isEqualTo("04:00");
+
+		MobileScheduleListResponse.MobileMatchSummary pdt = service.getMatch("match-1", PDT);
+		assertThat(pdt.date()).isEqualTo("2026-10-25");
+		assertThat(pdt.scheduledTime()).isEqualTo("12:00");
+	}
+
+	@Test
+	void resolveOffsetDefaultsToKstAndRejectsOutOfRange() {
+		assertThat(MobileScheduleService.resolveOffset(null)).isEqualTo(ZoneOffset.ofHours(9));
+		assertThat(MobileScheduleService.resolveOffset(-720)).isEqualTo(ZoneOffset.ofHours(-12));
+		assertThat(MobileScheduleService.resolveOffset(840)).isEqualTo(ZoneOffset.ofHours(14));
+		assertThat(MobileScheduleService.resolveOffset(330)).isEqualTo(ZoneOffset.ofHoursMinutes(5, 30));
+		assertThatThrownBy(() -> MobileScheduleService.resolveOffset(-721))
+				.isInstanceOf(CustomException.class)
+				.extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+		assertThatThrownBy(() -> MobileScheduleService.resolveOffset(841))
+				.isInstanceOf(CustomException.class);
 	}
 
 	@Test

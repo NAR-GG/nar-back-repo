@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Tag(name = "Mobile. 경기 일정", description = "모바일 앱 경기일정/경기리스트 전용 API")
@@ -47,27 +48,33 @@ public class MobileScheduleController {
 	@Operation(summary = "모바일 월별 캘린더 조회", description = "월별 캘린더 마킹용 경기 날짜와 경기 수를 조회합니다.")
 	@GetMapping("/calendar")
 	public ResponseEntity<MobileScheduleCalendarResponse> getCalendar(
-			@Parameter(description = "조회 월", example = "2026-04")
+			@Parameter(description = "조회 월(utcOffset 기준, 기본 KST)", example = "2026-04")
 			@RequestParam("month") @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
 			@Parameter(description = "리그 (전체는 ALL). 복수 지정 가능: league=LCK&league=LEC", example = "LCK")
 			@RequestParam(defaultValue = "LCK") List<String> league,
 			@Parameter(description = "팀 ID. 복수 지정 가능: teamId=1&teamId=3", example = "1")
-			@RequestParam(required = false) List<Long> teamId) {
+			@RequestParam(required = false) List<Long> teamId,
+			@Parameter(description = "UTC 기준 오프셋(분, 동쪽 +). 날짜·시각을 이 기준으로 해석·표시. 생략하면 540(KST). 범위 -720~840", example = "540")
+			@RequestParam(required = false) Integer utcOffset) {
+		ZoneOffset offset = MobileScheduleService.resolveOffset(utcOffset);
 		// 앱 첫 화면이 진입 즉시 부르는 응답. 마킹용 날짜/경기 수라 30초 지연은 눈에 띄지 않는다.
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.maxAge(Duration.ofSeconds(30)))
-				.body(mobileScheduleCacheableService.getCalendar(month, league, teamId));
+				.body(mobileScheduleCacheableService.getCalendar(month, league, teamId, offset));
 	}
 
 	@Operation(summary = "모바일 일별 경기 리스트 조회", description = "선택 날짜의 모바일 경기 리스트 카드 데이터를 조회합니다.")
 	@GetMapping
 	public ResponseEntity<MobileScheduleListResponse> getDailySchedules(
-			@Parameter(description = "조회 일자", example = "2026-04-01")
+			@Parameter(description = "조회 일자(utcOffset 기준, 기본 KST)", example = "2026-04-01")
 			@RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
 			@Parameter(description = "리그 (전체는 ALL). 복수 지정 가능: league=LCK&league=KESPA", example = "LCK")
 			@RequestParam(defaultValue = "LCK") List<String> league,
 			@Parameter(description = "팀 ID. 복수 지정 가능: teamId=1&teamId=5", example = "1")
-			@RequestParam(required = false) List<Long> teamId) {
-		return ResponseEntity.ok(mobileScheduleService.getDailySchedules(date, league, teamId));
+			@RequestParam(required = false) List<Long> teamId,
+			@Parameter(description = "UTC 기준 오프셋(분, 동쪽 +). 날짜·시각을 이 기준으로 해석·표시. 생략하면 540(KST). 범위 -720~840", example = "540")
+			@RequestParam(required = false) Integer utcOffset) {
+		return ResponseEntity.ok(mobileScheduleService.getDailySchedules(
+				date, league, teamId, MobileScheduleService.resolveOffset(utcOffset)));
 	}
 }

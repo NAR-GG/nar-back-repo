@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -76,6 +77,11 @@ public class MobileScheduleService {
 	 * 문자열 비교에서 {@code "0"} 보다 항상 크다(2026-08-14 프로덕션 확인).</p>
 	 */
 	private static final String PAST_BOUNDARY_MATCH_ID = "0";
+	/** utcOffset 미전송 시 기준. 한국은 DST 가 없어 Asia/Seoul 과 같은 결과다. */
+	public static final ZoneOffset DEFAULT_OFFSET = ZoneOffset.ofHours(9);
+	/** utcOffset 허용 범위(분). 실존 오프셋 전체(UTC−12:00 ~ UTC+14:00). */
+	private static final int MIN_UTC_OFFSET_MINUTES = -720;
+	private static final int MAX_UTC_OFFSET_MINUTES = 840;
 	private static final com.fasterxml.jackson.databind.ObjectMapper VOD_MAPPER =
 			new com.fasterxml.jackson.databind.ObjectMapper();
 
@@ -114,19 +120,41 @@ public class MobileScheduleService {
 		return new MobileScheduleFilterResponse(APP_DEFAULT_LEAGUE, leagues, teams, seasons);
 	}
 
+	/**
+	 * 앱이 보낸 utcOffset(UTC 기준 분, 동쪽 +)을 오프셋으로 바꾼다. 없으면 KST.
+	 *
+	 * <p>앱은 기기 IANA 시간대 이름을 못 읽어(네이티브 플러그인 = 스토어 릴리즈) 오프셋만 보낸다.
+	 * 그래서 DST 전환일을 넘는 조회(월 캘린더의 전환일 이후 구간)는 요청 시점 오프셋으로 한 시간
+	 * 어긋날 수 있다 — 감수한다.</p>
+	 */
+	public static ZoneOffset resolveOffset(Integer utcOffsetMinutes) {
+		if (utcOffsetMinutes == null) {
+			return DEFAULT_OFFSET;
+		}
+		if (utcOffsetMinutes < MIN_UTC_OFFSET_MINUTES || utcOffsetMinutes > MAX_UTC_OFFSET_MINUTES) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+		return ZoneOffset.ofTotalSeconds(utcOffsetMinutes * 60);
+	}
+
 	public MobileScheduleCalendarResponse getCalendar(YearMonth month, List<String> league, List<Long> teamId) {
+		return getCalendar(month, league, teamId, DEFAULT_OFFSET);
+	}
+
+	public MobileScheduleCalendarResponse getCalendar(
+			YearMonth month, List<String> league, List<Long> teamId, ZoneOffset offset) {
 		if (month == null) {
 			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 		List<String> normalizedLeagues = normalizeLeagues(league);
 		TeamFilters teamFilters = resolveTeamFilters(teamId);
-		LocalDateTime startUtc = MatchDateWindow.toUtc(month.atDay(1).atStartOfDay());
-		LocalDateTime endUtc = MatchDateWindow.toUtc(month.plusMonths(1).atDay(1).atStartOfDay());
+		LocalDateTime startUtc = MatchDateWindow.toUtc(month.atDay(1).atStartOfDay(), offset);
+		LocalDateTime endUtc = MatchDateWindow.toUtc(month.plusMonths(1).atDay(1).atStartOfDay(), offset);
 		List<LeagueMatch> matches = findMatches(normalizedLeagues, teamFilters, startUtc, endUtc);
 
 		Map<String, MobileScheduleCalendarResponse.DateSummary> summaries = new LinkedHashMap<>();
 		for (LeagueMatch match : matches) {
-			String date = MatchDateWindow.toKstDate(match.getMatchDate()).toString();
+			String date = MatchDateWindow.toZone(match.getMatchDate(), offset).toLocalDate().toString();
 			MobileScheduleCalendarResponse.DateSummary existing = summaries.get(date);
 			if (existing == null) {
 				summaries.put(date, new MobileScheduleCalendarResponse.DateSummary(
@@ -151,17 +179,22 @@ public class MobileScheduleService {
 	}
 
 	public MobileScheduleListResponse getDailySchedules(LocalDate date, List<String> league, List<Long> teamId) {
+		return getDailySchedules(date, league, teamId, DEFAULT_OFFSET);
+	}
+
+	public MobileScheduleListResponse getDailySchedules(
+			LocalDate date, List<String> league, List<Long> teamId, ZoneOffset offset) {
 		if (date == null) {
 			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 		List<String> normalizedLeagues = normalizeLeagues(league);
 		TeamFilters teamFilters = resolveTeamFilters(teamId);
-		LocalDateTime startUtc = MatchDateWindow.toUtc(date.atStartOfDay());
-		LocalDateTime endUtc = MatchDateWindow.toUtc(date.plusDays(1).atStartOfDay());
+		LocalDateTime startUtc = MatchDateWindow.toUtc(date.atStartOfDay(), offset);
+		LocalDateTime endUtc = MatchDateWindow.toUtc(date.plusDays(1).atStartOfDay(), offset);
 		List<LeagueMatch> found = findMatches(normalizedLeagues, teamFilters, startUtc, endUtc);
 		Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId = loadGames(found);
 		List<MobileScheduleListResponse.MobileMatchSummary> matches = found.stream()
-				.map(match -> toMatchSummary(match, gamesByMatchId))
+				.map(match -> toMatchSummary(match, gamesByMatchId, offset))
 				.toList();
 
 		return new MobileScheduleListResponse(date.toString(), echoLeague(normalizedLeagues), echoTeamId(teamId), matches);
@@ -183,6 +216,19 @@ public class MobileScheduleService {
 		return getMatchPage(league, teamId, seasonYear, seasonSplit, cursor, size, from, null, null);
 	}
 
+	public MobileMatchPageResponse getMatchPage(
+			String league,
+			Long teamId,
+			Integer seasonYear,
+			String seasonSplit,
+			String cursor,
+			Integer size,
+			LocalDate from,
+			LocalDate around,
+			String before) {
+		return getMatchPage(league, teamId, seasonYear, seasonSplit, cursor, size, from, around, before, DEFAULT_OFFSET);
+	}
+
 	/**
 	 * 경기 리스트 커서 페이지.
 	 *
@@ -199,7 +245,8 @@ public class MobileScheduleService {
 	 * {@code cursor=nextCursor} 를 보내면 같은 오름차순 축에서 이어진다 — 그래서 미래 방향 전용
 	 * 파라미터를 따로 두지 않았다.</p>
 	 *
-	 * <p>커서 값은 (matchDate, id) 그대로라 방향을 담지 않는다. 방향은 어떤 파라미터로 보냈는지가 정한다.</p>
+	 * <p>커서 값은 (matchDate, id) 그대로라 방향을 담지 않는다. 방향은 어떤 파라미터로 보냈는지가 정한다.
+	 * UTC 절대 시각이라 오프셋에도 무관하다 — {@code offset} 은 {@code from}/{@code around} 해석과 응답 날짜·시각에만 쓴다.</p>
 	 *
 	 * <p><b>정렬 파라미터(sort)를 받지 않는 건 의도된 선택이다.</b> 앱의 정렬 3개 중 서버 조건이
 	 * 바뀌는 건 '오늘 이후'({@code from}) 하나뿐이다 — 최근순과 오래된 순은 서버에 같은 요청을 보내고
@@ -219,7 +266,8 @@ public class MobileScheduleService {
 			Integer size,
 			LocalDate from,
 			LocalDate around,
-			String before) {
+			String before,
+			ZoneOffset offset) {
 		boolean hasAround = around != null;
 		boolean hasBefore = before != null && !before.isBlank();
 		boolean hasCursor = cursor != null && !cursor.isBlank();
@@ -238,18 +286,18 @@ public class MobileScheduleService {
 
 		if (hasAround) {
 			return matchPageAround(
-					normalizedLeague, leagueParam, teamId, teamFilter, seasonYear, normalizedSplit, pageSize, around);
+					normalizedLeague, leagueParam, teamId, teamFilter, seasonYear, normalizedSplit, pageSize, around, offset);
 		}
 		if (hasBefore) {
 			return matchPageBefore(
-					normalizedLeague, leagueParam, teamId, teamFilter, seasonYear, normalizedSplit, pageSize, before);
+					normalizedLeague, leagueParam, teamId, teamFilter, seasonYear, normalizedSplit, pageSize, before, offset);
 		}
 
 		MatchCursor matchCursor = decodeCursor(cursor);
 		LocalDateTime cursorDate = matchCursor != null ? matchCursor.matchDate() : null;
 		String cursorId = matchCursor != null ? matchCursor.matchId() : null;
-		// matchDate 는 UTC 저장이라 KST 기준 그날 00:00 을 UTC 로 옮겨 비교한다.
-		LocalDateTime fromUtc = from == null ? null : MatchDateWindow.toUtc(from.atStartOfDay());
+		// matchDate 는 UTC 저장이라 offset 기준 그날 00:00 을 UTC 로 옮겨 비교한다.
+		LocalDateTime fromUtc = from == null ? null : MatchDateWindow.toUtc(from.atStartOfDay(), offset);
 
 		List<LeagueMatch> fetched = fromUtc == null
 				? fetchDesc(leagueParam, teamFilter, seasonYear, normalizedSplit, cursorDate, cursorId, pageSize + 1)
@@ -259,7 +307,7 @@ public class MobileScheduleService {
 		List<LeagueMatch> page = fetched.size() > pageSize ? fetched.subList(0, pageSize) : fetched;
 		String nextCursor = fetched.size() > pageSize ? encodeCursor(page.getLast()) : null;
 
-		return MobileMatchPageResponse.forward(normalizedLeague, teamId, toMatchSummaries(page), nextCursor);
+		return MobileMatchPageResponse.forward(normalizedLeague, teamId, toMatchSummaries(page, offset), nextCursor);
 	}
 
 	/**
@@ -280,8 +328,9 @@ public class MobileScheduleService {
 			Integer seasonYear,
 			String seasonSplit,
 			int pageSize,
-			LocalDate around) {
-		LocalDateTime anchorUtc = MatchDateWindow.toUtc(around.atStartOfDay());
+			LocalDate around,
+			ZoneOffset offset) {
+		LocalDateTime anchorUtc = MatchDateWindow.toUtc(around.atStartOfDay(), offset);
 		int futureSize = pageSize / 2 + pageSize % 2;
 		int pastSize = pageSize - futureSize;
 
@@ -305,7 +354,7 @@ public class MobileScheduleService {
 		return new MobileMatchPageResponse(
 				normalizedLeague,
 				teamId,
-				toMatchSummaries(page),
+				toMatchSummaries(page, offset),
 				hasNext && !page.isEmpty() ? encodeCursor(page.getLast()) : null,
 				hasNext,
 				hasPrev && !page.isEmpty() ? encodeCursor(page.getFirst()) : null,
@@ -326,7 +375,8 @@ public class MobileScheduleService {
 			Integer seasonYear,
 			String seasonSplit,
 			int pageSize,
-			String before) {
+			String before,
+			ZoneOffset offset) {
 		MatchCursor cursor = decodeCursor(before);
 		List<LeagueMatch> fetched = fetchDesc(leagueParam, teamFilter, seasonYear, seasonSplit,
 				cursor.matchDate(), cursor.matchId(), pageSize + 1);
@@ -337,7 +387,7 @@ public class MobileScheduleService {
 		return new MobileMatchPageResponse(
 				normalizedLeague,
 				teamId,
-				toMatchSummaries(page),
+				toMatchSummaries(page, offset),
 				page.isEmpty() ? null : encodeCursor(page.getLast()),
 				!page.isEmpty(),
 				hasPrev ? encodeCursor(page.getFirst()) : null,
@@ -379,10 +429,11 @@ public class MobileScheduleService {
 						fromUtc, cursorDate, cursorId, fetchLimit);
 	}
 
-	private List<MobileScheduleListResponse.MobileMatchSummary> toMatchSummaries(List<LeagueMatch> page) {
+	private List<MobileScheduleListResponse.MobileMatchSummary> toMatchSummaries(
+			List<LeagueMatch> page, ZoneOffset offset) {
 		Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId = loadGames(page);
 		return page.stream()
-				.map(match -> toMatchSummary(match, gamesByMatchId))
+				.map(match -> toMatchSummary(match, gamesByMatchId, offset))
 				.toList();
 	}
 
@@ -391,9 +442,13 @@ public class MobileScheduleService {
 	 * 리스트 응답과 동일한 형태(MobileMatchSummary)로 경기 정보를 채울 때 쓴다.
 	 */
 	public MobileScheduleListResponse.MobileMatchSummary getMatch(String matchId) {
+		return getMatch(matchId, DEFAULT_OFFSET);
+	}
+
+	public MobileScheduleListResponse.MobileMatchSummary getMatch(String matchId, ZoneOffset offset) {
 		LeagueMatch match = leagueMatchRepository.findById(matchId)
 				.orElseThrow(() -> new CustomException(ErrorCode.DATA_NOT_FOUND));
-		return toMatchSummary(match, loadGames(List.of(match)));
+		return toMatchSummary(match, loadGames(List.of(match)), offset);
 	}
 
 	public MobileMatchGamesResponse getMatchGames(String matchId) {
@@ -612,11 +667,14 @@ public class MobileScheduleService {
 
 	private MobileScheduleListResponse.MobileMatchSummary toMatchSummary(
 			LeagueMatch match,
-			Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId) {
+			Map<String, List<MobileScheduleListResponse.MobileGameSummary>> gamesByMatchId,
+			ZoneOffset offset) {
 		return new MobileScheduleListResponse.MobileMatchSummary(
 				match.getId(),
-				match.getMatchDate() != null ? MatchDateWindow.toKstDate(match.getMatchDate()).toString() : null,
-				toScheduledTime(match),
+				match.getMatchDate() != null
+						? MatchDateWindow.toZone(match.getMatchDate(), offset).toLocalDate().toString()
+						: null,
+				toScheduledTime(match, offset),
 				match.getState(),
 				match.getMatchTitle(),
 				normalizeLeague(match.getLeagueName()),
@@ -791,11 +849,11 @@ public class MobileScheduleService {
 				.toList();
 	}
 
-	private String toScheduledTime(LeagueMatch match) {
+	private String toScheduledTime(LeagueMatch match, ZoneOffset offset) {
 		if (match.getMatchDate() == null) {
 			return "";
 		}
-		return MatchDateWindow.toKst(match.getMatchDate())
+		return MatchDateWindow.toZone(match.getMatchDate(), offset)
 				.toLocalTime()
 				.format(TIME_FORMATTER);
 	}

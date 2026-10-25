@@ -32,13 +32,15 @@ public class MobileMatchController {
 			summary = "모바일 경기 리스트 커서 페이지 조회",
 			description = "최신 경기부터 과거 방향으로 커서 기반 페이지네이션 조회합니다. "
 					+ "첫 페이지는 cursor 없이 호출하고, 이후 응답의 nextCursor를 cursor로 전달하면 이어서 조회됩니다. "
-					+ "from을 주면 그 날짜(KST 00:00) 이후 경기를 과거→미래 오름차순으로 내려줍니다 "
+					+ "from을 주면 그 날짜(utcOffset 기준, 기본 KST 00:00) 이후 경기를 과거→미래 오름차순으로 내려줍니다 "
 					+ "('오늘 이후' 필터용). 정렬 방향은 from/around 유무로 결정되며 sort 파라미터는 없습니다 "
 					+ "(최신순/오래된 순은 같은 데이터를 앱이 표시 방향만 뒤집어 그리므로 서버 정렬이 필요 없습니다). "
 					+ "around를 주면 그 날짜를 기준으로 과거 절반+미래 절반을 한 번에 내려줍니다 "
 					+ "('오늘로 진입' 용도). before를 주면 그 커서보다 과거를 내려줍니다(위로 스크롤). "
 					+ "around/before/cursor는 서로 배타적이며 함께 주면 400입니다. "
 					+ "각 경기에는 세트(games) 식별자 목록이 포함됩니다. "
+					+ "utcOffset(분)을 주면 from/around 날짜 해석과 응답의 date·scheduledTime이 그 오프셋 기준이 됩니다. "
+					+ "커서를 이어받을 때도 같은 utcOffset을 보내세요. "
 					+ "시즌 필터 옵션은 /api/mobile/schedules/filters 응답의 seasons에서 가져옵니다.")
 	@GetMapping
 	public ResponseEntity<MobileMatchPageResponse> getMatches(
@@ -54,15 +56,18 @@ public class MobileMatchController {
 			@RequestParam(required = false) String cursor,
 			@Parameter(description = "페이지 크기(1~50)", example = "20")
 			@RequestParam(defaultValue = "20") Integer size,
-			@Parameter(description = "이 날짜(KST) 00:00 이후 경기만. 지정하면 오름차순(과거→미래)", example = "2026-08-09")
+			@Parameter(description = "이 날짜(utcOffset 기준, 기본 KST) 00:00 이후 경기만. 지정하면 오름차순(과거→미래)", example = "2026-08-09")
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-			@Parameter(description = "이 날짜(KST) 00:00 기준 과거 절반+미래 절반을 한 번에. "
+			@Parameter(description = "이 날짜(utcOffset 기준, 기본 KST) 00:00 기준 과거 절반+미래 절반을 한 번에. "
 					+ "응답은 과거→미래 순이고 prevCursor/hasPrev가 함께 내려갑니다", example = "2026-08-14")
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate around,
 			@Parameter(description = "이전 응답의 prevCursor. 이 커서보다 과거 경기를 과거→미래 순으로 받습니다")
-			@RequestParam(required = false) String before) {
+			@RequestParam(required = false) String before,
+			@Parameter(description = "UTC 기준 오프셋(분, 동쪽 +). 날짜·시각을 이 기준으로 해석·표시. 생략하면 540(KST). 범위 -720~840", example = "540")
+			@RequestParam(required = false) Integer utcOffset) {
 		return ResponseEntity.ok(mobileScheduleService.getMatchPage(
-				league, teamId, seasonYear, split, cursor, size, from, around, before));
+				league, teamId, seasonYear, split, cursor, size, from, around, before,
+				MobileScheduleService.resolveOffset(utcOffset)));
 	}
 
 	@Operation(
@@ -72,8 +77,10 @@ public class MobileMatchController {
 	@GetMapping("/{matchId}")
 	public ResponseEntity<MobileScheduleListResponse.MobileMatchSummary> getMatch(
 			@Parameter(description = "매치 ID", example = "113990000000000001")
-			@PathVariable String matchId) {
-		return ResponseEntity.ok(mobileScheduleService.getMatch(matchId));
+			@PathVariable String matchId,
+			@Parameter(description = "UTC 기준 오프셋(분, 동쪽 +). date·scheduledTime을 이 기준으로 표시. 생략하면 540(KST). 범위 -720~840", example = "540")
+			@RequestParam(required = false) Integer utcOffset) {
+		return ResponseEntity.ok(mobileScheduleService.getMatch(matchId, MobileScheduleService.resolveOffset(utcOffset)));
 	}
 
 	@Operation(

@@ -39,12 +39,22 @@ public final class MatchDateWindow {
 
 	/** KST 벽시계 시각을 match_date 와 같은 기준으로 옮긴다. 하루 경계가 아닌 임의 시각용. */
 	public static LocalDateTime toUtc(LocalDateTime kstWallClock) {
-		return kstWallClock.atZone(KST).withZoneSameInstant(MATCH_DATE_ZONE).toLocalDateTime();
+		return toUtc(kstWallClock, KST);
+	}
+
+	/** {@code zone} 벽시계 시각을 match_date 와 같은 기준으로 옮긴다. 해외 사용자 오프셋(모바일 utcOffset)용. */
+	public static LocalDateTime toUtc(LocalDateTime wallClock, ZoneId zone) {
+		return wallClock.atZone(zone).withZoneSameInstant(MATCH_DATE_ZONE).toLocalDateTime();
 	}
 
 	/** match_date 를 KST 로 읽는다. 날짜만 필요하면 {@link #toKstDate}, 시각은 여기서 꺼낸다. */
 	public static ZonedDateTime toKst(LocalDateTime matchDate) {
-		return matchDate.atZone(MATCH_DATE_ZONE).withZoneSameInstant(KST);
+		return toZone(matchDate, KST);
+	}
+
+	/** match_date 를 {@code zone} 으로 읽는다. */
+	public static ZonedDateTime toZone(LocalDateTime matchDate, ZoneId zone) {
+		return matchDate.atZone(MATCH_DATE_ZONE).withZoneSameInstant(zone);
 	}
 
 	/** KST 하루의 시작을 match_date 와 같은 기준으로 옮긴 값(포함). */

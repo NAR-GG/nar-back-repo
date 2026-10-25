@@ -1,6 +1,7 @@
 package com.toy.nar.app.mobile.schedule;
 
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import org.springframework.cache.annotation.Cacheable;
@@ -45,9 +46,11 @@ public class MobileScheduleCacheableService {
 	/**
 	 * 월별 캘린더. 라이브 상태가 섞이지 않은 경기 목록이라 일정 동기화(30분)에만 바뀐다.
 	 * TTL 30초는 컨트롤러가 클라이언트에 약속한 값과 맞춘 것이다.
+	 * 오프셋마다 날짜 묶음이 달라지므로 키에 넣는다.
 	 */
-	@Cacheable(value = "mobileScheduleCalendar", key = "{#month, #league, #teamId}", sync = true)
-	public MobileScheduleCalendarResponse getCalendar(YearMonth month, List<String> league, List<Long> teamId) {
-		return mobileScheduleService.getCalendar(month, league, teamId);
+	@Cacheable(value = "mobileScheduleCalendar", key = "{#month, #league, #teamId, #offset}", sync = true)
+	public MobileScheduleCalendarResponse getCalendar(
+			YearMonth month, List<String> league, List<Long> teamId, ZoneOffset offset) {
+		return mobileScheduleService.getCalendar(month, league, teamId, offset);
 	}
 }
