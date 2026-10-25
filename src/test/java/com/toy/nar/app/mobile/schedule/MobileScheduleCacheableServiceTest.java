@@ -1,6 +1,7 @@
 package com.toy.nar.app.mobile.schedule;
 
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -36,6 +37,8 @@ import static org.mockito.Mockito.when;
  * (SimpleCacheManager 는 미등록 이름에 예외를 던진다).
  */
 class MobileScheduleCacheableServiceTest {
+
+	private static final ZoneOffset KST = MobileScheduleService.DEFAULT_OFFSET;
 
 	private AnnotationConfigApplicationContext context;
 	private MobileScheduleService delegate;
@@ -82,21 +85,26 @@ class MobileScheduleCacheableServiceTest {
 
 	@Test
 	void calendarKeyCoversMonthLeagueAndTeam() {
-		when(delegate.getCalendar(any(), any(), any())).thenReturn(calendarResponse());
+		when(delegate.getCalendar(any(), any(), any(), any())).thenReturn(calendarResponse());
 
 		YearMonth august = YearMonth.of(2026, 8);
-		cacheable.getCalendar(august, List.of("LCK"), null);
-		cacheable.getCalendar(august, List.of("LCK"), null);
+		cacheable.getCalendar(august, List.of("LCK"), null, KST);
+		cacheable.getCalendar(august, List.of("LCK"), null, KST);
 
-		verify(delegate, times(1)).getCalendar(august, List.of("LCK"), null);
+		verify(delegate, times(1)).getCalendar(august, List.of("LCK"), null, KST);
 
 		// 팀 필터가 다르면 다른 응답이라 캐시를 공유하면 안 된다.
-		cacheable.getCalendar(august, List.of("LCK"), List.of(1L));
-		verify(delegate, times(1)).getCalendar(august, List.of("LCK"), List.of(1L));
+		cacheable.getCalendar(august, List.of("LCK"), List.of(1L), KST);
+		verify(delegate, times(1)).getCalendar(august, List.of("LCK"), List.of(1L), KST);
 
 		// 월이 다르면 마찬가지.
-		cacheable.getCalendar(YearMonth.of(2026, 9), List.of("LCK"), null);
-		verify(delegate, times(1)).getCalendar(YearMonth.of(2026, 9), List.of("LCK"), null);
+		cacheable.getCalendar(YearMonth.of(2026, 9), List.of("LCK"), null, KST);
+		verify(delegate, times(1)).getCalendar(YearMonth.of(2026, 9), List.of("LCK"), null, KST);
+
+		// 오프셋이 다르면 날짜 묶음이 달라진다 — 해외 사용자 응답이 KST 응답과 섞이면 안 된다.
+		ZoneOffset pdt = ZoneOffset.ofHours(-7);
+		cacheable.getCalendar(august, List.of("LCK"), null, pdt);
+		verify(delegate, times(1)).getCalendar(august, List.of("LCK"), null, pdt);
 	}
 
 	/**
@@ -111,7 +119,7 @@ class MobileScheduleCacheableServiceTest {
 		AtomicInteger loads = new AtomicInteger();
 		YearMonth august = YearMonth.of(2026, 8);
 
-		when(delegate.getCalendar(august, List.of("LCK"), null)).thenAnswer(invocation -> {
+		when(delegate.getCalendar(august, List.of("LCK"), null, KST)).thenAnswer(invocation -> {
 			loads.incrementAndGet();
 			Thread.sleep(50); // 실측 조립 시간(317ms)을 축소해 재현한다.
 			return calendarResponse();
@@ -124,7 +132,7 @@ class MobileScheduleCacheableServiceTest {
 				futures.add(pool.submit(() -> {
 					ready.countDown();
 					go.await();
-					return cacheable.getCalendar(august, List.of("LCK"), null);
+					return cacheable.getCalendar(august, List.of("LCK"), null, KST);
 				}));
 			}
 			assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();

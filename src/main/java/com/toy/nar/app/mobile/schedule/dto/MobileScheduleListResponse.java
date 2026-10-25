@@ -12,8 +12,9 @@ public record MobileScheduleListResponse(
 
 	public record MobileMatchSummary(
 			String matchId,
-			@Schema(description = "경기 일자(KST)", example = "2026-04-01")
+			@Schema(description = "경기 일자(utcOffset 기준, 기본 KST)", example = "2026-04-01")
 			String date,
+			@Schema(description = "경기 시작 시각 HH:mm(utcOffset 기준, 기본 KST)", example = "17:00")
 			String scheduledTime,
 			String matchStatus,
 			String matchTitle,

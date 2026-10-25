@@ -6,6 +6,8 @@ import com.toy.nar.app.mobile.schedule.MobileScheduleService;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleCalendarResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleFilterResponse;
 import com.toy.nar.app.mobile.schedule.dto.MobileScheduleListResponse;
+import com.toy.nar.app.data.source.NotificationService;
+import com.toy.nar.common.error.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -14,9 +16,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -34,7 +40,8 @@ class MobileScheduleControllerTest {
 		mobileScheduleCacheableService = mock(MobileScheduleCacheableService.class);
 		mockMvc = MockMvcBuilders
 				.standaloneSetup(new MobileScheduleController(mobileScheduleService, mobileScheduleCacheableService))
-				.setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper()))
+				.setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper().findAndRegisterModules()))
+				.setControllerAdvice(new GlobalExceptionHandler(mock(NotificationService.class)))
 				.build();
 	}
 
@@ -59,7 +66,7 @@ class MobileScheduleControllerTest {
 
 	@Test
 	void getCalendarReturnsMobileCalendarShape() throws Exception {
-		when(mobileScheduleCacheableService.getCalendar(YearMonth.of(2026, 4), List.of("LCK"), List.of(1L)))
+		when(mobileScheduleCacheableService.getCalendar(YearMonth.of(2026, 4), List.of("LCK"), List.of(1L), MobileScheduleService.DEFAULT_OFFSET))
 				.thenReturn(new MobileScheduleCalendarResponse(
 						"2026-04",
 						"LCK",
@@ -93,7 +100,7 @@ class MobileScheduleControllerTest {
 
 	@Test
 	void getDailySchedulesReturnsMobileListShape() throws Exception {
-		when(mobileScheduleService.getDailySchedules(LocalDate.of(2026, 4, 1), List.of("LCK"), null))
+		when(mobileScheduleService.getDailySchedules(LocalDate.of(2026, 4, 1), List.of("LCK"), null, MobileScheduleService.DEFAULT_OFFSET))
 				.thenReturn(new MobileScheduleListResponse(
 						"2026-04-01",
 						"LCK",
@@ -124,5 +131,31 @@ class MobileScheduleControllerTest {
 				.andExpect(jsonPath("$.matches[0].redTeam.teamName").value("Gen.G"))
 				.andExpect(jsonPath("$.matches[0].games[0].gameId").value("game-1"))
 				.andExpect(jsonPath("$.matches[0].games[0].recordGameId").value(100L));
+	}
+
+	@Test
+	void utcOffsetIsPassedAsZoneOffset() throws Exception {
+		mockMvc.perform(get("/api/mobile/schedules")
+						.param("date", "2026-10-25")
+						.param("utcOffset", "-420"))
+				.andExpect(status().isOk());
+		verify(mobileScheduleService).getDailySchedules(
+				LocalDate.of(2026, 10, 25), List.of("LCK"), null, ZoneOffset.ofHours(-7));
+
+		mockMvc.perform(get("/api/mobile/schedules/calendar")
+						.param("month", "2026-11")
+						.param("utcOffset", "60"))
+				.andExpect(status().isOk());
+		verify(mobileScheduleCacheableService).getCalendar(
+				YearMonth.of(2026, 11), List.of("LCK"), null, ZoneOffset.ofHours(1));
+	}
+
+	@Test
+	void utcOffsetOutOfRangeIsBadRequest() throws Exception {
+		mockMvc.perform(get("/api/mobile/schedules").param("date", "2026-10-25").param("utcOffset", "841"))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(get("/api/mobile/schedules/calendar").param("month", "2026-10").param("utcOffset", "-721"))
+				.andExpect(status().isBadRequest());
+		verifyNoInteractions(mobileScheduleService, mobileScheduleCacheableService);
 	}
 }
