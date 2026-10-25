@@ -172,6 +172,50 @@ https://macmini.tail97b60c.ts.net     tailscale serve → 127.0.0.1:30443
 | 8090 | brew nginx 기본 서버 (기본값 8080 이 앱과 겹쳐 옮겼다) |
 | 3306 | MySQL — `127.0.0.1` + Tailscale 만. LAN 에는 안 연다 |
 
+## 바깥 연결 — usernet 이 새 연결 몰림에 SYN 을 흘린다 (미해결, 우회 중)
+
+VM 의 바깥 연결(인터넷·`192.168.5.2` 호스트 MySQL 포함)은 colima `network.address: false` 기본값이라
+맥 위의 유저공간 프록시 `limactl usernet` 을 지난다. 이 프록시가 **새 TCP 연결이 한꺼번에 몰리면 SYN 을
+흘리고**, 커널 재전송 백오프(1·3·7·15·31·63초 누적)에 걸린다.
+
+`scripts/conn-storm-check.py` 로 `fcm.googleapis.com:443` TLS 동시 개통(2026-10-26, 가장 느린 값):
+
+| 위치 | 100개 | 300개 | SYN 재전송 |
+|---|---|---|---|
+| 맥 호스트 | 0.34초 | 0.6초 | 0 |
+| Colima VM 안 | 11~36초 | 136초 (타임아웃 120) | +274 ~ +2,030 |
+
+VM conntrack 은 여유(1,252/196,608) — 병목은 VM 밖이다. 실피해: FCM 세트 알림 첫 팬아웃 20~50초
+(앱 쪽에서 연결 2개 + HTTP/2 멀티플렉싱으로 우회, #598).
+
+**지금 규칙**: 바깥으로 새 연결을 수십 개 이상 동시에 여는 코드는 이 VM 에서 막힌다. 연결 수를 묶거나 재사용하게 짠다.
+
+### 근본 해결 후보 — VM 에 실제 IP (초안, 미적용)
+
+`~/.colima/default/colima.yaml` (이 파일은 레포 밖이다):
+
+```yaml
+network:
+  address: true          # VM 에 도달 가능한 IP 를 붙인다 (vz 는 vzNAT, 아니면 socket_vmnet — 설치 여부 확인)
+  mode: shared
+  preferredRoute: true   # 기본 경로를 새 NIC 로. 이게 false 면 바깥 연결은 여전히 usernet 으로 간다
+```
+
+**전 서비스 중단 작업이다** — 경기 창 회피 + 사용자 승인 필수. 순서:
+
+1. 사전: `brew list socket_vmnet`(vz 가 아니면 필요, `sudo` 설치), VM 타입 확인(`colima list -j`).
+   맥 호스트에서 `python3 scripts/conn-storm-check.py 100` 기준선.
+2. `colima stop` → yaml 수정 → `colima start`. k3s 가 `activating` 무한루프면 dynamiclistener 캐시 삭제
+   (2026-08-23 전례, 메모리 colima-restart-k3s-cert).
+3. 검증:
+   - `colima ssh -- ip route` 기본 경로가 새 NIC 인지
+   - `colima ssh -- python3 /Users/changha/infra/.../conn-storm-check.py 100 300` 가 맥 호스트 수준(1초 미만)인지
+   - **`192.168.5.2:3306`(DB_URL) 이 여전히 닿는지** — usernet NIC 는 남지만 경로가 바뀌므로 반드시 확인.
+     안 닿으면 `nar-web.yaml`·`nar-scheduler.yaml` 의 DB_URL 을 바꿔야 한다(그건 별도 PR·승인)
+   - 포트 포워딩(30082 등, ssh mux) 생존 — `lsof -nP -iTCP -sTCP:LISTEN | grep '^ssh '`
+   - 파드 Ready·`[live-discovery]` 재개
+4. 롤백: yaml 을 `address: false` 로 되돌리고 `colima stop/start`.
+
 ## 단일 실패점 — 호스트↔VM 포워딩
 
 앱이 k3s(Colima VM) 로 들어간 뒤 실트래픽 경로가 VM 경계를 넘는다.
