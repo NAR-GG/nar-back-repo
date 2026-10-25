@@ -15,7 +15,7 @@ public class PlayerSoloTierRefreshScheduler {
 	private final RiotApiProperties riotApiProperties;
 	private final SchedulerAlertService schedulerAlertService;
 
-	// 추적 계정 솔랭 티어: 매시 40분. 계정 ~180개라 시간당 호출 ~180건.
+	// 추적 계정 솔랭 티어: 매시 40분. 계정 ~175개라 시간당 호출 ~175건(prod 키 한도 30,000/10분).
 	@Scheduled(cron = "${riot.solo-tier.cron:0 40 * * * *}", zone = "Asia/Seoul")
 	public void refresh() {
 		if (!riotApiProperties.isEnabled()) {

@@ -135,6 +135,13 @@ public class PlayerRiotAccount {
 			String tagLine,
 			String platform,
 			String puuid) {
+		// 다른 계정으로 바뀌면 옛 계정 티어를 보여주지 않게, 다음 갱신 전까지 크롤링 값으로 돌린다.
+		if (!Objects.equals(this.puuid, puuid)) {
+			this.soloTier = null;
+			this.soloDivision = null;
+			this.soloLp = null;
+			this.soloTierCheckedAt = null;
+		}
 		this.riotId = Objects.requireNonNull(riotId, "riotId must not be null");
 		this.gameName = Objects.requireNonNull(gameName, "gameName must not be null");
 		this.tagLine = Objects.requireNonNull(tagLine, "tagLine must not be null");
