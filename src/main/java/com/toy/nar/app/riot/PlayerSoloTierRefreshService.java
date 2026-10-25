@@ -39,7 +39,7 @@ public class PlayerSoloTierRefreshService {
 		return failed;
 	}
 
-	/** 한 계정. 솔랭 종료 알림 직후에도 불러 LP 를 바로 반영한다(시간당 스윕은 놓친 것을 메운다). */
+	/** 한 계정. 솔랭 종료 알림 90초 뒤에도 불러 새 LP 를 반영한다(시간당 스윕은 놓친 것을 메운다). */
 	public void refresh(PlayerRiotAccount account) {
 		Optional<RiotLeagueEntryResponse> solo = riotApiClient.findSoloRankEntry(account.getPuuid(), account.getPlatform());
 		accountRepository.updateSoloTier(account.getId(),

@@ -88,6 +88,7 @@ class SoloRankEndNotificationServiceTest {
 		assertThat(service.sweep()).isEqualTo(1);
 		verify(gameRepository).markEndNotified(eq(1L), eq("8292488921"), any());
 		service.refreshDueTiers(java.time.LocalDateTime.now().plus(SoloRankEndNotificationService.TIER_REFRESH_DELAY).plusSeconds(1));
+		verify(tierRefreshService).refresh(any());
 	}
 
 	/** match-v5 는 게임이 끝나도 곧바로 발행되지 않는다. 그때 알림을 보내면 안 되고 다시 봐야 한다. */
