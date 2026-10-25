@@ -24,12 +24,13 @@ public class PlayerProfileCrawlerService {
 
     private static final String BASE_URL = "https://www.trackingthepros.com/player/";
     private static final int TIMEOUT_MS = 10000;
+    // 티어는 riotId 뒤에 공백으로 떨어진 단어다. 앞뒤 경계와 대소문자 구분이 없으면
+    // "songman#KR11" 의 gm, "Rich#KR1" 의 ch 처럼 아이디 조각을 티어로 잘라낸다.
     private static final Pattern ACCOUNT_TIER_PATTERN = Pattern.compile(
-            "(Challenger|Ch|Grandmaster|GM|Master|Diamond|Emerald|Platinum|Gold|Silver|Bronze|Iron)"
+            "(?<=\\s)(Challenger|Ch|Grandmaster|GM|Master|Diamond|Emerald|Platinum|Gold|Silver|Bronze|Iron)(?=\\s|$)"
                     + "(\\s+(I|II|III|IV|V))?"
                     + "(\\s+\\d{1,3}(,\\d{3})*\\s*LP)?"
-                    + ".*",
-            Pattern.CASE_INSENSITIVE);
+                    + ".*");
 
     /**
      * TrackingThePros에서 선수 프로필 정보 크롤링
@@ -176,7 +177,7 @@ public class PlayerProfileCrawlerService {
      * 예: "[KR] Peyz#KR11 Challenger 1,200LP" -> GameAccountDto(riotId="Peyz #KR11",
      * tier="Challenger 1,200LP")
      */
-    private List<PlayerProfileDto.GameAccountDto> extractGameAccounts(Document doc) {
+    static List<PlayerProfileDto.GameAccountDto> extractGameAccounts(Document doc) {
         List<PlayerProfileDto.GameAccountDto> accounts = new ArrayList<>();
 
         // "Accounts" 헤더 찾기
