@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -227,9 +228,10 @@ public class PlayerPageQueryRepository {
 						rs.getInt("opp_games"), rs.getInt("opp_wins"), rs.getTimestamp("last_met").toLocalDateTime()));
 	}
 
+	/** game_accounts 는 NULL 일 수 있다 — queryForList 가 [null] 을 주므로 findFirst 전에 걸러야 NPE 가 안 난다. */
 	public Optional<String> gameAccountsJson(Long playerId) {
 		return jdbc.queryForList("SELECT game_accounts FROM players WHERE player_id = :playerId",
-				new MapSqlParameterSource("playerId", playerId), String.class).stream().findFirst();
+				new MapSqlParameterSource("playerId", playerId), String.class).stream().filter(Objects::nonNull).findFirst();
 	}
 
 	private static MapSqlParameterSource params(Long playerId, int year) {
