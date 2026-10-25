@@ -156,6 +156,30 @@ class ApnsLiveActivityClientTest {
 	}
 
 	@Test
+	void 연결을_여는_첫_요청이_실패해도_기다리던_요청은_나간다() throws Exception {
+		List<CompletableFuture<HttpResponse<String>>> dispatched =
+				Collections.synchronizedList(new ArrayList<>());
+		HttpClient httpClient = mock(HttpClient.class);
+		when(httpClient.sendAsync(any(), any())).thenAnswer(invocation -> {
+			CompletableFuture<HttpResponse<String>> pending = new CompletableFuture<>();
+			dispatched.add(pending);
+			return pending;
+		});
+		ApnsLiveActivityClient client = client(httpClient);
+
+		for (int i = 0; i < 10; i++) {
+			client.sendUpdateAsync("tok-" + i, contentState());
+		}
+		Thread.sleep(100);
+		assertThat(dispatched).hasSize(1);
+
+		// 첫 시도가 연결 타임아웃으로 죽어도(재시도 전에) 대기자는 풀려 나간다.
+		dispatched.get(0).completeExceptionally(new java.net.http.HttpConnectTimeoutException("connect timed out"));
+		waitUntil(() -> dispatched.size() >= 11);
+		assertThat(dispatched).hasSize(11); // 대기자 9 + 첫 요청 재시도 1 + 첫 시도 1
+	}
+
+	@Test
 	void 최근에_응답을_받았으면_기다리지_않고_한꺼번에_보낸다() throws Exception {
 		List<CompletableFuture<HttpResponse<String>>> dispatched =
 				Collections.synchronizedList(new ArrayList<>());
