@@ -7,7 +7,7 @@ import com.toy.nar.app.lolesports.live.repository.LiveGameObjectEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -49,6 +49,7 @@ public class LiveObjectEventRecorder {
 	private final NotificationService notificationService;
 	private final com.toy.nar.app.mobile.push.TeamLiveEventPushService teamLiveEventPushService;
 	private final com.toy.nar.app.lolesports.LeagueConfigService leagueConfigService;
+	private final TransactionOperations transactionOperations;
 	private final Map<String, ObservedObjectState> lastObservedByGame = new ConcurrentHashMap<>();
 	// [FCM #21] 세트마다 진영이 스왑되므로, 피드 window 의 진영별 esportsTeamId 를 게임별로 기억한다(Blue/Red → esportsTeamId).
 	private final Map<String, SideTeamIds> sideTeamIdsByGame = new ConcurrentHashMap<>();
@@ -64,11 +65,36 @@ public class LiveObjectEventRecorder {
 		sideTeamIdsByGame.remove(gameId);
 	}
 
-	@Transactional
+	/**
+	 * 이벤트 저장은 트랜잭션 안에서, 디스코드·FCM 발송은 커밋한 뒤 트랜잭션 밖에서 한다.
+	 *
+	 * <p>예전에는 발송까지 한 트랜잭션이었다. FCM 왕복(구독자 수에 비례해 수 초) 동안 DB 커넥션을
+	 * 쥐었고, 발송 예약(reserveAll)도 이 트랜잭션에 합류해 커밋 전까지 보이지 않았다. 발송 뒤 커밋
+	 * 전에 파드가 죽으면 예약까지 롤백돼 다음 파드가 같은 알림을 또 보냈다.</p>
+	 */
 	public void record(ActiveLiveGame activeGame, JsonNode windowResponse) {
+		List<Runnable> notifications = new ArrayList<>();
+		ObservedObjectState observed =
+				transactionOperations.execute(status -> recordEvents(activeGame, windowResponse, notifications));
+		// 기준선은 커밋된 뒤에만 옮긴다. 커밋이 실패했는데 옮겨 두면 그 구간 이벤트를 다시 유도하지 못한다.
+		if (observed != null) {
+			lastObservedByGame.put(activeGame.gameId(), observed);
+		}
+		for (Runnable notification : notifications) {
+			try {
+				notification.run();
+			} catch (Exception e) {
+				log.warn("[live-notify] 발송 실패 gameId={}: {}", activeGame.gameId(), e.getMessage(), e);
+			}
+		}
+	}
+
+	/** 이벤트를 저장하고 새 관측 기준선을 돌려준다. 유도할 프레임이 없으면 null. */
+	private ObservedObjectState recordEvents(
+			ActiveLiveGame activeGame, JsonNode windowResponse, List<Runnable> notifications) {
 		JsonNode frames = windowResponse.path("frames");
 		if (!frames.isArray() || frames.isEmpty()) {
-			return;
+			return null;
 		}
 
 		JsonNode gameMetadata = windowResponse.path("gameMetadata");
@@ -78,7 +104,7 @@ public class LiveObjectEventRecorder {
 
 		List<FrameSnapshot> snapshots = toSnapshots(frames);
 		if (snapshots.isEmpty()) {
-			return;
+			return null;
 		}
 
 		ObservedObjectState previous = lastObservedByGame.get(activeGame.gameId());
@@ -117,26 +143,26 @@ public class LiveObjectEventRecorder {
 			if (previous != null) {
 				int gameTotalPrevKills = previous.blue().kills() + previous.red().kills();
 				recordObjectDiff(activeGame, "Blue", previous.blue(), snapshot.blue(), snapshot.red(),
-						snapshot.frameTimestampUtc());
+						snapshot.frameTimestampUtc(), notifications);
 				recordObjectDiff(activeGame, "Red", previous.red(), snapshot.red(), snapshot.blue(),
-						snapshot.frameTimestampUtc());
+						snapshot.frameTimestampUtc(), notifications);
 				recordKills(activeGame, "Blue", previous.blue().kills(), snapshot.blue().kills(),
 						snapshot.red().kills(), gameTotalPrevKills,
 						previous.blueParticipants(), snapshot.blueParticipants(),
 						previous.redParticipants(), snapshot.redParticipants(),
-						metadata, snapshot.frameTimestampUtc());
+						metadata, snapshot.frameTimestampUtc(), notifications);
 				recordKills(activeGame, "Red", previous.red().kills(), snapshot.red().kills(),
 						snapshot.blue().kills(), gameTotalPrevKills,
 						previous.redParticipants(), snapshot.redParticipants(),
 						previous.blueParticipants(), snapshot.blueParticipants(),
-						metadata, snapshot.frameTimestampUtc());
+						metadata, snapshot.frameTimestampUtc(), notifications);
 			}
 
 			previous = new ObservedObjectState(snapshot.frameTimestampUtc(), snapshot.blue(), snapshot.red(),
 					snapshot.blueParticipants(), snapshot.redParticipants());
 		}
 
-		lastObservedByGame.put(activeGame.gameId(), previous);
+		return previous;
 	}
 
 	/**
@@ -192,15 +218,16 @@ public class LiveObjectEventRecorder {
 			TeamObjectState previous,
 			TeamObjectState current,
 			TeamObjectState opponentCurrent,
-			LocalDateTime frameTimestampUtc) {
+			LocalDateTime frameTimestampUtc,
+			List<Runnable> notifications) {
 		recordCounterEvents(activeGame, teamSide, EVENT_TOWER, previous.towers(), current.towers(),
-				opponentCurrent.towers(), frameTimestampUtc);
+				opponentCurrent.towers(), frameTimestampUtc, notifications);
 		recordCounterEvents(activeGame, teamSide, EVENT_BARON, previous.barons(), current.barons(),
-				opponentCurrent.barons(), frameTimestampUtc);
+				opponentCurrent.barons(), frameTimestampUtc, notifications);
 		recordCounterEvents(activeGame, teamSide, EVENT_INHIBITOR, previous.inhibitors(), current.inhibitors(),
-				opponentCurrent.inhibitors(), frameTimestampUtc);
+				opponentCurrent.inhibitors(), frameTimestampUtc, notifications);
 		recordDragonEvents(activeGame, teamSide, previous.dragons(), current.dragons(),
-				opponentCurrent.dragons().size(), frameTimestampUtc);
+				opponentCurrent.dragons().size(), frameTimestampUtc, notifications);
 	}
 
 	/**
@@ -220,7 +247,8 @@ public class LiveObjectEventRecorder {
 			Map<Integer, Kd> victimPrevKd,
 			Map<Integer, Kd> victimCurKd,
 			Map<Integer, ParticipantMeta> metadata,
-			LocalDateTime frameTimestampUtc) {
+			LocalDateTime frameTimestampUtc,
+			List<Runnable> notifications) {
 		if (currentTeamKills <= previousTeamKills) {
 			return;
 		}
@@ -244,7 +272,7 @@ public class LiveObjectEventRecorder {
 			// 선취점: 이 프레임 이전까지 양팀 킬 합이 0이고, 이 팀의 첫 킬일 때.
 			boolean firstBlood = gameTotalPrevKills == 0 && order == 1 && i == 0;
 			saveKillEventIfAbsent(activeGame, killerSide, order, currentTeamKills, opponentCurrentKills,
-					firstBlood, killerId, victimId, metadata, frameTimestampUtc);
+					firstBlood, killerId, victimId, metadata, frameTimestampUtc, notifications);
 		}
 	}
 
@@ -255,7 +283,8 @@ public class LiveObjectEventRecorder {
 			int previousValue,
 			int currentValue,
 			int opponentCurrentValue,
-			LocalDateTime frameTimestampUtc) {
+			LocalDateTime frameTimestampUtc,
+			List<Runnable> notifications) {
 		if (currentValue <= previousValue) {
 			return;
 		}
@@ -269,7 +298,8 @@ public class LiveObjectEventRecorder {
 					order,
 					order,
 					opponentCurrentValue,
-					frameTimestampUtc);
+					frameTimestampUtc,
+					notifications);
 		}
 	}
 
@@ -279,7 +309,8 @@ public class LiveObjectEventRecorder {
 			List<String> previousDragons,
 			List<String> currentDragons,
 			int opponentDragonCount,
-			LocalDateTime frameTimestampUtc) {
+			LocalDateTime frameTimestampUtc,
+			List<Runnable> notifications) {
 		if (currentDragons.size() <= previousDragons.size()) {
 			return;
 		}
@@ -294,7 +325,8 @@ public class LiveObjectEventRecorder {
 					index + 1,
 					index + 1,
 					opponentDragonCount,
-					frameTimestampUtc);
+					frameTimestampUtc,
+					notifications);
 		}
 	}
 
@@ -306,7 +338,8 @@ public class LiveObjectEventRecorder {
 			int eventOrder,
 			int valueAfter,
 			int opponentCurrentValue,
-			LocalDateTime frameTimestampUtc) {
+			LocalDateTime frameTimestampUtc,
+			List<Runnable> notifications) {
 		// 이미 저장된 이벤트라도 FCM 푸시는 다시 시도한다. 저장 직후 푸시 전에 프로세스가 죽으면
 		// (배포 중 컨테이너 교체) 다음 컨테이너가 exists 로 조기 return 해 그 알림이 영구 유실됐다.
 		// 발송 멱등은 delivery 테이블(reserve/reactivateStale)이 보장하므로 이미 SENT 인 건은 다시 안 나간다.
@@ -333,23 +366,24 @@ public class LiveObjectEventRecorder {
 		}
 
 		if (newlySaved && eventNotificationEnabled && isNotifiableLeague(activeGame.leagueName())) {
-			notificationService.sendLiveObjectEventNotification(
+			String teamName = teamNameOf(activeGame, teamSide);
+			notifications.add(() -> notificationService.sendLiveObjectEventNotification(
 					activeGame.leagueName(),
-					teamNameOf(activeGame, teamSide),
+					teamName,
 					teamSide,
 					eventType,
 					eventSubType,
 					eventOrder,
-					activeGame.gameId());
+					activeGame.gameId()));
 		}
 
 		// [FCM #21] LIVE_EVENT 푸시. live.notification.fcm.enabled 플래그로 게이트.
 		// 멱등 키 event_order 는 킬/오브젝트 충돌을 막기 위해 저장된 이벤트의 전역 id 를 쓴다.
 		if (teamLiveEventPushService.isEnabled() && isNotifiableLeague(activeGame.leagueName())) {
-			fireLiveEventPush(activeGame, teamSide, eventType,
-					objectEventTitle(activeGame, teamSide, eventType, eventSubType, valueAfter),
-					objectEventBody(activeGame, teamSide, eventType, valueAfter, opponentCurrentValue),
-					event.getId());
+			String title = objectEventTitle(activeGame, teamSide, eventType, eventSubType, valueAfter);
+			String body = objectEventBody(activeGame, teamSide, eventType, valueAfter, opponentCurrentValue);
+			long eventId = event.getId();
+			notifications.add(() -> fireLiveEventPush(activeGame, teamSide, eventType, title, body, eventId));
 		}
 	}
 
@@ -363,7 +397,8 @@ public class LiveObjectEventRecorder {
 			Integer killerId,
 			Integer victimId,
 			Map<Integer, ParticipantMeta> metadata,
-			LocalDateTime frameTimestampUtc) {
+			LocalDateTime frameTimestampUtc,
+			List<Runnable> notifications) {
 		ParticipantMeta killer = killerId == null ? null : metadata.get(killerId);
 		ParticipantMeta victim = victimId == null ? null : metadata.get(victimId);
 		String killerChampion = killer == null ? null : killer.champion();
@@ -398,30 +433,31 @@ public class LiveObjectEventRecorder {
 		}
 
 		if (newlySaved && eventNotificationEnabled && isNotifiableLeague(activeGame.leagueName())) {
-			notificationService.sendLiveKillNotification(
+			String teamName = teamNameOf(activeGame, killerSide);
+			notifications.add(() -> notificationService.sendLiveKillNotification(
 					activeGame.leagueName(),
-					teamNameOf(activeGame, killerSide),
+					teamName,
 					killerSide,
 					killer == null ? null : killer.summonerName(),
 					killerChampion,
 					victim == null ? null : victim.summonerName(),
 					victim == null ? null : victim.champion(),
 					eventOrder,
-					activeGame.gameId());
+					activeGame.gameId()));
 		}
 
 		// [FCM #21] LIVE_EVENT(킬) 푸시. live.notification.fcm.enabled 플래그로 게이트.
 		if (teamLiveEventPushService.isEnabled() && isNotifiableLeague(activeGame.leagueName())) {
-			fireLiveEventPush(activeGame, killerSide, EVENT_KILL,
-					killEventTitle(activeGame, killerSide, firstBlood,
-							killer == null ? null : killer.summonerName(),
-							victim == null ? null : victim.summonerName(),
-							teamKillsAfter),
-					killEventBody(activeGame, killerSide, firstBlood,
-							killer == null ? null : killer.summonerName(),
-							victim == null ? null : victim.summonerName(),
-							teamKillsAfter, opponentKillsCurrent),
-					event.getId());
+			String title = killEventTitle(activeGame, killerSide, firstBlood,
+					killer == null ? null : killer.summonerName(),
+					victim == null ? null : victim.summonerName(),
+					teamKillsAfter);
+			String body = killEventBody(activeGame, killerSide, firstBlood,
+					killer == null ? null : killer.summonerName(),
+					victim == null ? null : victim.summonerName(),
+					teamKillsAfter, opponentKillsCurrent);
+			long eventId = event.getId();
+			notifications.add(() -> fireLiveEventPush(activeGame, killerSide, EVENT_KILL, title, body, eventId));
 		}
 	}
 
