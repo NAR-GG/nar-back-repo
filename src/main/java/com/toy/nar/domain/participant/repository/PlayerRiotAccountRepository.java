@@ -3,8 +3,12 @@ package com.toy.nar.domain.participant.repository;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccount;
 import com.toy.nar.domain.participant.entity.PlayerRiotAccountLiveStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -35,4 +39,21 @@ public interface PlayerRiotAccountRepository extends JpaRepository<PlayerRiotAcc
 			"JOIN FETCH pra.player p " +
 			"WHERE pra.enabled = true")
 	List<PlayerRiotAccount> findAllTrackedAccounts();
+
+	// 티어 컬럼만 고친다. 엔티티를 save(merge)하면 그 사이 모니터가 바꾼 라이브 상태 컬럼을 되돌린다(copyLiveStateFrom 참고).
+	@Modifying
+	@Transactional
+	@Query("UPDATE PlayerRiotAccount pra SET pra.soloTier = :tier, pra.soloDivision = :division, pra.soloLp = :lp, " +
+			"pra.soloTierCheckedAt = :checkedAt WHERE pra.id = :id")
+	int updateSoloTier(@Param("id") Long id, @Param("tier") String tier, @Param("division") String division,
+			@Param("lp") Integer lp, @Param("checkedAt") LocalDateTime checkedAt);
+
+	// 기간 안에 끝난 솔랭 판과 그 판을 한 계정. 판 행엔 계정 id 가 없어 선수+플랫폼으로 잇는다.
+	@Query("SELECT new com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository$EndedGame(a, g.gameEndedAt) " +
+			"FROM PlayerRiotAccount a JOIN PlayerSoloRankGame g ON g.player = a.player AND g.platform = a.platform " +
+			"WHERE a.enabled = true AND g.gameEndedAt > :from AND g.gameEndedAt <= :until")
+	List<EndedGame> findEndedGames(@Param("from") LocalDateTime from, @Param("until") LocalDateTime until);
+
+	record EndedGame(PlayerRiotAccount account, LocalDateTime endedAt) {
+	}
 }

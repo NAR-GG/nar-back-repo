@@ -80,6 +80,19 @@ public class PlayerRiotAccount {
 	@Column(name = "last_match_checked_at")
 	private LocalDateTime lastMatchCheckedAt;
 
+	// 솔랭 티어(Riot league-v4). checked_at 이 null 이면 아직 안 받아온 것, tier 가 null 이면 언랭이다.
+	@Column(name = "solo_tier", length = 20)
+	private String soloTier;
+
+	@Column(name = "solo_division", length = 4)
+	private String soloDivision;
+
+	@Column(name = "solo_lp")
+	private Integer soloLp;
+
+	@Column(name = "solo_tier_checked_at")
+	private LocalDateTime soloTierCheckedAt;
+
 	@Column(name = "created_at", nullable = false)
 	private LocalDateTime createdAt;
 
@@ -122,6 +135,13 @@ public class PlayerRiotAccount {
 			String tagLine,
 			String platform,
 			String puuid) {
+		// 다른 계정으로 바뀌면 옛 계정 티어를 보여주지 않게, 다음 갱신 전까지 크롤링 값으로 돌린다.
+		if (!Objects.equals(this.puuid, puuid)) {
+			this.soloTier = null;
+			this.soloDivision = null;
+			this.soloLp = null;
+			this.soloTierCheckedAt = null;
+		}
 		this.riotId = Objects.requireNonNull(riotId, "riotId must not be null");
 		this.gameName = Objects.requireNonNull(gameName, "gameName must not be null");
 		this.tagLine = Objects.requireNonNull(tagLine, "tagLine must not be null");

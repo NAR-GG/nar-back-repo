@@ -40,6 +40,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -377,7 +378,7 @@ public class MobilePlayerPageService {
 		List<Map<String, Object>> crawled = crawledAccounts(playerId);
 		return accountRepository.findByPlayerIdAndEnabledTrueOrderByPrimaryAccountDesc(playerId).stream()
 				.map(account -> new PlayerSoloRankResponse.Account(account.getPlatform(),
-						region(account.getPlatform()), account.getRiotId(), tier(crawled, account.getRiotId()),
+						region(account.getPlatform()), account.getRiotId(), tier(account, crawled),
 						isLive(account, now)))
 				.toList();
 	}
@@ -386,6 +387,27 @@ public class MobilePlayerPageService {
 		return account.getLiveStatus() == PlayerRiotAccountLiveStatus.IN_RANKED_SOLO
 				&& account.getLastMatchCheckedAt() != null
 				&& !account.getLastMatchCheckedAt().isBefore(now.minus(MobileSoloRankStatusService.LIVE_FRESHNESS));
+	}
+
+	/** Riot 에서 받아온 적 있으면 그게 정답(언랭이면 null), 아직이면 크롤링 값. */
+	private static String tier(PlayerRiotAccount account, List<Map<String, Object>> crawled) {
+		return account.getSoloTierCheckedAt() != null
+				? tierLabel(account.getSoloTier(), account.getSoloDivision(), account.getSoloLp())
+				: tier(crawled, account.getRiotId());
+	}
+
+	/** 크롤링 문자열과 같은 모양: 마스터 이상은 "Ch 1,968LP", 그 아래는 "Diamond II". */
+	static String tierLabel(String tier, String division, Integer lp) {
+		if (tier == null) {
+			return null;
+		}
+		String points = String.format(Locale.US, " %,dLP", lp == null ? 0 : lp);
+		return switch (tier) {
+			case "CHALLENGER" -> "Ch" + points;
+			case "GRANDMASTER" -> "GM" + points;
+			case "MASTER" -> "Master" + points;
+			default -> tier.charAt(0) + tier.substring(1).toLowerCase(Locale.ROOT) + (division == null ? "" : " " + division);
+		};
 	}
 
 	/** players.game_accounts 크롤링 JSON. 깨졌으면 없는 셈 친다 — 티어는 곁들이 정보다. */
