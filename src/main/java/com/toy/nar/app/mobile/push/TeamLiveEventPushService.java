@@ -405,6 +405,7 @@ public class TeamLiveEventPushService {
 
 		// dedup: 양 팀 구독자라도 (member, matchId, setNumber, eventType, eventOrder) 1회만 통과한다.
 		// 구독자 수만큼 왕복하지 않도록 한 번에 예약하고 발송 대상만 돌려받는다.
+		long startedAt = System.nanoTime();
 		List<Long> reservedIds =
 				deliveryRepository.reserveAll(devicesByMember.keySet(), matchId, setNumber, eventType, eventOrder);
 		if (reservedIds.isEmpty()) {
@@ -425,7 +426,9 @@ public class TeamLiveEventPushService {
 
 		// 알림함(마이구독 피드)은 발송 '전에' 남긴다 — 근거는 PlayerSoloRankPushService 의
 		// 같은 지점 주석 참고(발송 뒤에 기록하면 푸시 받고 바로 마이구독을 열었을 때 비어 있다).
+		long reservedAt = System.nanoTime();
 		recordFeedAll(List.copyOf(tokensByMember.keySet()), eventType, message);
+		long feedRecordedAt = System.nanoTime();
 
 		List<String> allTokens = tokensByMember.values().stream().flatMap(List::stream).toList();
 		QuietAwarePushSender.Outcome outcome;
@@ -441,6 +444,7 @@ public class TeamLiveEventPushService {
 			return;
 		}
 
+		long pushedAt = System.nanoTime();
 		MobilePushResult result = outcome.result();
 		Set<String> successTokens = new HashSet<>(result.successTokens());
 		List<Long> delivered = new ArrayList<>();
@@ -457,10 +461,20 @@ public class TeamLiveEventPushService {
 		// 잠자기로 건너뛴 구독자는 발송 없이 마감만 한다 — 알림함에는 위에서 이미 남겼다.
 		markSkippedQuietAll(outcome.skippedMemberIds(), matchId, setNumber, eventType, eventOrder);
 		markFailedAll(undelivered, matchId, setNumber, eventType, eventOrder, "FCM 전송 성공 기기가 없습니다.");
+		// 단계별 소요. sendMs 는 잠자기 조회(DB) + FCM 이다 — FCM 몫은 게이트웨이 [fcm-send] totalMs 이고
+		// 차이가 잠자기 조회다. 발송 예외로 위에서 return 하면 이 줄은 안 남는다([fcm-send] 는 남는다).
+		log.info("[team-push] eventType={} matchId={} set={} order={} members={} reserveMs={} feedMs={} sendMs={} markMs={}",
+				eventType, matchId, setNumber, eventOrder, tokensByMember.size(),
+				millisBetween(startedAt, reservedAt), millisBetween(reservedAt, feedRecordedAt),
+				millisBetween(feedRecordedAt, pushedAt), millisBetween(pushedAt, System.nanoTime()));
 
 		if (!result.invalidTokens().isEmpty()) {
 			deactivateInvalidTokens(result.invalidTokens(), matchId, eventType);
 		}
+	}
+
+	private static long millisBetween(long fromNanos, long toNanos) {
+		return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(toNanos - fromNanos);
 	}
 
 	/** 마감 기록 실패가 발송 흐름을 깨면 안 되므로 흡수한다(푸시는 이미 나갔다). */

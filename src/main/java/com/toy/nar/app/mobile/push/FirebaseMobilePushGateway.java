@@ -11,12 +11,17 @@ import com.google.firebase.messaging.MulticastMessage;
 import com.google.firebase.messaging.Notification;
 import com.google.firebase.messaging.SendResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class FirebaseMobilePushGateway implements MobilePushGateway {
@@ -24,6 +29,16 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 	private static final int MAX_MULTICAST_TOKENS = 500;
 
 	private final ObjectProvider<FirebaseMessaging> firebaseMessagingProvider;
+
+	/**
+	 * 발송 소요 진단용. 세트 알림의 첫 팬아웃만 규모와 무관하게 20~50초 걸리는데(2026-10-25 실측)
+	 * DB·CPU·DNS 는 결백했다. 남은 후보는 FCM HTTP 계층 — 오래 쉰 뒤 첫 발송인지(idleBeforeMs),
+	 * 다른 발송과 SDK 스레드풀(100)을 나눠 쓰는 중인지(concurrentSends)를 묶음별 소요와 함께 남긴다.
+	 * idleBeforeMs 는 "마지막으로 끝난 발송" 기준이라 concurrentSends > 0 이면 연결이 쓰이는 중인데도
+	 * 크게 나올 수 있다 — 두 값을 같이 읽는다. SDK 가 요청별 소요를 주지 않아 묶음 소요로 대신한다.
+	 */
+	private final AtomicInteger inFlightSends = new AtomicInteger();
+	private final AtomicLong lastSendFinishedAtMs = new AtomicLong();
 
 	@Override
 	public boolean isAvailable() {
@@ -41,18 +56,38 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 		int failureCount = 0;
 		List<String> invalidTokens = new ArrayList<>();
 		List<String> successTokens = new ArrayList<>();
-		for (int start = 0; start < tokens.size(); start += MAX_MULTICAST_TOKENS) {
-			List<String> batchTokens = tokens.subList(
-					start,
-					Math.min(start + MAX_MULTICAST_TOKENS, tokens.size()));
-			BatchResponse response = sendBatch(firebaseMessaging, batchTokens, message);
-			successCount += response.getSuccessCount();
-			failureCount += response.getFailureCount();
-			collectInvalidTokens(batchTokens, response.getResponses(), invalidTokens);
-			collectSuccessTokens(batchTokens, response.getResponses(), successTokens);
+		List<Long> batchMillis = new ArrayList<>();
+		long lastFinishedAt = lastSendFinishedAtMs.get();
+		long idleBeforeMs = lastFinishedAt == 0 ? -1 : System.currentTimeMillis() - lastFinishedAt;
+		int concurrentSends = inFlightSends.getAndIncrement();
+		long startedAt = System.nanoTime();
+		try {
+			for (int start = 0; start < tokens.size(); start += MAX_MULTICAST_TOKENS) {
+				List<String> batchTokens = tokens.subList(
+						start,
+						Math.min(start + MAX_MULTICAST_TOKENS, tokens.size()));
+				long batchStartedAt = System.nanoTime();
+				BatchResponse response = sendBatch(firebaseMessaging, batchTokens, message);
+				batchMillis.add(elapsedMillis(batchStartedAt));
+				successCount += response.getSuccessCount();
+				failureCount += response.getFailureCount();
+				collectInvalidTokens(batchTokens, response.getResponses(), invalidTokens);
+				collectSuccessTokens(batchTokens, response.getResponses(), successTokens);
+			}
+		} finally {
+			inFlightSends.decrementAndGet();
+			lastSendFinishedAtMs.set(System.currentTimeMillis());
+			// 실패(예외)로 끝나도 남긴다 — 타임아웃이면 그 소요 자체가 단서다.
+			log.info("[fcm-send] tokens={} success={} failure={} batchesMs={} totalMs={} idleBeforeMs={} concurrentSends={}",
+					tokens.size(), successCount, failureCount, batchMillis, elapsedMillis(startedAt),
+					idleBeforeMs, concurrentSends);
 		}
 		return new MobilePushResult(
 				successCount, failureCount, List.copyOf(invalidTokens), List.copyOf(successTokens));
+	}
+
+	private static long elapsedMillis(long startedAtNanos) {
+		return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos);
 	}
 
 	private BatchResponse sendBatch(
