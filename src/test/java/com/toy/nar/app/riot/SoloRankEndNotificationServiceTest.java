@@ -32,6 +32,7 @@ class SoloRankEndNotificationServiceTest {
 	private final PlayerSoloRankPushService pushService = mock(PlayerSoloRankPushService.class);
 	private final PlayerSoloRankGameRepository gameRepository = mock(PlayerSoloRankGameRepository.class);
 	private final SoloRankEndNotificationProperties properties = new SoloRankEndNotificationProperties();
+	private final PlayerSoloTierRefreshService tierRefreshService = mock(PlayerSoloTierRefreshService.class);
 
 	private SoloRankEndNotificationService service;
 
@@ -39,7 +40,7 @@ class SoloRankEndNotificationServiceTest {
 	void setUp() {
 		properties.setEnabled(true);
 		service = new SoloRankEndNotificationService(
-				riotApiClient, championDataService, pushService, gameRepository, properties);
+				riotApiClient, championDataService, pushService, gameRepository, properties, tierRefreshService);
 		when(championDataService.findChampionByRiotKey(any())).thenReturn(java.util.Optional.empty());
 	}
 
@@ -66,9 +67,21 @@ class SoloRankEndNotificationServiceTest {
 		verify(pushService).notifySubscribersPostGame(
 				any(), eq("8292488921"), any(), any(), anyString(), eq(true), eq("4/2/8"), eq(1500), any());
 		verify(gameRepository).markEndNotified(eq(1L), eq("8292488921"), any());
+		verify(tierRefreshService).refresh(any());
 
 		// 두 번째 스윕에는 남은 대상이 없다.
 		assertThat(service.sweep()).isZero();
+	}
+
+	@Test
+	@DisplayName("티어 갱신이 실패해도 종료 알림은 나간다")
+	void 티어_갱신_실패는_발송을_막지_않는다() {
+		givenFinishedMatch();
+		org.mockito.Mockito.doThrow(new RuntimeException("429")).when(tierRefreshService).refresh(any());
+
+		service.onGameEnded(account(), "8292488921");
+
+		assertThat(service.sweep()).isEqualTo(1);
 	}
 
 	/** match-v5 는 게임이 끝나도 곧바로 발행되지 않는다. 그때 알림을 보내면 안 되고 다시 봐야 한다. */

@@ -29,13 +29,7 @@ public class PlayerSoloTierRefreshService {
 		int failed = 0;
 		for (PlayerRiotAccount account : accounts) {
 			try {
-				Optional<RiotLeagueEntryResponse> solo = riotApiClient.findSoloRankEntry(account.getPuuid(),
-						account.getPlatform());
-				accountRepository.updateSoloTier(account.getId(),
-						solo.map(RiotLeagueEntryResponse::tier).orElse(null),
-						solo.map(RiotLeagueEntryResponse::rank).orElse(null),
-						solo.map(RiotLeagueEntryResponse::leaguePoints).orElse(null),
-						LocalDateTime.now());
+				refresh(account);
 			} catch (Exception e) {
 				failed++;
 				log.warn("Solo tier refresh failed account={} platform={}", account.getRiotId(), account.getPlatform(), e);
@@ -43,5 +37,15 @@ public class PlayerSoloTierRefreshService {
 		}
 		log.info("Solo tier refreshed {}/{}", accounts.size() - failed, accounts.size());
 		return failed;
+	}
+
+	/** 한 계정. 솔랭 종료 알림 직후에도 불러 LP 를 바로 반영한다(시간당 스윕은 놓친 것을 메운다). */
+	public void refresh(PlayerRiotAccount account) {
+		Optional<RiotLeagueEntryResponse> solo = riotApiClient.findSoloRankEntry(account.getPuuid(), account.getPlatform());
+		accountRepository.updateSoloTier(account.getId(),
+				solo.map(RiotLeagueEntryResponse::tier).orElse(null),
+				solo.map(RiotLeagueEntryResponse::rank).orElse(null),
+				solo.map(RiotLeagueEntryResponse::leaguePoints).orElse(null),
+				LocalDateTime.now());
 	}
 }

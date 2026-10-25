@@ -50,6 +50,7 @@ public class SoloRankEndNotificationService {
 	private final PlayerSoloRankPushService playerSoloRankPushService;
 	private final PlayerSoloRankGameRepository soloRankGameRepository;
 	private final SoloRankEndNotificationProperties properties;
+	private final PlayerSoloTierRefreshService tierRefreshService;
 
 	/**
 	 * 결과를 기다리는 게임들. 재기동하면 비는데, 그때는 그 게임의 종료 알림만 못 나간다 —
@@ -179,6 +180,12 @@ public class SoloRankEndNotificationService {
 					account.getPlatform());
 		} catch (Exception e) {
 			log.warn("[solo-rank-end] 결과 저장 실패 player={} gameId={}", player.getName(), target.gameId, e);
+		}
+		// 판이 끝났으니 LP 가 바뀌었다. 실패해도 매시 40분 스윕이 메운다.
+		try {
+			tierRefreshService.refresh(account);
+		} catch (Exception e) {
+			log.warn("[solo-rank-end] 티어 갱신 실패 player={} gameId={}", player.getName(), target.gameId, e);
 		}
 		log.info("[solo-rank-end] 종료 알림 발송 player={} gameId={}", player.getName(), target.gameId);
 		return Outcome.SENT;
