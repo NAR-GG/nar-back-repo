@@ -9,15 +9,23 @@ import com.toy.nar.app.mobile.push.TeamLiveEventPushService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionOperations;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -31,7 +39,7 @@ class LiveObjectEventRecorderTest {
 	private final LiveObjectEventRecorder recorder = new LiveObjectEventRecorder(
 			objectEventRepository, mock(NotificationService.class), mock(TeamLiveEventPushService.class),
 			leagueConfigService,
-				org.springframework.transaction.support.TransactionOperations.withoutTransaction());
+				TransactionOperations.withoutTransaction());
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Test
@@ -40,7 +48,7 @@ class LiveObjectEventRecorderTest {
 		when(pushService.isEnabled()).thenReturn(true);
 		LiveObjectEventRecorder swapRecorder = new LiveObjectEventRecorder(
 				objectEventRepository, mock(NotificationService.class), pushService, leagueConfigService,
-				org.springframework.transaction.support.TransactionOperations.withoutTransaction());
+				TransactionOperations.withoutTransaction());
 		when(leagueConfigService.isNotificationEnabled("LCK")).thenReturn(true);
 		when(objectEventRepository.existsByGameIdAndTeamSideAndEventTypeAndEventOrder(any(), any(), any(), any()))
 				.thenReturn(false);
@@ -132,25 +140,25 @@ class LiveObjectEventRecorderTest {
 	@Test
 	void pushIsSentAfterTransactionCommits() throws Exception {
 		// FCM 왕복 동안 DB 커넥션을 쥐지 않도록, 발송은 저장 트랜잭션이 끝난 뒤에 나가야 한다.
-		java.util.concurrent.atomic.AtomicBoolean inTransaction = new java.util.concurrent.atomic.AtomicBoolean();
-		org.springframework.transaction.support.TransactionOperations tx =
-				new org.springframework.transaction.support.TransactionOperations() {
+		AtomicBoolean inTransaction = new AtomicBoolean();
+		TransactionOperations tx =
+				new TransactionOperations() {
 					@Override
-					public <T> T execute(org.springframework.transaction.support.TransactionCallback<T> action) {
+					public <T> T execute(TransactionCallback<T> action) {
 						inTransaction.set(true);
 						try {
 							return action.doInTransaction(
-									new org.springframework.transaction.support.SimpleTransactionStatus());
+									new SimpleTransactionStatus());
 						} finally {
 							inTransaction.set(false);
 						}
 					}
 				};
-		java.util.List<Boolean> sentInTransaction = new java.util.ArrayList<>();
+		List<Boolean> sentInTransaction = new ArrayList<>();
 		TeamLiveEventPushService pushService = mock(TeamLiveEventPushService.class);
 		when(pushService.isEnabled()).thenReturn(true);
-		org.mockito.Mockito.doAnswer(invocation -> sentInTransaction.add(inTransaction.get()))
-				.when(pushService).notifyLiveEvent(any(), org.mockito.ArgumentMatchers.anyInt(), anyLong(),
+		doAnswer(invocation -> sentInTransaction.add(inTransaction.get()))
+				.when(pushService).notifyLiveEvent(any(), anyInt(), anyLong(),
 						any(), any(), any(), any());
 		LiveObjectEventRecorder txRecorder = new LiveObjectEventRecorder(
 				objectEventRepository, mock(NotificationService.class), pushService, leagueConfigService, tx);

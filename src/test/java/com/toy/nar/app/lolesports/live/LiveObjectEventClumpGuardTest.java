@@ -1,5 +1,6 @@
 package com.toy.nar.app.lolesports.live;
 
+import org.springframework.transaction.support.TransactionOperations;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -42,7 +43,7 @@ class LiveObjectEventClumpGuardTest {
 
 	private final LiveObjectEventRecorder recorder =
 			new LiveObjectEventRecorder(repository, notificationService, pushService, leagueConfigService,
-				org.springframework.transaction.support.TransactionOperations.withoutTransaction());
+				TransactionOperations.withoutTransaction());
 
 	@Test
 	@DisplayName("정상 간격 프레임은 이벤트를 유도한다")

@@ -74,7 +74,12 @@ public class LiveObjectEventRecorder {
 	 */
 	public void record(ActiveLiveGame activeGame, JsonNode windowResponse) {
 		List<Runnable> notifications = new ArrayList<>();
-		transactionOperations.executeWithoutResult(status -> recordEvents(activeGame, windowResponse, notifications));
+		ObservedObjectState observed =
+				transactionOperations.execute(status -> recordEvents(activeGame, windowResponse, notifications));
+		// 기준선은 커밋된 뒤에만 옮긴다. 커밋이 실패했는데 옮겨 두면 그 구간 이벤트를 다시 유도하지 못한다.
+		if (observed != null) {
+			lastObservedByGame.put(activeGame.gameId(), observed);
+		}
 		for (Runnable notification : notifications) {
 			try {
 				notification.run();
@@ -84,10 +89,12 @@ public class LiveObjectEventRecorder {
 		}
 	}
 
-	private void recordEvents(ActiveLiveGame activeGame, JsonNode windowResponse, List<Runnable> notifications) {
+	/** 이벤트를 저장하고 새 관측 기준선을 돌려준다. 유도할 프레임이 없으면 null. */
+	private ObservedObjectState recordEvents(
+			ActiveLiveGame activeGame, JsonNode windowResponse, List<Runnable> notifications) {
 		JsonNode frames = windowResponse.path("frames");
 		if (!frames.isArray() || frames.isEmpty()) {
-			return;
+			return null;
 		}
 
 		JsonNode gameMetadata = windowResponse.path("gameMetadata");
@@ -97,7 +104,7 @@ public class LiveObjectEventRecorder {
 
 		List<FrameSnapshot> snapshots = toSnapshots(frames);
 		if (snapshots.isEmpty()) {
-			return;
+			return null;
 		}
 
 		ObservedObjectState previous = lastObservedByGame.get(activeGame.gameId());
@@ -155,7 +162,7 @@ public class LiveObjectEventRecorder {
 					snapshot.blueParticipants(), snapshot.redParticipants());
 		}
 
-		lastObservedByGame.put(activeGame.gameId(), previous);
+		return previous;
 	}
 
 	/**
