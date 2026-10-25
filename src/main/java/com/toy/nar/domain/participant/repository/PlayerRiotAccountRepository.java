@@ -47,4 +47,13 @@ public interface PlayerRiotAccountRepository extends JpaRepository<PlayerRiotAcc
 			"pra.soloTierCheckedAt = :checkedAt WHERE pra.id = :id")
 	int updateSoloTier(@Param("id") Long id, @Param("tier") String tier, @Param("division") String division,
 			@Param("lp") Integer lp, @Param("checkedAt") LocalDateTime checkedAt);
+
+	// 기간 안에 끝난 솔랭 판과 그 판을 한 계정. 판 행엔 계정 id 가 없어 선수+플랫폼으로 잇는다.
+	@Query("SELECT new com.toy.nar.domain.participant.repository.PlayerRiotAccountRepository$EndedGame(a, g.gameEndedAt) " +
+			"FROM PlayerRiotAccount a JOIN PlayerSoloRankGame g ON g.player = a.player AND g.platform = a.platform " +
+			"WHERE a.enabled = true AND g.gameEndedAt > :from AND g.gameEndedAt <= :until")
+	List<EndedGame> findEndedGames(@Param("from") LocalDateTime from, @Param("until") LocalDateTime until);
+
+	record EndedGame(PlayerRiotAccount account, LocalDateTime endedAt) {
+	}
 }

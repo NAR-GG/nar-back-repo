@@ -32,6 +32,9 @@ class PlayerSoloRankGameQueryTest {
 	@Autowired
 	private PlayerSoloRankGameRepository repository;
 
+	@Autowired
+	private PlayerRiotAccountRepository accountRepository;
+
 	private final LocalDateTime now = LocalDateTime.of(2026, 9, 25, 21, 0);
 	private Player faker;
 	private Player chovy;
@@ -114,5 +117,26 @@ class PlayerSoloRankGameQueryTest {
 		assertThat(latest.getDurationSeconds()).isEqualTo(1800);
 		// match-v5 시작 시각이 없으면 기존 값을 지우지 않는다
 		assertThat(finished.get(1).getGameStartedAt()).isNull();
+	}
+
+	@Test
+	void 최근_끝난_판의_계정을_선수와_플랫폼으로_찾는다() {
+		account(faker, PlayerRiotAccountLiveStatus.OFFLINE, "1", now);
+		account(chovy, PlayerRiotAccountLiveStatus.OFFLINE, "2", now);
+		game(faker, "1", now.minusMinutes(30));
+		game(chovy, "2", now.minusMinutes(30));
+		game(zeus, "3", now.minusMinutes(30));
+		em.flush();
+		repository.recordResult(faker.getId(), "1", null, now.minusMinutes(5), 1500, true, 1, 1, 1, 100, "kr");
+		// 다른 플랫폼에서 한 판 — 이 계정(kr)의 LP 와 무관하다.
+		repository.recordResult(chovy.getId(), "2", null, now.minusMinutes(5), 1500, true, 1, 1, 1, 100, "NA1");
+		// 계정 없는 선수.
+		repository.recordResult(zeus.getId(), "3", null, now.minusMinutes(5), 1500, true, 1, 1, 1, 100, "kr");
+
+		List<PlayerRiotAccountRepository.EndedGame> ended = accountRepository.findEndedGames(now.minusMinutes(30), now.minusMinutes(2));
+
+		assertThat(ended).extracting(e -> e.account().getPlayer().getName()).containsExactly("Faker");
+		assertThat(ended.get(0).endedAt()).isEqualTo(now.minusMinutes(5));
+		assertThat(accountRepository.findEndedGames(now.minusMinutes(4), now)).isEmpty();
 	}
 }

@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -30,6 +32,22 @@ public class PlayerSoloTierRefreshScheduler {
 			log.error("Scheduled solo tier refresh failed", e);
 			schedulerAlertService.recordFailure("PLAYER_SOLO_TIER_REFRESH", "선수 솔랭 티어 갱신", e,
 					"Riot league-v4 조회 중 오류");
+		}
+	}
+
+	// 판이 끝난 계정만 LP 반영 뒤 바로 갱신. 대상은 DB 에서 도출하므로 인메모리 상태가 없다.
+	@Scheduled(fixedDelayString = "${riot.solo-tier.ended-sweep-ms:30000}", initialDelayString = "${riot.solo-tier.ended-initial-delay-ms:60000}")
+	public void refreshRecentlyEnded() {
+		if (!riotApiProperties.isEnabled()) {
+			return;
+		}
+		try {
+			int refreshed = refreshService.refreshRecentlyEnded(LocalDateTime.now());
+			if (refreshed > 0) {
+				log.info("Solo tier refreshed after game end: {}", refreshed);
+			}
+		} catch (Exception e) {
+			log.warn("Solo tier refresh after game end failed", e);
 		}
 	}
 }

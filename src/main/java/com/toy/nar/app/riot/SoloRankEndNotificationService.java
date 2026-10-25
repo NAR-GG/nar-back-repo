@@ -1,6 +1,5 @@
 package com.toy.nar.app.riot;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,18 +45,11 @@ public class SoloRankEndNotificationService {
 
 	private static final int RANKED_SOLO_QUEUE_ID = 420;
 
-	/**
-	 * 판이 끝나고 league-v4 LP 가 바뀌기까지 38~70초, match-v5 발행보다 20~56초 늦다(2026-10-25 prod 5판 실측).
-	 * 발송 시점에 바로 부르면 옛 LP 를 적으므로 이만큼 미룬다. 스윕이 30초 주기라 실제로는 90~120초 뒤.
-	 */
-	static final Duration TIER_REFRESH_DELAY = Duration.ofSeconds(90);
-
 	private final RiotApiClient riotApiClient;
 	private final ChampionDataService championDataService;
 	private final PlayerSoloRankPushService playerSoloRankPushService;
 	private final PlayerSoloRankGameRepository soloRankGameRepository;
 	private final SoloRankEndNotificationProperties properties;
-	private final PlayerSoloTierRefreshService tierRefreshService;
 
 	/**
 	 * 결과를 기다리는 게임들. 재기동하면 비는데, 그때는 그 게임의 종료 알림만 못 나간다 —
@@ -67,9 +59,6 @@ public class SoloRankEndNotificationService {
 	 * 중복 발송은 없다(멱등 키가 DB 에 있다).</p>
 	 */
 	private final Map<String, Pending> pending = new ConcurrentHashMap<>();
-
-	/** 계정 id → 티어 갱신 예정 시각. pending 과 같은 이유로 인메모리 — 재기동으로 잃어도 매시 40분 스윕이 메운다. */
-	private final Map<Long, TierRefresh> tierRefreshDue = new ConcurrentHashMap<>();
 
 	/** 라이브 모니터가 "이 계정의 이 게임이 방금 끝났다"를 알릴 때 호출한다. */
 	public void onGameEnded(PlayerRiotAccount account, String gameId) {
@@ -87,11 +76,7 @@ public class SoloRankEndNotificationService {
 	 * @return 이번 스윕에서 발송한 건수
 	 */
 	public int sweep() {
-		if (!properties.isEnabled()) {
-			return 0;
-		}
-		refreshDueTiers(LocalDateTime.now());
-		if (pending.isEmpty()) {
+		if (!properties.isEnabled() || pending.isEmpty()) {
 			return 0;
 		}
 		int sent = 0;
@@ -195,27 +180,8 @@ public class SoloRankEndNotificationService {
 		} catch (Exception e) {
 			log.warn("[solo-rank-end] 결과 저장 실패 player={} gameId={}", player.getName(), target.gameId, e);
 		}
-		tierRefreshDue.put(account.getId(), new TierRefresh(account, LocalDateTime.now().plus(TIER_REFRESH_DELAY)));
 		log.info("[solo-rank-end] 종료 알림 발송 player={} gameId={}", player.getName(), target.gameId);
 		return Outcome.SENT;
-	}
-
-	/** 예정 시각이 지난 계정의 티어를 갱신한다. 실패해도 다시 잡지 않는다 — 매시 40분 스윕이 메운다. */
-	void refreshDueTiers(LocalDateTime now) {
-		for (Map.Entry<Long, TierRefresh> entry : Map.copyOf(tierRefreshDue).entrySet()) {
-			if (entry.getValue().dueAt().isAfter(now)) {
-				continue;
-			}
-			tierRefreshDue.remove(entry.getKey());
-			try {
-				tierRefreshService.refresh(entry.getValue().account());
-			} catch (Exception e) {
-				log.warn("[solo-rank-end] 티어 갱신 실패 account={}", entry.getValue().account().getRiotId(), e);
-			}
-		}
-	}
-
-	private record TierRefresh(PlayerRiotAccount account, LocalDateTime dueAt) {
 	}
 
 	/** spectator 게임 ID 는 플랫폼 접두사가 없다. match-v5 조회는 접두사가 필요하다. */
