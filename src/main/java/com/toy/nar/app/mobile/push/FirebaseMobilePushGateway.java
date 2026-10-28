@@ -28,6 +28,15 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 
 	private static final int MAX_MULTICAST_TOKENS = 500;
 
+	/**
+	 * 이만큼 쉬었으면 첫 토큰 1건만 먼저 보내 연결을 열고, 나머지를 그 연결에 싣는다.
+	 * 연결이 없을 때(오래 쉬어 닫힌 뒤) 몰려온 요청은 연결을 나눠 쓰지 못하고 한 건씩 풀려
+	 * 토큰당 ~0.1초가 든다 — 2026-10-26 실측에서 180초 넘게 쉰 뒤 첫 묶음만 27~49초,
+	 * 60~170초 쉰 뒤는 정상. 여유를 두고 60초로 잡는다. 비용은 왕복 1회.
+	 * 토큰이 연결 상한(FCM_MAX_CONNECTIONS=2) 이하면 기다릴 요청이 없어 건너뛴다.
+	 */
+	private static final long WARMUP_IDLE_MS = 60_000;
+
 	private final ObjectProvider<FirebaseMessaging> firebaseMessagingProvider;
 
 	/**
@@ -60,12 +69,13 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 		long lastFinishedAt = lastSendFinishedAtMs.get();
 		long idleBeforeMs = lastFinishedAt == 0 ? -1 : System.currentTimeMillis() - lastFinishedAt;
 		int concurrentSends = inFlightSends.getAndIncrement();
+		boolean warmup = tokens.size() > 2 && (idleBeforeMs < 0 || idleBeforeMs >= WARMUP_IDLE_MS);
 		long startedAt = System.nanoTime();
 		try {
-			for (int start = 0; start < tokens.size(); start += MAX_MULTICAST_TOKENS) {
-				List<String> batchTokens = tokens.subList(
-						start,
-						Math.min(start + MAX_MULTICAST_TOKENS, tokens.size()));
+			for (int start = 0; start < tokens.size(); ) {
+				int end = warmup && start == 0 ? 1 : Math.min(start + MAX_MULTICAST_TOKENS, tokens.size());
+				List<String> batchTokens = tokens.subList(start, end);
+				start = end;
 				long batchStartedAt = System.nanoTime();
 				BatchResponse response = sendBatch(firebaseMessaging, batchTokens, message);
 				batchMillis.add(elapsedMillis(batchStartedAt));
@@ -78,9 +88,9 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 			inFlightSends.decrementAndGet();
 			lastSendFinishedAtMs.set(System.currentTimeMillis());
 			// 실패(예외)로 끝나도 남긴다 — 타임아웃이면 그 소요 자체가 단서다.
-			log.info("[fcm-send] tokens={} success={} failure={} batchesMs={} totalMs={} idleBeforeMs={} concurrentSends={}",
+			log.info("[fcm-send] tokens={} success={} failure={} batchesMs={} totalMs={} idleBeforeMs={} concurrentSends={} warmup={}",
 					tokens.size(), successCount, failureCount, batchMillis, elapsedMillis(startedAt),
-					idleBeforeMs, concurrentSends);
+					idleBeforeMs, concurrentSends, warmup);
 		}
 		return new MobilePushResult(
 				successCount, failureCount, List.copyOf(invalidTokens), List.copyOf(successTokens));

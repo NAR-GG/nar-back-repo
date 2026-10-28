@@ -2,16 +2,24 @@ package com.toy.nar.app.mobile.push;
 
 import com.google.firebase.messaging.AndroidConfig;
 import com.google.firebase.messaging.ApnsConfig;
+import com.google.firebase.messaging.BatchResponse;
 import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.MulticastMessage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 소리 나는 발송 payload 를 지키는 회귀 테스트.
@@ -60,5 +68,24 @@ class FirebaseMobilePushGatewayTest {
 		assertThat(apsFields.get("sound")).isEqualTo("default");
 		// 잠자기를 무음 발송으로 되돌리면 이 단정이 먼저 깨진다.
 		assertThat(apsFields.get("interruption-level")).isNull();
+	}
+
+	@Test
+	@DisplayName("오래 쉬었으면 첫 토큰 1건으로 연결부터 열고, 바로 이은 발송은 한 묶음으로 보낸다")
+	@SuppressWarnings("unchecked")
+	void 오래_쉬었으면_첫_토큰으로_연결부터_연다() throws Exception {
+		FirebaseMessaging messaging = mock(FirebaseMessaging.class);
+		when(firebaseMessagingProvider.getIfAvailable()).thenReturn(messaging);
+		when(messaging.sendEachForMulticast(any(MulticastMessage.class))).thenReturn(mock(BatchResponse.class));
+		MobilePushMessage message = new MobilePushMessage("t", "b", Map.of());
+
+		gateway.send(List.of("a", "b", "c"), message); // 첫 발송 = 쉰 시간 모름 → 선개통
+		gateway.send(List.of("d", "e", "f"), message); // 방금 보냈다 → 그대로
+
+		ArgumentCaptor<MulticastMessage> sent = ArgumentCaptor.forClass(MulticastMessage.class);
+		verify(messaging, times(3)).sendEachForMulticast(sent.capture());
+		assertThat(sent.getAllValues())
+				.extracting(m -> (List<String>) ReflectionTestUtils.getField(m, "tokens"))
+				.containsExactly(List.of("a"), List.of("b", "c"), List.of("d", "e", "f"));
 	}
 }
