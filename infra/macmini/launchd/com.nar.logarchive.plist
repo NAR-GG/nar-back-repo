@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  매일 04:40(KST) 로그 아카이브 — 어제 하루치 nar 로그를 gzip 해 OCI 버킷 logs/ 와 로컬에 보관한다.
+  Loki 보존이 14일이라 그 전 로그를 파일로 남기는 용도다.
+
+  DB 백업(04:25)과 버킷 업로드가 몰리지 않게 15분 띄웠다.
+  cron 이 아니라 launchd 인 이유는 com.nar.dbbackup 과 같다(macOS cron 은 조용히 안 돈다).
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nar.logarchive</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/changha/nar/nar-log-archive.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>4</integer>
+        <key>Minute</key><integer>40</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/changha/nar/log-archive-launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/changha/nar/log-archive-launchd.log</string>
+</dict>
+</plist>
