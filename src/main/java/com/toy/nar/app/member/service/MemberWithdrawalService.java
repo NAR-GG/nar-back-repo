@@ -11,6 +11,8 @@ import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.toy.nar.app.monitor.SchedulerAlertService;
 
@@ -40,6 +42,8 @@ public class MemberWithdrawalService {
 	 * 탈퇴할 회원을 기록한다. 회원 삭제와 같은 트랜잭션에서, 삭제보다 먼저 불러야 한다.
 	 * 회원이 이미 없으면(재호출·연타의 두 번째 요청) 아무것도 하지 않는다.
 	 */
+	// FOR UPDATE 락이 호출부 트랜잭션 끝(회원 삭제 커밋)까지 살아 있어야 해서, 트랜잭션 밖 호출은 막는다.
+	@Transactional(propagation = Propagation.MANDATORY)
 	public void record(Long memberId, LocalDateTime now) {
 		// 회원 행부터 X 락. 없으면 INSERT ... SELECT 가 member 에 S 락을 잡은 채 상대의 UNIQUE 키 락을 기다리고,
 		// 상대는 DELETE member 에서 그 S 락을 기다려 연타 탈퇴가 데드락(1213 → 500)이 난다.

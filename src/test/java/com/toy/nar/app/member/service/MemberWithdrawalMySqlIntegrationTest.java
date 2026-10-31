@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 /**
- * 탈퇴 기록 SQL 을 실제 MySQL 에서 검증한다. {@code INSERT IGNORE ... SELECT} 와 제재 서브쿼리는 H2 로 재현되지 않는다.
+ * 탈퇴 기록 SQL 을 실제 MySQL 에서 검증한다. {@code INSERT ... SELECT ... ON DUPLICATE KEY}, {@code FOR UPDATE} 동시성, 와 제재 서브쿼리는 H2 로 재현되지 않는다.
  * 로컬 OrbStack 에서는 api.version 주입 없이 돌리면 조용히 skipped 된다.
  */
 @Testcontainers(disabledWithoutDocker = true)
