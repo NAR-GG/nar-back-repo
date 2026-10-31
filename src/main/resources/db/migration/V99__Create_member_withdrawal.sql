@@ -15,7 +15,7 @@ CREATE TABLE member_withdrawal (
     joined_at         DATETIME     NOT NULL,
     onboarded_at      DATETIME     NULL,
     withdrawn_at      DATETIME     NOT NULL,
-    restricted_until  DATETIME     NULL,
+    restricted_until  DATETIME(3)  NULL,         -- member_community_restriction.until 과 같은 정밀도
     reason            VARCHAR(200) NULL,
     UNIQUE KEY uk_member_withdrawal_member (member_id),
     INDEX idx_member_withdrawal_withdrawn_at (withdrawn_at)

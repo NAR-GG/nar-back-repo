@@ -7,13 +7,20 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -36,6 +43,7 @@ class MemberWithdrawalMySqlIntegrationTest {
 
 	private static JdbcTemplate jdbc;
 	private static MemberWithdrawalService service;
+	private static TransactionTemplate tx;
 
 	@BeforeAll
 	static void migrate() {
@@ -46,7 +54,9 @@ class MemberWithdrawalMySqlIntegrationTest {
 				.baselineVersion(MigrationVersion.fromVersion("30"))
 				.load()
 				.migrate();
-		jdbc = new JdbcTemplate(new DriverManagerDataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()));
+		DriverManagerDataSource dataSource = new DriverManagerDataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+		jdbc = new JdbcTemplate(dataSource);
+		tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
 		service = new MemberWithdrawalService(jdbc, mock(SchedulerAlertService.class));
 	}
 
@@ -84,6 +94,59 @@ class MemberWithdrawalMySqlIntegrationTest {
 		service.record(999L, NOW);
 
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM member_withdrawal", Integer.class)).isEqualTo(1);
+	}
+
+	/**
+	 * 연타 탈퇴: A 가 기록을 남긴 뒤 회원을 지우기 전에 B 가 기록에 들어온다.
+	 * 회원 행 락 없이는 B 가 member S 락 + UNIQUE 키 대기, A 가 DELETE member 에서 B 를 기다려 1213 데드락이 났다.
+	 */
+	@Test
+	void concurrentDoubleTapDoesNotDeadlock() throws Exception {
+		CountDownLatch aRecorded = new CountDownLatch(1);
+		ExecutorService pool = Executors.newFixedThreadPool(2);
+		try {
+			Future<?> a = pool.submit(() -> tx.executeWithoutResult(s -> {
+				service.record(7L, NOW);
+				aRecorded.countDown();
+				sleep(500);
+				withdrawDeletes();
+			}));
+			Future<?> b = pool.submit(() -> {
+				await(aRecorded);
+				tx.executeWithoutResult(s -> {
+					service.record(7L, NOW.plusSeconds(1));
+					withdrawDeletes();
+				});
+			});
+			a.get(10, TimeUnit.SECONDS);
+			b.get(10, TimeUnit.SECONDS);
+		} finally {
+			pool.shutdownNow();
+		}
+
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM member_withdrawal", Integer.class)).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT withdrawn_at FROM member_withdrawal", LocalDateTime.class)).isEqualTo(NOW);
+	}
+
+	private static void withdrawDeletes() {
+		jdbc.update("DELETE FROM member_social WHERE member_id = 7");
+		jdbc.update("DELETE FROM member WHERE id = 7");
+	}
+
+	private static void sleep(long ms) {
+		try {
+			Thread.sleep(ms);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	private static void await(CountDownLatch latch) {
+		try {
+			latch.await(5, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	@Test

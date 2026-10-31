@@ -38,9 +38,15 @@ public class MemberWithdrawalService {
 
 	/**
 	 * 탈퇴할 회원을 기록한다. 회원 삭제와 같은 트랜잭션에서, 삭제보다 먼저 불러야 한다.
-	 * 회원이 이미 없거나(재호출) 이미 기록됐으면(연타) 아무것도 하지 않는다.
+	 * 회원이 이미 없으면(재호출·연타의 두 번째 요청) 아무것도 하지 않는다.
 	 */
 	public void record(Long memberId, LocalDateTime now) {
+		// 회원 행부터 X 락. 없으면 INSERT ... SELECT 가 member 에 S 락을 잡은 채 상대의 UNIQUE 키 락을 기다리고,
+		// 상대는 DELETE member 에서 그 S 락을 기다려 연타 탈퇴가 데드락(1213 → 500)이 난다.
+		// 락을 먼저 잡으면 두 번째 요청은 첫 요청 커밋까지 기다렸다가 회원이 없어 0행으로 끝난다.
+		if (jdbcTemplate.queryForList("SELECT id FROM member WHERE id = ? FOR UPDATE", Long.class, memberId).isEmpty()) {
+			return;
+		}
 		List<String> socials = jdbcTemplate.queryForList(
 				"SELECT CONCAT(provider, ':', provider_id) FROM member_social WHERE member_id = ? ORDER BY id",
 				String.class, memberId);
@@ -49,10 +55,10 @@ public class MemberWithdrawalService {
 		String hashes = socials.stream().map(MemberWithdrawalService::sha256Hex)
 				.collect(Collectors.joining(","));
 
-		// 회원 행에서 바로 SELECT 해 넣는다 — 회원이 없으면 0행이라 멱등하고,
-		// 동시 탈퇴가 같은 회원을 두 번 넣으려 하면 UNIQUE(member_id) 를 IGNORE 가 흡수한다.
+		// 회원 행에서 바로 SELECT 해 넣는다. UNIQUE(member_id) 중복만 흡수한다
+		// (INSERT IGNORE 는 잘림·NOT NULL 위반까지 경고로 삼켜서 쓰지 않는다).
 		jdbcTemplate.update("""
-				INSERT IGNORE INTO member_withdrawal
+				INSERT INTO member_withdrawal
 				    (member_id, providers, social_id_hashes, joined_at, onboarded_at, withdrawn_at, restricted_until)
 				SELECT m.id, ?, ?, m.created_at, m.onboarded_at, ?,
 				       (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
@@ -62,6 +68,7 @@ public class MemberWithdrawalService {
 				        WHERE r.member_id = m.id AND (r.until IS NULL OR r.until > ?))
 				FROM member m
 				WHERE m.id = ?
+				ON DUPLICATE KEY UPDATE member_withdrawal.id = member_withdrawal.id
 				""",
 				providers, hashes.isEmpty() ? null : hashes, now, PERMANENT, now, memberId);
 	}
