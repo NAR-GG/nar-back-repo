@@ -22,6 +22,7 @@ import com.toy.nar.app.auth.profile.CloudinarySignatureService;
 import com.toy.nar.app.auth.profile.ProfileService;
 import com.toy.nar.app.auth.profile.dto.ProfileImageUploadSignatureResponse;
 import com.toy.nar.app.auth.profile.dto.ProfileUpdateRequest;
+import com.toy.nar.app.member.service.MemberWithdrawalService;
 import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
@@ -126,6 +127,7 @@ public class AuthController {
     private final FavoriteTeamChangePolicy favoriteTeamChangePolicy;
     private final CloudinarySignatureService cloudinarySignatureService;
     private final TransactionTemplate transactionTemplate;
+    private final MemberWithdrawalService memberWithdrawalService;
 
     @Operation(
             summary = "모바일 카카오 로그인",
@@ -418,6 +420,8 @@ public class AuthController {
         // 벌크 삭제 + 멱등 처리. 예전엔 조회 후 엔티티 삭제라, 응답이 늦어 사용자가 버튼을 연타하면
         // 동시 요청이 이미 지워진 행을 지우다 500(stale state)이 나고 이후 재시도는 404가 됐다.
         // 삭제 대상이 없으면 이미 탈퇴한 것이므로 204 로 응답한다.
+        // 탈퇴 기록은 소셜 연동·회원 행을 읽어 만들므로 삭제보다 먼저 남긴다.
+        memberWithdrawalService.record(memberId, LocalDateTime.now());
         memberSocialRepository.deleteAllByMemberId(memberId);
         memberRepository.deleteByMemberId(memberId);
         return ResponseEntity.noContent().build();

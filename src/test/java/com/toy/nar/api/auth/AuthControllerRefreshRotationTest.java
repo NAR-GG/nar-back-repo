@@ -68,6 +68,7 @@ class AuthControllerRefreshRotationTest {
 			mock(ProfileService.class),
 			mock(FavoriteTeamChangePolicy.class),
 			mock(CloudinarySignatureService.class),
+			null,
 			null);
 
 	@Test
