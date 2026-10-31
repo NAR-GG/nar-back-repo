@@ -7,6 +7,7 @@ import com.toy.nar.app.auth.KakaoUserClient;
 import com.toy.nar.app.auth.NaverUserClient;
 import com.toy.nar.app.auth.SocialLoginService;
 import com.toy.nar.app.auth.profile.CloudinarySignatureService;
+import com.toy.nar.app.member.service.MemberWithdrawalService;
 import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.entity.Member;
@@ -65,7 +66,8 @@ class AuthControllerOnboardingNotificationTest {
 				profileService,
 				new com.toy.nar.domain.member.service.FavoriteTeamChangePolicy(),
 				mock(CloudinarySignatureService.class),
-				immediateTransactionTemplate());
+				immediateTransactionTemplate(),
+				mock(MemberWithdrawalService.class));
 		Member member = Member.builder().name("용맹한바론").tag("0000").email("test@example.com").build();
 		ReflectionTestUtils.setField(member, "id", 7L);
 		Team team = Team.builder().name("T1").code("T1").imageUrl("t1.png").build();
@@ -249,7 +251,8 @@ class AuthControllerOnboardingNotificationTest {
 				profileService,
 				new com.toy.nar.domain.member.service.FavoriteTeamChangePolicy(),
 				mock(CloudinarySignatureService.class),
-				immediateTransactionTemplate());
+				immediateTransactionTemplate(),
+				mock(MemberWithdrawalService.class));
 		return new TestContext(
 				memberSocialRepository,
 				controller,

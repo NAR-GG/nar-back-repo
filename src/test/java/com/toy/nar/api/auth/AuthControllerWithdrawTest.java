@@ -9,6 +9,7 @@ import com.toy.nar.app.auth.SocialLoginService;
 import com.toy.nar.app.auth.profile.CloudinarySignatureService;
 import com.toy.nar.app.auth.profile.ProfileService;
 import com.toy.nar.domain.member.service.FavoriteTeamChangePolicy;
+import com.toy.nar.app.member.service.MemberWithdrawalService;
 import com.toy.nar.app.mobile.device.MobileDeviceService;
 import com.toy.nar.app.mobile.notification.MobileTeamNotificationService;
 import com.toy.nar.domain.member.repository.MemberRepository;
@@ -21,8 +22,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +42,7 @@ class AuthControllerWithdrawTest {
 
 	private final MemberRepository memberRepository = mock(MemberRepository.class);
 	private final MemberSocialRepository memberSocialRepository = mock(MemberSocialRepository.class);
+	private final MemberWithdrawalService memberWithdrawalService = mock(MemberWithdrawalService.class);
 
 	private final AuthController controller = new AuthController(
 			mock(JwtTokenProvider.class),
@@ -54,7 +61,8 @@ class AuthControllerWithdrawTest {
 			mock(ProfileService.class),
 			mock(FavoriteTeamChangePolicy.class),
 			mock(CloudinarySignatureService.class),
-				immediateTransactionTemplate());
+				immediateTransactionTemplate(),
+				memberWithdrawalService);
 
 	@Test
 	@DisplayName("탈퇴 시 소셜 연동과 회원을 벌크 삭제하고 204를 반환한다")
@@ -65,8 +73,11 @@ class AuthControllerWithdrawTest {
 		var response = controller.withdraw(7L);
 
 		assertThat(response.getStatusCode().value()).isEqualTo(204);
-		verify(memberSocialRepository).deleteAllByMemberId(7L);
-		verify(memberRepository).deleteByMemberId(7L);
+		// 탈퇴 기록은 소셜 연동·회원 행을 읽으므로 삭제보다 먼저 남아야 한다.
+		var order = inOrder(memberWithdrawalService, memberSocialRepository, memberRepository);
+		order.verify(memberWithdrawalService).record(eq(7L), any(LocalDateTime.class));
+		order.verify(memberSocialRepository).deleteAllByMemberId(7L);
+		order.verify(memberRepository).deleteByMemberId(7L);
 	}
 
 	@Test
