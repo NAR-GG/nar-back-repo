@@ -21,6 +21,8 @@ import java.util.List;
 public class FirebaseMessagingConfig {
 
 	private static final int FCM_MAX_CONNECTIONS = 2;
+	private static final int FCM_CONNECT_TIMEOUT_MS = 10_000;
+	private static final int FCM_READ_TIMEOUT_MS = 30_000;
 
 	@Bean
 	@ConditionalOnProperty(
@@ -36,6 +38,11 @@ public class FirebaseMessagingConfig {
 		FirebaseOptions options = FirebaseOptions.builder()
 				.setCredentials(GoogleCredentials.getApplicationDefault())
 				.setHttpTransport(fcmHttpTransport())
+				// SDK 기본값은 0(무한)이다. read timeout 은 HTTP/2 공유 연결의 무활동 타이머라 죽은 연결만
+				// 걸러낸다 — 요청별 상한이 아니다. 발송 스레드를 돌려받는 상한은 게이트웨이의 batchTimeout 이다
+				// (2026-11-02 스케줄러 22시간 정지, FirebaseMobilePushGateway 참고).
+				.setConnectTimeout(FCM_CONNECT_TIMEOUT_MS)
+				.setReadTimeout(FCM_READ_TIMEOUT_MS)
 				.build();
 		return FirebaseApp.initializeApp(options);
 	}

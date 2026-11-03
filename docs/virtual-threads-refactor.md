@@ -18,6 +18,7 @@ The important constraint is downstream capacity. Virtual threads make waiting ch
 - `spring.threads.virtual.enabled=true` enables Spring Boot virtual-thread integration for supported web/task execution paths.
 - `applicationTaskExecutor` now uses virtual threads with a concurrency limit. `TeamDashboardService` continues to parallelize independent DB reads, but no longer depends on a fixed platform thread pool.
 - Scheduled tasks now use `SimpleAsyncTaskScheduler` with virtual threads and the existing effective concurrency limit of 5.
+  - 2026-11-03 이후로는 해당 없음: `ThreadPoolTaskScheduler`(가상 스레드 32개)로 바꿨다. `SimpleAsyncTaskScheduler` 는 fixedDelay 잡을 스레드 하나에서 돌려 FCM 응답 하나가 유실되자 fixedDelay 잡 전부가 22시간 섰다(#605).
 - `WorldsService#getWorldsMatches` now uses `CompletableFuture` on the virtual-thread `applicationTaskExecutor` plus a local `Semaphore(5)`. This preserves the external LoL Esports API concurrency cap without keeping a Reactor pipeline that is immediately blocked.
 
 ## What remains intentionally unchanged

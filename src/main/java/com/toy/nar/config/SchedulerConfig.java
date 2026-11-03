@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.SchedulingConfigurer;
-import org.springframework.scheduling.concurrent.SimpleAsyncTaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 
 /**
@@ -25,7 +25,17 @@ import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 @EnableScheduling
 public class SchedulerConfig implements SchedulingConfigurer {
 
-	private static final int SCHEDULED_TASK_CONCURRENCY_LIMIT = 5;
+	/**
+	 * 잡을 동시에 돌리는 스레드 수. 잡 수(30개) 이상으로 잡아 cron 이 몰려도 라이브 폴링이 밀리지
+	 * 않게 한다. 가상 스레드라 비용이 없다. 잡을 늘려 이 수를 넘기면 같이 올린다.
+	 *
+	 * <p>SimpleAsyncTaskScheduler 를 쓰지 않는 이유 — 그건 fixedDelay 잡을 <b>스케줄러 스레드 하나</b>에서
+	 * 차례로 돌린다. 2026-11-02 16:08 솔랭 종료 알림의 FCM 발송 하나가 영영 안 끝나자 그 스레드를 쓰던
+	 * fixedDelay 잡 전부(솔랭 모니터·종료 알림·티어 갱신·라이브 폴링)가 22시간 섰다. 풀이면 잡 하나가
+	 * 막혀도 스레드 하나만 잃는다. 한 잡이 자기 자신과 겹치지 않는 fixedDelay 의미는 그대로지만,
+	 * fixedDelay 잡끼리는 이제 동시에 돈다(공유 상태는 ConcurrentHashMap, 발송은 DB 예약으로 멱등).</p>
+	 */
+	private static final int SCHEDULER_POOL_SIZE = 32;
 
 	private final SchedulerLeaseService leaseService;
 
@@ -35,9 +45,9 @@ public class SchedulerConfig implements SchedulingConfigurer {
 
 	@Bean
 	public TaskScheduler taskScheduler() {
-		SimpleAsyncTaskScheduler taskScheduler = new SimpleAsyncTaskScheduler();
+		ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
 		taskScheduler.setVirtualThreads(true);
-		taskScheduler.setConcurrencyLimit(SCHEDULED_TASK_CONCURRENCY_LIMIT);
+		taskScheduler.setPoolSize(SCHEDULER_POOL_SIZE);
 		taskScheduler.setThreadNamePrefix("Scheduled-VT-");
 		return taskScheduler;
 	}
