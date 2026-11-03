@@ -146,7 +146,7 @@ Caffeine은 JVM 안에 있어서 `CacheEvictionService`의 evict는 자기 JVM�
 `SchedulerLeaseService`)가 보장한다. 두 벌 돌면 라이브 폴링·푸시가 이중으로 나가는데, 롤아웃
 겹침에서도 리더만 잡 본문을 실행하므로 `RollingUpdate` 로 무중단 교체가 된다(위 CI/CD 절).
 
-가상 스레드 기반, 동시 실행 5개 제한(`SchedulerConfig.java`). 잡이 늘어 밀리면 파드를 늘리는 게 아니라
+가상 스레드 풀 10개(`SchedulerConfig.java`, `ThreadPoolTaskScheduler`). `SimpleAsyncTaskScheduler` 로 되돌리지 않는다 — fixedDelay 잡을 스레드 하나에 몰아 돌려서 잡 하나가 막히면 라이브 폴링까지 전부 선다(2026-11-02, 22시간). 잡이 늘어 밀리면 파드를 늘리는 게 아니라
 이 한도를 올리거나 도메인별로 Deployment를 쪼갠다(각각 `replicas: 1`).
 
 Key tasks:

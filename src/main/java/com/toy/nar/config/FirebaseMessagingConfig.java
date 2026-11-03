@@ -21,6 +21,8 @@ import java.util.List;
 public class FirebaseMessagingConfig {
 
 	private static final int FCM_MAX_CONNECTIONS = 2;
+	private static final int FCM_CONNECT_TIMEOUT_MS = 10_000;
+	private static final int FCM_READ_TIMEOUT_MS = 30_000;
 
 	@Bean
 	@ConditionalOnProperty(
@@ -36,6 +38,11 @@ public class FirebaseMessagingConfig {
 		FirebaseOptions options = FirebaseOptions.builder()
 				.setCredentials(GoogleCredentials.getApplicationDefault())
 				.setHttpTransport(fcmHttpTransport())
+				// SDK 기본값은 0(무한)이다. 응답 한 건이 유실되면 그 요청을 든 스레드가 영영 안 깨어난다
+				// — 2026-11-02 에 그렇게 스케줄러가 22시간 섰다(FirebaseMobilePushGateway 참고).
+				// 요청 하나 = 토큰 하나라 정상 응답은 1초 안팎이다.
+				.setConnectTimeout(FCM_CONNECT_TIMEOUT_MS)
+				.setReadTimeout(FCM_READ_TIMEOUT_MS)
 				.build();
 		return FirebaseApp.initializeApp(options);
 	}

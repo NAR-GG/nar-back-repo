@@ -1,5 +1,7 @@
 package com.toy.nar.app.mobile.push;
 
+import com.google.api.core.ApiFutures;
+import com.google.api.core.SettableApiFuture;
 import com.google.firebase.messaging.AndroidConfig;
 import com.google.firebase.messaging.ApnsConfig;
 import com.google.firebase.messaging.BatchResponse;
@@ -11,10 +13,13 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -76,16 +81,33 @@ class FirebaseMobilePushGatewayTest {
 	void 오래_쉬었으면_첫_토큰으로_연결부터_연다() throws Exception {
 		FirebaseMessaging messaging = mock(FirebaseMessaging.class);
 		when(firebaseMessagingProvider.getIfAvailable()).thenReturn(messaging);
-		when(messaging.sendEachForMulticast(any(MulticastMessage.class))).thenReturn(mock(BatchResponse.class));
+		when(messaging.sendEachForMulticastAsync(any(MulticastMessage.class)))
+				.thenAnswer(invocation -> ApiFutures.immediateFuture(mock(BatchResponse.class)));
 		MobilePushMessage message = new MobilePushMessage("t", "b", Map.of());
 
 		gateway.send(List.of("a", "b", "c"), message); // 첫 발송 = 쉰 시간 모름 → 선개통
 		gateway.send(List.of("d", "e", "f"), message); // 방금 보냈다 → 그대로
 
 		ArgumentCaptor<MulticastMessage> sent = ArgumentCaptor.forClass(MulticastMessage.class);
-		verify(messaging, times(3)).sendEachForMulticast(sent.capture());
+		verify(messaging, times(3)).sendEachForMulticastAsync(sent.capture());
 		assertThat(sent.getAllValues())
 				.extracting(m -> (List<String>) ReflectionTestUtils.getField(m, "tokens"))
 				.containsExactly(List.of("a"), List.of("b", "c"), List.of("d", "e", "f"));
+	}
+
+	@Test
+	@DisplayName("FCM 응답이 안 오면 상한에서 끊고 예외를 던진다 — 발송 스레드를 영영 잡아 두지 않는다")
+	void 응답이_안_오면_상한에서_끊는다() {
+		FirebaseMessaging messaging = mock(FirebaseMessaging.class);
+		when(firebaseMessagingProvider.getIfAvailable()).thenReturn(messaging);
+		SettableApiFuture<BatchResponse> neverCompletes = SettableApiFuture.create();
+		when(messaging.sendEachForMulticastAsync(any(MulticastMessage.class))).thenReturn(neverCompletes);
+		gateway.batchTimeout = Duration.ofMillis(50);
+
+		// 2026-11-02: 이 대기가 무한이라 스케줄러 스레드가 22시간 멈췄다.
+		assertThatThrownBy(() -> gateway.send(List.of("a"), new MobilePushMessage("t", "b", Map.of())))
+				.isInstanceOf(IllegalStateException.class)
+				.hasCauseInstanceOf(TimeoutException.class);
+		assertThat(neverCompletes.isCancelled()).isTrue();
 	}
 }

@@ -5,7 +5,6 @@ import com.google.firebase.messaging.ApnsConfig;
 import com.google.firebase.messaging.Aps;
 import com.google.firebase.messaging.BatchResponse;
 import com.google.firebase.messaging.FirebaseMessaging;
-import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.MulticastMessage;
 import com.google.firebase.messaging.Notification;
@@ -15,9 +14,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -36,6 +39,14 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 	 * 토큰이 연결 상한(FCM_MAX_CONNECTIONS=2) 이하면 기다릴 요청이 없어 건너뛴다.
 	 */
 	private static final long WARMUP_IDLE_MS = 60_000;
+
+	/**
+	 * 묶음 하나를 기다리는 상한. 요청 단위 read timeout(FirebaseMessagingConfig)이 1차 방어고,
+	 * 이건 그게 어떤 이유로든 안 먹을 때 발송 스레드를 돌려받는 마지막 상한이다.
+	 * 2026-11-02 16:08 에 묶음 하나가 영영 안 끝나 그 스레드를 쓰던 fixedDelay 잡 전부(솔랭 알림·
+	 * 라이브 폴링)가 22시간 섰다. 정상 묶음(500건)은 2초 안팎, 콜드 최악 실측 49초라 넉넉히 잡는다.
+	 */
+	Duration batchTimeout = Duration.ofSeconds(120);
 
 	private final ObjectProvider<FirebaseMessaging> firebaseMessagingProvider;
 
@@ -114,10 +125,20 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 				.setApnsConfig(apnsConfig())
 				.addAllTokens(tokens)
 				.build();
+		Future<BatchResponse> future = firebaseMessaging.sendEachForMulticastAsync(multicastMessage);
 		try {
-			return firebaseMessaging.sendEachForMulticast(multicastMessage);
-		} catch (FirebaseMessagingException e) {
-			throw new IllegalStateException("FCM 멀티캐스트 발송에 실패했습니다.", e);
+			return future.get(batchTimeout.toMillis(), TimeUnit.MILLISECONDS);
+		} catch (TimeoutException e) {
+			// ponytail: 일부 토큰은 이미 나갔을 수 있다. 호출부가 전원 FAILED 로 남기고 재예약하므로
+			// 그 일부는 두 번 받을 수 있다 — 스레드를 영영 잃는 것보다 낫다.
+			future.cancel(true);
+			throw new IllegalStateException(
+					"FCM 멀티캐스트 응답이 " + batchTimeout.toSeconds() + "초 안에 오지 않았습니다.", e);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("FCM 멀티캐스트 발송 대기 중 인터럽트되었습니다.", e);
+		} catch (ExecutionException e) {
+			throw new IllegalStateException("FCM 멀티캐스트 발송에 실패했습니다.", e.getCause());
 		}
 	}
 
