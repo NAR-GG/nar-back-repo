@@ -52,6 +52,12 @@ spec:
       # 토큰 마운트가 그 아래에 디렉토리를 만들려다 실패해 파드가 안 뜬다.
       automountServiceAccountToken: false
 
+      # 종료 유예. 기본 30초로는 모자라다 — graceful(최대 30) + executor 대기(최대 25, 알림 작업)
+      # + 라이브 큐 drain(최대 10, LivePersistenceQueue) 을 다 쓰면 70초 가까이 된다. 중간에
+      # SIGKILL 되면 리스를 반납하지 못해 새 파드가 TTL(15초) 만료까지 리더를 못 잡고,
+      # 큐에 남은 킬·오브젝트 알림도 버려진다. 평소 종료는 수 초다 — 상한일 뿐이다.
+      terminationGracePeriodSeconds: 75
+
       containers:
         - name: app
           image: menten4859/nar-gg:59870c1d502c04169f39926b4561e32c3a5ef771
