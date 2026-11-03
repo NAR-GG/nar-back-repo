@@ -38,9 +38,9 @@ public class FirebaseMessagingConfig {
 		FirebaseOptions options = FirebaseOptions.builder()
 				.setCredentials(GoogleCredentials.getApplicationDefault())
 				.setHttpTransport(fcmHttpTransport())
-				// SDK 기본값은 0(무한)이다. 응답 한 건이 유실되면 그 요청을 든 스레드가 영영 안 깨어난다
-				// — 2026-11-02 에 그렇게 스케줄러가 22시간 섰다(FirebaseMobilePushGateway 참고).
-				// 요청 하나 = 토큰 하나라 정상 응답은 1초 안팎이다.
+				// SDK 기본값은 0(무한)이다. read timeout 은 HTTP/2 공유 연결의 무활동 타이머라 죽은 연결만
+				// 걸러낸다 — 요청별 상한이 아니다. 발송 스레드를 돌려받는 상한은 게이트웨이의 batchTimeout 이다
+				// (2026-11-02 스케줄러 22시간 정지, FirebaseMobilePushGateway 참고).
 				.setConnectTimeout(FCM_CONNECT_TIMEOUT_MS)
 				.setReadTimeout(FCM_READ_TIMEOUT_MS)
 				.build();
