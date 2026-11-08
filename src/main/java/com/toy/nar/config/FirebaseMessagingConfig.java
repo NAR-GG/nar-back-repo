@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Configuration
 public class FirebaseMessagingConfig {
@@ -84,5 +85,30 @@ public class FirebaseMessagingConfig {
 			havingValue = "true")
 	public FirebaseMessaging firebaseMessaging(FirebaseApp firebaseApp) {
 		return FirebaseMessaging.getInstance(firebaseApp);
+	}
+
+	private static final AtomicInteger GENERATION = new AtomicInteger();
+	private static volatile String activeAppName = FirebaseApp.DEFAULT_APP_NAME;
+
+	/**
+	 * 연결 풀이 망가진 FCM 클라이언트를 버리고 새 앱(= 새 transport = 새 연결 풀)으로 갈아 끼운다.
+	 * 2026-11-07 08:46 에 httpclient5 풀이 꼬여 이후 40시간 푸시가 전량 실패했고 파드 재시작만이 풀었다 —
+	 * 게이트웨이가 연속 실패를 보고 이걸 부른다(FirebaseMobilePushGateway.recordInfraFailure).
+	 * 옛 앱은 정리를 백그라운드로 미룬다: 망가진 풀의 shutdown 이 오래 걸려도 발송 스레드를 잡지 않게.
+	 */
+	public static synchronized FirebaseMessaging rebuildMessaging() {
+		FirebaseApp old = FirebaseApp.getInstance(activeAppName);
+		FirebaseOptions fresh = old.getOptions().toBuilder().setHttpTransport(fcmHttpTransport()).build();
+		FirebaseApp next = FirebaseApp.initializeApp(fresh, "fcm-" + GENERATION.incrementAndGet());
+		activeAppName = next.getName();
+		Thread.ofVirtual().name("fcm-old-client-cleanup").start(() -> {
+			try {
+				old.getOptions().getHttpTransport().shutdown();
+			} catch (Exception ignored) {
+				// 이미 망가진 풀이라 실패해도 상관없다.
+			}
+			old.delete();
+		});
+		return FirebaseMessaging.getInstance(next);
 	}
 }
