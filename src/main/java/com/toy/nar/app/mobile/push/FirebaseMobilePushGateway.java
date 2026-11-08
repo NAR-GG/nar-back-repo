@@ -162,6 +162,7 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 			// ponytail: 이 묶음의 일부, 그리고 500건 넘는 발송이면 앞서 성공한 묶음까지 호출부가 전원
 			// FAILED 로 남기고 재예약하므로 두 번 받을 수 있다 — 스레드를 영영 잃는 것보다 낫다.
 			// 잦아지면 성공한 묶음 결과는 살려서 돌려준다.
+			recordInfraFailure(e);
 			throw new IllegalStateException(
 					"FCM 멀티캐스트 응답이 " + batchTimeout.toSeconds() + "초 안에 오지 않았습니다.", e);
 		} catch (InterruptedException e) {
@@ -169,6 +170,8 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 			throw new IllegalStateException("FCM 멀티캐스트 발송 대기 중 인터럽트되었습니다.", e);
 		} catch (ExecutionException e) {
 			done = true;
+			// 배치 전체가 예외로 끝나는 형태(풀 오류가 SDK 안에서 future 를 터뜨리는 경우)도 인프라 실패다.
+			recordInfraFailure(e);
 			throw new IllegalStateException("FCM 멀티캐스트 발송에 실패했습니다.", e.getCause());
 		} finally {
 			if (!done) {
@@ -224,20 +227,29 @@ public class FirebaseMobilePushGateway implements MobilePushGateway {
 		}
 	}
 
-	private synchronized void rebuildClient(int streak) {
-		long now = System.currentTimeMillis();
-		if (lastRebuildAtMs != 0 && now - lastRebuildAtMs < REBUILD_COOLDOWN_MS) {
-			return;
+	private void rebuildClient(int streak) {
+		String alert;
+		synchronized (this) {
+			long now = System.currentTimeMillis();
+			if (lastRebuildAtMs != 0 && now - lastRebuildAtMs < REBUILD_COOLDOWN_MS) {
+				return;
+			}
+			lastRebuildAtMs = now;
+			try {
+				rebuilt = rebuilder.get();
+				consecutiveInfraFailures.set(0);
+				log.error("[fcm-health] 연속 실패 {}회 — FCM 클라이언트를 새로 만들어 갈아 끼웠다", streak);
+				alert = "FCM 발송이 " + streak + "회 연속 인프라 실패해 클라이언트(연결 풀)를 재생성했다. 반복되면 FCM 장애 또는 재생성 실패.";
+			} catch (RuntimeException e) {
+				log.error("[fcm-health] FCM 클라이언트 재생성 실패", e);
+				alert = "FCM 발송이 " + streak + "회 연속 인프라 실패했고 클라이언트 재생성도 실패했다: " + e + " — 스케줄러 파드 재시작 필요.";
+			}
 		}
-		lastRebuildAtMs = now;
+		// 디스코드 HTTP 는 락 밖에서 — 타임아웃 없는 RestTemplate 이 다른 발송 스레드를 묶지 않게.
 		try {
-			rebuilt = rebuilder.get();
-			consecutiveInfraFailures.set(0);
-			log.error("[fcm-health] 연속 실패 {}회 — FCM 클라이언트를 새로 만들어 갈아 끼웠다", streak);
-			notificationService.sendSchedulerWarningNotification("fcm-self-heal",
-					"FCM 발송이 " + streak + "회 연속 인프라 실패해 클라이언트(연결 풀)를 재생성했다. 반복되면 FCM 장애 또는 재생성 실패.");
+			notificationService.sendSchedulerWarningNotification("fcm-self-heal", alert);
 		} catch (RuntimeException e) {
-			log.error("[fcm-health] FCM 클라이언트 재생성 실패", e);
+			log.warn("[fcm-health] 경보 발송 실패", e);
 		}
 	}
 

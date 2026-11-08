@@ -194,4 +194,89 @@ class FirebaseMobilePushGatewayTest {
 
 		assertThat(rebuilds[0]).isEqualTo(1);
 	}
+
+	@Test
+	@DisplayName("응답 타임아웃도 연속 실패로 세어, 풀이 응답을 아예 안 주는 형태의 재발도 갈아 끼운다")
+	void 타임아웃도_연속_실패로_센다() {
+		FirebaseMessaging hung = mock(FirebaseMessaging.class);
+		FirebaseMessaging fresh = mock(FirebaseMessaging.class);
+		when(firebaseMessagingProvider.getIfAvailable()).thenReturn(hung);
+		when(hung.sendEachForMulticastAsync(any(MulticastMessage.class)))
+				.thenAnswer(invocation -> SettableApiFuture.<BatchResponse>create());
+		gateway.batchTimeout = Duration.ofMillis(20);
+		gateway.rebuilder = () -> fresh;
+		MobilePushMessage message = new MobilePushMessage("t", "b", Map.of());
+
+		for (int i = 0; i < 3; i++) {
+			assertThatThrownBy(() -> gateway.send(List.of("a"), message)).isInstanceOf(IllegalStateException.class);
+		}
+
+		verify(notificationService).sendSchedulerWarningNotification(any(), any());
+	}
+
+	@Test
+	@DisplayName("배치가 예외로 끝나는 형태(ExecutionException)도 연속 실패로 센다")
+	void 배치_예외도_연속_실패로_센다() {
+		FirebaseMessaging broken = mock(FirebaseMessaging.class);
+		when(firebaseMessagingProvider.getIfAvailable()).thenReturn(broken);
+		SettableApiFuture<BatchResponse> failed = SettableApiFuture.create();
+		failed.setException(new IllegalStateException("Pool entry is not present in the set of leased entries"));
+		when(broken.sendEachForMulticastAsync(any(MulticastMessage.class))).thenReturn(failed);
+		int[] rebuilds = {0};
+		gateway.rebuilder = () -> {
+			rebuilds[0]++;
+			return broken;
+		};
+
+		for (int i = 0; i < 3; i++) {
+			assertThatThrownBy(() -> gateway.send(List.of("a"), new MobilePushMessage("t", "b", Map.of())))
+					.isInstanceOf(IllegalStateException.class);
+		}
+
+		assertThat(rebuilds[0]).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("성공이 한 번이라도 있으면 연속 카운트가 처음부터 다시 시작한다")
+	void 성공하면_카운트가_리셋된다() {
+		FirebaseMessaging messaging = mock(FirebaseMessaging.class);
+		when(firebaseMessagingProvider.getIfAvailable()).thenReturn(messaging);
+		BatchResponse ok = mock(BatchResponse.class);
+		when(ok.getSuccessCount()).thenReturn(1);
+		when(messaging.sendEachForMulticastAsync(any(MulticastMessage.class)))
+				.thenAnswer(invocation -> ApiFutures.immediateFuture(allFailed(null, 1)))
+				.thenAnswer(invocation -> ApiFutures.immediateFuture(allFailed(null, 1)))
+				.thenAnswer(invocation -> ApiFutures.immediateFuture(ok))
+				.thenAnswer(invocation -> ApiFutures.immediateFuture(allFailed(null, 1)))
+				.thenAnswer(invocation -> ApiFutures.immediateFuture(allFailed(null, 1)));
+		int[] rebuilds = {0};
+		gateway.rebuilder = () -> {
+			rebuilds[0]++;
+			return messaging;
+		};
+
+		for (int i = 0; i < 5; i++) {
+			gateway.send(List.of("a"), new MobilePushMessage("t", "b", Map.of()));
+		}
+
+		assertThat(rebuilds[0]).isZero(); // 2연속 - 성공 - 2연속: 3연속이 없다
+	}
+
+	@Test
+	@DisplayName("재생성이 실패해도 디스코드로 알린다")
+	void 재생성이_실패해도_알린다() {
+		FirebaseMessaging messaging = mock(FirebaseMessaging.class);
+		when(firebaseMessagingProvider.getIfAvailable()).thenReturn(messaging);
+		when(messaging.sendEachForMulticastAsync(any(MulticastMessage.class)))
+				.thenAnswer(invocation -> ApiFutures.immediateFuture(allFailed(null, 1)));
+		gateway.rebuilder = () -> {
+			throw new IllegalStateException("boom");
+		};
+
+		for (int i = 0; i < 3; i++) {
+			gateway.send(List.of("a"), new MobilePushMessage("t", "b", Map.of()));
+		}
+
+		verify(notificationService).sendSchedulerWarningNotification(any(), org.mockito.ArgumentMatchers.contains("재생성도 실패"));
+	}
 }
