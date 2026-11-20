@@ -48,6 +48,12 @@ spec:
       #  GOOGLE_APPLICATION_CREDENTIALS·APNS_KEY_PATH 도 같이 고쳐야 한다)
       automountServiceAccountToken: false
 
+      # 종료 유예. 기본 30초는 preStop(5) 만으로도 앱 몫을 25초로 깎는다. 앱 종료 예산은
+      # 웹 graceful(최대 30, timeout-per-shutdown-phase) + executor 대기(최대 25, 알림 작업)라
+      # 30초 안에 못 끝나면 SIGKILL 로 진행 중 요청·알림이 끊긴다. 합(5+30+25)에 여유를 둔다.
+      # 평소 종료는 수 초라 롤아웃이 이만큼 길어지지는 않는다 — 상한일 뿐이다.
+      terminationGracePeriodSeconds: 75
+
       containers:
         - name: app
           image: menten4859/nar-gg:59870c1d502c04169f39926b4561e32c3a5ef771
