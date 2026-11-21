@@ -80,11 +80,31 @@ if [ -r "$PAR_FILE" ]; then
 		*) log "응답본문: $(head -c 300 "$BODY")"; rm -f "$BODY"; fail "업로드 HTTP $HTTP" ;;
 	esac
 	rm -f "$BODY"
+
+	# 매월 1일 덤프는 monthly/ 에도 올린다. 일별(nar-*)은 버킷 수명주기로 45일 뒤 지워지고
+	# monthly/ 는 12개월 간다 — 20GiB 무료 한도 안에서 "한 달 전 시점" 복원을 가능하게 하는 장치다.
+	# 실패해도 일일 백업은 성공이므로 알림만 남기고 계속한다.
+	if [ "$(date +%d)" = "01" ]; then
+		MBODY=$(mktemp)
+		MHTTP=$(curl -sS -m 900 -X PUT --data-binary "@${FILE}" -o "$MBODY" -w '%{http_code}' \
+			"${PAR%/}/monthly/$(basename "$FILE")" 2>>"$LOG") || MHTTP=000
+		case "$MHTTP" in
+			200|201) log "월별 사본 업로드 완료 monthly/$(basename "$FILE")" ;;
+			*) log "월별 사본 업로드 실패 HTTP $MHTTP: $(head -c 300 "$MBODY")"
+			   if [ -r "$WEBHOOK_FILE" ]; then
+				curl -sS -m 15 -X POST -H 'Content-Type: application/json' \
+					-d "{\"content\":\"🟠 월별 덤프 사본 업로드 실패 (맥미니, HTTP $MHTTP) — 일일 백업은 성공\"}" \
+					"$(cat "$WEBHOOK_FILE")" >/dev/null 2>&1 || true
+			   fi ;;
+		esac
+		rm -f "$MBODY"
+	fi
 else
 	log "PAR 파일 없음 — 로컬 보관만"
 fi
 
-# 로컬은 7일치. 오프사이트 보관은 버킷 라이프사이클(30일)이 담당한다.
+# 로컬은 7일치. 오프사이트 보관은 버킷 수명주기가 담당한다(`nar-` 접두사 45일, monthly/ 365일).
+# 수명주기는 코드가 아니라 OCI 콘솔 규칙이다 — 규칙이 빠지면 20GiB 무료 한도가 찬다(2026-10-05 실사고).
 find "$DEST" -name 'nar-macmini-*.sql.gz' -mtime +"$KEEP_DAYS" -delete
 log "종료 (로컬 보관 $(ls -1 "$DEST"/nar-macmini-*.sql.gz 2>/dev/null | wc -l | tr -d ' ')개)"
 push_metric 0
